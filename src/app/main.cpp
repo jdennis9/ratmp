@@ -32,6 +32,10 @@
 #include <stb_image.h>
 #include <ini.h>
 
+#define MIN_FONT_SIZE 8
+#define DEFAULT_FONT_SIZE 14
+#define MAX_FONT_SIZE 32
+
 IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static struct {
@@ -113,6 +117,8 @@ const char *get_font() {
 
 void set_font_size(int size) {
 	G.need_load_font = true;
+	size = MIN(size, MAX_FONT_SIZE);
+	size = MAX(size, MIN_FONT_SIZE);
 	G.font_size = size;
 }
 
@@ -517,6 +523,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 	ImGuiIO &io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	
+	// In case font size is not defined in the theme, use a reasonable default
+	G.font_size = DEFAULT_FONT_SIZE;
 	
 	init_drag_drop(g_hWnd);
 	init_ui();

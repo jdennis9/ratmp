@@ -223,7 +223,9 @@ void save_theme(const char *name) {
 	
 	const char *background_path = get_background_image_path();
 	fprintf(file, "[Style]\n");
-	if (background_path) fprintf(file, "BackgroundImage = %s\n", background_path);
+	if (background_path) fprintf(file, "BackgroundImage= %s\n", background_path);
+	fprintf(file, "Font = %s\n", get_font());
+	fprintf(file, "FontSize = %d\n", get_font_size());
 	
 	fclose(file);
 }
