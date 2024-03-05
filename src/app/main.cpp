@@ -113,7 +113,7 @@ const char *get_font() {
 
 void set_font_size(int size) {
 	G.need_load_font = true;
-	G.font_size = MAX(size, 8);
+	G.font_size = size;
 }
 
 int get_font_size() {
@@ -453,8 +453,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 	// First time launch, generate default config
 	if (is_first_time_launch()) {
-		// @TODO: This dialog should show up the first time the user clicks the window close button.
-	
 		strcpy(g_config.theme, "default-dark");
 		save_config();
 	}
@@ -582,7 +580,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				io.Fonts->Clear();
 				cfg.MergeMode = true;
 				cfg.FontDataOwnedByAtlas = false;
-				io.Fonts->AddFontFromFileTTF(path, G.font_size);
+				io.Fonts->AddFontFromFileTTF(path, MAX(G.font_size, 8));
 				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
 				ImGui_ImplOpenGL3_CreateFontsTexture();
 			}
