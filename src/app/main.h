@@ -49,6 +49,14 @@ void load_background_image(const char *filename);
 // Returns NULL is no background is loaded
 const char *get_background_image_path();
 
+// Path is relative to fonts folder e.g liberation-mono.ttf -> fonts\\liberation-mono.ttf.
+// This is for portability, so the user doesn't need to store fonts elsewhere to be able to move the
+// program and not lose their theme fonts.
+void set_font(const char *path);
+const char *get_font();
+void set_font_size(int size);
+int get_font_size();
+
 void post_event(Event_Code event, int64 wparam, int64 lparam);
 void close_window_to_tray();
 

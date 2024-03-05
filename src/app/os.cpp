@@ -131,11 +131,15 @@ void for_each_file_from_dialog(Directory_Iterator_Callback *callback, File_Data_
 		{L"Supported image types", L"*.jpeg;*.jpg;*.png;*.tga"},
 	};
 	
+	COMDLG_FILTERSPEC font_types[] = {
+		{L"Supported font types", L"*.ttf;*.otf"},
+	};
 	
 	(void)CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, (void **)&dialog);
 	dialog->SetOptions(FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM | (FOS_ALLOWMULTISELECT*allow_multi));
 	if (file_type == FILE_DATA_TYPE_IMAGE) dialog->SetFileTypes(1, image_types);
 	else if (file_type == FILE_DATA_TYPE_MUSIC) dialog->SetFileTypes(1, music_types);
+	else if (file_type == FILE_DATA_TYPE_FONT) dialog->SetFileTypes(1, font_types);
 
 	if (SUCCEEDED(dialog->Show(NULL))) {
 		LPWSTR path;

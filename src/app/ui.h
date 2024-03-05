@@ -42,7 +42,6 @@ void ui_next_track();
 void ui_handle_hotkey(uintptr_t hotkey);
 
 void ui_accept_drag_drop(const Track_Drag_Drop_Payload *payload);
-void defer_font_load(const char *path);
 
 // Not thread-safe
 void ui_set_thumbnail(void *texture);

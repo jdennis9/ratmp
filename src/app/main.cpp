@@ -19,6 +19,7 @@
 #include "ui.h"
 #include "util/auto_array_impl.h"
 #include "main.h"
+#include "resources.gen.h"
 #include <windows.h>
 #include <versionhelpers.h>
 #include <dwmapi.h>
@@ -44,7 +45,7 @@ static struct {
 static HWND g_hWnd;
 
 static struct {
-	char deferred_font[512];
+	char font[512];
 	char background_path[512];
 	HICON icon;
 	HMENU tray_popup;
@@ -57,6 +58,7 @@ static struct {
 	} background;
 	bool need_load_thumbnail;
 	bool need_load_font;
+	int font_size;
 } G;
 
 Config g_config;
@@ -100,9 +102,22 @@ void save_config() {
 	fclose(file);
 }
 
-void defer_font_load(const char *path) {
+void set_font(const char *path) {
 	G.need_load_font = true;
-	strncpy(G.deferred_font, path, sizeof(G.deferred_font) - 1);
+	strncpy(G.font, path, sizeof(G.font) - 1);
+}
+
+const char *get_font() {
+	return G.font;
+}
+
+void set_font_size(int size) {
+	G.need_load_font = true;
+	G.font_size = MAX(size, 8);
+}
+
+int get_font_size() {
+	return G.font_size;
 }
 
 static GLuint create_texture(GLenum filter) {
@@ -280,6 +295,34 @@ static void render_frame() {
 void close_window_to_tray() {
 	ShowWindow(g_hWnd, SW_HIDE);
 }
+
+// Might use later
+#if 0
+void begin_main_window_drag() {
+	RECT win;
+	GetCursorPos(&G.drag.mouse_start);
+	GetWindowRect(g_hWnd, &win);
+	G.drag.window_start.x = win.left;
+	G.drag.window_start.y = win.top;
+	G.dragging_window = true;
+}
+
+void update_main_window_drag() {
+	if (!G.dragging_window) return;
+	POINT mouse_delta;
+	POINT mouse;
+	
+	GetCursorPos(&mouse);
+	mouse_delta.x = mouse.x - G.drag.mouse_start.x;
+	mouse_delta.y = mouse.y - G.drag.mouse_start.y;
+	
+	SetWindowPos(g_hWnd, NULL, G.drag.window_start.x + mouse_delta.x, G.drag.window_start.y + mouse_delta.y, 0, 0, SWP_NOSIZE);
+}
+
+void end_main_window_drag() {
+	G.dragging_window = false;
+}
+#endif
 
 static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
@@ -517,6 +560,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		// Replace font if needed
 		//=========================================================================================
 		if (G.need_load_font) {
+			ImGui_ImplOpenGL3_DestroyFontsTexture();
+			
 			ImFontConfig cfg = ImFontConfig();
 			static const ImWchar icon_range[] = {
 				0xf048, 0xf052, // playback control icons
@@ -526,18 +571,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			};
 			
 			char path[512];
-			snprintf(path, 512, "fonts\\%s", G.deferred_font);
+			snprintf(path, 512, "fonts\\%s", G.font);
 			
-			//USER_ASSERT(g_deferred_font.size >= 8, "Invalid or no font size for theme");
-			log_debug("Load font %s\n", G.deferred_font);
+			log_debug("Load font %s\n", G.font);
 			
 			io.Fonts->Clear();
 			cfg.MergeMode = true;
-			io.Fonts->AddFontFromFileTTF(path, 16);
-			io.Fonts->AddFontFromFileTTF("fonts\\NotoSansJP-SemiBold.ttf", 16, &cfg, io.Fonts->GetGlyphRangesJapanese());
-			io.Fonts->AddFontFromFileTTF("fonts\\FontAwesome.otf", 12, &cfg, icon_range);
+			cfg.FontDataOwnedByAtlas = false;
+			io.Fonts->AddFontFromFileTTF(path, G.font_size);
+			io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
 			
 			G.need_load_font = false;
+			
+			ImGui_ImplOpenGL3_CreateFontsTexture();
 		}
 		
 		//=========================================================================================

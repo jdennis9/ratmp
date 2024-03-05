@@ -453,7 +453,6 @@ void init_ui() {
 	G.selected_playlist = PLAYLIST_LIBRARY;
 	G.queued_playlist = -1;
 	atexit(&clean_up);
-	defer_font_load("NotoSans-SemiBold.ttf");
 }
 
 void ui_add_to_library(Track &track) {
@@ -548,7 +547,9 @@ bool show_ui() {
 	if (ImGui::BeginMainMenuBar()) {
 		if (ImGui::BeginMenu("File")) {
 			bool playlist_available = (G.selected_playlist != -1) && G.playlists.length() && (G.selected_playlist != PLAYLIST_QUEUE);
-
+			
+			// =========================================
+			// Only when playlist is available
 			ImGui::BeginDisabled(!playlist_available);
 			if (ImGui::MenuItem("Add files")) {
 				add_from_file_select_dialog();
@@ -565,7 +566,8 @@ bool show_ui() {
 				}
 			}
 			ImGui::EndDisabled();
-
+			// =========================================
+			
 			if (ImGui::MenuItem("Create playlist")) {
 				create_playlist();
 			}
@@ -605,11 +607,12 @@ bool show_ui() {
 			ImGui::EndMenu();
 		}
 		
-		ImGui::EndMainMenuBar();
-
-		ImVec2 size = ImGui::GetItemRectSize();
+		const float window_button_width = ImGui::GetWindowHeight();
+		ImGui::SetCursorPosX(io.DisplaySize.x - (window_button_width*3.f) - 1.f);
+		
 		// Need to push down the layout to accomodate the menu bar
-		layout.push_down_pixels(size.y);
+		layout.push_down_pixels(ImGui::GetWindowHeight());
+		ImGui::EndMainMenuBar();
 	}
 
 	//=============================================================================================

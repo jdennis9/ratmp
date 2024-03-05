@@ -201,3 +201,77 @@ bool small_selectable(const char *text, bool *p_value) {
 	ImVec2 text_size = ImGui::CalcTextSize(text);
 	return ImGui::Selectable(text, p_value, 0, text_size);
 }
+
+typedef void Small_Button_Draw_Hook(ImDrawList *draw_list, ImVec2 pos, ImVec2 size);
+
+// Small button with an icon that is drawn via a hook rather a glyph or image
+static bool special_small_button(const char *str_id, Small_Button_Draw_Hook *draw, ImVec2 size, uint32 hover_color) {
+	ImDrawList *draw_list = ImGui::GetWindowDrawList();
+	ImGuiWindow *window = ImGui::GetCurrentWindow();
+	ImGuiID id = ImGui::GetID(str_id);
+	bool active = false;
+	ImVec2 pos = ImGui::GetCursorScreenPos();
+	
+	ImGui::PushID(id);
+	if (ImGui::InvisibleButton(str_id, size, 0)) {
+		active = true;
+		ImGui::SetActiveID(id, window);
+	}
+	
+	if (ImGui::IsItemHovered()) {
+		draw_list->AddRectFilled(pos, ImVec2{pos.x + size.x, pos.y + size.y}, hover_color);
+	}
+	
+	draw(draw_list, pos, size);
+	
+	ImGui::PopID();
+	
+	return active;
+}
+
+// Might use these later, but for now a custom title bar is too tedious
+#if 0
+static void draw_minimize_icon(ImDrawList *draw_list, ImVec2 pos, ImVec2 size) {
+	const float line_length = size.x-14.f;
+	ImVec2 line_start = {pos.x + (size.x/2.f) - (line_length/2.f), pos.y + (size.y/2.f)};
+	draw_list->AddLine(line_start, ImVec2{line_start.x + line_length, line_start.y}, UINT32_MAX);
+}
+
+bool minimize_button(const char *str_id, float width) {
+	ImVec2 size;
+	size.x = width;
+	size.y = ImGui::GetWindowHeight();
+	return special_small_button(str_id, &draw_minimize_icon, size, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
+}
+
+static void draw_maximize_icon(ImDrawList *draw_list, ImVec2 pos, ImVec2 size) {
+	const float padding = 7.f;
+	draw_list->AddRect(ImVec2{pos.x + padding, pos.y + padding}, ImVec2{pos.x + size.x - padding, pos.y + size.y - padding}, UINT32_MAX);
+}
+
+bool maximize_button(const char *str_id, float width) {
+	ImVec2 size;
+	size.x = width;
+	size.y = ImGui::GetWindowHeight();
+	return special_small_button(str_id, &draw_maximize_icon, size, ImGui::GetColorU32(ImGuiCol_ButtonHovered));
+}
+
+static void draw_exit_icon(ImDrawList *draw_list, ImVec2 pos, ImVec2 size) {
+	const float padding = 7.f;
+	pos.x += padding;
+	pos.y += padding;
+	size.x -= (padding*2.f);
+	size.y -= (padding*2.f);
+	ImVec2 tl = pos;
+	ImVec2 br = {pos.x + size.x, pos.y + size.y};
+	draw_list->AddLine(tl, br, UINT32_MAX);
+	draw_list->AddLine(ImVec2{br.x, tl.y-1.f}, ImVec2{tl.x, br.y-1.f}, UINT32_MAX);
+}
+
+bool exit_button(const char *str_id, float width) {
+	ImVec2 size;
+	size.x = width;
+	size.y = ImGui::GetWindowHeight();
+	return special_small_button(str_id, &draw_exit_icon, size, 0xff0000ff);
+}
+#endif

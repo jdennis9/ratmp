@@ -87,6 +87,7 @@ void retrieve_file_path(Path_Ref ref, wchar_t *buffer, uint32 buffer_size);
 enum File_Data_Type {
 	FILE_DATA_TYPE_MUSIC,
 	FILE_DATA_TYPE_IMAGE,
+	FILE_DATA_TYPE_FONT,
 };
 
 typedef bool Directory_Iterator_Callback(const char *path);

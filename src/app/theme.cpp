@@ -21,8 +21,13 @@
 #include <ini.h>
 #include <assert.h>
 
+struct Font_Name {
+	char name[128];
+};
+
 struct Theme {
 	char name[MAX_THEME_NAME_LENGTH+1];
+	char font[512];
 };
 
 static ImVec4 g_theme_colors[THEME_COLOR__COUNT];
@@ -61,6 +66,8 @@ static const struct Color_Info {
 
 static Auto_Array<Theme> g_themes;
 static uint32 g_selected_theme;
+static Auto_Array<Font_Name> g_fonts;
+static uint32 g_selected_font;
 
 static uint32 flip_endian(uint32 v) {
 	uint32 ret;
@@ -99,6 +106,12 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 		if (!strcmp(key, "BackgroundImage")) {
 			load_background_image(value);
 		}
+		else if (!strcmp(key, "Font")) {
+			set_font(value);
+		}
+		else if (!strcmp(key, "FontSize")) {
+			set_font_size(atoi(value));
+		}
 	}
 	
 	return true;
@@ -107,7 +120,7 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 static bool add_theme_from_dir(const char *path) {
 	const char *filename = get_file_name(path);
 	uint32 length = get_file_name_length_without_extension(path);
-	Theme name;
+	Theme name = {};
 	assert(length < MAX_THEME_NAME_LENGTH);
 	if (length == 0) return true;
 	strncpy(name.name, filename, length);
@@ -117,9 +130,23 @@ static bool add_theme_from_dir(const char *path) {
 	return true;
 }
 
+
 static void refresh_themes() {
 	g_themes.reset();
 	for_each_file_in_directory(L"themes\\", &add_theme_from_dir, 1);
+}
+
+static bool add_font_from_dir(const char *path) {
+	const char *filename = get_file_name(path);
+	Font_Name name = {};
+	strncpy(name.name, filename, sizeof(name.name) - 1);
+	g_fonts.append(name);
+	return true;
+}
+
+static void refresh_fonts() {
+	g_fonts.reset();
+	for_each_file_in_directory(L"fonts\\", &add_font_from_dir, 1);
 }
 
 void set_default_theme() {
@@ -127,6 +154,7 @@ void set_default_theme() {
 	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImGui::GetStyleColorVec4(ImGuiCol_Header);
 	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
 	refresh_themes();
+	refresh_fonts();
 }
 
 static uint32 get_theme_index(const char *name) {
@@ -138,6 +166,7 @@ static uint32 get_theme_index(const char *name) {
 
 void load_theme(const char *name) {
 	refresh_themes();
+	refresh_fonts();
 	g_selected_theme = get_theme_index(name);
 	
 	if (g_selected_theme == UINT32_MAX) {
@@ -153,6 +182,14 @@ void load_theme(const char *name) {
 	
 	ImGuiStyle& style = ImGui::GetStyle();
 	style.SeparatorTextBorderSize = 1.f;
+	
+	const char *font = get_font();
+	for (uint32 i = 0; i < g_fonts.length(); ++i) {
+		if (!strcmp(g_fonts[i].name, font)) {
+			g_selected_font = i;
+			break;
+		}
+	}
 }
 
 void save_theme(const char *name) {
@@ -272,6 +309,23 @@ void show_theme_editor_gui() {
 		load_background_image(NULL);
 	}
 	ImGui::TextUnformatted(background_path ? background_path : "<none>");
+	
+	if (ImGui::BeginCombo("Font", g_fonts.length() ? g_fonts[g_selected_font].name : "<none>")) {
+		for (uint32 i = 0; i < g_fonts.length(); ++i) {
+			if (ImGui::Selectable(g_fonts[i].name)) {
+				g_selected_font = i;
+				set_font(g_fonts[i].name);
+			}
+		}
+		ImGui::EndCombo();
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Refresh")) refresh_fonts();
+	
+	int font_size = get_font_size();
+	if (ImGui::InputInt("Font size", &font_size)) {
+		set_font_size(font_size);
+	}
 }
 
 uint32 get_theme_color(Theme_Color color) {
