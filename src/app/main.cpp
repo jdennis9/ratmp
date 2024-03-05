@@ -560,9 +560,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		// Replace font if needed
 		//=========================================================================================
 		if (G.need_load_font) {
-			ImGui_ImplOpenGL3_DestroyFontsTexture();
+			G.need_load_font = false;
 			
 			ImFontConfig cfg = ImFontConfig();
+			char path[512];
+			snprintf(path, 512, "fonts\\%s", G.font);
+			
 			static const ImWchar icon_range[] = {
 				0xf048, 0xf052, // playback control icons
 				0xf026, 0xf028, // volume icons
@@ -570,20 +573,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				0
 			};
 			
-			char path[512];
-			snprintf(path, 512, "fonts\\%s", G.font);
-			
 			log_debug("Load font %s\n", G.font);
 			
-			io.Fonts->Clear();
-			cfg.MergeMode = true;
-			cfg.FontDataOwnedByAtlas = false;
-			io.Fonts->AddFontFromFileTTF(path, G.font_size);
-			io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
-			
-			G.need_load_font = false;
-			
-			ImGui_ImplOpenGL3_CreateFontsTexture();
+			if (file_exists(path)) {
+				ImGui_ImplOpenGL3_DestroyFontsTexture();
+				io.Fonts->Clear();
+				cfg.MergeMode = true;
+				cfg.FontDataOwnedByAtlas = false;
+				io.Fonts->AddFontFromFileTTF(path, G.font_size);
+				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
+				ImGui_ImplOpenGL3_CreateFontsTexture();
+			}
+			else {
+				show_message_box(MESSAGE_BOX_WARNING, "Could not find font \"%s\"", G.font);
+			}
 		}
 		
 		//=========================================================================================
