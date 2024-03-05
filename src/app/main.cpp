@@ -19,7 +19,7 @@
 #include "ui.h"
 #include "util/auto_array_impl.h"
 #include "main.h"
-#include "resources.gen.h"
+#include "embedded.gen.h"
 #include <windows.h>
 #include <versionhelpers.h>
 #include <dwmapi.h>
@@ -440,7 +440,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		g_hWnd = FindWindowW(WNDCLASS_NAME, NULL);
 		if (g_hWnd) SetForegroundWindow(g_hWnd); // Bring the running instance to the foreground
 		return 0;
-	}
+	}	
+#else	
+	HINSTANCE hInstance = GetModuleHandle(NULL);
 #endif
 	
 	(void)OleInitialize(NULL);
@@ -457,7 +459,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		save_config();
 	}
 	
-	G.icon = (HICON)LoadImageW(NULL, L"32x32.ico", IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
+	G.icon = LoadIconA(hInstance, "WindowIcon");
 	
 	// Create window
 	WNDCLASSEXW wndclass = {};
@@ -465,7 +467,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	wndclass.style = CS_OWNDC;
 	wndclass.lpfnWndProc = &window_proc;
 	wndclass.lpszClassName = WNDCLASS_NAME;
-	wndclass.hInstance = GetModuleHandle(NULL);
+	wndclass.hInstance = hInstance;
 	wndclass.hIcon = G.icon;
 	RegisterClassExW(&wndclass);
 	

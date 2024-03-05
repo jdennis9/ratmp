@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(ratmp)
 
-file(GLOB_RECURSE sources src/app/*.h src/app/*.cpp src/thirdparty/*.cpp src/thirdparty/*.c)
+file(GLOB_RECURSE sources src/app/*.h src/app/*.cpp src/app/resources.rc src/thirdparty/*.cpp src/thirdparty/*.c)
 file(GLOB data data/*)
 
 add_executable(ratmp WIN32 ${sources})
