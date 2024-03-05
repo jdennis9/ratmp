@@ -33,9 +33,30 @@ enum Event_Code {
 	EVENT_STREAM_TRACK_LOADED,
 };
 
+enum Glyph_Range {
+	GLYPH_RANGE_JAPANESE,
+	GLYPH_RANGE_KOREAN,
+	GLYPH_RANGE_CYRILLIC,
+	GLYPH_RANGE_GREEK,
+	GLYPH_RANGE_CHINESE,
+	GLYPH_RANGE_VIETNAMESE,
+	GLYPH_RANGE_THAI,
+	GLYPH_RANGE__COUNT,
+};
+
+#define USE_GLYPH_RANGE_NAMES(name) const char *name[GLYPH_RANGE__COUNT];\
+name[GLYPH_RANGE_JAPANESE] = "Japanese";\
+name[GLYPH_RANGE_KOREAN] = "Korean";\
+name[GLYPH_RANGE_CYRILLIC] = "Cyrillic";\
+name[GLYPH_RANGE_GREEK] = "Greek";\
+name[GLYPH_RANGE_CHINESE] = "Chinese";\
+name[GLYPH_RANGE_VIETNAMESE] = "Vietnamese";\
+name[GLYPH_RANGE_THAI] = "Thai";\
+
 struct Config {
 	char theme[MAX_THEME_NAME_LENGTH + 1];
 	Close_Policy close_policy;
+	bool include_glyphs[GLYPH_RANGE__COUNT];
 };
 
 extern Config g_config;

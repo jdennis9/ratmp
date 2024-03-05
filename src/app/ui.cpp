@@ -983,6 +983,17 @@ static void show_config_editor_gui() {
 		}
 	}
 	
+	// Glyph ranges
+	ImGui::SeparatorText("Included language characters");
+	ImGui::SetItemTooltip("Load characters for these languages from fonts if supported.");
+	{
+		USE_GLYPH_RANGE_NAMES(range_names);
+		
+		for (int i = 0; i < GLYPH_RANGE__COUNT; ++i) {
+			apply |= ImGui::Checkbox(range_names[i], &config.include_glyphs[i]);
+		}
+	}
+	
 	if (apply) apply_config();
 	if (ImGui::Button("Save")) save_config();
 }

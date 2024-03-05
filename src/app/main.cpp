@@ -72,6 +72,8 @@ Config g_config;
 static void init_drag_drop(HWND hWnd);
 
 static int load_config_ini_handler(void *dont_care, const char *section, const char *key, const char *value) {
+	USE_GLYPH_RANGE_NAMES(range_names);
+	
 	if (!strcmp(section, "Main")) {
 		if (!strcmp(key, "sTheme")) {
 			log_debug("Theme: %s\n", value);
@@ -79,6 +81,14 @@ static int load_config_ini_handler(void *dont_care, const char *section, const c
 		}
 		else if (!strcmp(key, "iClosePolicy")) {
 			g_config.close_policy = (Close_Policy)atoi(value);
+		}
+		else for (uint32 i = 0; i < GLYPH_RANGE__COUNT; ++i) {
+			char key_name[64];
+			snprintf(key_name, 64, "bLoad%sGlyphs", range_names[i]);
+			if (!strcmp(key_name, key)) {
+				g_config.include_glyphs[i] = atoi(value);
+				break;
+			}
 		}
 	}
 	
@@ -98,10 +108,16 @@ void save_config() {
 	FILE *file = fopen("config.ini", "w");
 	if (!file) return;
 	
+	USE_GLYPH_RANGE_NAMES(range_names);
+	
 	fprintf(file, "; Note: Time values are in milliseconds\n");
 	fprintf(file, "[Main]\n");
 	fprintf(file, "sTheme = %s\n", g_config.theme);
 	fprintf(file, "iClosePolicy = %d\n", g_config.close_policy);
+	
+	for (int i = 0; i < GLYPH_RANGE__COUNT; ++i) {
+		fprintf(file, "bLoad%sGlyphs = %d\n", range_names[i], g_config.include_glyphs[i]);
+	}
 	
 	fclose(file);
 }
@@ -586,10 +602,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			
 			if (file_exists(path)) {
 				ImGui_ImplOpenGL3_DestroyFontsTexture();
+				
+				ImVector<ImWchar> ranges = ImVector<ImWchar>();
+				ImFontGlyphRangesBuilder builder = ImFontGlyphRangesBuilder();
+				
+				builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+				
+				if (g_config.include_glyphs[GLYPH_RANGE_JAPANESE]) builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
+				if (g_config.include_glyphs[GLYPH_RANGE_KOREAN]) builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
+				if (g_config.include_glyphs[GLYPH_RANGE_CYRILLIC]) builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+				if (g_config.include_glyphs[GLYPH_RANGE_GREEK]) builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
+				if (g_config.include_glyphs[GLYPH_RANGE_CHINESE]) builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+				if (g_config.include_glyphs[GLYPH_RANGE_THAI]) builder.AddRanges(io.Fonts->GetGlyphRangesThai());
+				if (g_config.include_glyphs[GLYPH_RANGE_VIETNAMESE]) builder.AddRanges(io.Fonts->GetGlyphRangesVietnamese());
+				
+				builder.BuildRanges(&ranges);
+				
 				io.Fonts->Clear();
-				cfg.MergeMode = true;
+				io.Fonts->AddFontFromFileTTF(path, MAX(G.font_size, 8), &cfg, ranges.Data);
 				cfg.FontDataOwnedByAtlas = false;
-				io.Fonts->AddFontFromFileTTF(path, MAX(G.font_size, 8));
+				cfg.MergeMode = true;
 				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
 				ImGui_ImplOpenGL3_CreateFontsTexture();
 			}
