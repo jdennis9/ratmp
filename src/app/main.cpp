@@ -361,7 +361,7 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 		case WM_CLOSE: {
 			switch (g_config.close_policy) {
 				case CLOSE_POLICY_QUERY: {
-					if (MessageBoxA(NULL, "Minimize to the system tray?", "Close Policy",  MB_YESNO | MB_ICONQUESTION) == IDYES) {
+					if (MessageBoxA(NULL, "Minimize to tray?", "Close Policy",  MB_YESNO | MB_ICONQUESTION) == IDYES) {
 						ShowWindow(hWnd, SW_HIDE);
 					}
 					else {

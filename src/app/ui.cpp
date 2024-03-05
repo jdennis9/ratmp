@@ -760,7 +760,7 @@ bool show_ui() {
 		// Config editor
 		//=============================================================================================
 		if (G.extra_view == EXTRA_VIEW_CONFIG) {
-			if (ImGui::Begin("Edit Config", &G.show_extra_view, flags)) {
+			if (ImGui::Begin("Edit Preferences", &G.show_extra_view, flags)) {
 				show_config_editor_gui();
 			}
 			ImGui::End();
