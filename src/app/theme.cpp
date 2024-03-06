@@ -145,8 +145,23 @@ static bool add_font_from_dir(const char *path) {
 }
 
 static void refresh_fonts() {
+	bool update_selected_font = false;
+	Font_Name current_font;
+	if (g_fonts.length()) {
+		strcpy(current_font.name, g_fonts[g_selected_font].name);
+		update_selected_font = true;
+	}
+	
 	g_fonts.reset();
 	for_each_file_in_directory(L"fonts\\", &add_font_from_dir, 1);
+	
+	g_selected_font = 0;
+	if (update_selected_font) for (uint32 i = 0; i < g_fonts.length(); ++i) {
+		if (!strcmp(current_font.name, g_fonts[i].name)) {
+			g_selected_font = i;
+			break;
+		}
+	}
 }
 
 void set_default_theme() {
