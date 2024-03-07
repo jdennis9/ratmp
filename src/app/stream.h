@@ -31,18 +31,13 @@ enum Stream_State {
 #define THUMBNAIL_HEIGHT 512
 #define WAVEFORM_IMAGE_HEIGHT 23
 
-struct Image {
-	void *data;
-	uint32 width;
-	uint32 height;
-};
-
 bool stream_open(Audio_Client_ID client, const char *preferred_device = nullptr);
 
 bool stream_load(const char *file_path);
 void stream_flush_events();
 
 // always RGBA format
+bool stream_extract_thumbnail(const char *filename, int requested_size, Image *out);
 bool stream_get_thumbnail(Image *th);
 void stream_free_thumbnail(Image *th);
 void stream_get_waveform(Image *image);

@@ -46,6 +46,14 @@ typedef int32_t int32;
 typedef int16_t int16;
 typedef int8_t int8;
 
+typedef void *Texture_ID;
+
+struct Image {
+	void *data;
+	int width;
+	int height;
+};
+
 #define log_debug(...) printf(__VA_ARGS__)
 #define log_error(...) printf(__VA_ARGS__)
 
@@ -55,6 +63,9 @@ Mutex create_mutex();
 void lock_mutex(Mutex mtx);
 void unlock_mutex(Mutex mtx);
 void destroy_mutex(Mutex mtx);
+
+Texture_ID create_texture_from_image(const Image *image);
+void destroy_texture(Texture_ID texture);
 
 uint64 time_get_tick();
 uint64 time_get_frequency();

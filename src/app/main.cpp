@@ -155,6 +155,12 @@ static GLuint create_texture(GLenum filter) {
 	return texture;
 }
 
+Texture_ID create_texture_from_image(const Image *image) {
+	GLuint texture = create_texture(GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->width, image->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image->data);
+	return (Texture_ID)texture;
+}
+
 static void load_thumbnail() {
 	Image image;
 	static GLuint texture;
@@ -357,6 +363,12 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			g_window.width = g_window.resize_width;
 			g_window.height = g_window.resize_height;
 			return 0;
+		}
+		case WM_GETMINMAXINFO: {
+			LPMINMAXINFO info = (LPMINMAXINFO)lParam;
+			info->ptMinTrackSize.x = 500;
+			info->ptMinTrackSize.y = 500;
+			break;
 		}
 		case WM_CLOSE: {
 			switch (g_config.close_policy) {

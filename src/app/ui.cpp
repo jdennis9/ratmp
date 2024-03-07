@@ -40,6 +40,11 @@ enum Extra_View {
 	EXTRA_VIEW_ABOUT,
 };
 
+enum Main_View {
+	MAIN_VIEW_TRACKS,
+	MAIN_VIEW_ALBUMS,
+};
+
 struct Box { ImVec2 pos; ImVec2 size; };
 
 // Layout helper for ImGui windows
@@ -118,6 +123,7 @@ static struct {
 	int32 renaming_playlist;
 	int32 selected_playlist;
 	int32 queued_playlist;
+	Main_View main_view;
 	Extra_View extra_view;
 	ImTextureID thumbnail;
 	ImTextureID waveform_image;
@@ -130,6 +136,7 @@ static struct {
 static void show_config_editor_gui();
 static void show_hotkey_gui();
 static void show_about_gui();
+static void queue_tracklist(const Tracklist &tracklist);
 
 void ui_next_track() {
 	char path[512];
@@ -406,6 +413,49 @@ static int32 show_track_list_gui(Tracklist& tracklist, int32 playlist_id, const 
 	return play_index;
 }
 
+static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
+	uint32 album_count = albums.length();
+	const ImGuiTableFlags table_flags =
+		ImGuiTableFlags_ScrollY;
+	
+	int padding = 16;
+	int column_count = (int)(ImGui::GetWindowWidth() / (128+(padding*2)));
+	
+	if (!column_count) return -1;
+	
+	ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2{(float)padding, (float)padding});
+	
+	if (ImGui::BeginTable("##album_table", column_count, table_flags)) {
+		ImGui::TableNextRow();
+		for (uint32 i = 0; i < album_count; ++i) {
+			const Album& album = albums[i];
+			const char *name = get_metadata_string(album.metadata, METADATA_ALBUM);
+			bool hovered = false;
+			bool play = false;
+			
+			ImGui::TableNextColumn();
+			ImGui::Image((ImTextureID)album.thumbnail, ImVec2{128, 128});
+			
+			hovered |= ImGui::IsItemHovered();
+			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) play = true;
+			
+			play |= ImGui::Selectable(name);
+			hovered |= ImGui::IsItemHovered();
+			
+			if (hovered) ImGui::SetTooltip(name);
+			if (play) {
+				queue_tracklist(album.tracks);
+				play_track_at(PLAYLIST_QUEUE, 0);
+			}
+		}
+		ImGui::EndTable();
+	}
+	
+	ImGui::PopStyleVar();
+	
+	return -1;
+}
+
 static bool add_playlist(const char *path) {
 	Tracklist tracklist = {};
 	tracklist.load_from_file(path);
@@ -461,11 +511,15 @@ void ui_add_to_library(Track &track) {
 	}
 }
 
-static void queue_playlist(int32 index) {
-	const Tracklist &playlist = G.playlists[index];
+static void queue_tracklist(const Tracklist &tracklist) {
 	G.playlists[PLAYLIST_QUEUE].clear();
-	playlist.copy(&G.playlists[PLAYLIST_QUEUE]);
+	tracklist.copy(&G.playlists[PLAYLIST_QUEUE]);
 	if (G.shuffle_enabled) G.playlists[PLAYLIST_QUEUE].shuffle();
+}
+
+static void queue_playlist(int32 index) {
+	const Tracklist &tracklist = G.playlists[index];
+	queue_tracklist(tracklist);
 }
 
 static void create_playlist() {
@@ -616,7 +670,7 @@ bool show_ui() {
 	}
 
 	//=============================================================================================
-	// Playlist management
+	// Navigation
 	//=============================================================================================
 	window = layout.push_right(0.15f);
 	set_next_window_box(window);
@@ -634,19 +688,28 @@ bool show_ui() {
 		ImGui::SeparatorText("Navigation");
 		
 		// Library and queue
-		if (ImGui::BeginTable("##library_and_queue", 1, ImGuiTableFlags_BordersInner)) {
+		if (ImGui::BeginTable("##navigation", 1, ImGuiTableFlags_BordersInner)) {
 			ImGui::TableSetupColumn("##names");
 			
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			if (ImGui::Selectable("Library##library", G.selected_playlist == PLAYLIST_LIBRARY)) {
+			if (ImGui::Selectable("Albums##albums", G.main_view == MAIN_VIEW_ALBUMS)) {
+				G.main_view = MAIN_VIEW_ALBUMS;
 				G.selected_playlist = PLAYLIST_LIBRARY;
 			}
 			
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			if (ImGui::Selectable("Queue##queue", G.selected_playlist == PLAYLIST_QUEUE)) {
+			if (ImGui::Selectable("Library##library", G.selected_playlist == PLAYLIST_LIBRARY && G.main_view == MAIN_VIEW_TRACKS)) {
+				G.selected_playlist = PLAYLIST_LIBRARY;
+				G.main_view = MAIN_VIEW_TRACKS;
+			}
+			
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			if (ImGui::Selectable("Queue##queue", G.selected_playlist == PLAYLIST_QUEUE && G.main_view == MAIN_VIEW_TRACKS)) {
 				G.selected_playlist = PLAYLIST_QUEUE;
+				G.main_view = MAIN_VIEW_TRACKS;
 			}
 			
 			ImGui::EndTable();
@@ -703,8 +766,9 @@ bool show_ui() {
 					char name_id[128];
 					snprintf(name_id, sizeof(name_id), "%s##%s", playlist.name, playlist.get_filename());
 
-					if (ImGui::Selectable(name_id, G.selected_playlist == iplaylist)) {
+					if (ImGui::Selectable(name_id, G.selected_playlist == iplaylist && G.main_view == MAIN_VIEW_TRACKS)) {
 						G.selected_playlist = iplaylist;
+						G.main_view = MAIN_VIEW_TRACKS;
 					}
 					
 					if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
@@ -803,7 +867,14 @@ bool show_ui() {
 	//=============================================================================================
 	window = layout.push_down_pixels(-66);
 	set_next_window_box(window);
-	if (G.selected_playlist != -1) {
+	if (G.main_view == MAIN_VIEW_ALBUMS) {
+		const Auto_Array<Album>& albums = get_albums();
+		if (ImGui::Begin("Albums", NULL, ImGuiWindowFlags_NoDecoration)) {
+			show_album_list_gui(albums);
+		}
+		ImGui::End();
+	}
+	else if (G.selected_playlist != -1) {
 		Tracklist &playlist = G.playlists[G.selected_playlist];
 		static char filter_text[128];
 		static Track_Filter filter;

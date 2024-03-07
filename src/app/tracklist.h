@@ -20,6 +20,7 @@
 #include "files.h"
 #include "metadata.h"
 #include "util/auto_array.h"
+#include "stream.h"
 #include <ctype.h>
 
 enum Track_Filter_Part {
@@ -93,7 +94,7 @@ struct Tracklist {
 
 	int32 index_of_track(const Track &track);
 	bool add(const char *path);
-	bool add(Track track);
+	bool add(Track track, bool add_to_album_pool = true);
 	uint32 length() const;
 	void copy(Tracklist *dst) const;
 	void copy_selection(Tracklist *dst) const;
@@ -112,5 +113,14 @@ struct Tracklist {
 	void delete_file();
 };
 
+struct Album {
+	// References the metadata for the first track of each album. The album name can be extracted from there
+	Metadata_Ref metadata;
+	// Thumbnail is loaded when this album is first added
+	Texture_ID thumbnail;
+	Tracklist tracks;
+};
+
+const Auto_Array<Album> &get_albums();
 
 #endif //TRACK_LIST_H

@@ -76,6 +76,7 @@ static DWORD generate_waveform_image(LPVOID data_ptr);
 
 // Closes the current file. Does not undo intialisation
 static void close_decoder(Decoder *dec);
+static bool decoder_load(Decoder *dec, const char *filename, bool no_audio = false);
 static void decoder_lock(Decoder *dec);
 static void decoder_unlock(Decoder *dec);
 static int64 decoder_get_pos(Decoder *dec);
@@ -155,19 +156,30 @@ static void close_decoder(Decoder *dec) {
 		for (uint32 i = 0; i < ARRAY_LENGTH(dec->overflow); ++i) {
 			free(dec->overflow[i]);
 		}
-
-		av_frame_unref(dec->frame);
-		av_frame_unref(dec->thumbnail_frame);
-		av_packet_unref(dec->packet);
-		av_frame_free(&dec->frame);
-		av_frame_free(&dec->thumbnail_frame);
-		av_packet_free(&dec->packet);
-		av_packet_free(&dec->thumbnail_packet);
-		avcodec_close(dec->decoder);
+					
+		if (dec->thumbnail_frame) {
+			av_frame_unref(dec->thumbnail_frame);
+			av_frame_free(&dec->thumbnail_frame);
+			av_packet_free(&dec->thumbnail_packet);
+		}
+		
+		if (dec->frame) {
+			av_frame_unref(dec->frame);
+			av_frame_free(&dec->frame);
+		}
+		
+		if (dec->packet) {
+			av_packet_unref(dec->packet);
+			av_packet_free(&dec->packet);
+		}
+		
 		avformat_close_input(&dec->demuxer);
 		avformat_free_context(dec->demuxer);
-		avcodec_free_context(&dec->decoder);
-		swr_free(&dec->resampler);
+		if (dec->decoder) {
+			avcodec_close(dec->decoder);
+			avcodec_free_context(&dec->decoder);
+			swr_free(&dec->resampler);
+		}
 		dec->demuxer = NULL;
 		dec->decoder = NULL;
 		dec->thumbnail_packet = NULL;
@@ -283,8 +295,9 @@ static void stream_callback(void *data, uint32 frame_count, uint8 *buffers[]) {
 	return;
 }
 
-static bool decoder_get_thumbnail(Decoder *dec, Image *out) {
+static bool decoder_get_thumbnail(Decoder *dec, int size, Image *out) {
 	if (!dec->demuxer || (dec->thumbnail_stream_index == -1)) {
+		log_debug("No thumbnail for decoder %p\n", dec);
 		return false;
 	}
 	AVPacket *pkt = &dec->demuxer->streams[dec->thumbnail_stream_index]->attached_pic;
@@ -302,7 +315,9 @@ static bool decoder_get_thumbnail(Decoder *dec, Image *out) {
 			defer(av_frame_free(&dec->thumbnail_frame));
 			codec = avcodec_find_decoder(codecpar->codec_id);
 
-			if (!codec) return false;
+			if (!codec) {
+				return false;
+			}
 
 			decoder = avcodec_alloc_context3(codec);
 			defer(avcodec_free_context(&decoder));
@@ -319,8 +334,8 @@ static bool decoder_get_thumbnail(Decoder *dec, Image *out) {
 				image->width,
 				image->height,
 				(AVPixelFormat)image->format,
-				THUMBNAIL_WIDTH,
-				THUMBNAIL_HEIGHT,
+				size,
+				size,
 				AV_PIX_FMT_RGBA,
 				SWS_BICUBIC,
 				NULL,
@@ -346,7 +361,8 @@ static bool decoder_get_thumbnail(Decoder *dec, Image *out) {
 				th->width,
 				th->height,
 				4);
-
+			
+			log_debug("Loaded thumbnail for %p\n", dec);
 			return true;
 		}
 	}
@@ -354,10 +370,18 @@ static bool decoder_get_thumbnail(Decoder *dec, Image *out) {
 	return false;
 }
 
+bool stream_extract_thumbnail(const char *filename, int requested_size, Image *out) {
+	Decoder dec = {};
+	decoder_load(&dec, filename, true);
+	bool ret = decoder_get_thumbnail(&dec, requested_size, out);
+	close_decoder(&dec);
+	return ret;
+}
+
 bool stream_get_thumbnail(Image *out) {
 	Decoder *dec = &G.decoder;
 	decoder_lock(dec);
-	bool ret = decoder_get_thumbnail(dec, out);
+	bool ret = decoder_get_thumbnail(dec, THUMBNAIL_WIDTH, out);
 	decoder_unlock(dec);
 	return ret;
 }
@@ -416,12 +440,13 @@ bool stream_file_is_supported(const char *file_path) {
 	return supported;
 }
 
-bool decoder_load(Decoder *dec, const char *file_path) {
+static bool decoder_load(Decoder *dec, const char *file_path, bool no_audio) {
 	const AVCodec *codec;
 	const AVStream *stream;
 	Audio_Stream_Spec *spec = &dec->output_stream->spec;
 	
 	decoder_lock(dec);
+	defer(decoder_unlock(dec));
 	close_decoder(dec);
 	
 	//================================================================
@@ -444,11 +469,15 @@ bool decoder_load(Decoder *dec, const char *file_path) {
 	if (dec->stream_index == -1) {
 		avformat_close_input(&dec->demuxer);
 		avformat_free_context(dec->demuxer);
-		decoder_unlock(dec);
 		return false;
 	}
 	
 	stream = dec->demuxer->streams[dec->stream_index];
+	
+	if (no_audio) {
+		dec->is_open = true;
+		return true;
+	}
 	
 	//================================================================
 	// Decoder
@@ -494,7 +523,6 @@ bool decoder_load(Decoder *dec, const char *file_path) {
 	
 	dec->is_open = true;
 	dec->output_stream->interrupt();
-	decoder_unlock(dec);
 	
 	return true;
 }

@@ -18,10 +18,73 @@
 #include "metadata.h"
 #include "ui.h"
 #include "util/auto_array_impl.h"
+#include "embedded/missing_thumbnail.h"
+#include <stb_image.h>
 #include <stdlib.h>
 #include <io.h>
+#include <xxhash.h>
 
-bool Tracklist::add(Track track) {
+// One global album list is stored and added to when add() is called on a tracklist
+struct Album_List {
+	Auto_Array<uint64> ids; // XXH3_64bits hash of the album name
+	Auto_Array<Album> albums;
+};
+
+static Album_List g_albums;
+
+const Auto_Array<Album> &get_albums() {
+	return g_albums.albums;
+}
+
+static void add_to_albums(const Track& track) {
+	const char *album_name = get_metadata_string(track.metadata, METADATA_ALBUM);
+	if (!strcmp(album_name, " ")) return; // Cancel if this track doesn't have an album
+	uint64 id = XXH3_64bits(album_name, strlen(album_name));
+	int32 album_count = g_albums.albums.length();
+	int32 index;
+	for (index = 0; index < album_count; ++index) {
+		if (g_albums.ids[index] == id) {
+			break;
+		}
+	}
+	
+	
+	// Album doesn't exist, add it
+	if (index == album_count) {
+		char path[512];
+		Album album = {};
+		Image thumbnail;
+		album.metadata = track.metadata;
+		album.tracks.add(track, false);
+		
+		// Load thumbnail
+		retrieve_file_path(track.path, path, 512);
+		if (stream_extract_thumbnail(path, 128, &thumbnail)) {
+			album.thumbnail = create_texture_from_image(&thumbnail);
+			stream_free_thumbnail(&thumbnail);
+		}
+		else {
+			static Texture_ID missing_thumbnail;
+			if (!missing_thumbnail) {
+				Image image;
+				image.data = stbi_load_from_memory(MISSING_THUMBNAIL_DATA, MISSING_THUMBNAIL_SIZE, &image.width, &image.height, NULL, 4);
+				missing_thumbnail = create_texture_from_image(&image);
+				stbi_image_free(image.data);
+			}
+			
+			album.thumbnail = missing_thumbnail;
+		};
+		
+		g_albums.ids.append(id);
+		g_albums.albums.append(album);
+	}
+	else {
+		Album& album = g_albums.albums[index];
+		album.tracks.add(track, false);
+	}
+}
+
+bool Tracklist::add(Track track, bool add_to_album_pool) {
 	uint32 track_count = m_tracks.length();
 	for (uint32 i = 0; i < track_count; ++i) {
 		if (m_tracks[i].metadata == track.metadata) 
@@ -29,6 +92,7 @@ bool Tracklist::add(Track track) {
 	}
 	m_tracks.append(track);
 	ui_add_to_library(track);
+	if (add_to_album_pool) add_to_albums(track);
 	return true;
 }
 
