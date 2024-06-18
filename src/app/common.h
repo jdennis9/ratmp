@@ -23,7 +23,7 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define VERSION_STRING "1.0.1"
+#define VERSION_STRING "1.0.2"
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

@@ -158,19 +158,20 @@ static bool is_track_playing(const Track &track) {
 	return G.playing_track.metadata == track.metadata;
 }
 
-static void play_track_at(uint32 iplaylist, int32 position, bool translate_index = false) {
+static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index = false) {
 	char path[512];
 	Tracklist &tracklist = G.playlists[PLAYLIST_QUEUE];
+	bool ok;
 	
 	if (iplaylist == PLAYLIST_QUEUE) {
 		position = tracklist.repeat(position);
 		const Track &track = tracklist[position];
 		retrieve_file_path(track.path, path, sizeof(path));
-		stream_load(path);
+		ok = stream_load(path);
 		G.queue_position = position;
 		G.queued_playlist = PLAYLIST_QUEUE;
 		G.playing_track = track;
-		return;
+		return ok;
 	}
 	
 	if (iplaylist != G.queued_playlist) {
@@ -180,13 +181,13 @@ static void play_track_at(uint32 iplaylist, int32 position, bool translate_index
 		if (G.shuffle_enabled) tracklist.shuffle();
 	}
 
-	if (tracklist.length() == 0) return;
+	if (tracklist.length() == 0) return true;
 
 	// If this track was selected manually from the track list
 	// we need to translate the index to match for that track in the queue
 	if (translate_index && G.shuffle_enabled) {
 		position = tracklist.index_of_track(G.playlists[iplaylist][position]);
-		if (position < 0) return;
+		if (position < 0) return false;
 	}
 
 	position = tracklist.repeat(position);
@@ -194,19 +195,24 @@ static void play_track_at(uint32 iplaylist, int32 position, bool translate_index
 
 	const Track &current = tracklist[position];
 	retrieve_file_path(current.path, path, sizeof(path));
-	stream_load(path);
+	ok = stream_load(path);
 
 	G.playing_track = current;
+	return ok;
 }
 
 static void goto_next_track() {
-	if (G.state == STREAM_STATE_STOPPED) return;
-	play_track_at(G.queued_playlist, G.queue_position + 1);
+	if (G.queued_playlist < 0) return;
+	for (uint32 i = 1; i <= G.playlists[G.queued_playlist].length(); ++i) {
+		if (play_track_at(G.queued_playlist, G.queue_position + 1)) break;
+	}
 }
 
 static void goto_previous_track() {
-	if (G.state == STREAM_STATE_STOPPED) return;
-	play_track_at(G.queued_playlist, G.queue_position - 1);
+	if (G.queued_playlist < 0) return;
+	for (uint32 i = 1; i <= G.playlists[G.queued_playlist].length(); ++i) {
+		if (play_track_at(G.queued_playlist, G.queue_position - 1)) break;
+	}
 }
 
 static int32 show_playlist_dropdown_selector() {
@@ -948,7 +954,7 @@ bool show_ui() {
 			// Next track
 			ImGui::SameLine();
 			if (small_selectable(u8"\xf051")) {
-				ui_next_track();
+				goto_next_track();
 			}
 
 			// Timer

@@ -454,7 +454,6 @@ static bool decoder_load(Decoder *dec, const char *file_path, bool no_audio) {
 	//================================================================
 	dec->demuxer = avformat_alloc_context();
 	if (avformat_open_input(&dec->demuxer, file_path, NULL, NULL)) {
-		decoder_unlock(dec);
 		return false;
 	}
 	avformat_find_stream_info(dec->demuxer, NULL);
@@ -529,25 +528,28 @@ static bool decoder_load(Decoder *dec, const char *file_path, bool no_audio) {
 
 bool stream_load(const char *file_path) {
 	Decoder *dec = &G.decoder;
-	decoder_load(dec, file_path);
-	
-	Waveform_Image_Load *waveform = new Waveform_Image_Load;
-	strncpy(waveform->path, file_path, sizeof(waveform->path)-1);
-	
-	// Asynchronously generate the waveform image
-	if (G.waveform_loader_thread) {
-		G.cancel_waveform_load = true;
-		WaitForSingleObject(G.waveform_loader_thread, INFINITE);
-		CloseHandle(G.waveform_loader_thread);
+	if (decoder_load(dec, file_path)) {
+		Waveform_Image_Load *waveform = new Waveform_Image_Load;
+		strncpy(waveform->path, file_path, sizeof(waveform->path)-1);
+		
+		// Asynchronously generate the waveform image
+		if (G.waveform_loader_thread) {
+			G.cancel_waveform_load = true;
+			WaitForSingleObject(G.waveform_loader_thread, INFINITE);
+			CloseHandle(G.waveform_loader_thread);
+		}
+		G.cancel_waveform_load = false;
+		G.waveform_loader_thread = CreateThread(NULL, 256<<10, &generate_waveform_image, waveform, 0, NULL);
+		
+		post_event(EVENT_STREAM_THUMBNAIL_READY, 0, 0);
+		post_event(EVENT_STREAM_TRACK_LOADED, 0, 0);
+		G.state = STREAM_STATE_PLAYING;
+		return true;
 	}
-	G.cancel_waveform_load = false;
-	G.waveform_loader_thread = CreateThread(NULL, 256<<10, &generate_waveform_image, waveform, 0, NULL);
 	
-	post_event(EVENT_STREAM_THUMBNAIL_READY, 0, 0);
-	post_event(EVENT_STREAM_TRACK_LOADED, 0, 0);
-	G.state = STREAM_STATE_PLAYING;
-
-	return true;
+	post_event(EVENT_STREAM_TRACK_LOAD_FAILED, 0, 0);
+	G.state = STREAM_STATE_STOPPED;
+	return false;
 }
 
 Stream_State stream_get_state() { return G.state; }

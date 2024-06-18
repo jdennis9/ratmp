@@ -437,6 +437,10 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			ui_set_waveform_image(NULL);
 			return 0;
 		}
+		case WM_USER+EVENT_STREAM_TRACK_LOAD_FAILED: {
+			ui_set_waveform_image(NULL);
+			return 0;
+		}
 	}
 	
 	return DefWindowProcW(hWnd, msg, wParam, lParam);

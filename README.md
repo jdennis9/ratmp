@@ -16,7 +16,7 @@ Rat comes with a built-in realtime theme editor. There are a few preset themes a
 You can set an image background for themes, which supports formats jpeg, png and tga.
 
 ## Building
-Required CMake and vcpkg.
+Requires CMake and vcpkg.
 
 Make sure these packages are installed with vcpkg:
 - ffmpeg:x64-windows
