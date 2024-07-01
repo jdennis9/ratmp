@@ -804,6 +804,21 @@ bool show_ui() {
 							deleting_playlist = iplaylist;
 							ImGui::OpenPopup(delete_confirmation_popup_id);
 						}
+						if (ImGui::BeginMenu("Sort by")) {
+							if (ImGui::MenuItem("Album")) {
+								playlist.sort(METADATA_ALBUM);
+								playlist.save_to_file();
+							}
+							if (ImGui::MenuItem("Artist")) {
+								playlist.sort(METADATA_ARTIST);
+								playlist.save_to_file();
+							}
+							if (ImGui::MenuItem("Title")) {
+								playlist.sort(METADATA_TITLE);
+								playlist.save_to_file();
+							}
+							ImGui::EndMenu();
+						}
 						ImGui::EndPopup();
 					}
 				}
@@ -901,6 +916,23 @@ bool show_ui() {
 					G.extra_view = EXTRA_VIEW_SEARCH_RESULTS;
 					G.show_extra_view = true;
 				}
+			}
+			
+			ImGui::SameLine();
+			if (ImGui::BeginCombo("##sort", "Sort by", ImGuiComboFlags_WidthFitPreview)) {
+				if (ImGui::Selectable("Album")) {
+					playlist.sort(METADATA_ALBUM);
+					playlist.save_to_file();
+				}
+				if (ImGui::Selectable("Artist")) {
+					playlist.sort(METADATA_ARTIST);
+					playlist.save_to_file();
+				}
+				if (ImGui::Selectable("Title")) {
+					playlist.sort(METADATA_TITLE);
+					playlist.save_to_file();
+				}
+				ImGui::EndCombo();
 			}
 
 			int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);

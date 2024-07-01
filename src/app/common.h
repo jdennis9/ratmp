@@ -27,13 +27,14 @@
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define SWAP(a, b) {auto swapper_ = a; a = b; b = swapper_;}
 
 #ifdef _MSC_VER
 #define ALIGNED(x) __declspec(align(x))
 #define INLINE __forceinline
 #elif defined(__GNUC__)
 #define ALIGNED(x) __attribute__((aligned(x)))
-#define INLIEN __attribute__((always_inline))
+#define INLINE __attribute__((always_inline))
 #endif
 
 typedef uint64_t uint64;

@@ -183,6 +183,83 @@ void Tracklist::clear() {
 	m_tracks.reset();
 }
 
+static Metadata_Type get_sorting_alternate_metadata_type(Metadata_Type type) {
+	switch (type) {
+		case METADATA_TITLE: 
+		return METADATA_ALBUM;
+		
+		case METADATA_ALBUM:
+		case METADATA_ARTIST:
+		return METADATA_TITLE;
+	}
+	
+	return METADATA_TITLE;
+}
+
+static int compare_strings_case_insensitive(const char *a, const char *b) {
+	for (; *a && *b; ++a, ++b) {
+		if (isalpha(*a) && isalpha(*b)) {
+			int ca = tolower(*a);
+			int cb = tolower(*b);
+			if (ca < cb) 
+				return -1;
+			else if (ca > cb)
+				return 1;
+		}
+		else if (isalpha(*a)) 
+			return -1;
+		else if (isalpha(*b)) 
+			return 1;
+	}
+	
+	return 0;
+}
+
+static bool track_sorts_before_track(const Track& a, const Track& b, Metadata_Type aspect) {
+	const char *A = get_metadata_string(a.metadata, aspect);
+	const char *B = get_metadata_string(b.metadata, aspect);
+	if (!A[0]) return 0;
+	if (!B[0]) return 1;
+	
+	int cmp = compare_strings_case_insensitive(A, B);
+	if (cmp == 0) {
+		aspect = get_sorting_alternate_metadata_type(aspect);
+		A = get_metadata_string(a.metadata, aspect);
+		B = get_metadata_string(b.metadata, aspect);
+		if (!A[0]) return 0;
+		if (!B[0]) return 1;
+		return compare_strings_case_insensitive(A, B) == -1;
+	}
+	
+	return cmp == -1;
+}
+
+static void quick_sort_tracks(Auto_Array<Track> tracks, int low, int high, Metadata_Type aspect) {
+	int pivot;
+	if (low < high) {
+		pivot = high;
+		{
+			int i = low-1;
+			for (int j = low; j <= high-1; ++j) {
+				bool j_before_pivot = track_sorts_before_track(tracks[j], tracks[pivot], aspect);
+				if (j_before_pivot) {
+					i++;
+					SWAP(tracks[i], tracks[j]);
+				}
+			}
+			SWAP(tracks[i+1], tracks[high]);
+			pivot = i + 1;
+		}
+		
+		quick_sort_tracks(tracks, low, pivot-1, aspect);
+		quick_sort_tracks(tracks, pivot+1, high, aspect);
+	}
+}
+
+void Tracklist::sort(Metadata_Type aspect) {
+	quick_sort_tracks(m_tracks, 0, m_tracks.m_count-1, aspect);
+}
+
 const char *Tracklist::get_filename() const {
 	return m_filename;
 }

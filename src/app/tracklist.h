@@ -69,13 +69,13 @@ struct Track {
 
 struct Tracklist {	
 	Auto_Array<Track> m_tracks;
-	char m_filename[128];
 	struct { int32 first; int32 last; } m_selection;
 
 	INLINE Track &operator [](int index) { return m_tracks[index]; }
 	INLINE const Track &operator [](int index) const { return m_tracks[index]; }
 
 	char name[128-16];
+	char m_filename[128];
 
 	// Get position as if repeat mode is on
 	inline uint32 repeat(int32 position) const {
@@ -104,6 +104,7 @@ struct Tracklist {
 	void select_to(int32 index);
 	void shuffle();
 	void clear();
+	void sort(Metadata_Type aspect);
 	const char *get_filename() const;
 
 	// Returns number of tracks loaded.
