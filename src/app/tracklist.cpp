@@ -212,6 +212,8 @@ static int compare_strings_case_insensitive(const char *a, const char *b) {
 			return 1;
 	}
 	
+	if (*a) return 1;
+	if (*b) return -1;
 	return 0;
 }
 
