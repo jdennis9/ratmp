@@ -623,6 +623,9 @@ bool show_ui() {
 				if (select_folder_dialog(folder, 512)) {
 					for_each_file_in_directory(folder, &add_from_file_select_dialog_callback);
 					G.playlists[G.selected_playlist].save_to_file();
+					if (G.selected_playlist == G.queued_playlist) {
+						queue_playlist(G.selected_playlist);
+					}
 				}
 			}
 			ImGui::EndDisabled();
@@ -792,6 +795,9 @@ bool show_ui() {
 							delete track_payload;
 							ImGui::EndDragDropTarget();
 							playlist.save_to_file();
+							if (iplaylist == G.queued_playlist) {
+								queue_playlist(iplaylist);
+							}
 						}
 					}
 					
