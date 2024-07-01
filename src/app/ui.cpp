@@ -1065,6 +1065,7 @@ void ui_handle_hotkey(uintptr_t hotkey) {
 static void show_config_editor_gui() {
 	Config& config = g_config;
 	bool apply = false;
+	bool need_save = false;
 	
 	if (ImGui::BeginCombo("Theme", config.theme)) {
 		const char *sel = show_theme_selector_gui();
@@ -1086,6 +1087,7 @@ static void show_config_editor_gui() {
 			for (int i = 0; i < CLOSE_POLICY__COUNT; ++i) {
 				if (ImGui::Selectable(close_policy_names[i])) {
 					config.close_policy = (Close_Policy)i;
+					need_save = true;
 				}
 			}
 			ImGui::EndCombo();
@@ -1103,8 +1105,9 @@ static void show_config_editor_gui() {
 		}
 	}
 	
+	need_save |= apply;
 	if (apply) apply_config();
-	if (ImGui::Button("Save")) save_config();
+	if (need_save) save_config();
 }
 
 static void show_hotkey_gui() {

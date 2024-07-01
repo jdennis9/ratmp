@@ -105,6 +105,7 @@ void load_config() {
 }
 
 void save_config() {
+	log_debug("Saving config\n");
 	FILE *file = fopen("config.ini", "w");
 	if (!file) return;
 	
