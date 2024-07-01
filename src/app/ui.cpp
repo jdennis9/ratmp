@@ -814,14 +814,17 @@ bool show_ui() {
 							if (ImGui::MenuItem("Album")) {
 								playlist.sort(METADATA_ALBUM);
 								playlist.save_to_file();
+								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
 							}
 							if (ImGui::MenuItem("Artist")) {
 								playlist.sort(METADATA_ARTIST);
 								playlist.save_to_file();
+								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
 							}
 							if (ImGui::MenuItem("Title")) {
 								playlist.sort(METADATA_TITLE);
 								playlist.save_to_file();
+								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
 							}
 							ImGui::EndMenu();
 						}
@@ -929,14 +932,20 @@ bool show_ui() {
 				if (ImGui::Selectable("Album")) {
 					playlist.sort(METADATA_ALBUM);
 					playlist.save_to_file();
+					if (G.selected_playlist == G.queued_playlist) 
+						queue_playlist(G.selected_playlist);
 				}
 				if (ImGui::Selectable("Artist")) {
 					playlist.sort(METADATA_ARTIST);
 					playlist.save_to_file();
+					if (G.selected_playlist == G.queued_playlist) 
+						queue_playlist(G.selected_playlist);
 				}
 				if (ImGui::Selectable("Title")) {
 					playlist.sort(METADATA_TITLE);
 					playlist.save_to_file();
+					if (G.selected_playlist == G.queued_playlist) 
+						queue_playlist(G.selected_playlist);
 				}
 				ImGui::EndCombo();
 			}
