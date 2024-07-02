@@ -714,6 +714,12 @@ bool show_ui() {
 				G.main_view = MAIN_VIEW_TRACKS;
 			}
 			
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
+				(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
+				G.selected_playlist = PLAYLIST_LIBRARY;
+				play_track_at(PLAYLIST_LIBRARY, 0);
+			}
+			
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			if (ImGui::Selectable("Queue##queue", G.selected_playlist == PLAYLIST_QUEUE && G.main_view == MAIN_VIEW_TRACKS)) {
