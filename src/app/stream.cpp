@@ -419,19 +419,21 @@ float stream_get_volume() {
 	return G.volume; 
 }
 
+#define IS_EXTENSION(str, ext) (*(uint32*)(str) == *(uint32*)(ext))
+
 bool stream_file_is_supported(const char *file_path) {
 	const char *extension_ptr = get_file_extension(file_path);
-	char extension[8];
+	char extension[8] = {};
 	strncpy(extension, extension_ptr, 7);
 
 	for (int i = 0; i < 8 && extension[i]; ++i) {
 		extension[i] = tolower(extension[i]);
 	}
-
+	
 	bool supported = 
-		!strcmp(extension, "m4a") || !strcmp(extension, "mp3") || !strcmp(extension, "wav") ||
-		!strcmp(extension, "aiff") || !strcmp(extension, "opus") || !strcmp(extension, "flac") ||
-		!strcmp(extension, "ogg") || !strcmp(extension, "wma");
+		IS_EXTENSION(extension, "m4a") || IS_EXTENSION(extension, "mp3") || IS_EXTENSION(extension, "wav") ||
+		IS_EXTENSION(extension, "aiff") || IS_EXTENSION(extension, "opus") || IS_EXTENSION(extension, "flac") ||
+		IS_EXTENSION(extension, "ogg") || IS_EXTENSION(extension, "wma");
 
 	if (!supported) {
 		log_debug("File type \"%s\" not supported\n", extension);

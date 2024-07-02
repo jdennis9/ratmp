@@ -101,4 +101,19 @@ bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max);
 bool file_exists(const char *path);
 bool create_directory(const char *path);
 
+static inline const char *read_line(const char *in, char *out, int out_size) {
+	int out_count = 0;
+	if (!*in) return NULL;
+	
+	while (*in && *in == '\n') in++;
+	
+	for (; *in && (*in != '\n') && (out_count < (out_size-1)); ++in, ++out_count) {
+		out[out_count] = *in;
+	}
+	out[out_count] = 0;
+	if (!out_count) return NULL;
+	return *in ? in + 1 : in;
+}
+
+
 #endif //FILES_H

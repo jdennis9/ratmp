@@ -464,6 +464,7 @@ static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
 
 static bool add_playlist(const char *path) {
 	Tracklist tracklist = {};
+	log_debug("Load playlist \"%s\"\n", path);
 	tracklist.load_from_file(path);
 	G.playlists.append(tracklist);
 	return true;
@@ -478,9 +479,12 @@ static void clean_up() {
 
 void init_ui() {
 	set_default_theme();
+	START_TIMER(load_metadata, "Load metadata cache");
 	load_metadata_cache();
+	STOP_TIMER(load_metadata);
 	
 	// Library and queue
+	START_TIMER(load_library, "Load library");
 	{
 		Tracklist library = {};
 		Tracklist queue = {};
@@ -500,11 +504,14 @@ void init_ui() {
 		G.playlists.append(library);
 		G.playlists.append(queue);
 	}
+	STOP_TIMER(load_library);
 	
+	START_TIMER(load_playlists, "Load playlists");
 	for_each_file_in_directory(L"playlists", &add_playlist);
 	if (!file_exists("playlists")) {
 		create_directory("playlists");
 	}
+	STOP_TIMER(load_playlists);
 	G.renaming_playlist = -1;
 	G.selected_playlist = PLAYLIST_LIBRARY;
 	G.queued_playlist = -1;

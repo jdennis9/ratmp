@@ -278,7 +278,6 @@ static bool create_wgl_device(HWND hWnd) {
 	g_window.hDC = GetDC(hWnd);
 	if (!g_window.hRC)
 		g_window.hRC = wglCreateContext(hDc);
-	
 	return true;
 }
 
@@ -530,9 +529,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 	UpdateWindow(g_hWnd);
 	ShowWindow(g_hWnd, SW_NORMAL);
+	START_TIMER(create_wgl_device, "Create WGL device");
 	create_wgl_device(g_hWnd);
+	STOP_TIMER(create_wgl_device);
 	wglMakeCurrent(g_window.hDC, g_window.hRC);
+	START_TIMER(load_opengl, "Load OpenGL library");
 	glewInit();
+	STOP_TIMER(load_opengl);
 	enable_vsync();
 	
 	SendMessage(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)G.icon);
@@ -560,8 +563,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	// In case font size is not defined in the theme, use a reasonable default
 	G.font_size = DEFAULT_FONT_SIZE;
 	
+	START_TIMER(init_ui, "Initialize UI");
 	init_drag_drop(g_hWnd);
 	init_ui();
+	STOP_TIMER(init_ui);
 	
 	load_config(); // Config needs to be loaded after ImGui and OpenGL are initialized
 	

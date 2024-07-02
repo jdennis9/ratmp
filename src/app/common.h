@@ -74,6 +74,11 @@ uint32 wchar_to_multibyte(const wchar_t *in, char *out, uint32 out_max);
 uint32 multibyte_to_wchar(const char *in, wchar_t *out, uint32 out_max);
 int format_time(int32 seconds, char *buffer, int buffer_size);
 
+#define START_TIMER(var, text) struct {const char *name; uint64 start;} timer__##var = {text, time_get_tick()};
+#define STOP_TIMER(var) \
+printf("%s: %gms\n", timer__##var.name, \
+((float)(time_get_tick() - timer__##var.start) / (float)time_get_frequency()) * 1000.f);
+
 enum Message_Box_Type {
 	MESSAGE_BOX_ERROR,
 	MESSAGE_BOX_WARNING,

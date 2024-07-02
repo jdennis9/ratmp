@@ -86,10 +86,15 @@ static void add_to_albums(const Track& track) {
 
 bool Tracklist::add(Track track, bool add_to_album_pool) {
 	uint32 track_count = m_tracks.length();
-	for (uint32 i = 0; i < track_count; ++i) {
+	uint32 m = track_count/2;
+	for (uint32 i = 0; i < m; ++i) {
 		if (m_tracks[i].metadata == track.metadata) 
 			return true;
+		if (m_tracks[i+m].metadata == track.metadata)
+			return true;
 	}
+	if ((track_count%2) && m_tracks[track_count-1].metadata == track.metadata) return true;
+	
 	m_tracks.append(track);
 	ui_add_to_library(track);
 	if (add_to_album_pool) add_to_albums(track);
@@ -104,7 +109,7 @@ bool Tracklist::add(const char *path) {
 	track.path = store_file_path(path);
 	track.metadata = retrieve_metadata(path);
 	add(track);
-
+	
 	return true;
 }
 
@@ -268,38 +273,49 @@ const char *Tracklist::get_filename() const {
 
 uint32 Tracklist::load_from_file(const char *path) {
 	char line[1024];
+	char *buffer;
+	long buffer_size;
+	const char *reader;
 	FILE *file;
 	uint32 count = 0;
 	size_t length = 0;
-
+	
 	//strncpy(m_filename, get_file_name(path), sizeof(m_filename)-1);
 	strncpy(m_filename, path, sizeof(m_filename)-1);
 
-	file = fopen(path, "r");
+	file = fopen(path, "rb");
 
 	if (!file) return 0;
-	if (fgets(line, 1024, file)) {} // Version
+	fseek(file, 0, SEEK_END);
+	buffer_size = ftell(file);
+	buffer = (char*)malloc(buffer_size+1);
+	fseek(file, 0, SEEK_SET);
+	fread(buffer, buffer_size, 1, file);
+	buffer[buffer_size] = 0;
+	reader = buffer;
+	
+	if (reader = read_line(reader, line, sizeof(line))) {} // Version
 
 	// Name
-	if (fgets(line, 1024, file)) {
+	if (reader = read_line(reader, line, sizeof(line))) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		strncpy(this->name, line, sizeof(this->name)-1);
 	}
 
-	while (fgets(line, 1024, file)) {
+	while (reader = read_line(reader, line, sizeof(line))) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		count += this->add(line);
 	}
 
 	fclose(file);
+	free(buffer);
 	return count;
 }
 
 void Tracklist::save_to_file(const char *path) {
 	char filename[16];
-	
 	if (!path && !m_filename[0]) {
 		strcpy(filename, "XXXXXX");
 		if (!_mktemp(filename)) {

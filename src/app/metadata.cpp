@@ -146,12 +146,13 @@ static inline char *eat_spaces(char *c) {
 }
 
 void load_metadata_cache() {
-	uint64 timer = time_get_tick();
-
 	G.metadata.reset();
 	G.string_pool.reset();
 	push_string(" ");
-
+	
+	char *buffer;
+	const char *reader;
+	long buffer_size;
 	char line[2048];
 	FILE *file = fopen(METADATA_CACHE_PATH, "r");
 	if (!file) {
@@ -159,11 +160,19 @@ void load_metadata_cache() {
 		return;
 	}
 	
+	fseek(file, 0, SEEK_END);
+	buffer_size = ftell(file);
+	buffer = (char*)malloc(buffer_size+1);
+	fseek(file, 0, SEEK_SET);
+	fread(buffer, buffer_size, 1, file);
+	fclose(file);
+	buffer[buffer_size] = 0;
+	
 	GET_METADATA_TYPE_NAMES(type_names);
 
-	log_debug("Loading metadata cache\n");
-
-	while (fgets(line, sizeof(line), file)) {
+	reader = buffer;
+	
+	while (reader = read_line(reader, line, sizeof(line))) {
 		char *string = line;
 		uint32 id = (uint32)strtoll(string, &string, 16);
 		Metadata data = {};
@@ -207,7 +216,5 @@ void load_metadata_cache() {
 		G.metadata.add(id, data);
 	}
 
-	fclose(file);
-
-	log_debug("Load metadata cache: %g s\n", (float)(time_get_tick() - timer) / (float)time_get_frequency());
+	free(buffer);
 }
