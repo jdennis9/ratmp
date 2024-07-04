@@ -201,27 +201,6 @@ static Metadata_Type get_sorting_alternate_metadata_type(Metadata_Type type) {
 	return METADATA_TITLE;
 }
 
-static int compare_strings_case_insensitive(const char *a, const char *b) {
-	for (; *a && *b; ++a, ++b) {
-		if (isalpha(*a) && isalpha(*b)) {
-			int ca = tolower(*a);
-			int cb = tolower(*b);
-			if (ca < cb) 
-				return -1;
-			else if (ca > cb)
-				return 1;
-		}
-		else if (isalpha(*a)) 
-			return -1;
-		else if (isalpha(*b)) 
-			return 1;
-	}
-	
-	if (*a) return 1;
-	if (*b) return -1;
-	return 0;
-}
-
 static bool track_sorts_before_track(const Track& a, const Track& b, Metadata_Type aspect) {
 	const char *A = get_metadata_string(a.metadata, aspect);
 	const char *B = get_metadata_string(b.metadata, aspect);

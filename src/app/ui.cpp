@@ -120,6 +120,7 @@ static struct {
 	Stream_State state;
 	int32 queue_position;
 	Auto_Array<Tracklist> playlists;
+	Auto_Array<uint32> playlist_order; // Order of user playlists
 	int32 renaming_playlist;
 	int32 selected_playlist;
 	int32 queued_playlist;
@@ -213,6 +214,37 @@ static void goto_previous_track() {
 	for (uint32 i = 1; i <= G.playlists[G.queued_playlist].length(); ++i) {
 		if (play_track_at(G.queued_playlist, G.queue_position - 1)) break;
 	}
+}
+
+static void quick_sort_playlists(Auto_Array<uint32>& order, int low, int high) {
+	int pivot;
+	if (low < high) {
+		pivot = high;
+		{
+			int i = low-1;
+			for (int j = low; j <= high-1; ++j) {
+				bool j_before_pivot = compare_strings_case_insensitive(G.playlists[order[j]].name,
+																	   G.playlists[order[pivot]].name) == -1;
+				if (j_before_pivot) {
+					i++;
+					SWAP(G.playlists[order[i]], G.playlists[order[j]]);
+				}
+			}
+			SWAP(G.playlists[order[i+1]], G.playlists[order[high]]);
+			pivot = i + 1;
+		}
+		
+		quick_sort_playlists(order, low, pivot-1);
+		quick_sort_playlists(order, pivot+1, high);
+	}
+}
+
+static void sort_playlists() {
+	uint32 count = G.playlists.m_count;
+	G.playlist_order.reset();
+	for (uint32 i = PLAYLIST_USER; i < G.playlists.m_count; ++i) 
+		G.playlist_order.append(i);
+	quick_sort_playlists(G.playlist_order, 0, G.playlist_order.m_count-1);
 }
 
 static int32 show_playlist_dropdown_selector() {
@@ -511,7 +543,9 @@ void init_ui() {
 	if (!file_exists("playlists")) {
 		create_directory("playlists");
 	}
+	sort_playlists();
 	STOP_TIMER(load_playlists);
+	
 	G.renaming_playlist = -1;
 	G.selected_playlist = PLAYLIST_LIBRARY;
 	G.queued_playlist = -1;
@@ -538,6 +572,7 @@ static void queue_playlist(int32 index) {
 static void create_playlist() {
 	Tracklist list = {};
 	G.renaming_playlist = G.playlists.append(list);
+	G.playlist_order.append(G.renaming_playlist);
 }
 
 static bool add_from_file_select_dialog_callback(const char *path) {
@@ -757,6 +792,7 @@ bool show_ui() {
 					G.playlists.remove_range(deleting_playlist, deleting_playlist);
 					if (deleting_playlist == G.selected_playlist) G.selected_playlist = -1;
 					if (deleting_playlist == G.queued_playlist) G.queued_playlist = -1;
+					sort_playlists();
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SameLine();
@@ -767,7 +803,9 @@ bool show_ui() {
 			}
 
 			// Show list of user playlists
-			for (uint32 iplaylist = PLAYLIST_USER; iplaylist < playlist_count; ++iplaylist) {
+			for (uint32 order = 0; order < G.playlist_order.m_count; ++order) {
+				uint32 iplaylist = G.playlist_order[order];
+				if (iplaylist < PLAYLIST_USER || iplaylist >= G.playlists.m_count) continue;
 				Tracklist &playlist = G.playlists[iplaylist];
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
@@ -776,12 +814,26 @@ bool show_ui() {
 					bool commit = false;
 					ImGui::SetWindowFocus();
 					ImGui::SetKeyboardFocusHere();
+					
 					commit |= ImGui::InputText("##playlist_name", playlist.name, 
 											   sizeof(playlist.name), ImGuiInputTextFlags_EnterReturnsTrue);
 					if (commit) {
+						// Store the name of the playlist so we can find its new index in the playlist array
+						char name[sizeof(playlist.name)+1];
+						name[sizeof(playlist.name)] = 0;
+						strncpy(name, playlist.name, sizeof(playlist.name));
+						
 						G.renaming_playlist = -1;
-						G.selected_playlist = iplaylist;
 						playlist.save_to_file();
+						sort_playlists();
+						
+						// Find new index of playlist and select it
+						for (uint32 i = PLAYLIST_USER; i < G.playlists.m_count; ++i) {
+							if (!strcmp(G.playlists[i].name, name)) {
+								G.selected_playlist = i;
+								break;
+							}
+						}
 					}
 				}
 				else {

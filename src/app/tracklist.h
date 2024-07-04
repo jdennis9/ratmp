@@ -46,6 +46,27 @@ static bool string_contains(const char *haystack, const char *needle) {
 	return false;
 }
 
+static int compare_strings_case_insensitive(const char *a, const char *b) {
+	for (; *a && *b; ++a, ++b) {
+		if (isalpha(*a) && isalpha(*b)) {
+			int ca = tolower(*a);
+			int cb = tolower(*b);
+			if (ca < cb) 
+				return -1;
+			else if (ca > cb)
+				return 1;
+		}
+		else if (isalpha(*a)) 
+			return -1;
+		else if (isalpha(*b)) 
+			return 1;
+	}
+	
+	if (*a) return 1;
+	if (*b) return -1;
+	return 0;
+}
+
 struct Track_Filter {
 	uint32 enabled;
 	const char *filter;
