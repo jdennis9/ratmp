@@ -35,6 +35,7 @@
 #define MIN_FONT_SIZE 8
 #define DEFAULT_FONT_SIZE 14
 #define MAX_FONT_SIZE 32
+#define SINGLE_INSTANCE
 
 IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -47,6 +48,9 @@ static struct {
 } g_window;
 
 static HWND g_hWnd;
+#ifdef SINGLE_INSTANCE
+static HANDLE g_foreground_event;
+#endif
 
 static struct {
 	char font[512];
@@ -394,12 +398,11 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 		case WM_APP + 1: {
 			if (LOWORD(lParam) == WM_LBUTTONDOWN) {
 				ShowWindow(hWnd, SW_SHOW);
-				
+				SetForegroundWindow(hWnd);
 			}
 			else if (LOWORD(lParam) == WM_RBUTTONDOWN) {
 				POINT mouse;
 				GetCursorPos(&mouse);
-				SetForegroundWindow(hWnd);
 				TrackPopupMenuEx(G.tray_popup, TPM_LEFTBUTTON, mouse.x, mouse.y, hWnd, NULL);
 				PostMessage(hWnd, WM_NULL, 0, 0);
 			}
@@ -441,6 +444,11 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			ui_set_waveform_image(NULL);
 			return 0;
 		}
+		case WM_USER+EVENT_REQUEST_SHOW_WINDOW: {
+			ShowWindow(hWnd, SW_SHOW);
+			SetForegroundWindow(hWnd);
+			return 0;
+		}
 	}
 	
 	return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -459,6 +467,18 @@ static void enable_vsync() {
 	else wglSwapIntervalEXT(1);
 }
 
+#ifdef SINGLE_INSTANCE
+static DWORD foreground_event_thread(LPVOID lParam) {
+	while (1) {
+		if (WaitForSingleObject(g_foreground_event, INFINITE) == WAIT_OBJECT_0) {
+			post_event(EVENT_REQUEST_SHOW_WINDOW, 0, 0);
+		}
+	}
+	
+	return 0;
+}
+#endif SINGLE_INSTANCE
+
 void post_event(Event_Code event, int64 wparam, int64 lparam) {
 	PostMessageW(g_hWnd, WM_USER+event, wparam, lparam);
 }
@@ -471,15 +491,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 {
 	const wchar_t *WNDCLASS_NAME = L"RAT_WINDOW";
 	
-#ifdef NDEBUG
-	// Check this is the only running instance of Traklist
-	HANDLE instance_mutex = CreateMutexW(NULL, TRUE, L"RAT_INSTANCE");
+#ifdef SINGLE_INSTANCE
+	g_foreground_event = CreateEventW(NULL, FALSE, FALSE, L"RAT_INSTANCE");
 	if (GetLastError() == ERROR_ALREADY_EXISTS) {
-		g_hWnd = FindWindowW(WNDCLASS_NAME, NULL);
-		if (g_hWnd) SetForegroundWindow(g_hWnd); // Bring the running instance to the foreground
+		log_debug("Found existing instance, bringing to foreground\n");
+		g_foreground_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, L"RAT_INSTANCE");
+		if (g_foreground_event) SetEvent(g_foreground_event);
+		else log_error("Failed to open process event");
 		return 0;
-	}	
-#else	
+	}
+	CreateThread(NULL, 0, &foreground_event_thread, NULL, 0, NULL);
+#endif
+	
+#ifndef NDEBUG
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 #endif
 	
@@ -577,7 +601,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		const uint64 input_idle_threshold = time_get_frequency() / 8; // ~0.125 seconds
 		
 		if (IsWindowVisible(g_hWnd)) {
-			if ((time_since_last_input < input_idle_threshold) || (MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT) == WAIT_OBJECT_0)) {
+			if ((time_since_last_input < input_idle_threshold) || 
+				(MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT) == WAIT_OBJECT_0)) {
 				while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
 					TranslateMessage(&msg);
 					DispatchMessage(&msg);
@@ -673,8 +698,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	wglDeleteContext(g_window.hRC);
 	DestroyWindow(g_hWnd);
 	UnregisterClassW(L"main_window", wndclass.hInstance);
-#ifdef NDEBUG
-	CloseHandle(instance_mutex);
+#ifdef SINGLE_INSTANCE
+	CloseHandle(g_foreground_event);
 #endif
 	
 	return 0;
