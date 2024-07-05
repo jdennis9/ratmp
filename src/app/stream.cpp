@@ -143,8 +143,7 @@ static void decoder_seek(Decoder *dec, int64 millisecond) {
 		dec->current_sample = second * dec->sample_rate;
 		auto base = dec->demuxer->streams[dec->stream_index]->time_base;
 		int64 ts = av_rescale(second, base.den, base.num);
-		avformat_seek_file(dec->demuxer, dec->stream_index, ts-1000, ts, ts+1000, 0);
-		avformat_flush(dec->demuxer);
+		avformat_seek_file(dec->demuxer, dec->stream_index, 0, ts, ts, 0);
 		avcodec_flush_buffers(dec->decoder);
 		dec->overflow_frame_count = 0;
 		dec->output_stream->interrupt();
