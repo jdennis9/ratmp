@@ -391,17 +391,39 @@ void show_theme_editor_gui() {
 	const char *background_path = get_background_image_path();
 	ImGui::SeparatorText("Style");
 	
-	ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
-	editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
-	input_float_clamped("Window Border Thickness", &style.WindowBorderSize, 0.f, 8.f);
-	editor_padding_helper2("Table Cell Padding", &style.CellPadding, 0.f, 8.f);
-	ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.f, 16.f, "%.0f");
-	editor_padding_helper2("Frame Padding", &style.FramePadding, 0.f, 8.f);
-	editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
-	input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
-	ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
-	ImGui::SliderFloat("Title Alignment", &style.WindowTitleAlign.x, 0.f, 1.f);
-	
+	if (ImGui::BeginTable("##style_table", 2)) {
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
+		ImGui::TableNextColumn();
+		editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
+		
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		input_float_clamped("Border Size", &style.WindowBorderSize, 0.f, 8.f);
+		ImGui::TableNextColumn();
+		editor_padding_helper2("Table Cell Padding", &style.CellPadding, 0.f, 8.f);
+		
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.f, 16.f, "%.0f");
+		ImGui::TableNextColumn();
+		editor_padding_helper2("Frame Padding", &style.FramePadding, 0.f, 8.f);
+				
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
+		ImGui::TableNextColumn();
+		ImGui::SliderFloat("Title Alignment", &style.WindowTitleAlign.x, 0.f, 1.f);
+		
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
+		ImGui::TableNextColumn();
+		input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
+		
+		ImGui::EndTable();
+	}
 	
 	ImGui::TextUnformatted("Background image");
 	ImGui::SameLine();
