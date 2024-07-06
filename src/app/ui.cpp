@@ -1135,7 +1135,7 @@ bool show_ui() {
 
 			// Volume button
 			ImGui::SameLine();
-			{
+			if (0) {
 				const char *icon = u8"\xf028";
 				ImVec2 text_size = ImGui::CalcTextSize(icon);
 				ImVec2 cursor = ImGui::GetCursorPos();
@@ -1150,6 +1150,19 @@ bool show_ui() {
 					if (vertical_volume_slider("##slider", ImVec2{14, 60}, &volume, 0.f, 1.f)) 
 						stream_set_volume(volume);
 					ImGui::EndPopup();
+				}
+			}
+			else {
+				const char *icon = u8"\xf028";
+				ImVec2 icon_size = ImGui::CalcTextSize(icon);
+				float volume = stream_get_volume();
+				ImVec2 cursor = ImGui::GetCursorPos();
+				float width = 90.f;
+				cursor.x = window.size.x - width - (style.ItemInnerSpacing.x*2.f) - (style.WindowPadding.x*2.f) - icon_size.x;
+				ImGui::SetCursorPos(cursor);
+				if (circle_handle_slider(icon, &volume, 0.f, 1.f, width)) {
+					stream_set_volume(volume);
+					ImGui::SetTooltip("%d%%", (int)(100.f * volume));
 				}
 			}
 			

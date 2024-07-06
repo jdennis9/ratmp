@@ -233,6 +233,72 @@ static bool special_small_button(const char *str_id, Small_Button_Draw_Hook *dra
 	return active;
 }
 
+bool circle_handle_slider(const char *str_id, float *p_position, float min, float max, float width) {
+	ImDrawList *draw_list = ImGui::GetWindowDrawList();
+	ImGuiWindow *window = ImGui::GetCurrentWindow();
+	ImVec2 available_size = ImGui::GetContentRegionAvail();
+	ImVec2 cursor = ImGui::GetCursorScreenPos();
+	ImVec2 mouse = ImGui::GetMousePos();
+	float rel_pos = (*p_position - min) / (max - min);
+	ImGuiID id = ImGui::GetID(str_id);
+	bool active = id == ImGui::GetActiveID();
+	ImGuiStyle& style = ImGui::GetStyle();
+	ImVec2 text_size = ImGui::CalcTextSize(str_id);
+	
+	const float handle_radius = 6.f;
+	ImVec2 size = {width, 6.f};
+	ImVec2 bg_pos = {
+		cursor.x, 
+		cursor.y + style.ItemInnerSpacing.y + (ImGui::GetTextLineHeight()*.5f) - size.y,
+	};
+	ImVec2 handle_center = {bg_pos.x + (size.x * rel_pos), bg_pos.y + (size.y*.5f)};
+	
+	ImVec2 text_pos = {cursor.x + width + style.ItemInnerSpacing.x + handle_radius + 2.f, cursor.y};
+	draw_list->AddText(text_pos, ImGui::GetColorU32(style.Colors[ImGuiCol_Text]), str_id);
+	
+	draw_list->AddRectFilled(bg_pos,
+							 ImVec2{bg_pos.x + size.x, bg_pos.y + size.y},
+							 get_theme_color(THEME_COLOR_SEEK_BAR_BG), 4.f);
+	draw_list->AddRectFilled(bg_pos,
+							 ImVec2{bg_pos.x + (size.x * rel_pos), bg_pos.y + size.y},
+							 get_theme_color(THEME_COLOR_SEEK_BAR), 4.f);
+	
+	draw_list->AddCircleFilled(handle_center,
+							   handle_radius,
+							   get_theme_color(THEME_COLOR_SEEK_BAR));
+	
+	
+	
+	ImGui::PushID(id);
+	ImVec2 clickbox_size = {
+		size.x + (style.ItemInnerSpacing.x * 2.f),
+		size.y + (style.ItemInnerSpacing.y * 2.f),
+	};
+	if (ImGui::InvisibleButton(str_id, clickbox_size,
+							   ImGuiButtonFlags_PressedOnClick|ImGuiButtonFlags_Repeat)) {
+		active = true;
+		ImGui::SetActiveID(id, window);
+	}
+	
+	if (active &&
+		(ImGui::IsMouseClicked(ImGuiMouseButton_Left)||ImGui::IsMouseDown(ImGuiMouseButton_Left))) {
+		rel_pos = ImClamp((mouse.x - cursor.x) / size.x, 0.f, 1.f);
+		*p_position = ImLerp(min, max, rel_pos);
+	}
+	
+	if (active && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+		ImGui::ClearActiveID();
+		active = false;
+	}
+	
+	if (active) {
+		ImGui::SetActiveID(id, window);
+	}
+	ImGui::PopID();
+	
+	return active;
+}
+
 // Might use these later, but for now a custom title bar is too tedious
 #if 0
 static void draw_minimize_icon(ImDrawList *draw_list, ImVec2 pos, ImVec2 size) {
