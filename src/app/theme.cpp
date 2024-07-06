@@ -64,6 +64,33 @@ static const struct Color_Info {
 	{ImGuiCol_COUNT + THEME_COLOR_TRACK_PREVIEW, "Track Preview.", "TrackPreview"},
 };
 
+/*union Theme_Var {
+	ImVec2 vector;
+	float scalar;
+	
+	Theme_Var(ImVec2 vec) : vector(vec) {}
+	Theme_Var(float f) : scalar(f) {}
+};
+
+enum {
+	THEME_VAR_TYPE_VEC2,
+	THEME_VAR_TYPE_FLOAT,
+};
+
+static const struct Theme_Var_Info {
+	ImGuiStyleVar id;
+	int type;
+	const char *name;
+	const char *ini_name;
+	Theme_Var min;
+	Theme_Var max;
+} g_var_info[] = {
+	{
+		ImGuiStyleVar_WindowRounding, THEME_VAR_TYPE_FLOAT, 
+		"Window Rounding", "WindowRounding", Theme_Var(0.f), Theme_Var(16.f)
+	},
+};*/
+
 static Auto_Array<Theme> g_themes;
 static uint32 g_selected_theme;
 static Auto_Array<Font_Name> g_fonts;
@@ -112,6 +139,32 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 		else if (!strcmp(key, "FontSize")) {
 			set_font_size(atoi(value));
 		}
+		else if (!strcmp(key, "WindowRounding"))
+			style.WindowRounding = (float)atoi(value);
+		else if (!strcmp(key, "WindowBorderSize"))
+			style.WindowBorderSize = (float)atoi(value);
+		else if (!strcmp(key, "ScrollbarRounding"))
+			style.ScrollbarRounding = (float)atoi(value);
+		else if (!strcmp(key, "FrameRounding"))
+			style.FrameRounding = (float)atoi(value);
+		else if (!strcmp(key, "ScrollbarSize"))
+			style.ScrollbarSize = (float)atoi(value);
+		else if (!strcmp(key, "WindowPaddingX"))
+			style.WindowPadding.x = (float)atoi(value);
+		else if (!strcmp(key, "WindowPaddingY"))
+			style.WindowPadding.y = (float)atoi(value);
+		else if (!strcmp(key, "CellPaddingX"))
+			style.CellPadding.x = (float)atoi(value);
+		else if (!strcmp(key, "CellPaddingY"))
+			style.CellPadding.y = (float)atoi(value);
+		else if (!strcmp(key, "FramePaddingX"))
+			style.FramePadding.x = (float)atoi(value);
+		else if (!strcmp(key, "FramePaddingY"))
+			style.FramePadding.y = (float)atoi(value);
+		else if (!strcmp(key, "ItemSpacingX"))
+			style.ItemSpacing.x = (float)atoi(value);
+		else if (!strcmp(key, "ItemSpacingY"))
+			style.ItemSpacing.y = (float)atoi(value);
 	}
 	
 	return true;
@@ -241,6 +294,19 @@ void save_theme(const char *name) {
 	if (background_path) fprintf(file, "BackgroundImage= %s\n", background_path);
 	fprintf(file, "Font = %s\n", get_font());
 	fprintf(file, "FontSize = %d\n", get_font_size());
+	fprintf(file, "WindowRounding = %d\n", (int)style.WindowRounding);
+	fprintf(file, "WindowPaddingX = %d\n", (int)style.WindowPadding.x);
+	fprintf(file, "WindowPaddingY = %d\n", (int)style.WindowPadding.y);
+	fprintf(file, "WindowBorderSize = %d\n", (int)style.WindowBorderSize);
+	fprintf(file, "CellPaddingX = %d\n", (int)style.CellPadding.x);
+	fprintf(file, "CellPaddingY = %d\n", (int)style.CellPadding.y);
+	fprintf(file, "FrameRounding = %d\n", (int)style.FrameRounding);
+	fprintf(file, "FramePaddingX = %d\n", (int)style.FramePadding.x);
+	fprintf(file, "FramePaddingY = %d\n", (int)style.FramePadding.y);
+	fprintf(file, "ItemSpacingX = %d\n", (int)style.ItemSpacing.x);
+	fprintf(file, "ItemSpacingY = %d\n", (int)style.ItemSpacing.y);
+	fprintf(file, "ScrollbarSize = %d\n", (int)style.ScrollbarSize);
+	fprintf(file, "ScrollbarRounding = %d\n", (int)style.ScrollbarRounding);
 	
 	fclose(file);
 }
@@ -248,6 +314,35 @@ void save_theme(const char *name) {
 static bool set_background_image(const char *path) {
 	load_background_image(path);
 	return true;
+}
+
+static inline float clamp(float x, float min, float max) {
+	return (x < min) ? min : ((x > max) ? max : x);
+}
+
+static inline bool editor_padding_helper(const char *text, ImVec2* val, float min, float max) {
+	if (ImGui::InputFloat(text, &val->x, 1.f, 1.f, "%.0f")) {
+		val->y = val->x = clamp(val->x, min, max);
+		return true;
+	}
+	return false;
+}
+
+static inline bool editor_padding_helper2(const char *text, ImVec2 *val, float min, float max) {
+	if (ImGui::InputFloat2(text, &val->x, "%.0f")) {
+		val->x = clamp(val->x, min, max);
+		val->y = clamp(val->y, min, max);
+		return true;
+	}
+	return false;
+}
+
+static inline bool input_float_clamped(const char *text, float *val, float min, float max) {
+	if (ImGui::InputFloat(text, val, 1.f, 1.f, "%.0f")) {
+		*val = clamp(*val, min, max);
+		return true;
+	}
+	return false;
 }
 
 void show_theme_editor_gui() {
@@ -315,6 +410,17 @@ void show_theme_editor_gui() {
 	
 	const char *background_path = get_background_image_path();
 	ImGui::SeparatorText("Style");
+	
+	ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
+	editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
+	input_float_clamped("Window Border Thickness", &style.WindowBorderSize, 0.f, 8.f);
+	editor_padding_helper2("Table Cell Padding", &style.CellPadding, 0.f, 8.f);
+	ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.f, 16.f, "%.0f");
+	editor_padding_helper2("Frame Padding", &style.FramePadding, 0.f, 8.f);
+	editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
+	input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
+	ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
+	
 	
 	ImGui::TextUnformatted("Background image");
 	ImGui::SameLine();
