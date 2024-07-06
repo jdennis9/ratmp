@@ -61,6 +61,10 @@ bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_po
 		active = true;
 	}
 	
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+	}
+	
 	ImGui::PopID();
 	
 	return active;
