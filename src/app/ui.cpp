@@ -777,6 +777,7 @@ bool show_ui() {
 				G.selected_playlist = PLAYLIST_LIBRARY;
 				play_track_at(PLAYLIST_LIBRARY, 0);
 			}
+			ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_LIBRARY].length());
 			
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -784,6 +785,7 @@ bool show_ui() {
 				G.selected_playlist = PLAYLIST_QUEUE;
 				G.main_view = MAIN_VIEW_TRACKS;
 			}
+			ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_QUEUE].length());
 			
 			ImGui::EndTable();
 		}
@@ -860,6 +862,8 @@ bool show_ui() {
 						G.selected_playlist = iplaylist;
 						G.main_view = MAIN_VIEW_TRACKS;
 					}
+					
+					ImGui::SetItemTooltip("%u tracks", playlist.length());
 					
 					if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
 						(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
