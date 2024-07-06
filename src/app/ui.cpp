@@ -702,6 +702,7 @@ bool show_ui() {
 			if (ImGui::MenuItem("Remove missing tracks")) {
 				if (G.selected_playlist >= 0 && G.selected_playlist < (int)G.playlists.m_count) {
 					G.playlists[G.selected_playlist].remove_missing_tracks();
+					G.playlists[G.selected_playlist].save_to_file();
 				}
 			}
 			ImGui::EndMenu();
