@@ -620,7 +620,7 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 	const uint32 samples_per_segment = (decoder_get_duration(&dec) * 44.1)/image->height;
 	output_stream->allocate_buffers(samples_per_segment);
 	
-	uint32 seg_count = 0;
+	int seg_count = 0;
 	float segment_sum = 0.f;
 	
 	while (!decoder_decode(&dec,(uint8**)output_stream->buffers, samples_per_segment) && (seg_count < image->height)) {
@@ -658,14 +658,14 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 	float line_factor = 1.f/segment_avg;
 	
 	// Fill in unfilled segments with silence
-	for (uint32 i = seg_count; i < image->height; ++i) {
+	for (int i = seg_count; i < image->height; ++i) {
 		uint32 *line = (uint32*)((uint8*)image->data + (image->width * i * 4));
 		line[half_width] = UINT32_MAX;
 	}
 	
 	if (G.cancel_waveform_load) goto CANCEL;
 	
-	for (uint32 seg = 0; seg < seg_count; ++seg) {
+	for (int seg = 0; seg < seg_count; ++seg) {
 		uint32 *line = (uint32*)((uint8*)image->data + (image->width * seg * 4));
 		line[half_width] = UINT32_MAX;
 		

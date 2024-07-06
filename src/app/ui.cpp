@@ -979,7 +979,7 @@ bool show_ui() {
 		//=============================================================================================
 		else if (G.extra_view == EXTRA_VIEW_MISSING_TRACKS) {
 			if (ImGui::Begin("Missing Tracks", &G.show_extra_view, flags)) {
-				if ((G.selected_playlist >= 0) && (G.selected_playlist < G.playlists.m_count)) {
+				if ((G.selected_playlist >= 0) && (G.selected_playlist < (int)G.playlists.m_count)) {
 					Tracklist& playlist = G.playlists[G.selected_playlist];
 					for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
 						char path[512];
