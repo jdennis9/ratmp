@@ -34,6 +34,7 @@
 
 #define MIN_FONT_SIZE 8
 #define DEFAULT_FONT_SIZE 14
+#define DEFAULT_ICON_FONT_SIZE 12
 #define MAX_FONT_SIZE 32
 #define SINGLE_INSTANCE
 
@@ -67,6 +68,7 @@ static struct {
 	bool need_load_thumbnail;
 	bool need_load_font;
 	int font_size;
+	int icon_font_size;
 } G;
 
 Config g_config;
@@ -143,8 +145,19 @@ void set_font_size(int size) {
 	G.font_size = size;
 }
 
+void set_icon_font_size(int size) {
+	G.need_load_font = true;
+	size = MIN(size, MAX_FONT_SIZE);
+	size = MAX(size, MIN_FONT_SIZE);
+	G.icon_font_size = size;
+}
+
 int get_font_size() {
 	return G.font_size;
+}
+
+int get_icon_font_size() {
+	return G.icon_font_size;
 }
 
 static GLuint create_texture(GLenum filter) {
@@ -586,6 +599,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 	// In case font size is not defined in the theme, use a reasonable default
 	G.font_size = DEFAULT_FONT_SIZE;
+	G.icon_font_size = DEFAULT_ICON_FONT_SIZE;
 	
 	START_TIMER(init_ui, "Initialize UI");
 	init_drag_drop(g_hWnd);
@@ -669,7 +683,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				io.Fonts->AddFontFromFileTTF(path, MAX(G.font_size, 8), &cfg, ranges.Data);
 				cfg.FontDataOwnedByAtlas = false;
 				cfg.MergeMode = true;
-				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 12, &cfg, icon_range);
+				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
+											   G.icon_font_size, &cfg, icon_range);
 				ImGui_ImplOpenGL3_CreateFontsTexture();
 			}
 			else {

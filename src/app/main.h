@@ -78,7 +78,9 @@ const char *get_background_image_path();
 void set_font(const char *path);
 const char *get_font();
 void set_font_size(int size);
+void set_icon_font_size(int size);
 int get_font_size();
+int get_icon_font_size();
 
 void post_event(Event_Code event, int64 wparam, int64 lparam);
 void close_window_to_tray();

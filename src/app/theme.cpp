@@ -139,6 +139,9 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 		else if (!strcmp(key, "FontSize")) {
 			set_font_size(atoi(value));
 		}
+		else if (!strcmp(key, "IconFontSize")) {
+			set_icon_font_size(atoi(value));
+		}
 		else if (!strcmp(key, "WindowRounding"))
 			style.WindowRounding = (float)atoi(value);
 		else if (!strcmp(key, "WindowBorderSize"))
@@ -296,6 +299,7 @@ void save_theme(const char *name) {
 	if (background_path) fprintf(file, "BackgroundImage= %s\n", background_path);
 	fprintf(file, "Font = %s\n", get_font());
 	fprintf(file, "FontSize = %d\n", get_font_size());
+	fprintf(file, "IconFontSize = %d\n", get_icon_font_size());
 	fprintf(file, "WindowRounding = %d\n", (int)style.WindowRounding);
 	fprintf(file, "WindowPaddingX = %d\n", (int)style.WindowPadding.x);
 	fprintf(file, "WindowPaddingY = %d\n", (int)style.WindowPadding.y);
@@ -452,6 +456,11 @@ void show_theme_editor_gui() {
 	int font_size = get_font_size();
 	if (ImGui::InputInt("Font size", &font_size)) {
 		set_font_size(font_size);
+	}
+	
+	int icon_size = get_icon_font_size();
+	if (ImGui::InputInt("Icon size", &icon_size)) {
+		set_icon_font_size(icon_size);
 	}
 }
 
