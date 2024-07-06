@@ -698,6 +698,12 @@ bool show_ui() {
 				G.extra_view = EXTRA_VIEW_CONFIG;
 				G.show_extra_view = true;
 			}
+			ImGui::SeparatorText("Playlist");
+			if (ImGui::MenuItem("Remove missing tracks")) {
+				if (G.selected_playlist >= 0 && G.selected_playlist < (int)G.playlists.m_count) {
+					G.playlists[G.selected_playlist].remove_missing_tracks();
+				}
+			}
 			ImGui::EndMenu();
 		}
 		
