@@ -48,7 +48,6 @@ static void add_to_albums(const Track& track) {
 		}
 	}
 	
-	
 	// Album doesn't exist, add it
 	if (index == album_count) {
 		char path[512];
@@ -103,8 +102,13 @@ bool Tracklist::add(Track track, bool add_to_album_pool) {
 
 bool Tracklist::add(const char *path) {
 	Track track;
-	if (!stream_file_is_supported(path) || !file_exists(path)) 
+	if (!stream_file_is_supported(path)) 
 		return false;
+	
+	if (!file_exists(path)) {
+		m_missing_tracks.append(store_file_path(path));
+		return false;
+	}
 
 	track.path = store_file_path(path);
 	track.metadata = retrieve_metadata(path);
@@ -250,6 +254,10 @@ const char *Tracklist::get_filename() const {
 	return m_filename;
 }
 
+void Tracklist::remove_missing_tracks() {
+	m_missing_tracks.reset();
+}
+
 uint32 Tracklist::load_from_file(const char *path) {
 	char line[1024];
 	char *buffer;
@@ -318,6 +326,12 @@ void Tracklist::save_to_file(const char *path) {
 	for (uint32 i = 0; i < track_count; ++i) {
 		char track_path[512];
 		retrieve_file_path(m_tracks[i].path, track_path, 512);
+		fprintf(file, "%s\n", track_path);
+	}
+	
+	for (uint32 i = 0; i < m_missing_tracks.m_count; ++i) {
+		char track_path[512];
+		retrieve_file_path(m_missing_tracks[i], track_path, 512);
 		fprintf(file, "%s\n", track_path);
 	}
 

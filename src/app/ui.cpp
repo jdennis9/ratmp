@@ -38,6 +38,7 @@ enum Extra_View {
 	EXTRA_VIEW_HOTKEYS,
 	EXTRA_VIEW_SEARCH_RESULTS,
 	EXTRA_VIEW_ABOUT,
+	EXTRA_VIEW_MISSING_TRACKS,
 };
 
 enum Main_View {
@@ -699,7 +700,15 @@ bool show_ui() {
 			}
 			ImGui::EndMenu();
 		}
-
+		
+		if (ImGui::BeginMenu("View")) {
+			if (ImGui::MenuItem("Show missing tracks")) {
+				G.extra_view = EXTRA_VIEW_MISSING_TRACKS;
+				G.show_extra_view = true;
+			}
+			ImGui::EndMenu();
+		}
+		
 		if (ImGui::BeginMenu("Help")) {
 			if (ImGui::MenuItem("Hotkeys")) {
 				G.extra_view = EXTRA_VIEW_HOTKEYS;
@@ -934,14 +943,20 @@ bool show_ui() {
 			}
 			ImGui::End();
 		}
-
+		
+		//=============================================================================================
+		// Hotkeys
+		//=============================================================================================
 		else if (G.extra_view == EXTRA_VIEW_HOTKEYS) {
 			if (ImGui::Begin("Hotkeys", &G.show_extra_view, flags)) {
 				show_hotkey_gui();
 			}
 			ImGui::End();
 		}
-
+		
+		//=============================================================================================
+		// Search results
+		//=============================================================================================
 		else if (G.extra_view == EXTRA_VIEW_SEARCH_RESULTS) {
 			if (ImGui::Begin("Search Results", &G.show_extra_view, flags)) {
 				show_track_list_gui(G.search_results, -1, NULL);
@@ -949,9 +964,29 @@ bool show_ui() {
 			ImGui::End();
 		}
 		
+		//=============================================================================================
+		// About
+		//=============================================================================================
 		else if (G.extra_view == EXTRA_VIEW_ABOUT) {
 			if (ImGui::Begin("About", &G.show_extra_view, flags)) {
 				show_about_gui();
+			}
+			ImGui::End();
+		}
+		
+		//=============================================================================================
+		// Missing tracks
+		//=============================================================================================
+		else if (G.extra_view == EXTRA_VIEW_MISSING_TRACKS) {
+			if (ImGui::Begin("Missing Tracks", &G.show_extra_view, flags)) {
+				if ((G.selected_playlist >= 0) && (G.selected_playlist < G.playlists.m_count)) {
+					Tracklist& playlist = G.playlists[G.selected_playlist];
+					for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
+						char path[512];
+						retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
+						ImGui::TextUnformatted(path);
+					}
+				}
 			}
 			ImGui::End();
 		}

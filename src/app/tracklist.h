@@ -90,6 +90,7 @@ struct Track {
 
 struct Tracklist {	
 	Auto_Array<Track> m_tracks;
+	Auto_Array<Path_Ref> m_missing_tracks;
 	struct { int32 first; int32 last; } m_selection;
 
 	INLINE Track &operator [](int index) { return m_tracks[index]; }
@@ -127,6 +128,7 @@ struct Tracklist {
 	void clear();
 	void sort(Metadata_Type aspect);
 	const char *get_filename() const;
+	void remove_missing_tracks();
 
 	// Returns number of tracks loaded.
 	uint32 load_from_file(const char *path);

@@ -165,6 +165,8 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 			style.ItemSpacing.x = (float)atoi(value);
 		else if (!strcmp(key, "ItemSpacingY"))
 			style.ItemSpacing.y = (float)atoi(value);
+		else if (!strcmp(key, "WindowTitleAlign"))
+			style.WindowTitleAlign.x = atof(value);
 	}
 	
 	return true;
@@ -307,6 +309,7 @@ void save_theme(const char *name) {
 	fprintf(file, "ItemSpacingY = %d\n", (int)style.ItemSpacing.y);
 	fprintf(file, "ScrollbarSize = %d\n", (int)style.ScrollbarSize);
 	fprintf(file, "ScrollbarRounding = %d\n", (int)style.ScrollbarRounding);
+	fprintf(file, "WindowTitleAlign = %f\n", style.WindowTitleAlign.x);
 	
 	fclose(file);
 }
@@ -420,6 +423,7 @@ void show_theme_editor_gui() {
 	editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
 	input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
 	ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
+	ImGui::SliderFloat("Title Alignment", &style.WindowTitleAlign.x, 0.f, 1.f);
 	
 	
 	ImGui::TextUnformatted("Background image");
