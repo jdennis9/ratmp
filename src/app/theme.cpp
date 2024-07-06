@@ -64,33 +64,6 @@ static const struct Color_Info {
 	{ImGuiCol_COUNT + THEME_COLOR_TRACK_PREVIEW, "Track Preview.", "TrackPreview"},
 };
 
-/*union Theme_Var {
-	ImVec2 vector;
-	float scalar;
-	
-	Theme_Var(ImVec2 vec) : vector(vec) {}
-	Theme_Var(float f) : scalar(f) {}
-};
-
-enum {
-	THEME_VAR_TYPE_VEC2,
-	THEME_VAR_TYPE_FLOAT,
-};
-
-static const struct Theme_Var_Info {
-	ImGuiStyleVar id;
-	int type;
-	const char *name;
-	const char *ini_name;
-	Theme_Var min;
-	Theme_Var max;
-} g_var_info[] = {
-	{
-		ImGuiStyleVar_WindowRounding, THEME_VAR_TYPE_FLOAT, 
-		"Window Rounding", "WindowRounding", Theme_Var(0.f), Theme_Var(16.f)
-	},
-};*/
-
 static Auto_Array<Theme> g_themes;
 static uint32 g_selected_theme;
 static Auto_Array<Font_Name> g_fonts;
@@ -465,7 +438,8 @@ void show_theme_editor_gui() {
 }
 
 uint32 get_theme_color(Theme_Color color) {
-	return ImGui::GetColorU32(g_theme_colors[color]);
+	uint32 c = ImGui::GetColorU32(g_theme_colors[color]);
+	return c ? c : 0xff000000;
 }
 
 const char *show_theme_selector_gui() {

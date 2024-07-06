@@ -258,14 +258,14 @@ bool circle_handle_slider(const char *str_id, float *p_position, float min, floa
 	
 	draw_list->AddRectFilled(bg_pos,
 							 ImVec2{bg_pos.x + size.x, bg_pos.y + size.y},
-							 get_theme_color(THEME_COLOR_SEEK_BAR_BG), 4.f);
+							 ImGui::GetColorU32(style.Colors[ImGuiCol_Header]), 4.f);
 	draw_list->AddRectFilled(bg_pos,
 							 ImVec2{bg_pos.x + (size.x * rel_pos), bg_pos.y + size.y},
-							 get_theme_color(THEME_COLOR_SEEK_BAR), 4.f);
+							 ImGui::GetColorU32(style.Colors[ImGuiCol_HeaderActive]), 4.f);
 	
 	draw_list->AddCircleFilled(handle_center,
 							   handle_radius,
-							   get_theme_color(THEME_COLOR_SEEK_BAR));
+							   ImGui::GetColorU32(style.Colors[ImGuiCol_HeaderActive]));
 	
 	
 	
