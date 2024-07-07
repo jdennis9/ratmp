@@ -325,6 +325,8 @@ static inline bool input_float_clamped(const char *text, float *val, float min, 
 	return false;
 }
 
+
+//@TODO: Unsaved theme changes should set the unsaved changes flag in ImGui::Begin() for the window
 void show_theme_editor_gui() {
 	ImGuiStyle& style = ImGui::GetStyle();
 	static char theme_name[MAX_THEME_NAME_LENGTH];

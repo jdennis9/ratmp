@@ -645,6 +645,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//=========================================================================================
 		// Replace font if needed
 		//=========================================================================================
+		//@TODO: Support custom icon fonts
 		if (G.need_load_font) {
 			G.need_load_font = false;
 			

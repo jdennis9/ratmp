@@ -920,7 +920,8 @@ bool show_ui() {
 			ImGui::EndTable();
 		}
 		
-		if (ImGui::SmallButton("+")) {
+		ImGui::Separator();
+		if (ImGui::Selectable("+ New playlist...")) {
 			create_playlist();
 		}
 	}

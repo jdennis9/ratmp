@@ -1,0 +1,2 @@
+1.2.0:
+- Replace small '+' button to create new playlist with "New playlist..." selectable
