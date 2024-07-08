@@ -38,6 +38,7 @@ typedef int32 Metadata_Ref;
 
 Metadata_Ref retrieve_metadata(const char *file);
 const char *get_metadata_string(Metadata_Ref ref, Metadata_Type type);
+bool metadata_string_is_empty(const char *str);
 void save_metadata_cache();
 void load_metadata_cache();
 

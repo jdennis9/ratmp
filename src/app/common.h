@@ -22,12 +22,14 @@
 #include <stdint.h>
 #include <limits.h>
 #include <stdio.h>
+#include <xxhash.h>
 
 #define VERSION_STRING "1.1.0"
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define SWAP(a, b) {auto swapper_ = a; a = b; b = swapper_;}
+#define hash_string(str) XXH32(str, strlen(str), 0)
 
 #ifdef _MSC_VER
 #define ALIGNED(x) __declspec(align(x))

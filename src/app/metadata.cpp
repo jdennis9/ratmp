@@ -116,6 +116,10 @@ const char *get_metadata_string(Metadata_Ref ref, Metadata_Type type) {
 	return &G.string_pool[m.offsets[type]];
 }
 
+bool metadata_string_is_empty(const char *str) {
+	return !strcmp(str, EMPTY_STRING);
+}
+
 void save_metadata_cache() {
 	GET_METADATA_TYPE_NAMES(string_names);
 	const char *string;

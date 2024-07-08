@@ -395,6 +395,7 @@ void stream_get_waveform(Image *image) {
 
 bool stream_open(Audio_Client_ID client_id, const char *preferred_device) {
 	get_audio_client(client_id, &G.client);
+	av_log_set_level(AV_LOG_QUIET);
 	G.client.init();
 
 	USER_ASSERT_FATAL(G.client.get_device_count() > 0, "No audio devices found");
