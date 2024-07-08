@@ -1,2 +1,3 @@
 1.2.0:
 - Replace small '+' button to create new playlist with "New playlist..." selectable
+- If there is no track thumbnail loaded, the area where the thumbnail would normally be is filled with blank space

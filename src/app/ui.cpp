@@ -751,6 +751,9 @@ bool show_ui() {
 			ImGui::Image(G.thumbnail, ImVec2{window.size.x, window.size.x});
 			ImGui::PopStyleVar();
 		}
+		else {
+			ImGui::InvisibleButton("##missing_thumbnail", ImVec2{window.size.x, window.size.x});
+		}
 		
 		ImGui::SeparatorText("Navigation");
 		
