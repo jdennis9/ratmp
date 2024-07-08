@@ -133,6 +133,7 @@ static struct {
 	Track playing_track;
 	bool show_extra_view;
 	bool shuffle_enabled;
+	bool dirty_theme;
 } G;
 
 static void show_config_editor_gui();
@@ -953,8 +954,9 @@ bool show_ui() {
 		// Theme editor
 		//=============================================================================================
 		else if (G.extra_view == EXTRA_VIEW_THEME) {
-			if (ImGui::Begin("Edit Theme", &G.show_extra_view, flags)) {
-				show_theme_editor_gui();
+			ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
+			if (ImGui::Begin("Edit Theme", &G.show_extra_view, flags|unsaved)) {
+				G.dirty_theme = show_theme_editor_gui();
 			}
 			ImGui::End();
 		}

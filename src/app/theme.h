@@ -32,7 +32,8 @@ enum Theme_Color {
 void set_default_theme();
 void load_theme(const char *name);
 void save_theme(const char *name);
-void show_theme_editor_gui();
+// Returns true if there are unsaved theme changes
+bool show_theme_editor_gui();
 const char *show_theme_selector_gui();
 const char *get_loaded_theme();
 uint32 get_theme_color(Theme_Color color);

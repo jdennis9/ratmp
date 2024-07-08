@@ -254,6 +254,7 @@ void save_theme(const char *name) {
 	snprintf(path, 256, "themes\\%s.ini", theme.name);
 	
 	FILE *file = fopen(path, "w");
+	if (!file) return;
 	
 	fprintf(file, "[Colors]\n");
 	for (uint32 i = 0; i < ARRAY_LENGTH(g_color_info); ++i) {
@@ -325,13 +326,12 @@ static inline bool input_float_clamped(const char *text, float *val, float min, 
 	return false;
 }
 
-
-//@TODO: Unsaved theme changes should set the unsaved changes flag in ImGui::Begin() for the window
-void show_theme_editor_gui() {
+bool show_theme_editor_gui() {
 	ImGuiStyle& style = ImGui::GetStyle();
 	static char theme_name[MAX_THEME_NAME_LENGTH];
 	//static const char *editing_theme;
 	static bool new_theme = false;
+	static bool dirty = false;
 	
 	if (ImGui::InputText("Name", theme_name, MAX_THEME_NAME_LENGTH)) new_theme = true;
 	
@@ -340,7 +340,7 @@ void show_theme_editor_gui() {
 		if (editing_theme) {
 			strcpy(theme_name, editing_theme);
 		}
-	}
+	} else dirty = true;
 	
 	ImGui::SameLine();
 	if (ImGui::BeginCombo("##select_theme", "", ImGuiComboFlags_NoPreview)) {
@@ -349,6 +349,7 @@ void show_theme_editor_gui() {
 			load_theme(sel);
 			strcpy(theme_name, sel);
 			new_theme = false;
+			dirty = false;
 		}
 		
 		ImGui::EndCombo();
@@ -358,6 +359,7 @@ void show_theme_editor_gui() {
 	if (ImGui::Button("Save")) {
 		if (theme_name[0]) {
 			save_theme(theme_name);
+			dirty = false;
 		}
 		else {
 			ImGui::OpenPopup("##warning_popup");
@@ -383,10 +385,11 @@ void show_theme_editor_gui() {
 			ImVec4 color = ImGui::GetStyleColorVec4(info.color);
 			if (ImGui::ColorEdit4(info.name, &color.x)) {
 				style.Colors[info.color] = color;
+				dirty = true;
 			}
 		}
 		else {
-			ImGui::ColorEdit4(info.name, &g_theme_colors[info.color - ImGuiCol_COUNT].x);
+			dirty |= ImGui::ColorEdit4(info.name, &g_theme_colors[info.color - ImGuiCol_COUNT].x);
 		}
 	}
 	
@@ -396,33 +399,33 @@ void show_theme_editor_gui() {
 	if (ImGui::BeginTable("##style_table", 2)) {
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
+		dirty |= ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
 		ImGui::TableNextColumn();
-		editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
+		dirty |= editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
 		
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		input_float_clamped("Border Size", &style.WindowBorderSize, 0.f, 8.f);
+		dirty |= input_float_clamped("Border Size", &style.WindowBorderSize, 0.f, 8.f);
 		ImGui::TableNextColumn();
-		editor_padding_helper2("Table Cell Padding", &style.CellPadding, 0.f, 8.f);
+		dirty |= editor_padding_helper2("Table Cell Padding", &style.CellPadding, 0.f, 8.f);
 		
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.f, 16.f, "%.0f");
+		dirty |= ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.f, 16.f, "%.0f");
 		ImGui::TableNextColumn();
-		editor_padding_helper2("Frame Padding", &style.FramePadding, 0.f, 8.f);
+		dirty |= editor_padding_helper2("Frame Padding", &style.FramePadding, 0.f, 8.f);
 				
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
+		dirty |= editor_padding_helper2("Item Spacing", &style.ItemSpacing, 0.f, 8.f);
 		ImGui::TableNextColumn();
-		ImGui::SliderFloat("Title Alignment", &style.WindowTitleAlign.x, 0.f, 1.f);
+		dirty |= ImGui::SliderFloat("Title Alignment", &style.WindowTitleAlign.x, 0.f, 1.f);
 		
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
-		ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
+		dirty |= ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.f, 16.f, "%.0f");
 		ImGui::TableNextColumn();
-		input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
+		dirty |= input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
 		
 		ImGui::EndTable();
 	}
@@ -435,6 +438,7 @@ void show_theme_editor_gui() {
 	ImGui::SameLine();
 	if (ImGui::Button("Remove")) {
 		load_background_image(NULL);
+		dirty = true;
 	}
 	ImGui::TextUnformatted(background_path ? background_path : "<none>");
 	
@@ -453,12 +457,16 @@ void show_theme_editor_gui() {
 	int font_size = get_font_size();
 	if (ImGui::InputInt("Font size", &font_size)) {
 		set_font_size(font_size);
+		dirty = true;
 	}
 	
 	int icon_size = get_icon_font_size();
 	if (ImGui::InputInt("Icon size", &icon_size)) {
 		set_icon_font_size(icon_size);
+		dirty = true;
 	}
+	
+	return dirty;
 }
 
 uint32 get_theme_color(Theme_Color color) {
