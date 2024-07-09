@@ -94,41 +94,35 @@ void load_stats() {
 
 void show_playback_stats_gui() {
 	lock_mutex(g_write_lock);
-	if (ImGui::BeginTabBar("##stat_tabs")) {
-		if (ImGui::BeginTabItem("Tracks")) {
-			if (ImGui::BeginTable("##track_table", 4, ImGuiTableFlags_RowBg)) {
-				ImGui::TableSetupScrollFreeze(1, 1);
-				ImGui::TableHeadersRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TableHeader("No. Plays");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::TableHeader("Album");
-				ImGui::TableSetColumnIndex(2);
-				ImGui::TableHeader("Artist");
-				ImGui::TableSetColumnIndex(3);
-				ImGui::TableHeader("Track");
-				
-				for (uint32 i = 0; i < g_counter_keys.m_count; ++i) {
-					ImGui::TableNextRow();
-					const Track& track = g_counter_keys[i];
-					const char *album = get_metadata_string(track.metadata, METADATA_ALBUM);
-					const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
-					const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
-					ImGui::TableSetColumnIndex(0);
-					ImGui::Text("%u", g_counters[i]);
-					ImGui::TableSetColumnIndex(1);
-					ImGui::TextUnformatted(album);
-					ImGui::TableSetColumnIndex(2);
-					ImGui::TextUnformatted(artist);
-					ImGui::TableSetColumnIndex(3);
-					ImGui::TextUnformatted(title);
-					//ImGui::Text("%s - %s : %u", artist, title, g_counters[i]);
-				}
-				ImGui::EndTable();
-			}
-			ImGui::EndTabItem();
+	if (ImGui::BeginTable("##track_table", 4, ImGuiTableFlags_RowBg)) {
+		ImGui::TableSetupScrollFreeze(1, 1);
+		ImGui::TableHeadersRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TableHeader("No. Plays");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::TableHeader("Album");
+		ImGui::TableSetColumnIndex(2);
+		ImGui::TableHeader("Artist");
+		ImGui::TableSetColumnIndex(3);
+		ImGui::TableHeader("Track");
+		
+		for (uint32 i = 0; i < g_counter_keys.m_count; ++i) {
+			ImGui::TableNextRow();
+			const Track& track = g_counter_keys[i];
+			const char *album = get_metadata_string(track.metadata, METADATA_ALBUM);
+			const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
+			const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%u", g_counters[i]);
+			ImGui::TableSetColumnIndex(1);
+			ImGui::TextUnformatted(album);
+			ImGui::TableSetColumnIndex(2);
+			ImGui::TextUnformatted(artist);
+			ImGui::TableSetColumnIndex(3);
+			ImGui::TextUnformatted(title);
+			//ImGui::Text("%s - %s : %u", artist, title, g_counters[i]);
 		}
-		ImGui::EndTabBar();
+		ImGui::EndTable();
 	}
 	unlock_mutex(g_write_lock);
 }

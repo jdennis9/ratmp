@@ -567,7 +567,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	}
 	
 	UpdateWindow(g_hWnd);
-	ShowWindow(g_hWnd, SW_NORMAL);
 	START_TIMER(create_wgl_device, "Create WGL device");
 	create_wgl_device(g_hWnd);
 	STOP_TIMER(create_wgl_device);
@@ -609,6 +608,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	STOP_TIMER(init_ui);
 	
 	load_config(); // Config needs to be loaded after ImGui and OpenGL are initialized
+	ShowWindow(g_hWnd, SW_NORMAL);
 	
 	bool running = true;
 	while (running) {
