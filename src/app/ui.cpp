@@ -534,11 +534,11 @@ void init_ui() {
 	STOP_TIMER(load_metadata);
 	
 	// Library and queue
-	START_TIMER(load_library, "Load library");
 	{
 		Tracklist library = {};
 		Tracklist queue = {};
 		
+		START_TIMER(load_library, "Load library");
 		if (file_exists(".\\library")) {
 			library.load_from_file(".\\library");
 		}
@@ -550,11 +550,11 @@ void init_ui() {
 		strncpy(queue.name, "Queue", sizeof(queue.name)-1);
 		library.save_to_file(".\\library");
 		queue.save_to_file(".\\queue");
+		STOP_TIMER(load_library);
 		
 		G.playlists.append(library);
 		G.playlists.append(queue);
 	}
-	STOP_TIMER(load_library);
 	
 	START_TIMER(load_playlists, "Load playlists");
 	for_each_file_in_directory(L"playlists", &add_playlist);

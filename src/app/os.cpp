@@ -40,6 +40,22 @@ void destroy_mutex(Mutex mtx) {
 	CloseHandle(mtx);
 }
 
+Event create_event() {
+	return CreateEvent(NULL, FALSE, FALSE, NULL);
+}
+
+void event_signal(Event e) {
+	SetEvent(e);
+}
+
+void event_wait(Event e) {
+	WaitForSingleObject(e, INFINITE);
+}
+
+void destroy_event(Event e) {
+	CloseHandle(e);
+}
+
 uint64 time_get_tick() {
 	LARGE_INTEGER tick;
 	QueryPerformanceCounter(&tick);
@@ -222,3 +238,23 @@ void show_message_box(Message_Box_Type type, const char *message, ...) {
 
 	MessageBoxA(NULL, formatted, captions[type], types[type]);
 }
+
+struct Thread_Func_Caller {
+	Thread_Function *func;
+	void *data;
+};
+
+static DWORD thread_func_caller(LPVOID in_data) {
+	Thread_Func_Caller *data = (Thread_Func_Caller*)in_data;
+	int ret = data->func(data->data);
+	delete data;
+	return ret;
+}
+
+bool create_thread(Thread_Function *func, void *user_data) {
+	Thread_Func_Caller *data = new Thread_Func_Caller;
+	data->func = func;
+	data->data = user_data;
+	return CreateThread(NULL, 0, &thread_func_caller, data, 0, NULL) != 0;
+}
+	

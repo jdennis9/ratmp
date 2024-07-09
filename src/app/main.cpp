@@ -616,6 +616,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		uint64 time_since_last_input = time_get_tick() - G.time_of_last_input;
 		const uint64 input_idle_threshold = time_get_frequency() / 8; // ~0.125 seconds
 		
+		check_album_thumbnail_queue();
+		
 		if (IsWindowVisible(g_hWnd)) {
 			if ((time_since_last_input < input_idle_threshold) || 
 				(MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT) == WAIT_OBJECT_0)) {

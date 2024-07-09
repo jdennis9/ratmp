@@ -34,6 +34,7 @@ struct Auto_Array {
 	inline void remove_range(int32 first, int32 last);
 	inline void reset();
 	inline void free();
+	inline void copy_to(Auto_Array<T>& other);
 };
 
 #endif //AUTO_ARRAY_H

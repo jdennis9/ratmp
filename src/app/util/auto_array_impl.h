@@ -74,3 +74,10 @@ inline void Auto_Array<T>::free() {
 	m_capacity = 0;
 	m_count = 0;
 }
+
+template<typename T>
+inline void Auto_Array<T>::copy_to(Auto_Array<T>& other) {
+	uint32 offset = other.push(m_count);
+	for (uint32 i = 0; i < m_count; ++i) other[offset+i] = m_elements[i];
+}
+	

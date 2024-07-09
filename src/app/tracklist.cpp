@@ -36,6 +36,110 @@ const Auto_Array<Album> &get_albums() {
 	return g_albums.albums;
 }
 
+struct Async_Load_Thumbnail {
+	char path[512];
+	uint32 album;
+};
+
+struct Thumbnail_Query {
+	Path_Ref path;
+	uint32 album_index;
+};
+
+struct Thumbnail_Result {
+	uint32 album_index;
+	Image image;
+};
+
+static int thumbnail_load_thread(void *dont_care);
+
+struct Thumbnail_Queue {
+	Auto_Array<Thumbnail_Query> queue;
+	Auto_Array<Thumbnail_Result> results;
+	Event event;
+	Mutex lock;
+	Mutex results_lock;
+	
+	Thumbnail_Queue() {
+		event = create_event();
+		lock = create_mutex();
+		results_lock = create_mutex();
+		create_thread(&thumbnail_load_thread, NULL);
+	}
+};
+
+static Thumbnail_Queue g_thumbnail_queue;
+
+static int thumbnail_load_thread(void *dont_care) {
+	Thumbnail_Queue& queue = g_thumbnail_queue;
+	Auto_Array<Thumbnail_Query> queries = {};
+	
+	while (1) {
+		event_wait(queue.event);
+		lock_mutex(queue.lock);
+		queries.reset();
+		queue.queue.copy_to(queries);
+		unlock_mutex(queue.lock);
+		
+		char path[512];
+		for (uint32 i = 0; i < queries.m_count; ++i) {
+			Thumbnail_Query& query = queries[i];
+			retrieve_file_path(query.path, path, sizeof(path));
+			Thumbnail_Result result = {};
+			result.album_index = query.album_index;
+			if (stream_extract_thumbnail(path, 128, &result.image)) {
+				lock_mutex(queue.results_lock);
+				queue.results.append(result);
+				unlock_mutex(queue.results_lock);
+			} else {
+				result.image.data = NULL;
+				lock_mutex(queue.results_lock);
+				queue.results.append(result);
+				unlock_mutex(queue.results_lock);
+			}
+		}
+	}
+	
+	return 0;
+}
+
+static void queue_thumbnail_load(uint32 album, Path_Ref path) {
+	Thumbnail_Query query;
+	query.album_index = album;
+	query.path = path;
+	lock_mutex(g_thumbnail_queue.lock);
+	g_thumbnail_queue.queue.append(query);
+	unlock_mutex(g_thumbnail_queue.lock);
+	event_signal(g_thumbnail_queue.event);
+}
+
+void check_album_thumbnail_queue() {
+	//START_TIMER(timer, "Create album thumbnail textures");
+	lock_mutex(g_thumbnail_queue.results_lock);
+	Auto_Array<Thumbnail_Result>& results = g_thumbnail_queue.results;
+	for (uint32 i = 0; i < results.m_count; ++i) {
+		if (results[i].image.data) {
+			g_albums.albums[i].thumbnail = create_texture_from_image(&results[i].image);
+		}
+		else {
+			static Texture_ID missing_thumbnail;
+			if (!missing_thumbnail) {
+				Image image;
+				image.data = stbi_load_from_memory(MISSING_THUMBNAIL_DATA, 
+												   MISSING_THUMBNAIL_SIZE, 
+												   &image.width, &image.height, 
+												   NULL, 4);
+				missing_thumbnail = create_texture_from_image(&image);
+				stbi_image_free(image.data);
+			}
+			g_albums.albums[i].thumbnail = missing_thumbnail;
+		}
+	}
+	results.reset();
+	unlock_mutex(g_thumbnail_queue.results_lock);
+	//STOP_TIMER(timer);
+}
+
 static void add_to_albums(const Track& track) {
 	const char *album_name = get_metadata_string(track.metadata, METADATA_ALBUM);
 	if (!strcmp(album_name, " ")) return; // Cancel if this track doesn't have an album
@@ -50,32 +154,13 @@ static void add_to_albums(const Track& track) {
 	
 	// Album doesn't exist, add it
 	if (index == album_count) {
-		char path[512];
 		Album album = {};
-		Image thumbnail;
 		album.metadata = track.metadata;
 		album.tracks.add(track, false);
 		
-		// Load thumbnail
-		retrieve_file_path(track.path, path, 512);
-		if (stream_extract_thumbnail(path, 128, &thumbnail)) {
-			album.thumbnail = create_texture_from_image(&thumbnail);
-			stream_free_thumbnail(&thumbnail);
-		}
-		else {
-			static Texture_ID missing_thumbnail;
-			if (!missing_thumbnail) {
-				Image image;
-				image.data = stbi_load_from_memory(MISSING_THUMBNAIL_DATA, MISSING_THUMBNAIL_SIZE, &image.width, &image.height, NULL, 4);
-				missing_thumbnail = create_texture_from_image(&image);
-				stbi_image_free(image.data);
-			}
-			
-			album.thumbnail = missing_thumbnail;
-		};
-		
-		g_albums.ids.append(id);
+		index = g_albums.ids.append(id);
 		g_albums.albums.append(album);
+		queue_thumbnail_load(index, track.path);
 	}
 	else {
 		Album& album = g_albums.albums[index];
@@ -260,32 +345,37 @@ void Tracklist::remove_missing_tracks() {
 
 uint32 Tracklist::load_from_file(const char *path) {
 	char line[1024];
-	FILE *file;
 	uint32 count = 0;
 	size_t length = 0;
+	char *buffer;
+	const char *reader;
 	
 	//strncpy(m_filename, get_file_name(path), sizeof(m_filename)-1);
 	strncpy(m_filename, path, sizeof(m_filename)-1);
 
-	file = fopen(path, "r");
-
-	if (!file) return 0;
-	if (fgets(line, sizeof(line), file)) {} // Version
+	if (!read_whole_file_string(path, &buffer)) return 0;
+	reader = buffer;
+	
+	// Version
+	reader = read_line(reader, line, sizeof(line));
+	if (!reader) return 0;
 
 	// Name
-	if (fgets(line, sizeof(line), file)) {
+	if (reader = read_line(reader, line, sizeof(line))) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		strncpy(this->name, line, sizeof(this->name)-1);
 	}
-
-	while (fgets(line, sizeof(line), file)) {
+	
+	if (!reader) return 0;
+	
+	// Tracks
+	while (reader = read_line(reader, line, sizeof(line))) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		count += this->add(line);
 	}
 
-	fclose(file);
 	return count;
 }
 

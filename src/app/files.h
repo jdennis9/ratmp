@@ -19,6 +19,7 @@
 #include "common.h"
 #include "util/auto_array.h"
 #include <string.h>
+#include <stdlib.h>
 
 static inline const char *get_file_extension(const char *path) {
 	int64 length = strlen(path);
@@ -47,6 +48,37 @@ static uint32 get_file_name_length_without_extension(const char *path) {
 	
 	if (extension == path || extension < filename) return (uint32)strlen(filename);
 	else return (uint32)(extension - filename - 1);
+}
+
+
+static inline const char *read_line(const char *in, char *out, int out_size) {
+	int out_count = 0;
+	if (!*in) return NULL;
+	
+	while (*in && *in == '\n') in++;
+	
+	for (; *in && (*in != '\n') && (out_count < (out_size-1)); ++in, ++out_count) {
+		out[out_count] = *in;
+	}
+	out[out_count] = 0;
+	if (!out_count) return NULL;
+	return *in ? in + 1 : in;
+}
+
+static inline uint32 read_whole_file_string(const char *path, char **data) {
+	FILE *f = fopen(path, "rb");
+	long size;
+	if (!f) return 0;
+	
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	*data = (char*)malloc(size+1);
+	fread(*data, size, 1, f);
+	(*data)[size] = 0;
+	
+	fclose(f);
+	return (uint32)size;
 }
 
 // Used to reduce memory usage from storing large amounts of paths. 

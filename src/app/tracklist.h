@@ -146,5 +146,6 @@ struct Album {
 };
 
 const Auto_Array<Album> &get_albums();
+void check_album_thumbnail_queue();
 
 #endif //TRACK_LIST_H

@@ -2,8 +2,6 @@
 #include "util/auto_array_impl.h"
 #include "files.h"
 #include <string.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 
 struct Stat_Counter_Key {
 	uint32 key;
@@ -66,7 +64,7 @@ void increment_stat_counter(Stat_Counter_Type type, const char *string) {
 	unlock_mutex(g_write_lock);
 }
 
-static DWORD WINAPI async_save_stats(LPVOID dont_care) {
+static int async_save_stats(void *dont_care) {
 	if (!file_exists("stats")) {
 		if (!create_directory("stats")) return 0;
 	}
@@ -89,7 +87,7 @@ static DWORD WINAPI async_save_stats(LPVOID dont_care) {
 	return 0;
 }
 
-static DWORD WINAPI async_load_stats(LPVOID dont_care) {
+static int async_load_stats(void *dont_care) {
 	lock_mutex(g_write_lock);
 	FILE *f = fopen("stats/counters", "r");
 	char line[1024];
@@ -130,8 +128,6 @@ static DWORD WINAPI async_load_stats(LPVOID dont_care) {
 			g_counter_keys[index].type = (Stat_Counter_Type)type;
 			g_counters[index].string = push_string(string);
 			g_counters[index].value = count;
-			
-			log_debug("\"%s\" : %d, %d\n", string, type, count);
 		}
 		fclose(f);
 	}
@@ -140,11 +136,11 @@ static DWORD WINAPI async_load_stats(LPVOID dont_care) {
 }
 
 void save_stats() {
-	CreateThread(NULL, 0, &async_save_stats, NULL, 0, NULL);
+	create_thread(&async_save_stats, NULL);
 }
 
 void load_stats() {	
-	CreateThread(NULL, 0, &async_load_stats, NULL, 0, NULL);
+	create_thread(&async_load_stats, NULL);
 }
 
 

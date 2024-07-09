@@ -68,6 +68,12 @@ void lock_mutex(Mutex mtx);
 void unlock_mutex(Mutex mtx);
 void destroy_mutex(Mutex mtx);
 
+typedef void *Event;
+Event create_event();
+void event_signal(Event event);
+void event_wait(Event event);
+void destroy_event(Event event);
+
 Texture_ID create_texture_from_image(const Image *image);
 void destroy_texture(Texture_ID texture);
 
@@ -93,6 +99,9 @@ void show_message_box(Message_Box_Type type, const char *message, ...);
 
 #define USER_ASSERT_WARN(cond, ...) if (!(cond)) show_message_box(MESSAGE_BOX_WARNING, __VA_ARGS__)
 #define USER_ASSERT_FATAL(cond, ...) if (!(cond)) { show_message_box(MESSAGE_BOX_ERROR, __VA_ARGS__); exit(0); }
+
+typedef int Thread_Function(void *data);
+bool create_thread(Thread_Function *func, void *data);
 
 static inline char *eat_spaces(char *c) {
 	for (; *c && isspace(*c); ++c);
