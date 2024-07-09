@@ -294,6 +294,10 @@ bool circle_handle_slider(const char *str_id, float *p_position, float min, floa
 	if (active) {
 		ImGui::SetActiveID(id, window);
 	}
+	
+	if (active || ImGui::IsItemHovered()) {
+		ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+	}
 	ImGui::PopID();
 	
 	return active;
