@@ -163,6 +163,7 @@ static bool is_track_playing(const Track &track) {
 }
 
 static void increment_track_play_count(const Track& track) {
+	START_TIMER(update_stats, "Update stats");
 	const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
 	const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
 	const char *album = get_metadata_string(track.metadata, METADATA_ALBUM);
@@ -171,6 +172,8 @@ static void increment_track_play_count(const Track& track) {
 		increment_stat_counter(STAT_COUNTER_ARTIST, artist);
 	if (!metadata_string_is_empty(album))
 		increment_stat_counter(STAT_COUNTER_ALBUM, album);
+	save_stats();
+	STOP_TIMER(update_stats);
 }
 
 static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index = false) {
@@ -560,6 +563,8 @@ void init_ui() {
 	}
 	sort_playlists();
 	STOP_TIMER(load_playlists);
+	
+	load_stats();
 	
 	G.renaming_playlist = -1;
 	G.selected_playlist = PLAYLIST_LIBRARY;

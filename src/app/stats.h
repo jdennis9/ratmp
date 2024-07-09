@@ -11,7 +11,10 @@ enum Stat_Counter_Type {
 	STAT_COUNTER__COUNT,
 };
 
+void init_stats();
 uint32 get_stat_counter(Stat_Counter_Type counter, const char *string);
 void increment_stat_counter(Stat_Counter_Type counter, const char *string);
+void save_stats();
+void load_stats();
 
 #endif //STATS_H

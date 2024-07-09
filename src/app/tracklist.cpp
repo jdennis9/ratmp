@@ -260,9 +260,6 @@ void Tracklist::remove_missing_tracks() {
 
 uint32 Tracklist::load_from_file(const char *path) {
 	char line[1024];
-	char *buffer;
-	long buffer_size;
-	const char *reader;
 	FILE *file;
 	uint32 count = 0;
 	size_t length = 0;
@@ -270,34 +267,25 @@ uint32 Tracklist::load_from_file(const char *path) {
 	//strncpy(m_filename, get_file_name(path), sizeof(m_filename)-1);
 	strncpy(m_filename, path, sizeof(m_filename)-1);
 
-	file = fopen(path, "rb");
+	file = fopen(path, "r");
 
 	if (!file) return 0;
-	fseek(file, 0, SEEK_END);
-	buffer_size = ftell(file);
-	buffer = (char*)malloc(buffer_size+1);
-	fseek(file, 0, SEEK_SET);
-	fread(buffer, buffer_size, 1, file);
-	buffer[buffer_size] = 0;
-	reader = buffer;
-	
-	if (reader = read_line(reader, line, sizeof(line))) {} // Version
+	if (fgets(line, sizeof(line), file)) {} // Version
 
 	// Name
-	if (reader = read_line(reader, line, sizeof(line))) {
+	if (fgets(line, sizeof(line), file)) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		strncpy(this->name, line, sizeof(this->name)-1);
 	}
 
-	while (reader = read_line(reader, line, sizeof(line))) {
+	while (fgets(line, sizeof(line), file)) {
 		length = strlen(line);
 		line[length - 1] = 0;
 		count += this->add(line);
 	}
 
 	fclose(file);
-	free(buffer);
 	return count;
 }
 

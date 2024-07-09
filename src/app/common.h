@@ -23,6 +23,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <xxhash.h>
+#include <ctype.h>
 
 #define VERSION_STRING "1.1.0"
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
@@ -92,5 +93,10 @@ void show_message_box(Message_Box_Type type, const char *message, ...);
 
 #define USER_ASSERT_WARN(cond, ...) if (!(cond)) show_message_box(MESSAGE_BOX_WARNING, __VA_ARGS__)
 #define USER_ASSERT_FATAL(cond, ...) if (!(cond)) { show_message_box(MESSAGE_BOX_ERROR, __VA_ARGS__); exit(0); }
+
+static inline char *eat_spaces(char *c) {
+	for (; *c && isspace(*c); ++c);
+	return c;
+}
 
 #endif //COMMON_H

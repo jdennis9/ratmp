@@ -20,6 +20,7 @@
 #include "util/auto_array_impl.h"
 #include "main.h"
 #include "embedded.gen.h"
+#include "stats.h"
 #include <windows.h>
 #include <versionhelpers.h>
 #include <dwmapi.h>
@@ -525,6 +526,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	stream_open(AUDIO_CLIENT_WASAPI);
 	setlocale(LC_ALL, ".65001");
 	srand(time(NULL));
+	init_stats();
 	
 	// First time launch, generate default config
 	if (is_first_time_launch()) {
