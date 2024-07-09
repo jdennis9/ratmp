@@ -1,5 +1,0 @@
-1.2.0:
-- Replace small '+' button to create new playlist with "New playlist..." selectable
-- If there is no track thumbnail loaded, the area where the thumbnail would normally be is filled with blank space
-- Unsaved changes in the theme editor now show a mark in the window title
-- Hovering the volume slider now changes the cursor to a pointing hand
