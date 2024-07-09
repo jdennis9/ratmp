@@ -2,145 +2,133 @@
 #include "util/auto_array_impl.h"
 #include "files.h"
 #include <string.h>
+#include <imgui.h>
 
-struct Stat_Counter_Key {
-	uint32 key;
-	Stat_Counter_Type type;
-};
-
-struct Stat_Counter {
-	uint32 string;
-	uint32 value;
-};
-
-static Auto_Array<char> g_string_pool;
-static Auto_Array<Stat_Counter_Key> g_counter_keys;
-static Auto_Array<Stat_Counter> g_counters;
+static Auto_Array<Track> g_counter_keys;
+static Auto_Array<uint32> g_counters;
 static Mutex g_write_lock;
-
-static uint32 push_string(const char *str) {
-	size_t length = strlen(str);
-	uint32 offset = g_string_pool.push(length + 1);
-	for (uint32 i = 0; i < length; ++i) {
-		g_string_pool[offset + i] = str[i];
-	}
-	g_string_pool[offset + length] = 0;
-	return offset;
-}
 
 void init_stats() {
 	g_write_lock = create_mutex();
 }
 
-int lookup_stat_counter(Stat_Counter_Type type, const char *string) {
-	uint32 key = hash_string(string);
+static int lookup_track_counter(const Track& track) {
 	for (uint32 i = 0; i < g_counter_keys.m_count; ++i) {
-		if (g_counter_keys[i].key == key && g_counter_keys[i].type == type) {
-			return i;
-		}
+		if (g_counter_keys[i].metadata == track.metadata) return i;
 	}
-	
 	return -1;
 }
 
-uint32 get_stat_counter(Stat_Counter_Type type, const char *string) {
-	int index = lookup_stat_counter(type, string);
-	return index >= 0 ? g_counters[index].value : 0;
-}
-
-void increment_stat_counter(Stat_Counter_Type type, const char *string) {
-	lock_mutex(g_write_lock);
-	int index = lookup_stat_counter(type, string);
-	if (index < 0) {
-		index = g_counter_keys.push(1);
-		g_counters.push(1);
-		g_counter_keys[index].key = hash_string(string);
-		g_counter_keys[index].type = type;
-		g_counters[index].string = push_string(string);
-		g_counters[index].value = 0;
+void increment_track_play_count(const Track& track) {
+	int index = lookup_track_counter(track);
+	if (index == -1) {
+		index = g_counter_keys.append(track);
+		g_counters.append(1);
 	}
-	
-	g_counters[index].value++;
-	unlock_mutex(g_write_lock);
-}
-
-static int async_save_stats(void *dont_care) {
-	if (!file_exists("stats")) {
-		if (!create_directory("stats")) return 0;
-	}
-	
-	lock_mutex(g_write_lock);
-	FILE *f = fopen("stats/counters", "w");
-	if (f) {
-		// Version
-		fprintf(f, "1\n");
-		
-		for (uint32 i = 0; i < g_counters.m_count; ++i) {
-			const char *string = &g_string_pool[g_counters[i].string];
-			fprintf(f, "%d %u %s\n", g_counter_keys[i].type, g_counters[i].value,
-					string);
+	else {
+		g_counters[index]++;
+		while (index && g_counters[index-1] < g_counters[index]) {
+			SWAP(g_counter_keys[index-1], g_counter_keys[index]);
+			SWAP(g_counters[index-1], g_counters[index]);
+			index--;
 		}
-		
-		fclose(f);
 	}
-	unlock_mutex(g_write_lock);
-	return 0;
 }
 
-static int async_load_stats(void *dont_care) {
-	lock_mutex(g_write_lock);
-	FILE *f = fopen("stats/counters", "r");
-	char line[1024];
-	if (f) {
-		g_string_pool.reset();
-		g_counter_keys.reset();
-		g_counters.reset();
-		
-		fgets(line, sizeof(line), f);
-		
-		while (fgets(line, sizeof(line), f)) {
-			char *string = line;
-			int type;
-			int count;
-			
-			line[strlen(line)-1] = 0;
-			
-			string = strtok(string, " ");
-			if (!string) continue;
-			type = atoi(string);
-			string += strlen(string)+1;
-			if (!*string) continue;
-			//string = eat_spaces(string);
-			
-			string = strtok(string, " ");
-			if (!string) continue;
-			count = atoi(string);
-			string += strlen(string)+1;
-			if (!*string) continue;
-			//string = eat_spaces(string);
-			
-			if (!*string) continue;
-			
-			int index = g_counter_keys.push(1);
-			g_counters.push(1);
-			
-			g_counter_keys[index].key = hash_string(string);
-			g_counter_keys[index].type = (Stat_Counter_Type)type;
-			g_counters[index].string = push_string(string);
-			g_counters[index].value = count;
-		}
-		fclose(f);
-	}
-	unlock_mutex(g_write_lock);
-	return 0;
+uint32 get_track_play_count(const Track& track) {
+	int index = lookup_track_counter(track);
+	if (index == -1) return 0;
+	return g_counters[index];
 }
 
 void save_stats() {
-	create_thread(&async_save_stats, NULL);
+	if (!file_exists("stats")) {
+		create_directory("stats");
+	}
+	FILE *f = fopen("stats/counters", "w");
+	if (!f) return;
+	
+	fprintf(f, "1\n");
+	
+	for (uint32 i = 0; i < g_counters.m_count; ++i) {
+		char path[512];
+		retrieve_file_path(g_counter_keys[i].path, path, sizeof(path));
+		fprintf(f, "%u %s\n", g_counters[i], path);
+	}
+	
+	fclose(f);
 }
 
-void load_stats() {	
-	create_thread(&async_load_stats, NULL);
+void load_stats() {
+	char *buffer;
+	if (!read_whole_file_string("stats/counters", &buffer)) return;
+	
+	g_counter_keys.reset();
+	g_counters.reset();
+	
+	char line[1024];
+	const char *reader = buffer;
+	
+	// Version
+	reader = read_line(reader, line, sizeof(line));
+	if (!reader) return;
+	
+	while (reader = read_line(reader, line, sizeof(line))) {
+		char *string = line;
+		line[strlen(line) - 1] = 0;
+		string = strtok(string, " ");
+		if (!string || !*string) continue;
+		int count = atoi(string);
+		const char *path = string + strlen(string) + 1;
+		if (!*path) continue;
+		
+		Track track;
+		track.path = store_file_path(path);
+		track.metadata = retrieve_metadata(path);
+		g_counter_keys.append(track);
+		g_counters.append(count);
+	}
+	
+	free(buffer);
 }
 
-
+void show_playback_stats_gui() {
+	lock_mutex(g_write_lock);
+	if (ImGui::BeginTabBar("##stat_tabs")) {
+		if (ImGui::BeginTabItem("Tracks")) {
+			if (ImGui::BeginTable("##track_table", 4, ImGuiTableFlags_RowBg)) {
+				ImGui::TableSetupScrollFreeze(1, 1);
+				ImGui::TableHeadersRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TableHeader("No. Plays");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TableHeader("Album");
+				ImGui::TableSetColumnIndex(2);
+				ImGui::TableHeader("Artist");
+				ImGui::TableSetColumnIndex(3);
+				ImGui::TableHeader("Track");
+				
+				for (uint32 i = 0; i < g_counter_keys.m_count; ++i) {
+					ImGui::TableNextRow();
+					const Track& track = g_counter_keys[i];
+					const char *album = get_metadata_string(track.metadata, METADATA_ALBUM);
+					const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
+					const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
+					ImGui::TableSetColumnIndex(0);
+					ImGui::Text("%u", g_counters[i]);
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextUnformatted(album);
+					ImGui::TableSetColumnIndex(2);
+					ImGui::TextUnformatted(artist);
+					ImGui::TableSetColumnIndex(3);
+					ImGui::TextUnformatted(title);
+					//ImGui::Text("%s - %s : %u", artist, title, g_counters[i]);
+				}
+				ImGui::EndTable();
+			}
+			ImGui::EndTabItem();
+		}
+		ImGui::EndTabBar();
+	}
+	unlock_mutex(g_write_lock);
+}

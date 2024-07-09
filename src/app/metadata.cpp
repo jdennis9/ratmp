@@ -35,6 +35,7 @@ static struct {
 	Hash_Map<Metadata> metadata;
 	Auto_Array<char> string_pool;
 	bool initialized;
+	Mutex lock;
 } G;
 
 static uint32 push_string(const char *str) {
@@ -70,8 +71,9 @@ Metadata_Ref retrieve_metadata(const char *pathname) {
 	}
 
 	avformat_open_input(&input, pathname, NULL, NULL);
-	if (input == NULL) 
+	if (input == NULL) {
 		return INVALID_METADATA_REF;
+	}
 	avformat_find_stream_info(input, NULL);
 
 	
@@ -85,6 +87,7 @@ Metadata_Ref retrieve_metadata(const char *pathname) {
 		{METADATA_ARTIST, "artist"},
 		{METADATA_ALBUM, "album"},
 	};
+	
 	
 	// Check metadata dictionary entries for mapped metadata types
 	for (uint32 i = 0; i < ARRAY_LENGTH(mappings); ++i) {
@@ -104,10 +107,12 @@ Metadata_Ref retrieve_metadata(const char *pathname) {
 		metadata.offsets[METADATA_DURATION] = push_string(duration_string);
 	}
 	
+	ref = G.metadata.add(pathname, metadata);
+	
 	avformat_close_input(&input);
 	avformat_free_context(input);
 	
-	return G.metadata.add(pathname, metadata);
+	return ref;
 }
 
 const char *get_metadata_string(Metadata_Ref ref, Metadata_Type type) {

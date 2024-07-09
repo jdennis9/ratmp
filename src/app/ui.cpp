@@ -40,6 +40,7 @@ enum Extra_View {
 	EXTRA_VIEW_SEARCH_RESULTS,
 	EXTRA_VIEW_ABOUT,
 	EXTRA_VIEW_MISSING_TRACKS,
+	EXTRA_VIEW_PLAYBACK_STATS,
 };
 
 enum Main_View {
@@ -162,20 +163,6 @@ static bool is_track_playing(const Track &track) {
 	return G.playing_track.metadata == track.metadata;
 }
 
-static void increment_track_play_count(const Track& track) {
-	START_TIMER(update_stats, "Update stats");
-	const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
-	const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
-	const char *album = get_metadata_string(track.metadata, METADATA_ALBUM);
-	increment_stat_counter(STAT_COUNTER_TITLE, title);
-	if (!metadata_string_is_empty(artist))
-		increment_stat_counter(STAT_COUNTER_ARTIST, artist);
-	if (!metadata_string_is_empty(album))
-		increment_stat_counter(STAT_COUNTER_ALBUM, album);
-	save_stats();
-	STOP_TIMER(update_stats);
-}
-
 static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index = false) {
 	char path[512];
 	Tracklist &tracklist = G.playlists[PLAYLIST_QUEUE];
@@ -186,7 +173,10 @@ static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index
 		const Track &track = tracklist[position];
 		retrieve_file_path(track.path, path, sizeof(path));
 		ok = stream_load(path);
-		if (ok) increment_track_play_count(track);
+		if (ok) {
+			increment_track_play_count(track);
+			save_stats();
+		}
 		G.queue_position = position;
 		G.queued_playlist = PLAYLIST_QUEUE;
 		G.playing_track = track;
@@ -215,7 +205,10 @@ static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index
 	const Track &current = tracklist[position];
 	retrieve_file_path(current.path, path, sizeof(path));
 	ok = stream_load(path);
-	if (ok) increment_track_play_count(current);
+	if (ok) {
+		increment_track_play_count(current);
+		save_stats();
+	}
 	G.playing_track = current;
 	return ok;
 }
@@ -732,6 +725,10 @@ bool show_ui() {
 				G.extra_view = EXTRA_VIEW_MISSING_TRACKS;
 				G.show_extra_view = true;
 			}
+			if (ImGui::MenuItem("Playback statistics")) {
+				G.extra_view = EXTRA_VIEW_PLAYBACK_STATS;
+				G.show_extra_view = true;
+			}
 			ImGui::EndMenu();
 		}
 		
@@ -1022,6 +1019,15 @@ bool show_ui() {
 						ImGui::TextUnformatted(path);
 					}
 				}
+			}
+			ImGui::End();
+		}
+		//=============================================================================================
+		// Playback stats
+		//=============================================================================================
+		else if (G.extra_view == EXTRA_VIEW_PLAYBACK_STATS) {
+			if (ImGui::Begin("Playback Statistics", &G.show_extra_view, flags)) {
+				show_playback_stats_gui();
 			}
 			ImGui::End();
 		}
