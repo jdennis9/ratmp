@@ -211,6 +211,7 @@ static uint32 get_theme_index(const char *name) {
 }
 
 void load_theme(const char *name) {
+	ImGuiStyle& style = ImGui::GetStyle();
 	refresh_themes();
 	refresh_fonts();
 	g_selected_theme = get_theme_index(name);
@@ -221,12 +222,14 @@ void load_theme(const char *name) {
 		return;
 	}
 	
+	style = ImGuiStyle();
+	ImGui::StyleColorsDark();
+	
 	char path[256];
 	snprintf(path, 256, "themes\\%s.ini", name);
 	load_background_image(NULL); // Unload current background image
 	ini_parse(path, &theme_ini_handler, NULL);
 	
-	ImGuiStyle& style = ImGui::GetStyle();
 	style.SeparatorTextBorderSize = 1.f;
 	
 	const char *font = get_font();
