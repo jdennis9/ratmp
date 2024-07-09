@@ -150,6 +150,7 @@ void ui_next_track() {
 	const Track &track = queue[G.queue_position];
 	retrieve_file_path(track.path, path, 512);
 	stream_load(path);
+	increment_track_play_count(track);
 	G.playing_track = track;
 }
 
