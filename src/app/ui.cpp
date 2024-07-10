@@ -217,7 +217,6 @@ static void goto_previous_track() {
 	}
 }
 
-
 void ui_next_track() {
 	goto_next_track();
 }
@@ -869,13 +868,24 @@ bool show_ui() {
 					}
 				}
 				else {
-					char name_id[128];
+					char name_id[128];					
+					bool playing = (iplaylist == G.queued_playlist);
 					snprintf(name_id, sizeof(name_id), "%s##%s", playlist.name, playlist.get_filename());
-
-					if (ImGui::Selectable(name_id, G.selected_playlist == iplaylist && G.main_view == MAIN_VIEW_TRACKS)) {
+					
+					bool selected = G.selected_playlist == iplaylist && G.main_view == MAIN_VIEW_TRACKS;
+					
+					if (playing) {
+						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
+											   get_theme_color(THEME_COLOR_PLAYING_INDICATOR));
+						ImGui::PushStyleColor(ImGuiCol_Text, get_theme_color(THEME_COLOR_PLAYING_TEXT));
+					}
+					
+					if (ImGui::Selectable(name_id, selected, ImGuiSelectableFlags_SpanAllColumns)) {
 						G.selected_playlist = iplaylist;
 						G.main_view = MAIN_VIEW_TRACKS;
 					}
+					
+					if (playing) ImGui::PopStyleColor();
 					
 					ImGui::SetItemTooltip("%u tracks", playlist.length());
 					
