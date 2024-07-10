@@ -143,17 +143,6 @@ static void show_hotkey_gui();
 static void show_about_gui();
 static void queue_tracklist(const Tracklist &tracklist);
 
-void ui_next_track() {
-	char path[512];
-	Tracklist& queue = G.playlists[PLAYLIST_QUEUE];
-	G.queue_position = queue.repeat(G.queue_position + 1);
-	const Track &track = queue[G.queue_position];
-	retrieve_file_path(track.path, path, 512);
-	stream_load(path);
-	increment_track_play_count(track);
-	G.playing_track = track;
-}
-
 static void set_next_window_box(const Box &box) {
 	ImGui::SetNextWindowPos(box.pos);
 	ImGui::SetNextWindowSize(box.size);
@@ -226,6 +215,11 @@ static void goto_previous_track() {
 	for (uint32 i = 1; i <= G.playlists[G.queued_playlist].length(); ++i) {
 		if (play_track_at(G.queued_playlist, G.queue_position - 1)) break;
 	}
+}
+
+
+void ui_next_track() {
+	goto_next_track();
 }
 
 static void quick_sort_playlists(Auto_Array<uint32>& order, int low, int high) {
