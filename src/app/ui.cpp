@@ -158,6 +158,8 @@ static bool play_track_at(uint32 iplaylist, int32 position, bool translate_index
 	Tracklist &tracklist = G.playlists[PLAYLIST_QUEUE];
 	bool ok;
 	
+	if (!G.playlists[iplaylist].length()) return true;
+	
 	if (iplaylist == PLAYLIST_QUEUE) {
 		position = tracklist.repeat(position);
 		const Track &track = tracklist[position];
@@ -1119,40 +1121,42 @@ bool show_ui() {
 	window = layout.push_right(1);
 	set_next_window_box(window);
 	if (ImGui::Begin("Control Panel", NULL, ImGuiWindowFlags_NoDecoration)) {
+		// Shuffle
+		ImGui::SameLine();
+		if (small_selectable(u8"\xf074", &G.shuffle_enabled)) {
+			if (G.shuffle_enabled) G.playlists[PLAYLIST_QUEUE].shuffle();
+			else if ((G.queued_playlist != -1) && (G.queued_playlist != PLAYLIST_QUEUE)) {
+				G.playlists[PLAYLIST_QUEUE].clear();
+				G.playlists[G.queued_playlist].copy(&G.playlists[PLAYLIST_QUEUE]);
+			}
+		}
+		
+		// Previous track
+		ImGui::SameLine();
+		if (small_selectable(u8"\xf048")) {
+			goto_previous_track();
+		}
+		
+		// Play/pause
+		ImGui::SameLine();
+		if (small_selectable(G.state == STREAM_STATE_PLAYING ? u8"\xf04c" : u8"\xf04b")) {
+			if (G.state != STREAM_STATE_STOPPED) stream_toggle_playing();
+			else {
+				play_track_at(PLAYLIST_QUEUE, 0);
+			}
+		}
+		
+		// Next track
+		ImGui::SameLine();
+		if (small_selectable(u8"\xf051")) {
+			goto_next_track();
+		}
+
 		if (G.state != STREAM_STATE_STOPPED) {
 			int64 new_pos;
 			const Track &track = G.playing_track;
 			const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
 			const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
-
-			// Shuffle
-			ImGui::SameLine();
-			if (small_selectable(u8"\xf074", &G.shuffle_enabled)) {
-				if (G.shuffle_enabled) G.playlists[PLAYLIST_QUEUE].shuffle();
-				else if ((G.queued_playlist != -1) && (G.queued_playlist != PLAYLIST_QUEUE)) {
-					G.playlists[PLAYLIST_QUEUE].clear();
-					G.playlists[G.queued_playlist].copy(&G.playlists[PLAYLIST_QUEUE]);
-				}
-			}
-
-			// Previous track
-			ImGui::SameLine();
-			if (small_selectable(u8"\xf048")) {
-				goto_previous_track();
-			}
-
-			// Play/pause
-			ImGui::SameLine();
-			if (small_selectable(G.state == STREAM_STATE_PLAYING ? u8"\xf04c" : u8"\xf04b")) {
-				stream_toggle_playing();
-			}
-
-			// Next track
-			ImGui::SameLine();
-			if (small_selectable(u8"\xf051")) {
-				goto_next_track();
-			}
-
 			// Timer
 			ImGui::SameLine();
 			{
