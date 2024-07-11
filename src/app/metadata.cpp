@@ -122,7 +122,7 @@ const char *get_metadata_string(Metadata_Ref ref, Metadata_Type type) {
 }
 
 bool metadata_string_is_empty(const char *str) {
-	return !strcmp(str, " ");
+	return !strcmp(str, " ") || !strcmp(str, EMPTY_STRING);
 }
 
 void save_metadata_cache() {
