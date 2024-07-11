@@ -108,4 +108,8 @@ static inline char *eat_spaces(char *c) {
 	return c;
 }
 
+static inline int iclamp(int i, int min, int max) {
+	return (i < min) ? min : ((i > max) ? max : i);
+}
+
 #endif //COMMON_H

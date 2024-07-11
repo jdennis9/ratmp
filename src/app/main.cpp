@@ -78,6 +78,10 @@ Config g_config;
 
 static void init_drag_drop(HWND hWnd);
 
+static bool is_first_time_launch() {
+	return !file_exists("config.ini");
+}
+
 static int load_config_ini_handler(void *dont_care, const char *section, const char *key, const char *value) {
 	USE_GLYPH_RANGE_NAMES(range_names);
 	
@@ -88,6 +92,14 @@ static int load_config_ini_handler(void *dont_care, const char *section, const c
 		}
 		else if (!strcmp(key, "iClosePolicy")) {
 			g_config.close_policy = (Close_Policy)atoi(value);
+		}
+		else if (!strcmp(key, "iThumbnailSize")) {
+			g_config.thumbnail_size = iclamp(atoi(value), MIN_THUMBNAIL_SIZE, MAX_THUMBNAIL_SIZE);
+		}
+		else if (!strcmp(key, "iPreviewThumbnailSize")) {
+			g_config.preview_thumbnail_size = iclamp(atoi(value), 
+													 MIN_PREVIEW_THUMBNAIL_SIZE,
+													 MAX_PREVIEW_THUMBNAIL_SIZE);
 		}
 		else for (uint32 i = 0; i < GLYPH_RANGE__COUNT; ++i) {
 			char key_name[64];
@@ -107,8 +119,14 @@ void apply_config() {
 }
 
 void load_config() {
-	ini_parse("config.ini", &load_config_ini_handler, NULL);
-	apply_config();
+	strcpy(g_config.theme, "default-dark");
+	g_config.thumbnail_size = 512;
+	g_config.preview_thumbnail_size = 128;
+	if (!is_first_time_launch()) {
+		ini_parse("config.ini", &load_config_ini_handler, NULL);
+	} else {
+		save_config();
+	}
 }
 
 void save_config() {
@@ -122,6 +140,8 @@ void save_config() {
 	fprintf(file, "[Main]\n");
 	fprintf(file, "sTheme = %s\n", g_config.theme);
 	fprintf(file, "iClosePolicy = %d\n", g_config.close_policy);
+	fprintf(file, "iThumbnailSize = %d\n", g_config.thumbnail_size);
+	fprintf(file, "iPreviewThumbnailSize = %d\n", g_config.preview_thumbnail_size);
 	
 	for (int i = 0; i < GLYPH_RANGE__COUNT; ++i) {
 		fprintf(file, "bLoad%sGlyphs = %d\n", range_names[i], g_config.include_glyphs[i]);
@@ -191,7 +211,8 @@ static void load_thumbnail() {
 		}
 		
 		texture = create_texture(GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_config.thumbnail_size, g_config.thumbnail_size,
+					 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
 		
 		ui_set_thumbnail((void*)texture);
 		
@@ -468,10 +489,6 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 	return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-static bool is_first_time_launch() {
-	return !file_exists("config.ini");
-}
-
 static void enable_vsync() {
 	typedef bool wglSwapIntervalEXT_PFN(int);
 	wglSwapIntervalEXT_PFN *wglSwapIntervalEXT;
@@ -529,10 +546,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	init_stats();
 	
 	// First time launch, generate default config
-	if (is_first_time_launch()) {
+	/*if (is_first_time_launch()) {
 		strcpy(g_config.theme, "default-dark");
 		save_config();
-	}
+	}*/
+	load_config();
 	
 	G.icon = LoadIconA(hInstance, "WindowIcon");
 	
@@ -607,7 +625,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	init_ui();
 	STOP_TIMER(init_ui);
 	
-	load_config(); // Config needs to be loaded after ImGui and OpenGL are initialized
+	//load_config(); // Config needs to be loaded after ImGui and OpenGL are initialized
+	apply_config();
 	ShowWindow(g_hWnd, SW_NORMAL);
 	
 	bool running = true;

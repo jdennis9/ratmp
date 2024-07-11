@@ -380,7 +380,7 @@ bool stream_extract_thumbnail(const char *filename, int requested_size, Image *o
 bool stream_get_thumbnail(Image *out) {
 	Decoder *dec = &G.decoder;
 	decoder_lock(dec);
-	bool ret = decoder_get_thumbnail(dec, THUMBNAIL_WIDTH, out);
+	bool ret = decoder_get_thumbnail(dec, g_config.thumbnail_size, out);
 	decoder_unlock(dec);
 	return ret;
 }

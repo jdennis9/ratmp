@@ -134,8 +134,6 @@ void load_stats() {
 		Track track;
 		track.path = store_file_path(path);
 		track.metadata = retrieve_metadata(path);
-		//g_counter_keys.append(track);
-		//g_counters.append(count);
 		increment_track_play_count(track, count);
 	}
 	

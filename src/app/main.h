@@ -55,10 +55,17 @@ name[GLYPH_RANGE_CHINESE] = "Chinese";\
 name[GLYPH_RANGE_VIETNAMESE] = "Vietnamese";\
 name[GLYPH_RANGE_THAI] = "Thai";\
 
+#define MIN_THUMBNAIL_SIZE 64
+#define MAX_THUMBNAIL_SIZE 1024
+#define MIN_PREVIEW_THUMBNAIL_SIZE 32
+#define MAX_PREVIEW_THUMBNAIL_SIZE 256
+
 struct Config {
 	char theme[MAX_THEME_NAME_LENGTH + 1];
 	Close_Policy close_policy;
 	bool include_glyphs[GLYPH_RANGE__COUNT];
+	int thumbnail_size;
+	int preview_thumbnail_size;
 };
 
 extern Config g_config;

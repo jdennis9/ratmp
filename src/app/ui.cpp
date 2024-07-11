@@ -1286,6 +1286,17 @@ static void show_config_editor_gui() {
 		}
 	}
 	
+	// Thumbnail sizes
+	if (ImGui::InputInt("Thumbnail size", &config.thumbnail_size)) {
+		config.thumbnail_size = iclamp(config.thumbnail_size, MIN_THUMBNAIL_SIZE, MAX_THUMBNAIL_SIZE);
+		need_save = true;
+	}
+	if (ImGui::InputInt("Preview thumbnail size", &config.preview_thumbnail_size)) {
+		config.thumbnail_size = iclamp(config.thumbnail_size, 
+									   MIN_PREVIEW_THUMBNAIL_SIZE, MAX_PREVIEW_THUMBNAIL_SIZE);
+		need_save = true;
+	}
+	
 	need_save |= apply;
 	if (apply) apply_config();
 	if (need_save) save_config();
