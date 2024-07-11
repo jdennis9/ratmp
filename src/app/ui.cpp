@@ -1274,6 +1274,7 @@ static void show_config_editor_gui() {
 			ImGui::EndCombo();
 		}
 	}
+	ImGui::SetItemTooltip("What to do when closing the main window");
 	
 	// Glyph ranges
 	ImGui::SeparatorText("Included language characters");
@@ -1291,11 +1292,15 @@ static void show_config_editor_gui() {
 		config.thumbnail_size = iclamp(config.thumbnail_size, MIN_THUMBNAIL_SIZE, MAX_THUMBNAIL_SIZE);
 		need_save = true;
 	}
+	ImGui::SetItemTooltip("Size of album art for current track");
+	
 	if (ImGui::InputInt("Preview thumbnail size", &config.preview_thumbnail_size)) {
 		config.thumbnail_size = iclamp(config.thumbnail_size, 
 									   MIN_PREVIEW_THUMBNAIL_SIZE, MAX_PREVIEW_THUMBNAIL_SIZE);
 		need_save = true;
 	}
+	ImGui::SetItemTooltip("Size of album art in albums view. Increasing this will increase memory usage"
+						  " (Requires restart)");
 	
 	need_save |= apply;
 	if (apply) apply_config();
