@@ -809,7 +809,7 @@ bool show_ui() {
 		
 		
 		ImGui::SeparatorText("Playlists");
-
+		
 		// Playlist list
 		if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner)) {
 			ImGui::TableSetupColumn("##names");
@@ -887,6 +887,10 @@ bool show_ui() {
 					if (ImGui::Selectable(name_id, selected, ImGuiSelectableFlags_SpanAllColumns)) {
 						G.selected_playlist = iplaylist;
 						G.main_view = MAIN_VIEW_TRACKS;
+					}
+					
+					if (selected && ImGui::IsKeyPressed(ImGuiKey_F2)) {
+						G.renaming_playlist = iplaylist;
 					}
 					
 					if (playing) ImGui::PopStyleColor();
