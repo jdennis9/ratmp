@@ -318,6 +318,8 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 				else tracklist.select(itrack);
 			}
 			
+			// Pop cell color change
+			
 			// Prepare for drag and drop
 			if (ImGui::BeginDragDropSource()) {
 				Tracklist *payload = new Tracklist();
@@ -341,36 +343,36 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 			if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 				play_index = itrack;
 			}
-			
-			if (ImGui::BeginPopupContextItem()) {
-				if (!selected) tracklist.select(itrack);
-				
-				if (ImGui::BeginMenu("Add to playlist")) {
-					int32 iplaylist = show_playlist_dropdown_selector();
-					if (iplaylist != -1) {
-						Tracklist &playlist = G.playlists[iplaylist];
-						tracklist.copy_selection(&playlist);
-						playlist.save_to_file();
-					}
-					ImGui::EndMenu();
-				}
-				
-				if (editable && ImGui::MenuItem("Remove")) {
-					tracklist.remove_selection();
-					tracklist.save_to_file();
-					tracklist.select(0);
-				}
-				
-				if (queueable && ImGui::MenuItem("Add to queue")) {
-					tracklist.copy_selection(&G.playlists[PLAYLIST_QUEUE]);
-				}
-				
-				ImGui::EndPopup();
-			}
 		}
 		
-		// Pop cell color change
 		if (playing) ImGui::PopStyleColor();
+		
+		if (ImGui::BeginPopupContextItem()) {
+			if (!selected) tracklist.select(itrack);
+			
+			if (ImGui::BeginMenu("Add to playlist")) {
+				int32 iplaylist = show_playlist_dropdown_selector();
+				if (iplaylist != -1) {
+					Tracklist &playlist = G.playlists[iplaylist];
+					tracklist.copy_selection(&playlist);
+					playlist.save_to_file();
+				}
+				ImGui::EndMenu();
+			}
+			
+			if (editable && ImGui::MenuItem("Remove")) {
+				tracklist.remove_selection();
+				tracklist.save_to_file();
+				tracklist.select(0);
+			}
+			
+			if (queueable && ImGui::MenuItem("Add to queue")) {
+				tracklist.copy_selection(&G.playlists[PLAYLIST_QUEUE]);
+			}
+			
+			ImGui::EndPopup();
+		}
+		
 		
 		// ====== Duration
 		if (ImGui::TableNextColumn()){
