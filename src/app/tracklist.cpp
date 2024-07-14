@@ -118,8 +118,9 @@ void check_album_thumbnail_queue() {
 	lock_mutex(g_thumbnail_queue.results_lock);
 	Auto_Array<Thumbnail_Result>& results = g_thumbnail_queue.results;
 	for (uint32 i = 0; i < results.m_count; ++i) {
+		uint32 index = results[i].album_index;
 		if (results[i].image.data) {
-			g_albums.albums[i].thumbnail = create_texture_from_image(&results[i].image);
+			g_albums.albums[index].thumbnail = create_texture_from_image(&results[i].image);
 		}
 		else {
 			static Texture_ID missing_thumbnail;
@@ -132,7 +133,7 @@ void check_album_thumbnail_queue() {
 				missing_thumbnail = create_texture_from_image(&image);
 				stbi_image_free(image.data);
 			}
-			g_albums.albums[i].thumbnail = missing_thumbnail;
+			g_albums.albums[index].thumbnail = missing_thumbnail;
 		}
 	}
 	results.reset();
