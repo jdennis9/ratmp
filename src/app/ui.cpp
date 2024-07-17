@@ -604,17 +604,17 @@ void ui_accept_drag_drop(const Track_Drag_Drop_Payload *payload) {
 	}
 }
 
-static bool show_navigation_ui(/*const Box& window*/) {
+static bool show_navigation_ui() {
 	ImVec2 window_size = ImGui::GetContentRegionAvail();
 	
 	// Image
 	if (G.thumbnail) {
 		ImVec2 v = ImGui::GetCursorPos();
 		v.x = 0;
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
-		ImGui::SetCursorPos(v);
+		//ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
+		//ImGui::SetCursorPos(v);
 		ImGui::Image(G.thumbnail, ImVec2{window_size.x, window_size.x});
-		ImGui::PopStyleVar();
+		//ImGui::PopStyleVar();
 	}
 	else {
 		ImGui::InvisibleButton("##missing_thumbnail", ImVec2{window_size.x, window_size.x});
@@ -1049,6 +1049,7 @@ bool show_ui() {
 	ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
 	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
 		ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp;
+		ImGui::SetNextWindowSizeConstraints(ImVec2(100.f, 0.f), ImVec2(io.DisplaySize.x*0.36f, FLT_MAX));
 		if (ImGui::BeginChild("##navigation", ImVec2(0, 0), ImGuiChildFlags_ResizeX|ImGuiChildFlags_Border)) {
 			show_navigation_ui();
 		}
