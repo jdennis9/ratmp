@@ -115,8 +115,6 @@ static int theme_ini_handler(void *data, const char *section, const char *key, c
 		else if (!strcmp(key, "IconFontSize")) {
 			set_icon_font_size(atoi(value));
 		}
-		else if (!strcmp(key, "WindowRounding"))
-			style.WindowRounding = (float)atoi(value);
 		else if (!strcmp(key, "WindowBorderSize"))
 			style.WindowBorderSize = (float)atoi(value);
 		else if (!strcmp(key, "ScrollbarRounding"))
@@ -277,7 +275,6 @@ void save_theme(const char *name) {
 	fprintf(file, "Font = %s\n", get_font());
 	fprintf(file, "FontSize = %d\n", get_font_size());
 	fprintf(file, "IconFontSize = %d\n", get_icon_font_size());
-	fprintf(file, "WindowRounding = %d\n", (int)style.WindowRounding);
 	fprintf(file, "WindowPaddingX = %d\n", (int)style.WindowPadding.x);
 	fprintf(file, "WindowPaddingY = %d\n", (int)style.WindowPadding.y);
 	fprintf(file, "WindowBorderSize = %d\n", (int)style.WindowBorderSize);
@@ -400,12 +397,6 @@ bool show_theme_editor_gui() {
 	ImGui::SeparatorText("Style");
 	
 	if (ImGui::BeginTable("##style_table", 2)) {
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		dirty |= ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.f, 16.f, "%.0f");
-		ImGui::TableNextColumn();
-		dirty |= editor_padding_helper("Window Padding", &style.WindowPadding, 0.f, 16.f);
-		
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		dirty |= input_float_clamped("Border Size", &style.WindowBorderSize, 0.f, 8.f);

@@ -1047,11 +1047,11 @@ bool show_ui() {
 	
 	ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
 	ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
-	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration)) {
+	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
 		ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp;
 		if (ImGui::BeginTable("##layout_table", 2, table_flags)) {
 			const float control_panel_height = 70.f;
-			ImGui::TableSetupColumn("Navigation");
+			ImGui::TableSetupColumn("Navigation", 0, 0.12f);
 			ImGui::TableSetupColumn("Tracklist");
 			
 			//=============================================================================================
