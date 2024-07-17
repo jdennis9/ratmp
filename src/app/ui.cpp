@@ -1021,7 +1021,7 @@ bool show_ui() {
 		
 		if (ImGui::BeginMenu("View")) {
 			if (ImGui::MenuItem("Show missing tracks", NULL, show_missing_tracks)) {
-				show_missing_tracks = true;
+				show_missing_tracks = !show_missing_tracks;
 			}
 			if (ImGui::MenuItem("Playback statistics")) {
 				show_playback_stats = true;
