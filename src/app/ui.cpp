@@ -1151,6 +1151,8 @@ bool show_ui() {
 	ImGui::End(); // ##main
 	
 	ImVec2 popup_size = {500.f, 500.f};
+	ImVec2 popup_min_size = {300.f, 300.f};
+	ImVec2 popup_max_size = {1000.f, 1000.f};
 	
 	ImVec4 window_color = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
 	window_color.w = 1.f;
@@ -1158,6 +1160,7 @@ bool show_ui() {
 	
 	if (show_hotkeys) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Hotkeys", &show_hotkeys)) {
 			show_hotkey_gui();
 		}
@@ -1166,6 +1169,7 @@ bool show_ui() {
 	
 	if (show_config_editor) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Preferences", &show_config_editor)) {
 			show_config_editor_gui();
 		}
@@ -1175,6 +1179,7 @@ bool show_ui() {
 	if (show_theme_editor) {
 		ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Theme", &show_theme_editor, unsaved)) {
 			ImGui::PopStyleColor();
 			G.dirty_theme = show_theme_editor_gui();
@@ -1184,6 +1189,8 @@ bool show_ui() {
 	}
 	
 	if (show_search_results) {
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Search Results", &show_search_results, 0)) {
 			show_track_list_gui(G.search_results, -1, NULL);
 		}
@@ -1192,6 +1199,7 @@ bool show_ui() {
 	
 	if (show_about) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("About", &show_about)) {
 			show_about_gui();
 		}
@@ -1200,6 +1208,7 @@ bool show_ui() {
 	
 	if (show_playback_stats) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Playback Statistics", &show_playback_stats)) {
 			show_playback_stats_gui();
 		}
