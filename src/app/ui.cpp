@@ -1176,7 +1176,9 @@ bool show_ui() {
 		ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
 		if (ImGui::Begin("Theme", &show_theme_editor, unsaved)) {
+			ImGui::PopStyleColor();
 			G.dirty_theme = show_theme_editor_gui();
+			ImGui::PushStyleColor(ImGuiCol_WindowBg, window_color);
 		}
 		ImGui::End();
 	}
