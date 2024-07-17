@@ -1152,6 +1152,10 @@ bool show_ui() {
 	
 	ImVec2 popup_size = {500.f, 500.f};
 	
+	ImVec4 window_color = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+	window_color.w = 1.f;
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, window_color);
+	
 	if (show_hotkeys) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
 		if (ImGui::Begin("Hotkeys", &show_hotkeys)) {
@@ -1199,6 +1203,8 @@ bool show_ui() {
 		}
 		ImGui::End();
 	}
+	
+	ImGui::PopStyleColor();
 	
 	return running;
 }
