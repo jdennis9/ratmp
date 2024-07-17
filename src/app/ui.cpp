@@ -662,7 +662,8 @@ static bool show_navigation_ui() {
 	ImGui::SeparatorText("Playlists");
 	
 	// Playlist list
-	if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner)) {
+	ImVec2 playlist_list_size = ImVec2(0, ImGui::GetContentRegionAvail().y - (ImGui::GetTextLineHeight()*2.f));
+	if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner|ImGuiTableFlags_ScrollY, playlist_list_size)) {
 		ImGui::TableSetupColumn("##names");
 		uint32 playlist_count = G.playlists.length();
 		static int deleting_playlist;
