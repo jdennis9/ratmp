@@ -1057,7 +1057,7 @@ bool show_ui() {
 		ImGui::EndChild();
 		ImGui::SameLine();
 		if (ImGui::BeginChild("##track_and_control_panel_view")) {
-			const float control_panel_height = 70.f;
+			const float control_panel_height = 66.f;
 			ImGuiChildFlags child_flags = 
 				ImGuiChildFlags_Border;
 			ImVec2 tracklist_size = ImVec2(0, -control_panel_height - style.ItemSpacing.y);
