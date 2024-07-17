@@ -32,17 +32,6 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
-enum Extra_View {
-	EXTRA_VIEW_NONE,
-	EXTRA_VIEW_THEME,
-	EXTRA_VIEW_CONFIG,
-	EXTRA_VIEW_HOTKEYS,
-	EXTRA_VIEW_SEARCH_RESULTS,
-	EXTRA_VIEW_ABOUT,
-	EXTRA_VIEW_MISSING_TRACKS,
-	EXTRA_VIEW_PLAYBACK_STATS,
-};
-
 enum Main_View {
 	MAIN_VIEW_TRACKS,
 	MAIN_VIEW_ALBUMS,
@@ -128,12 +117,10 @@ static struct {
 	int32 selected_playlist;
 	int32 queued_playlist;
 	Main_View main_view;
-	Extra_View extra_view;
 	ImTextureID thumbnail;
 	ImTextureID waveform_image;
 	Tracklist drag_drop_payload;
 	Track playing_track;
-	bool show_extra_view;
 	bool shuffle_enabled;
 	bool dirty_theme;
 } G;
@@ -343,9 +330,7 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 			if (ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 				play_index = itrack;
 			}
-		}
-		
-		if (playing) ImGui::PopStyleColor();
+		} else continue;
 		
 		if (ImGui::BeginPopupContextItem()) {
 			if (!selected) tracklist.select(itrack);
@@ -373,12 +358,14 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 			ImGui::EndPopup();
 		}
 		
-		
 		// ====== Duration
 		if (ImGui::TableNextColumn()){
 			const char *duration = get_metadata_string(track.metadata, METADATA_DURATION);
 			ImGui::TextUnformatted(duration);
 		}
+		
+		if (playing) ImGui::PopStyleColor();
+		
 	}
 	
 	return play_index;
@@ -616,21 +603,341 @@ void ui_accept_drag_drop(const Track_Drag_Drop_Payload *payload) {
 		queue_playlist(G.selected_playlist);
 	}
 }
- 
-bool show_ui() {
-	Layout layout;
-	Box window;
-	ImGuiIO &io = ImGui::GetIO();
+
+static bool show_navigation_ui(/*const Box& window*/) {
+	ImVec2 window_size = ImGui::GetContentRegionAvail();
+	
+	// Image
+	if (G.thumbnail) {
+		ImVec2 v = ImGui::GetCursorPos();
+		v.x = 0;
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
+		ImGui::SetCursorPos(v);
+		ImGui::Image(G.thumbnail, ImVec2{window_size.x, window_size.x});
+		ImGui::PopStyleVar();
+	}
+	else {
+		ImGui::InvisibleButton("##missing_thumbnail", ImVec2{window_size.x, window_size.x});
+	}
+	
+	ImGui::SeparatorText("Navigation");
+	
+	// Library and queue
+	if (ImGui::BeginTable("##navigation", 1, ImGuiTableFlags_BordersInner)) {
+		ImGui::TableSetupColumn("##names");
+		
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (ImGui::Selectable("Albums##albums", G.main_view == MAIN_VIEW_ALBUMS)) {
+			G.main_view = MAIN_VIEW_ALBUMS;
+			G.selected_playlist = PLAYLIST_LIBRARY;
+		}
+		
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (ImGui::Selectable("Library##library", G.selected_playlist == PLAYLIST_LIBRARY && G.main_view == MAIN_VIEW_TRACKS)) {
+			G.selected_playlist = PLAYLIST_LIBRARY;
+			G.main_view = MAIN_VIEW_TRACKS;
+		}
+		
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
+			(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
+			G.selected_playlist = PLAYLIST_LIBRARY;
+			play_track_at(PLAYLIST_LIBRARY, 0);
+		}
+		ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_LIBRARY].length());
+		
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (ImGui::Selectable("Queue##queue", G.selected_playlist == PLAYLIST_QUEUE && G.main_view == MAIN_VIEW_TRACKS)) {
+			G.selected_playlist = PLAYLIST_QUEUE;
+			G.main_view = MAIN_VIEW_TRACKS;
+		}
+		ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_QUEUE].length());
+		
+		ImGui::EndTable();
+	}
+	
+	
+	ImGui::SeparatorText("Playlists");
+	
+	// Playlist list
+	if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner)) {
+		ImGui::TableSetupColumn("##names");
+		uint32 playlist_count = G.playlists.length();
+		static int deleting_playlist;
+		ImGuiID delete_confirmation_popup_id = ImGui::GetID("##delete_confirmation");
+		
+		// Delete playlist?
+		if (ImGui::BeginPopup("##delete_confirmation")) {
+			assert(deleting_playlist >= PLAYLIST_USER);
+			Tracklist &playlist = G.playlists[deleting_playlist];
+			ImGui::Text("Delete playlist \"%s\"? (Cannot be undone)", G.playlists[deleting_playlist].name);
+			if (ImGui::Button("Delete")) {
+				playlist.delete_file();
+				G.playlists.remove_range(deleting_playlist, deleting_playlist);
+				if (deleting_playlist == G.selected_playlist) G.selected_playlist = -1;
+				if (deleting_playlist == G.queued_playlist) G.queued_playlist = -1;
+				sort_playlists();
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel")) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+		
+		// Show list of user playlists
+		for (uint32 order = 0; order < G.playlist_order.m_count; ++order) {
+			uint32 iplaylist = G.playlist_order[order];
+			if (iplaylist < PLAYLIST_USER || iplaylist >= G.playlists.m_count) continue;
+			Tracklist &playlist = G.playlists[iplaylist];
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			// Rename playlist
+			if (G.renaming_playlist == iplaylist) {
+				bool commit = false;
+				ImGui::SetWindowFocus();
+				ImGui::SetKeyboardFocusHere();
+				
+				commit |= ImGui::InputText("##playlist_name", playlist.name, 
+										   sizeof(playlist.name), ImGuiInputTextFlags_EnterReturnsTrue);
+				if (commit) {
+					// Store the name of the playlist so we can find its new index in the playlist array
+					char name[sizeof(playlist.name)+1];
+					name[sizeof(playlist.name)] = 0;
+					strncpy(name, playlist.name, sizeof(playlist.name));
+					
+					G.renaming_playlist = -1;
+					playlist.save_to_file();
+					sort_playlists();
+					
+					// Find new index of playlist and select it
+					for (uint32 i = PLAYLIST_USER; i < G.playlists.m_count; ++i) {
+						if (!strcmp(G.playlists[i].name, name)) {
+							G.selected_playlist = i;
+							break;
+						}
+					}
+				}
+			}
+			else {
+				char name_id[128];					
+				bool playing = (iplaylist == G.queued_playlist);
+				snprintf(name_id, sizeof(name_id), "%s##%s", playlist.name, playlist.get_filename());
+				
+				bool selected = G.selected_playlist == iplaylist && G.main_view == MAIN_VIEW_TRACKS;
+				
+				if (playing) {
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
+										   get_theme_color(THEME_COLOR_PLAYING_INDICATOR));
+					ImGui::PushStyleColor(ImGuiCol_Text, get_theme_color(THEME_COLOR_PLAYING_TEXT));
+				}
+				
+				if (ImGui::Selectable(name_id, selected, ImGuiSelectableFlags_SpanAllColumns)) {
+					G.selected_playlist = iplaylist;
+					G.main_view = MAIN_VIEW_TRACKS;
+				}
+				
+				if (selected && ImGui::IsKeyPressed(ImGuiKey_F2)) {
+					G.renaming_playlist = iplaylist;
+				}
+				
+				if (playing) ImGui::PopStyleColor();
+				
+				ImGui::SetItemTooltip("%u tracks", playlist.length());
+				
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
+					(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
+					G.selected_playlist = iplaylist;
+					play_track_at(iplaylist, 0);
+				}
+				
+				// Accept incoming track drag and drop
+				if (ImGui::BeginDragDropTarget()) {
+					const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("TRACKS");
+					if (payload) {
+						Tracklist *track_payload = *(Tracklist **)payload->Data;
+						track_payload->copy(&playlist);
+						delete track_payload;
+						ImGui::EndDragDropTarget();
+						playlist.save_to_file();
+						if (iplaylist == G.queued_playlist) {
+							queue_playlist(iplaylist);
+						}
+					}
+				}
+				
+				// Right click context menu
+				if (ImGui::BeginPopupContextItem()) {
+					if (ImGui::MenuItem("Rename")) {
+						G.renaming_playlist = iplaylist;
+					}
+					if (ImGui::MenuItem("Delete")) {
+						deleting_playlist = iplaylist;
+						ImGui::OpenPopup(delete_confirmation_popup_id);
+					}
+					if (ImGui::BeginMenu("Sort by")) {
+						if (ImGui::MenuItem("Album")) {
+							playlist.sort(METADATA_ALBUM);
+							playlist.save_to_file();
+							if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
+						}
+						if (ImGui::MenuItem("Artist")) {
+							playlist.sort(METADATA_ARTIST);
+							playlist.save_to_file();
+							if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
+						}
+						if (ImGui::MenuItem("Title")) {
+							playlist.sort(METADATA_TITLE);
+							playlist.save_to_file();
+							if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
+						}
+						ImGui::EndMenu();
+					}
+					ImGui::EndPopup();
+				}
+			}
+		}
+		ImGui::EndTable();
+	}
+	
+	ImGui::Separator();
+	if (ImGui::Selectable("+ New playlist...")) {
+		create_playlist();
+	}
+	
+	return true;
+}
+
+static bool show_control_panel_ui(/*const Box& window*/) {
 	const ImGuiStyle &style = ImGui::GetStyle();
 	const int64 playback_position = stream_get_pos();
 	const int64 playback_duration = stream_get_duration();
+	
+	// Shuffle
+	ImGui::SameLine();
+	if (small_selectable(u8"\xf074", &G.shuffle_enabled)) {
+		if (G.shuffle_enabled) G.playlists[PLAYLIST_QUEUE].shuffle();
+		else if ((G.queued_playlist != -1) && (G.queued_playlist != PLAYLIST_QUEUE)) {
+			G.playlists[PLAYLIST_QUEUE].clear();
+			G.playlists[G.queued_playlist].copy(&G.playlists[PLAYLIST_QUEUE]);
+		}
+	}
+	
+	// Previous track
+	ImGui::SameLine();
+	if (small_selectable(u8"\xf048")) {
+		goto_previous_track();
+	}
+	
+	// Play/pause
+	ImGui::SameLine();
+	if (small_selectable(G.state == STREAM_STATE_PLAYING ? u8"\xf04c" : u8"\xf04b")) {
+		if (G.state != STREAM_STATE_STOPPED) stream_toggle_playing();
+		else {
+			play_track_at(PLAYLIST_QUEUE, 0);
+		}
+	}
+	
+	// Next track
+	ImGui::SameLine();
+	if (small_selectable(u8"\xf051")) {
+		goto_next_track();
+	}
+	
+	if (G.state != STREAM_STATE_STOPPED) {
+		int64 new_pos;
+		const Track &track = G.playing_track;
+		const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
+		const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
+		ImVec2 size = ImGui::GetContentRegionAvail();
+		
+		// Timer
+		ImGui::SameLine();
+		{
+			char pos[64];
+			char duration[64];
+			
+			format_time(playback_position, pos, 64);
+			format_time(playback_duration, duration, 64);
+			
+			ImGui::Text("%s/%s", pos, duration);
+		}
+		
+		// Draw artist - title centered in the panel
+		ImGui::SameLine();
+		{
+			char pt[256];
+			ImVec2 text_size;
+			ImVec2 cursor = ImGui::GetCursorPos();
+			
+			snprintf(pt, 256, "%s - %s", artist, title);
+			text_size = ImGui::CalcTextSize(pt);
+			cursor.x = (size.x / 2) - (text_size.x / 2) - style.ItemInnerSpacing.x;
+			ImGui::SetCursorPos(cursor);
+			ImGui::TextUnformatted(pt);
+		}
+		
+		// Volume button
+		ImGui::SameLine();
+		if (0) {
+			const char *icon = u8"\xf028";
+			ImVec2 text_size = ImGui::CalcTextSize(icon);
+			ImVec2 cursor = ImGui::GetCursorPos();
+			cursor.x = size.x - text_size.x - style.ItemInnerSpacing.x - style.WindowPadding.x;
+			ImGui::SetCursorPos(cursor);
+			if (small_selectable(icon)) {
+				ImGui::OpenPopup("##volume_slider");
+			}
+			
+			if (ImGui::BeginPopup("##volume_slider")) {
+				float volume = stream_get_volume();
+				if (vertical_volume_slider("##slider", ImVec2{14, 60}, &volume, 0.f, 1.f)) 
+					stream_set_volume(volume);
+				ImGui::EndPopup();
+			}
+		}
+		else {
+			const char *icon = u8"\xf028";
+			ImVec2 icon_size = ImGui::CalcTextSize(icon);
+			float volume = stream_get_volume();
+			ImVec2 cursor = ImGui::GetCursorPos();
+			float width = 90.f;
+			cursor.x = size.x - width - (style.ItemInnerSpacing.x*2.f) - (style.WindowPadding.x*2.f) - icon_size.x;
+			ImGui::SetCursorPos(cursor);
+			if (circle_handle_slider(icon, &volume, 0.f, 1.f, width)) {
+				stream_set_volume(volume);
+				ImGui::SetTooltip("%d%%", (int)(100.f * volume));
+			}
+		}
+		
+		// Seek bar
+		if (seek_slider("##seek", playback_position, playback_duration, 
+						&new_pos, WAVEFORM_IMAGE_HEIGHT, G.waveform_image)) {
+			stream_seek(new_pos*1000);
+		}
+	}
+	
+	return true;
+}
+
+bool show_ui() {
+	ImGuiIO &io = ImGui::GetIO();
+	ImGuiStyle& style = ImGui::GetStyle();
 	bool running = true;
 	bool jump_to_playing = false;
+	static bool show_hotkeys = false;
+	static bool show_theme_editor = false;
+	static bool show_config_editor = false;
+	static bool show_playback_stats = false;
+	static bool show_about = false;
+	static bool show_missing_tracks = false;
+	static bool show_search_results = false;
 	
 	G.state = stream_get_state();
 
-	layout.init(io.DisplaySize);
-	
 	//=============================================================================================
 	// Handle hotkeys
 	//=============================================================================================
@@ -651,15 +958,16 @@ bool show_ui() {
 				stream_toggle_playing();
 			}
 		}
-		
 	}
 	
 	//=============================================================================================
 	// Main menu
 	//=============================================================================================
+	float menu_bar_height;
 	if (ImGui::BeginMainMenuBar()) {
 		if (ImGui::BeginMenu("File")) {
-			bool playlist_available = (G.selected_playlist != -1) && G.playlists.length() && (G.selected_playlist != PLAYLIST_QUEUE);
+			bool playlist_available = (G.selected_playlist != -1) 
+				&& G.playlists.length() && (G.selected_playlist != PLAYLIST_QUEUE);
 			
 			// =========================================
 			// Only when playlist is available
@@ -670,6 +978,7 @@ bool show_ui() {
 					queue_playlist(G.selected_playlist);
 				}
 			}
+			
 
 			if (ImGui::MenuItem("Add folder")) {
 				wchar_t folder[512];
@@ -698,46 +1007,34 @@ bool show_ui() {
 
 			ImGui::EndMenu();
 		}
+		menu_bar_height = ImGui::GetItemRectSize().y;
 		
 		if (ImGui::BeginMenu("Edit")) {
 			if (ImGui::MenuItem("Edit theme")) {
-				G.extra_view = EXTRA_VIEW_THEME;
-				G.show_extra_view = true;
+				show_theme_editor = true;
 			}
 			if (ImGui::MenuItem("Preferences")) {
-				G.extra_view = EXTRA_VIEW_CONFIG;
-				G.show_extra_view = true;
-			}
-			ImGui::SeparatorText("Playlist");
-			if (ImGui::MenuItem("Remove missing tracks")) {
-				if (G.selected_playlist >= 0 && G.selected_playlist < (int)G.playlists.m_count) {
-					G.playlists[G.selected_playlist].remove_missing_tracks();
-					G.playlists[G.selected_playlist].save_to_file();
-				}
+				show_config_editor = true;
 			}
 			ImGui::EndMenu();
 		}
 		
 		if (ImGui::BeginMenu("View")) {
-			if (ImGui::MenuItem("Show missing tracks")) {
-				G.extra_view = EXTRA_VIEW_MISSING_TRACKS;
-				G.show_extra_view = true;
+			if (ImGui::MenuItem("Show missing tracks", NULL, show_missing_tracks)) {
+				show_missing_tracks = true;
 			}
 			if (ImGui::MenuItem("Playback statistics")) {
-				G.extra_view = EXTRA_VIEW_PLAYBACK_STATS;
-				G.show_extra_view = true;
+				show_playback_stats = true;
 			}
 			ImGui::EndMenu();
 		}
 		
 		if (ImGui::BeginMenu("Help")) {
 			if (ImGui::MenuItem("Hotkeys")) {
-				G.extra_view = EXTRA_VIEW_HOTKEYS;
-				G.show_extra_view = true;
+				show_hotkeys = true;
 			}
 			if (ImGui::MenuItem("About")) {
-				G.extra_view = EXTRA_VIEW_ABOUT;
-				G.show_extra_view = true;
+				show_about = true;
 			}
 			ImGui::EndMenu();
 		}
@@ -745,491 +1042,176 @@ bool show_ui() {
 		const float window_button_width = ImGui::GetWindowHeight();
 		ImGui::SetCursorPosX(io.DisplaySize.x - (window_button_width*3.f) - 1.f);
 		
-		// Need to push down the layout to accomodate the menu bar
-		layout.push_down_pixels(ImGui::GetWindowHeight());
 		ImGui::EndMainMenuBar();
 	}
-
-	//=============================================================================================
-	// Navigation
-	//=============================================================================================
-	window = layout.push_right(0.15f);
-	set_next_window_box(window);
-	if (ImGui::Begin("Playlists", NULL, ImGuiWindowFlags_NoDecoration)) {
-		// Image
-		if (G.thumbnail) {
-			ImVec2 v = ImGui::GetCursorPos();
-			v.x = 0;
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
-			ImGui::SetCursorPos(v);
-			ImGui::Image(G.thumbnail, ImVec2{window.size.x, window.size.x});
-			ImGui::PopStyleVar();
-		}
-		else {
-			ImGui::InvisibleButton("##missing_thumbnail", ImVec2{window.size.x, window.size.x});
-		}
-		
-		ImGui::SeparatorText("Navigation");
-		
-		// Library and queue
-		if (ImGui::BeginTable("##navigation", 1, ImGuiTableFlags_BordersInner)) {
-			ImGui::TableSetupColumn("##names");
+	
+	ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
+	ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
+	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration)) {
+		ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp;
+		if (ImGui::BeginTable("##layout_table", 2, table_flags)) {
+			const float control_panel_height = 70.f;
+			ImGui::TableSetupColumn("Navigation");
+			ImGui::TableSetupColumn("Tracklist");
 			
+			//=============================================================================================
+			// Navigation
+			//=============================================================================================
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			if (ImGui::Selectable("Albums##albums", G.main_view == MAIN_VIEW_ALBUMS)) {
-				G.main_view = MAIN_VIEW_ALBUMS;
-				G.selected_playlist = PLAYLIST_LIBRARY;
-			}
+			show_navigation_ui();
 			
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			if (ImGui::Selectable("Library##library", G.selected_playlist == PLAYLIST_LIBRARY && G.main_view == MAIN_VIEW_TRACKS)) {
-				G.selected_playlist = PLAYLIST_LIBRARY;
-				G.main_view = MAIN_VIEW_TRACKS;
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::BeginChild("##track_and_control_panel_view")) {
+				ImGuiChildFlags child_flags = 
+					ImGuiChildFlags_Border;
+				ImVec2 tracklist_size = ImVec2(0, -control_panel_height - style.WindowPadding.y);
+				if (ImGui::BeginChild("##track_view", tracklist_size, child_flags, 0)) {
+					//=============================================================================================
+					// Track list
+					//=============================================================================================
+					if (G.main_view == MAIN_VIEW_ALBUMS) {
+						const Auto_Array<Album>& albums = get_albums();
+						show_album_list_gui(albums);
+					}
+					else if (G.selected_playlist != -1) {
+						Tracklist &playlist = G.playlists[G.selected_playlist];
+						static char filter_text[128];
+						static Track_Filter filter;
+						filter.add(TRACK_FILTER_ALBUM);
+						filter.add(TRACK_FILTER_ARTIST);
+						filter.add(TRACK_FILTER_TITLE);
+						filter.filter = filter_text;
+						
+						const char *playlist_name = playlist.name[0] != 0 ? playlist.name : "<untitled>";
+						char window_title[512];
+						snprintf(window_title, 512, "%s [%u tracks]\n", playlist_name, playlist.length());
+						
+						if (ImGui::InputTextWithHint("##filter", "Filter", filter_text, sizeof(filter_text), ImGuiInputTextFlags_EnterReturnsTrue)) {
+							G.search_results.clear();
+							if (filter.enabled && filter.filter[0]) {
+								playlist.copy_with_filter(&G.search_results, &filter);
+								show_search_results = true;
+							}
+						}
+						
+						// Show sort-by dropdown if we aren't looking at the queue
+						if (G.selected_playlist != PLAYLIST_QUEUE) {
+							ImGui::SameLine();
+							if (ImGui::BeginCombo("##sort", "Sort by", ImGuiComboFlags_WidthFitPreview)) {
+								if (ImGui::Selectable("Album")) {
+									playlist.sort(METADATA_ALBUM);
+									playlist.save_to_file();
+									if (G.selected_playlist == G.queued_playlist) 
+										queue_playlist(G.selected_playlist);
+								}
+								if (ImGui::Selectable("Artist")) {
+									playlist.sort(METADATA_ARTIST);
+									playlist.save_to_file();
+									if (G.selected_playlist == G.queued_playlist) 
+										queue_playlist(G.selected_playlist);
+								}
+								if (ImGui::Selectable("Title")) {
+									playlist.sort(METADATA_TITLE);
+									playlist.save_to_file();
+									if (G.selected_playlist == G.queued_playlist) 
+										queue_playlist(G.selected_playlist);
+								}
+								ImGui::EndCombo();
+							}
+						}
+						
+						ImVec2 missing_tracks_size = ImVec2(0.f, 140.f);
+						if (show_missing_tracks) {
+							ImGui::SeparatorText("Missing Tracks");
+							if (ImGui::BeginListBox("##missing_tracks", missing_tracks_size)) {
+								for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
+									char path[512];
+									retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
+									ImGui::TextUnformatted(path);
+								}
+								ImGui::EndListBox();
+							}
+							if (ImGui::Button("Remove missing tracks")) {
+								playlist.remove_missing_tracks();
+								playlist.save_to_file();
+							}
+						}
+						
+						int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);
+						if (play_index >= 0) {
+							play_track_at(G.selected_playlist, play_index, true);
+						}
+						
+					}
+				}
+				ImGui::EndChild();
+				
+				//=============================================================================================
+				// Control panel
+				//=============================================================================================
+				if (ImGui::BeginChild("##control_panel", ImVec2(0, control_panel_height), child_flags, 0)) {
+					show_control_panel_ui();
+				}
+				ImGui::EndChild();
 			}
-			
-			if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
-				(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
-				G.selected_playlist = PLAYLIST_LIBRARY;
-				play_track_at(PLAYLIST_LIBRARY, 0);
-			}
-			ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_LIBRARY].length());
-			
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			if (ImGui::Selectable("Queue##queue", G.selected_playlist == PLAYLIST_QUEUE && G.main_view == MAIN_VIEW_TRACKS)) {
-				G.selected_playlist = PLAYLIST_QUEUE;
-				G.main_view = MAIN_VIEW_TRACKS;
-			}
-			ImGui::SetItemTooltip("%u tracks", G.playlists[PLAYLIST_QUEUE].length());
+			ImGui::EndChild();
 			
 			ImGui::EndTable();
 		}
-		
-		
-		ImGui::SeparatorText("Playlists");
-		
-		// Playlist list
-		if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner)) {
-			ImGui::TableSetupColumn("##names");
-			uint32 playlist_count = G.playlists.length();
-			static int deleting_playlist;
-			ImGuiID delete_confirmation_popup_id = ImGui::GetID("##delete_confirmation");
-
-			// Delete playlist?
-			if (ImGui::BeginPopup("##delete_confirmation")) {
-				assert(deleting_playlist >= PLAYLIST_USER);
-				Tracklist &playlist = G.playlists[deleting_playlist];
-				ImGui::Text("Delete playlist \"%s\"? (Cannot be undone)", G.playlists[deleting_playlist].name);
-				if (ImGui::Button("Delete")) {
-					playlist.delete_file();
-					G.playlists.remove_range(deleting_playlist, deleting_playlist);
-					if (deleting_playlist == G.selected_playlist) G.selected_playlist = -1;
-					if (deleting_playlist == G.queued_playlist) G.queued_playlist = -1;
-					sort_playlists();
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Cancel")) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
-
-			// Show list of user playlists
-			for (uint32 order = 0; order < G.playlist_order.m_count; ++order) {
-				uint32 iplaylist = G.playlist_order[order];
-				if (iplaylist < PLAYLIST_USER || iplaylist >= G.playlists.m_count) continue;
-				Tracklist &playlist = G.playlists[iplaylist];
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				// Rename playlist
-				if (G.renaming_playlist == iplaylist) {
-					bool commit = false;
-					ImGui::SetWindowFocus();
-					ImGui::SetKeyboardFocusHere();
-					
-					commit |= ImGui::InputText("##playlist_name", playlist.name, 
-											   sizeof(playlist.name), ImGuiInputTextFlags_EnterReturnsTrue);
-					if (commit) {
-						// Store the name of the playlist so we can find its new index in the playlist array
-						char name[sizeof(playlist.name)+1];
-						name[sizeof(playlist.name)] = 0;
-						strncpy(name, playlist.name, sizeof(playlist.name));
-						
-						G.renaming_playlist = -1;
-						playlist.save_to_file();
-						sort_playlists();
-						
-						// Find new index of playlist and select it
-						for (uint32 i = PLAYLIST_USER; i < G.playlists.m_count; ++i) {
-							if (!strcmp(G.playlists[i].name, name)) {
-								G.selected_playlist = i;
-								break;
-							}
-						}
-					}
-				}
-				else {
-					char name_id[128];					
-					bool playing = (iplaylist == G.queued_playlist);
-					snprintf(name_id, sizeof(name_id), "%s##%s", playlist.name, playlist.get_filename());
-					
-					bool selected = G.selected_playlist == iplaylist && G.main_view == MAIN_VIEW_TRACKS;
-					
-					if (playing) {
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
-											   get_theme_color(THEME_COLOR_PLAYING_INDICATOR));
-						ImGui::PushStyleColor(ImGuiCol_Text, get_theme_color(THEME_COLOR_PLAYING_TEXT));
-					}
-					
-					if (ImGui::Selectable(name_id, selected, ImGuiSelectableFlags_SpanAllColumns)) {
-						G.selected_playlist = iplaylist;
-						G.main_view = MAIN_VIEW_TRACKS;
-					}
-					
-					if (selected && ImGui::IsKeyPressed(ImGuiKey_F2)) {
-						G.renaming_playlist = iplaylist;
-					}
-					
-					if (playing) ImGui::PopStyleColor();
-					
-					ImGui::SetItemTooltip("%u tracks", playlist.length());
-					
-					if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) || 
-						(ImGui::IsItemClicked() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))) {
-						G.selected_playlist = iplaylist;
-						play_track_at(iplaylist, 0);
-					}
-
-					// Accept incoming track drag and drop
-					if (ImGui::BeginDragDropTarget()) {
-						const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("TRACKS");
-						if (payload) {
-							Tracklist *track_payload = *(Tracklist **)payload->Data;
-							track_payload->copy(&playlist);
-							delete track_payload;
-							ImGui::EndDragDropTarget();
-							playlist.save_to_file();
-							if (iplaylist == G.queued_playlist) {
-								queue_playlist(iplaylist);
-							}
-						}
-					}
-					
-					// Right click context menu
-					if (ImGui::BeginPopupContextItem()) {
-						if (ImGui::MenuItem("Rename")) {
-							G.renaming_playlist = iplaylist;
-						}
-						if (ImGui::MenuItem("Delete")) {
-							deleting_playlist = iplaylist;
-							ImGui::OpenPopup(delete_confirmation_popup_id);
-						}
-						if (ImGui::BeginMenu("Sort by")) {
-							if (ImGui::MenuItem("Album")) {
-								playlist.sort(METADATA_ALBUM);
-								playlist.save_to_file();
-								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
-							}
-							if (ImGui::MenuItem("Artist")) {
-								playlist.sort(METADATA_ARTIST);
-								playlist.save_to_file();
-								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
-							}
-							if (ImGui::MenuItem("Title")) {
-								playlist.sort(METADATA_TITLE);
-								playlist.save_to_file();
-								if (iplaylist == G.queued_playlist) queue_playlist(iplaylist);
-							}
-							ImGui::EndMenu();
-						}
-						ImGui::EndPopup();
-					}
-				}
-			}
-			ImGui::EndTable();
-		}
-		
-		ImGui::Separator();
-		if (ImGui::Selectable("+ New playlist...")) {
-			create_playlist();
-		}
 	}
-	ImGui::End();
+	ImGui::End(); // ##main
 	
-	//=============================================================================================
-	// Left side view
-	//=============================================================================================
-	if (G.show_extra_view) {
-		window = layout.push_right(0.4f);
-		set_next_window_box(window);
-		
-		const uint32 flags = ImGuiWindowFlags_NoDecoration ^ ImGuiWindowFlags_NoTitleBar;
-
-		//=============================================================================================
-		// Config editor
-		//=============================================================================================
-		if (G.extra_view == EXTRA_VIEW_CONFIG) {
-			if (ImGui::Begin("Edit Preferences", &G.show_extra_view, flags)) {
-				show_config_editor_gui();
-			}
-			ImGui::End();
-		}
-		
-		//=============================================================================================
-		// Theme editor
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_THEME) {
-			ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
-			if (ImGui::Begin("Edit Theme", &G.show_extra_view, flags|unsaved)) {
-				G.dirty_theme = show_theme_editor_gui();
-			}
-			ImGui::End();
-		}
-		
-		//=============================================================================================
-		// Hotkeys
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_HOTKEYS) {
-			if (ImGui::Begin("Hotkeys", &G.show_extra_view, flags)) {
-				show_hotkey_gui();
-			}
-			ImGui::End();
-		}
-		
-		//=============================================================================================
-		// Search results
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_SEARCH_RESULTS) {
-			if (ImGui::Begin("Search Results", &G.show_extra_view, flags)) {
-				show_track_list_gui(G.search_results, -1, NULL);
-			}
-			ImGui::End();
-		}
-		
-		//=============================================================================================
-		// About
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_ABOUT) {
-			if (ImGui::Begin("About", &G.show_extra_view, flags)) {
-				show_about_gui();
-			}
-			ImGui::End();
-		}
-		
-		//=============================================================================================
-		// Missing tracks
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_MISSING_TRACKS) {
-			if (ImGui::Begin("Missing Tracks", &G.show_extra_view, flags)) {
-				if ((G.selected_playlist >= 0) && (G.selected_playlist < (int)G.playlists.m_count)) {
-					Tracklist& playlist = G.playlists[G.selected_playlist];
-					for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
-						char path[512];
-						retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
-						ImGui::TextUnformatted(path);
-					}
-				}
-			}
-			ImGui::End();
-		}
-		//=============================================================================================
-		// Playback stats
-		//=============================================================================================
-		else if (G.extra_view == EXTRA_VIEW_PLAYBACK_STATS) {
-			if (ImGui::Begin("Playback Statistics", &G.show_extra_view, flags)) {
-				show_playback_stats_gui();
-			}
-			ImGui::End();
-		}
-	}
+	ImVec2 popup_size = {500.f, 500.f};
 	
-	//=============================================================================================
-	// Track list
-	//=============================================================================================
-	window = layout.push_down_pixels(-66);
-	set_next_window_box(window);
-	if (G.main_view == MAIN_VIEW_ALBUMS) {
-		const Auto_Array<Album>& albums = get_albums();
-		if (ImGui::Begin("Albums", NULL, ImGuiWindowFlags_NoDecoration)) {
-			show_album_list_gui(albums);
-		}
-		ImGui::End();
-	}
-	else if (G.selected_playlist != -1) {
-		Tracklist &playlist = G.playlists[G.selected_playlist];
-		static char filter_text[128];
-		static Track_Filter filter;
-		filter.add(TRACK_FILTER_ALBUM);
-		filter.add(TRACK_FILTER_ARTIST);
-		filter.add(TRACK_FILTER_TITLE);
-		filter.filter = filter_text;
-		
-		const char *playlist_name = playlist.name[0] != 0 ? playlist.name : "<untitled>";
-		char window_title[512];
-		snprintf(window_title, 512, "%s [%u tracks]\n", playlist_name, playlist.length());
-		
-		if (ImGui::Begin(window_title, NULL, ImGuiWindowFlags_NoDecoration ^ ImGuiWindowFlags_NoTitleBar)) {
-			if (ImGui::InputTextWithHint("##filter", "Filter", filter_text, sizeof(filter_text), ImGuiInputTextFlags_EnterReturnsTrue)) {
-				G.search_results.clear();
-				if (filter.enabled && filter.filter[0]) {
-					playlist.copy_with_filter(&G.search_results, &filter);
-					G.extra_view = EXTRA_VIEW_SEARCH_RESULTS;
-					G.show_extra_view = true;
-				}
-			}
-			
-			// Show sort-by dropdown if we aren't looking at the queue
-			if (G.selected_playlist != PLAYLIST_QUEUE) {
-				ImGui::SameLine();
-				if (ImGui::BeginCombo("##sort", "Sort by", ImGuiComboFlags_WidthFitPreview)) {
-					if (ImGui::Selectable("Album")) {
-						playlist.sort(METADATA_ALBUM);
-						playlist.save_to_file();
-						if (G.selected_playlist == G.queued_playlist) 
-							queue_playlist(G.selected_playlist);
-					}
-					if (ImGui::Selectable("Artist")) {
-						playlist.sort(METADATA_ARTIST);
-						playlist.save_to_file();
-						if (G.selected_playlist == G.queued_playlist) 
-							queue_playlist(G.selected_playlist);
-					}
-					if (ImGui::Selectable("Title")) {
-						playlist.sort(METADATA_TITLE);
-						playlist.save_to_file();
-						if (G.selected_playlist == G.queued_playlist) 
-							queue_playlist(G.selected_playlist);
-					}
-					ImGui::EndCombo();
-				}
-			}
-
-			int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);
-			if (play_index >= 0) {
-				play_track_at(G.selected_playlist, play_index, true);
-			}
-		}
-		
-		ImGui::End();
-	}
-	else {
-		if (ImGui::Begin("##empty_tracklist", NULL, ImGuiWindowFlags_NoDecoration)) {
+	if (show_hotkeys) {
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		if (ImGui::Begin("Hotkeys", &show_hotkeys)) {
+			show_hotkey_gui();
 		}
 		ImGui::End();
 	}
 	
-	//=============================================================================================
-	// Control panel
-	//=============================================================================================
-	window = layout.push_right(1);
-	set_next_window_box(window);
-	if (ImGui::Begin("Control Panel", NULL, ImGuiWindowFlags_NoDecoration)) {
-		// Shuffle
-		ImGui::SameLine();
-		if (small_selectable(u8"\xf074", &G.shuffle_enabled)) {
-			if (G.shuffle_enabled) G.playlists[PLAYLIST_QUEUE].shuffle();
-			else if ((G.queued_playlist != -1) && (G.queued_playlist != PLAYLIST_QUEUE)) {
-				G.playlists[PLAYLIST_QUEUE].clear();
-				G.playlists[G.queued_playlist].copy(&G.playlists[PLAYLIST_QUEUE]);
-			}
+	if (show_config_editor) {
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		if (ImGui::Begin("Preferences", &show_config_editor)) {
+			show_config_editor_gui();
 		}
-		
-		// Previous track
-		ImGui::SameLine();
-		if (small_selectable(u8"\xf048")) {
-			goto_previous_track();
-		}
-		
-		// Play/pause
-		ImGui::SameLine();
-		if (small_selectable(G.state == STREAM_STATE_PLAYING ? u8"\xf04c" : u8"\xf04b")) {
-			if (G.state != STREAM_STATE_STOPPED) stream_toggle_playing();
-			else {
-				play_track_at(PLAYLIST_QUEUE, 0);
-			}
-		}
-		
-		// Next track
-		ImGui::SameLine();
-		if (small_selectable(u8"\xf051")) {
-			goto_next_track();
-		}
-
-		if (G.state != STREAM_STATE_STOPPED) {
-			int64 new_pos;
-			const Track &track = G.playing_track;
-			const char *title = get_metadata_string(track.metadata, METADATA_TITLE);
-			const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
-			// Timer
-			ImGui::SameLine();
-			{
-				char pos[64];
-				char duration[64];
-
-				format_time(playback_position, pos, 64);
-				format_time(playback_duration, duration, 64);
-
-				ImGui::Text("%s/%s", pos, duration);
-			}
-
-			// Draw artist - title centered in the panel
-			ImGui::SameLine();
-			{
-				char pt[256];
-				ImVec2 text_size;
-				ImVec2 cursor = ImGui::GetCursorPos();
-
-				snprintf(pt, 256, "%s - %s", artist, title);
-				text_size = ImGui::CalcTextSize(pt);
-				cursor.x = (window.size.x / 2) - (text_size.x / 2) - style.ItemInnerSpacing.x;
-				ImGui::SetCursorPos(cursor);
-				ImGui::TextUnformatted(pt);
-			}
-
-			// Volume button
-			ImGui::SameLine();
-			if (0) {
-				const char *icon = u8"\xf028";
-				ImVec2 text_size = ImGui::CalcTextSize(icon);
-				ImVec2 cursor = ImGui::GetCursorPos();
-				cursor.x = window.size.x - text_size.x - style.ItemInnerSpacing.x - style.WindowPadding.x;
-				ImGui::SetCursorPos(cursor);
-				if (small_selectable(icon)) {
-					ImGui::OpenPopup("##volume_slider");
-				}
-
-				if (ImGui::BeginPopup("##volume_slider")) {
-					float volume = stream_get_volume();
-					if (vertical_volume_slider("##slider", ImVec2{14, 60}, &volume, 0.f, 1.f)) 
-						stream_set_volume(volume);
-					ImGui::EndPopup();
-				}
-			}
-			else {
-				const char *icon = u8"\xf028";
-				ImVec2 icon_size = ImGui::CalcTextSize(icon);
-				float volume = stream_get_volume();
-				ImVec2 cursor = ImGui::GetCursorPos();
-				float width = 90.f;
-				cursor.x = window.size.x - width - (style.ItemInnerSpacing.x*2.f) - (style.WindowPadding.x*2.f) - icon_size.x;
-				ImGui::SetCursorPos(cursor);
-				if (circle_handle_slider(icon, &volume, 0.f, 1.f, width)) {
-					stream_set_volume(volume);
-					ImGui::SetTooltip("%d%%", (int)(100.f * volume));
-				}
-			}
-			
-			// Seek bar
-			if (seek_slider("##seek", playback_position, playback_duration, &new_pos, WAVEFORM_IMAGE_HEIGHT, G.waveform_image)) {
-				stream_seek(new_pos*1000);
-			}
-		}
+		ImGui::End();
 	}
-	ImGui::End();
-
+	
+	if (show_theme_editor) {
+		ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		if (ImGui::Begin("Theme", &show_theme_editor, unsaved)) {
+			G.dirty_theme = show_theme_editor_gui();
+		}
+		ImGui::End();
+	}
+	
+	if (show_search_results) {
+		if (ImGui::Begin("Search Results", &show_search_results, 0)) {
+			show_track_list_gui(G.search_results, -1, NULL);
+		}
+		ImGui::End();
+	}
+	
+	if (show_about) {
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		if (ImGui::Begin("About", &show_about)) {
+			show_about_gui();
+		}
+		ImGui::End();
+	}
+	
+	if (show_playback_stats) {
+		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
+		if (ImGui::Begin("Playback Statistics", &show_playback_stats)) {
+			show_playback_stats_gui();
+		}
+		ImGui::End();
+	}
+	
 	return running;
 }
 
