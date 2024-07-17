@@ -1049,116 +1049,102 @@ bool show_ui() {
 	ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
 	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
 		ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp;
-		if (ImGui::BeginTable("##layout_table", 2, table_flags)) {
-			const float control_panel_height = 70.f;
-			ImGui::TableSetupColumn("Navigation", 0, 0.12f);
-			ImGui::TableSetupColumn("Tracklist");
-			
-			//=============================================================================================
-			// Navigation
-			//=============================================================================================
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
+		if (ImGui::BeginChild("##navigation", ImVec2(0, 0), ImGuiChildFlags_ResizeX|ImGuiChildFlags_Border)) {
 			show_navigation_ui();
-			
-			ImGui::TableSetColumnIndex(1);
-			if (ImGui::BeginChild("##track_and_control_panel_view")) {
-				ImGuiChildFlags child_flags = 
-					ImGuiChildFlags_Border;
-				ImVec2 tracklist_size = ImVec2(0, -control_panel_height - style.WindowPadding.y);
-				if (ImGui::BeginChild("##track_view", tracklist_size, child_flags, 0)) {
-					//=============================================================================================
-					// Track list
-					//=============================================================================================
-					if (G.main_view == MAIN_VIEW_ALBUMS) {
-						const Auto_Array<Album>& albums = get_albums();
-						show_album_list_gui(albums);
-					}
-					else if (G.selected_playlist != -1) {
-						Tracklist &playlist = G.playlists[G.selected_playlist];
-						static char filter_text[128];
-						static Track_Filter filter;
-						filter.add(TRACK_FILTER_ALBUM);
-						filter.add(TRACK_FILTER_ARTIST);
-						filter.add(TRACK_FILTER_TITLE);
-						filter.filter = filter_text;
-						
-						const char *playlist_name = playlist.name[0] != 0 ? playlist.name : "<untitled>";
-						char window_title[512];
-						snprintf(window_title, 512, "%s [%u tracks]\n", playlist_name, playlist.length());
-						
-						if (ImGui::InputTextWithHint("##filter", "Filter", filter_text, sizeof(filter_text), ImGuiInputTextFlags_EnterReturnsTrue)) {
-							G.search_results.clear();
-							if (filter.enabled && filter.filter[0]) {
-								playlist.copy_with_filter(&G.search_results, &filter);
-								show_search_results = true;
-							}
-						}
-						
-						// Show sort-by dropdown if we aren't looking at the queue
-						if (G.selected_playlist != PLAYLIST_QUEUE) {
-							ImGui::SameLine();
-							if (ImGui::BeginCombo("##sort", "Sort by", ImGuiComboFlags_WidthFitPreview)) {
-								if (ImGui::Selectable("Album")) {
-									playlist.sort(METADATA_ALBUM);
-									playlist.save_to_file();
-									if (G.selected_playlist == G.queued_playlist) 
-										queue_playlist(G.selected_playlist);
-								}
-								if (ImGui::Selectable("Artist")) {
-									playlist.sort(METADATA_ARTIST);
-									playlist.save_to_file();
-									if (G.selected_playlist == G.queued_playlist) 
-										queue_playlist(G.selected_playlist);
-								}
-								if (ImGui::Selectable("Title")) {
-									playlist.sort(METADATA_TITLE);
-									playlist.save_to_file();
-									if (G.selected_playlist == G.queued_playlist) 
-										queue_playlist(G.selected_playlist);
-								}
-								ImGui::EndCombo();
-							}
-						}
-						
-						ImVec2 missing_tracks_size = ImVec2(0.f, 140.f);
-						if (show_missing_tracks) {
-							ImGui::SeparatorText("Missing Tracks");
-							if (ImGui::BeginListBox("##missing_tracks", missing_tracks_size)) {
-								for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
-									char path[512];
-									retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
-									ImGui::TextUnformatted(path);
-								}
-								ImGui::EndListBox();
-							}
-							if (ImGui::Button("Remove missing tracks")) {
-								playlist.remove_missing_tracks();
-								playlist.save_to_file();
-							}
-						}
-						
-						int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);
-						if (play_index >= 0) {
-							play_track_at(G.selected_playlist, play_index, true);
-						}
-						
-					}
-				}
-				ImGui::EndChild();
-				
-				//=============================================================================================
-				// Control panel
-				//=============================================================================================
-				if (ImGui::BeginChild("##control_panel", ImVec2(0, control_panel_height), child_flags, 0)) {
-					show_control_panel_ui();
-				}
-				ImGui::EndChild();
-			}
-			ImGui::EndChild();
-			
-			ImGui::EndTable();
 		}
+		ImGui::EndChild();
+		ImGui::SameLine();
+		if (ImGui::BeginChild("##track_and_control_panel_view")) {
+			const float control_panel_height = 70.f;
+			ImGuiChildFlags child_flags = 
+				ImGuiChildFlags_Border;
+			ImVec2 tracklist_size = ImVec2(0, -control_panel_height - style.ItemSpacing.y);
+			if (ImGui::BeginChild("##track_view", tracklist_size, child_flags, 0)) {
+				//=============================================================================================
+				// Track list
+				//=============================================================================================
+				if (G.main_view == MAIN_VIEW_ALBUMS) {
+					const Auto_Array<Album>& albums = get_albums();
+					show_album_list_gui(albums);
+				}
+				else if (G.selected_playlist != -1) {
+					Tracklist &playlist = G.playlists[G.selected_playlist];
+					static char filter_text[128];
+					static Track_Filter filter;
+					filter.add(TRACK_FILTER_ALBUM);
+					filter.add(TRACK_FILTER_ARTIST);
+					filter.add(TRACK_FILTER_TITLE);
+					filter.filter = filter_text;
+					
+					const char *playlist_name = playlist.name[0] != 0 ? playlist.name : "<untitled>";
+					char window_title[512];
+					snprintf(window_title, 512, "%s [%u tracks]\n", playlist_name, playlist.length());
+					
+					if (ImGui::InputTextWithHint("##filter", "Filter", filter_text, sizeof(filter_text), ImGuiInputTextFlags_EnterReturnsTrue)) {
+						G.search_results.clear();
+						if (filter.enabled && filter.filter[0]) {
+							playlist.copy_with_filter(&G.search_results, &filter);
+							show_search_results = true;
+						}
+					}
+					
+					// Show sort-by dropdown if we aren't looking at the queue
+					if (G.selected_playlist != PLAYLIST_QUEUE) {
+						ImGui::SameLine();
+						if (ImGui::BeginCombo("##sort", "Sort by", ImGuiComboFlags_WidthFitPreview)) {
+							if (ImGui::Selectable("Album")) {
+								playlist.sort(METADATA_ALBUM);
+								playlist.save_to_file();
+								if (G.selected_playlist == G.queued_playlist) 
+									queue_playlist(G.selected_playlist);
+							}
+							if (ImGui::Selectable("Artist")) {
+								playlist.sort(METADATA_ARTIST);
+								playlist.save_to_file();
+								if (G.selected_playlist == G.queued_playlist) 
+									queue_playlist(G.selected_playlist);
+							}
+							if (ImGui::Selectable("Title")) {
+								playlist.sort(METADATA_TITLE);
+								playlist.save_to_file();
+								if (G.selected_playlist == G.queued_playlist) 
+									queue_playlist(G.selected_playlist);
+							}
+							ImGui::EndCombo();
+						}
+					}
+					
+					ImVec2 missing_tracks_size = ImVec2(0.f, 140.f);
+					if (show_missing_tracks) {
+						ImGui::SeparatorText("Missing Tracks");
+						if (ImGui::BeginListBox("##missing_tracks", missing_tracks_size)) {
+							for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
+								char path[512];
+								retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
+								ImGui::TextUnformatted(path);
+							}
+							ImGui::EndListBox();
+						}
+						if (ImGui::Button("Remove missing tracks")) {
+							playlist.remove_missing_tracks();
+							playlist.save_to_file();
+						}
+					}
+					
+					int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);
+					if (play_index >= 0) {
+						play_track_at(G.selected_playlist, play_index, true);
+					}
+				}
+			} ImGui::EndChild();
+			
+			//=============================================================================================
+			// Control panel
+			//=============================================================================================
+			if (ImGui::BeginChild("##control_panel", ImVec2(0, control_panel_height), child_flags, 0)) {
+				show_control_panel_ui();
+			} ImGui::EndChild();
+		} ImGui::EndChild();
 	}
 	ImGui::End(); // ##main
 	
