@@ -1077,7 +1077,8 @@ bool show_ui() {
 	ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
 	if (ImGui::Begin("##main", NULL, ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus)) {
 		ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp;
-		ImGui::SetNextWindowSizeConstraints(ImVec2(100.f, 0.f), ImVec2(io.DisplaySize.x*0.36f, FLT_MAX));
+		if (io.DisplaySize.x > FLT_EPSILON)
+			ImGui::SetNextWindowSizeConstraints(ImVec2(100.f, 0.f), ImVec2(io.DisplaySize.x*0.36f, FLT_MAX));
 		if (ImGui::BeginChild("##navigation", ImVec2(0, 0), ImGuiChildFlags_ResizeX|ImGuiChildFlags_Border)) {
 			show_navigation_ui();
 		}
