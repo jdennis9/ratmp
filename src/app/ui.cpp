@@ -866,6 +866,20 @@ static bool show_control_panel_ui(/*const Box& window*/) {
 		const char *artist = get_metadata_string(track.metadata, METADATA_ARTIST);
 		ImVec2 size = ImGui::GetContentRegionAvail();
 		
+		if (ImGui::BeginPopupContextWindow()) {
+			if (ImGui::BeginMenu("Add to playlist")) {
+				int32 iplaylist = show_playlist_dropdown_selector();
+				if (iplaylist != -1) {
+					Tracklist &playlist = G.playlists[iplaylist];
+					playlist.add(track);
+					playlist.save_to_file();
+				}
+				ImGui::EndMenu();
+			}
+			
+			ImGui::EndPopup();
+		}
+		
 		// Timer
 		ImGui::SameLine();
 		{
@@ -890,6 +904,8 @@ static bool show_control_panel_ui(/*const Box& window*/) {
 			cursor.x = (size.x / 2) - (text_size.x / 2) - style.ItemInnerSpacing.x;
 			ImGui::SetCursorPos(cursor);
 			ImGui::TextUnformatted(pt);
+			
+			
 		}
 		
 		// Volume button
