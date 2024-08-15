@@ -415,7 +415,11 @@ static int32 show_track_list_gui(Tracklist& tracklist, int32 playlist_id, const 
 	ImGuiListClipper clipper = ImGuiListClipper();
 	if (use_clipper) clipper.Begin(tracklist.length());
 	
-	if (ImGui::BeginTable("##tracklist", 4, table_flags)) {
+	char table_id[192] = {};
+	// Use the file path of the playlist as the table ID. This makes ImGui remember the column
+	// sizing per playlist
+	snprintf(table_id, sizeof(table_id)-1, "##%s", G.playlists[playlist_id].m_filename);
+	if (ImGui::BeginTable(table_id, 4, table_flags)) {
 		ImGui::TableSetupColumn("Album", 0, 200.f);
 		ImGui::TableSetupColumn("Artist", 0, 200.f);
 		ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_NoHide, 400.f);
