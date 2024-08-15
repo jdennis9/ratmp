@@ -333,6 +333,8 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 		} else continue;
 		
 		if (ImGui::BeginPopupContextItem()) {
+			if (playing) ImGui::PopStyleColor();
+			
 			if (!selected) tracklist.select(itrack);
 			
 			if (ImGui::BeginMenu("Add to playlist")) {
@@ -356,6 +358,11 @@ static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint
 			}
 			
 			ImGui::EndPopup();
+			
+			if (playing) {
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, get_theme_color(THEME_COLOR_PLAYING_INDICATOR));
+				ImGui::PushStyleColor(ImGuiCol_Text, get_theme_color(THEME_COLOR_PLAYING_TEXT));
+			}
 		}
 		
 		// ====== Duration
