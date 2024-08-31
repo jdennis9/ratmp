@@ -13,8 +13,8 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
-#include <imgui_impl_opengl3.h>
-#include <imgui_impl_win32.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_win32.h>
 #include "stream.h"
 #include "ui.h"
 #include "util/auto_array_impl.h"
@@ -508,7 +508,7 @@ static DWORD foreground_event_thread(LPVOID lParam) {
 	
 	return 0;
 }
-#endif SINGLE_INSTANCE
+#endif //SINGLE_INSTANCE
 
 void post_event(Event_Code event, int64 wparam, int64 lparam) {
 	PostMessageW(g_hWnd, WM_USER+event, wparam, lparam);
