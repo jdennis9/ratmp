@@ -1075,17 +1075,21 @@ bool show_ui() {
 		
 		ImGui::EndMainMenuBar();
 	}
-	
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
 		ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
 		bool showing = ImGui::Begin("Main Window", NULL, 
-				ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoNavFocus);
+				ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoNavFocus|
+				ImGuiWindowFlags_NoBackground);
 		ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_AutoHideTabBar;
 		if (!showing) dockspace_flags |= ImGuiDockNodeFlags_KeepAliveOnly;
 		ImGui::DockSpace(ImGui::GetID("MainDockSpace"), ImVec2(0, 0), dockspace_flags);
 		ImGui::End();
 	}
+	ImGui::PopStyleVar(2);
 
 	if (ImGui::Begin("Navigation", NULL, 0)) {
 		show_navigation_ui();
