@@ -597,10 +597,17 @@ void stream_close() {
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+static float clamp(float x, float min, float max) {
+	if (x < min) return min;
+	if (x > max) return max;
+	return x;
+}
+
 //@TODO: Handle super short and super long audio files
 static DWORD generate_waveform_image(LPVOID data_ptr) {
 	Decoder dec = {};
 	Waveform_Image_Load *data = (Waveform_Image_Load*)data_ptr;
+	defer(delete data);
 
 	float segment_values[1024];
 	Image *image = &G.waveform_image;
@@ -614,8 +621,17 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 	
 	// Open the stream and file
 	Audio_Memory_Stream *output_stream = new Audio_Memory_Stream(44100);
+	defer(output_stream->close());
+	defer(delete output_stream);
 	dec.output_stream = output_stream;
-	decoder_load(&dec, data->path);
+	if (!decoder_load(&dec, data->path)) {
+		log_error("generate_waveform_image(): Could not open file for reading\n");
+		delete output_stream;
+		delete data;
+		return 0;
+	}
+
+	defer(close_decoder(&dec));
 	
 	// Samples per line of the image
 	const uint32 samples_per_segment = (decoder_get_duration(&dec) * 44.1)/image->height;
@@ -623,7 +639,8 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 	
 	int seg_count = 0;
 	float segment_sum = 0.f;
-	
+	float max_peak = 0.f;
+
 	while (!decoder_decode(&dec,(uint8**)output_stream->buffers, samples_per_segment) && (seg_count < image->height)) {
 		float *in = output_stream->buffers[0];
 		float sum = 0.f;
@@ -638,28 +655,26 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 			
 			// If the sample is a peak add it to the peak average
 			if ((a < b) && (b > c)) {
-				sum += b;
+				sum += clamp(b, 0.f, 1.f);
 				peak_count++;
 			}
 		}
 		
 		float avg = sum / (float)peak_count;
-		if (avg > 1.f) avg = 1.f;
-		else if (avg < 0.f) avg = 0.f;
-		else if (isnan(avg)) avg = 0.f;
+		if (isnan(avg)) avg = 0.f;
+		avg = clamp(avg, 0.f, 1.f);
+		max_peak = MAX(max_peak, avg);
 		
 		segment_values[seg_count++] = avg;
 		segment_sum += avg;
 		
 		if (G.cancel_waveform_load) break;
 	}
-	
-	// Get the average of all segments and use it to scale output to better fit quiet music
-	float segment_avg = segment_sum / (float)seg_count;
-	float line_factor = 1.f/segment_avg;
+
+	float line_factor = 1.f/max_peak;
 	//float line_factor = 1.f;
 
-	if (G.cancel_waveform_load) goto CANCEL;
+	if (G.cancel_waveform_load) return 0;
 	
 	// Fill in unfilled segments with silence
 	for (int i = seg_count; i < image->height; ++i) {
@@ -667,7 +682,7 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 		line[half_width] = UINT32_MAX;
 	}
 	
-	if (G.cancel_waveform_load) goto CANCEL;
+	if (G.cancel_waveform_load) return 0;
 	
 	for (int seg = 0; seg < seg_count; ++seg) {
 		uint32 *line = (uint32*)((uint8*)image->data + (image->width * seg * 4));
@@ -682,15 +697,9 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 		}
 	}
 	
-	if (G.cancel_waveform_load) goto CANCEL;
+	if (G.cancel_waveform_load) return 0;
 	
 	post_event(EVENT_STREAM_WAVEFORM_READY, 0, 0);
-	
-	CANCEL:
-	close_decoder(&dec);
-	output_stream->close();
-	delete output_stream;
-	delete data;
 	
 	return 0;
 }

@@ -66,6 +66,8 @@ struct Config {
 	bool include_glyphs[GLYPH_RANGE__COUNT];
 	int thumbnail_size;
 	int preview_thumbnail_size;
+	int waveform_width;
+	int waveform_height;
 };
 
 extern Config g_config;
