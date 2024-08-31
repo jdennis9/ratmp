@@ -29,7 +29,7 @@ enum Stream_State {
 
 #define THUMBNAIL_WIDTH 512
 #define THUMBNAIL_HEIGHT 512
-#define WAVEFORM_IMAGE_HEIGHT 23
+#define WAVEFORM_IMAGE_HEIGHT 128
 
 bool stream_open(Audio_Client_ID client, const char *preferred_device = nullptr);
 

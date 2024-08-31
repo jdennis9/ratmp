@@ -601,7 +601,7 @@ void stream_close() {
 static DWORD generate_waveform_image(LPVOID data_ptr) {
 	Decoder dec = {};
 	Waveform_Image_Load *data = (Waveform_Image_Load*)data_ptr;
-	
+
 	float segment_values[1024];
 	Image *image = &G.waveform_image;
 	if (image->data) free(image->data);
@@ -651,12 +651,15 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 		segment_values[seg_count++] = avg;
 		segment_sum += avg;
 		
-		if (G.cancel_waveform_load) goto CANCEL;
+		if (G.cancel_waveform_load) break;
 	}
 	
 	// Get the average of all segments and use it to scale output to better fit quiet music
 	float segment_avg = segment_sum / (float)seg_count;
 	float line_factor = 1.f/segment_avg;
+	//float line_factor = 1.f;
+
+	if (G.cancel_waveform_load) goto CANCEL;
 	
 	// Fill in unfilled segments with silence
 	for (int i = seg_count; i < image->height; ++i) {

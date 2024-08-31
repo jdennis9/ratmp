@@ -29,7 +29,7 @@
 #include <locale.h>
 #include <time.h>
 #include <gl/glew.h>
-#include <gl/GL.h>
+#include <GL/gl.h>
 #include <stb_image.h>
 #include <ini.h>
 
@@ -197,7 +197,7 @@ static GLuint create_texture(GLenum filter) {
 Texture_ID create_texture_from_image(const Image *image) {
 	GLuint texture = create_texture(GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->width, image->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image->data);
-	return (Texture_ID)texture;
+	return (Texture_ID)(uintptr_t)texture;
 }
 
 static void load_thumbnail() {
@@ -214,7 +214,7 @@ static void load_thumbnail() {
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_config.thumbnail_size, g_config.thumbnail_size,
 					 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
 		
-		ui_set_thumbnail((void*)texture);
+		ui_set_thumbnail((void*)(uintptr_t)texture);
 		
 		stream_free_thumbnail(&image);
 	}
@@ -262,7 +262,7 @@ void load_background_image(const char *path) {
 	stbi_image_free(image_data);
 	
 	log_debug("Loaded background \"%s\"\n", path);
-	strncpy(G.background_path, path, sizeof(G.background_path)-1);
+	strncpy_s(G.background_path, path, sizeof(G.background_path)-1);
 }
 
 const char *get_background_image_path() {
@@ -331,7 +331,7 @@ static void create_tray_icon(HWND hwnd) {
 	data.hIcon = G.icon;
 	data.uVersion = 4;
 	
-	strcpy(data.szTip, "RAT MP");
+	strcpy_s(data.szTip, "RAT_MP");
 	
 	Shell_NotifyIconA(NIM_ADD, &data);
 }
@@ -422,6 +422,7 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 				}
 				case CLOSE_POLICY_EXIT_TO_TRAY: ShowWindow(hWnd, SW_HIDE); break;
 				case CLOSE_POLICY_EXIT: PostQuitMessage(0); break;
+				case CLOSE_POLICY__COUNT: break;
 			}
 			return 0;
 		}
@@ -468,7 +469,7 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			stream_get_waveform(&image);
 			glBindTexture(GL_TEXTURE_2D, texture);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
-			ui_set_waveform_image((void*)texture);
+			ui_set_waveform_image((void*)(uintptr_t)texture);
 			return 0;
 		}
 		case WM_USER+EVENT_STREAM_TRACK_LOADED: {
@@ -614,7 +615,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ImGui_ImplOpenGL3_Init();
 	
 	ImGuiIO &io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
 	
 	// In case font size is not defined in the theme, use a reasonable default
 	G.font_size = DEFAULT_FONT_SIZE;
@@ -780,7 +781,7 @@ struct Drop_Target : IDropTarget {
 	
 	HRESULT DragEnter(IDataObject *data, DWORD key_state, POINTL point, DWORD *effect) override {
 		if (*effect & DROPEFFECT_LINK) return S_OK;
-		log_error("Unexpected drop effect on DragEnter(): 0x%x\n", *effect);
+		log_error("Unexpected drop effect on DragEnter(): 0x%x\n", (uint32)*effect);
 		return E_UNEXPECTED;
 	}
 	
@@ -814,6 +815,6 @@ static void init_drag_drop(HWND hWnd) {
 	HRESULT result = RegisterDragDrop((HWND)hWnd, &g_drag_drop_target);
 	
 	if (!SUCCEEDED(result)) {
-		log_error("RegisterDragDrop failed with code %d (0x%x)\n", result, result);
+		log_error("RegisterDragDrop failed with code %d (0x%x)\n", (uint32)result, (uint32)result);
 	}
 }
