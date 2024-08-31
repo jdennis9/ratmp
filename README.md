@@ -32,4 +32,5 @@ cmake --build . --config Release
 cmake --install . --config Release
 ```
 
-Everything will be ready in the Release folder.
+All binaries will be ready in the Release folder.
+Copy data from the data directory into the folder where the binaries were installed.

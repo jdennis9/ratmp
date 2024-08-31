@@ -487,7 +487,7 @@ static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
 			play |= ImGui::Selectable(name);
 			hovered |= ImGui::IsItemHovered();
 			
-			if (hovered) ImGui::SetTooltip(name);
+			if (hovered) ImGui::SetTooltip("%s", name);
 			if (play) {
 				queue_tracklist(album.tracks);
 				play_track_at(PLAYLIST_QUEUE, 0);
