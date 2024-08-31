@@ -1079,7 +1079,8 @@ bool show_ui() {
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
 		ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
-		bool showing = ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoDecoration);
+		bool showing = ImGui::Begin("Main Window", NULL, 
+				ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoNavFocus);
 		ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_AutoHideTabBar;
 		if (!showing) dockspace_flags |= ImGuiDockNodeFlags_KeepAliveOnly;
 		ImGui::DockSpace(ImGui::GetID("MainDockSpace"), ImVec2(0, 0), dockspace_flags);
@@ -1263,10 +1264,19 @@ void ui_handle_hotkey(uintptr_t hotkey) {
 	}
 }
 
+// Formats a string into the buffer and returns the buffer
+static const char *format_string(char *buffer, int max, const char *format, ...) {
+	va_list va;
+	va_start(va, format);
+	vsnprintf(buffer, max, format, va);
+	va_end(va);
+}
+
 static void show_config_editor_gui() {
 	Config& config = g_config;
 	bool apply = false;
 	bool need_save = false;
+	char format_buffer[512];
 	
 	if (ImGui::BeginCombo("Theme", config.theme)) {
 		const char *sel = show_theme_selector_gui();
@@ -1321,6 +1331,26 @@ static void show_config_editor_gui() {
 	}
 	ImGui::SetItemTooltip("Size of album art in albums view. Increasing this will increase memory usage"
 						  " (Requires restart)");
+
+	if (ImGui::BeginCombo("Waveform Horiz. Resolution", lazy_format("%d", 1<<g_config.waveform_height_power))) {
+		for (int i = MIN_WAVEFORM_HEIGHT_POWER; i <= MAX_WAVEFORM_HEIGHT_POWER; ++i) {
+			if (ImGui::Selectable(lazy_format("%d", 1<<i), g_config.waveform_height_power == i)) {
+				g_config.waveform_height_power = i;
+				need_save = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+
+	if (ImGui::BeginCombo("Waveform Vert. Resolution", lazy_format("%d", 1<<g_config.waveform_width_power))) {
+		for (int i = MIN_WAVEFORM_WIDTH_POWER; i <= MAX_WAVEFORM_WIDTH_POWER; ++i) {
+			if (ImGui::Selectable(lazy_format("%d", 1<<i), g_config.waveform_width_power == i)) {
+				g_config.waveform_width_power = i;
+				need_save = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
 	
 	need_save |= apply;
 	if (apply) apply_config();

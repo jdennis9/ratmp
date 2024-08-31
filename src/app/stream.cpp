@@ -609,20 +609,21 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 	Waveform_Image_Load *data = (Waveform_Image_Load*)data_ptr;
 	defer(delete data);
 
-	float segment_values[1024];
 	Image *image = &G.waveform_image;
 	if (image->data) free(image->data);
-	image->width = WAVEFORM_IMAGE_HEIGHT;
-	image->height = 1024;
+	image->width = 1<<g_config.waveform_width_power;
+	image->height = 1<<g_config.waveform_height_power;
 	image->data = malloc(image->width*image->height*4);
 	memset(image->data, 0, image->width*image->height*4);
+	float *segment_values = (float*)malloc(image->height * sizeof(float));
+	defer(free(segment_values));
 	
 	const int32 half_width = image->width/2;
 	
 	// Open the stream and file
 	Audio_Memory_Stream *output_stream = new Audio_Memory_Stream(44100);
-	defer(output_stream->close());
 	defer(delete output_stream);
+	defer(output_stream->close());
 	dec.output_stream = output_stream;
 	if (!decoder_load(&dec, data->path)) {
 		log_error("generate_waveform_image(): Could not open file for reading\n");

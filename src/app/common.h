@@ -83,6 +83,9 @@ uint32 wchar_to_multibyte(const wchar_t *in, char *out, uint32 out_max);
 uint32 multibyte_to_wchar(const char *in, wchar_t *out, uint32 out_max);
 int format_time(int32 seconds, char *buffer, int buffer_size);
 
+// Formats a thread-local global buffer and returns a pointer to it
+const char *lazy_format(const char *fmt, ...);
+
 #define START_TIMER(var, text) struct {const char *name; uint64 start;} timer__##var = {text, time_get_tick()};
 #define STOP_TIMER(var) \
 printf("%s: %gms\n", timer__##var.name, \

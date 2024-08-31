@@ -101,6 +101,14 @@ static int load_config_ini_handler(void *dont_care, const char *section, const c
 													 MIN_PREVIEW_THUMBNAIL_SIZE,
 													 MAX_PREVIEW_THUMBNAIL_SIZE);
 		}
+		else if (!strcmp(key, "iWaveformHorizRes")) {
+			// 512 to 4096
+			g_config.waveform_height_power = iclamp(atoi(value), MIN_WAVEFORM_HEIGHT_POWER, MAX_WAVEFORM_HEIGHT_POWER);
+		}
+		else if (!strcmp(key, "iWaveformVerticalRes")) {
+			// 16 to 512
+			g_config.waveform_width_power = iclamp(atoi(value), MIN_WAVEFORM_WIDTH_POWER, MAX_WAVEFORM_WIDTH_POWER);
+		}
 		else for (uint32 i = 0; i < GLYPH_RANGE__COUNT; ++i) {
 			char key_name[64];
 			snprintf(key_name, 64, "bLoad%sGlyphs", range_names[i]);
@@ -122,6 +130,8 @@ void load_config() {
 	strcpy(g_config.theme, "default-dark");
 	g_config.thumbnail_size = 512;
 	g_config.preview_thumbnail_size = 128;
+	g_config.waveform_height_power = 10; // 1024
+	g_config.waveform_width_power = 7; // 128
 	if (!is_first_time_launch()) {
 		ini_parse("config.ini", &load_config_ini_handler, NULL);
 	} else {
@@ -142,6 +152,8 @@ void save_config() {
 	fprintf(file, "iClosePolicy = %d\n", g_config.close_policy);
 	fprintf(file, "iThumbnailSize = %d\n", g_config.thumbnail_size);
 	fprintf(file, "iPreviewThumbnailSize = %d\n", g_config.preview_thumbnail_size);
+	fprintf(file, "iWaveformVerticalRes = %d\n", g_config.waveform_width_power);
+	fprintf(file, "iWaveformHorizRes = %d\n", g_config.waveform_height_power);
 	
 	for (int i = 0; i < GLYPH_RANGE__COUNT; ++i) {
 		fprintf(file, "bLoad%sGlyphs = %d\n", range_names[i], g_config.include_glyphs[i]);
@@ -818,3 +830,13 @@ static void init_drag_drop(HWND hWnd) {
 		log_error("RegisterDragDrop failed with code %d (0x%x)\n", (uint32)result, (uint32)result);
 	}
 }
+
+const char *lazy_format(const char *fmt, ...) {
+	thread_local char buffer[4096];
+	va_list va;
+	va_start(va, fmt);
+	vsnprintf(buffer, sizeof(buffer), fmt, va);
+	va_end(va);
+	return buffer;
+}
+

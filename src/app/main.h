@@ -59,6 +59,10 @@ name[GLYPH_RANGE_THAI] = "Thai";\
 #define MAX_THUMBNAIL_SIZE 1024
 #define MIN_PREVIEW_THUMBNAIL_SIZE 32
 #define MAX_PREVIEW_THUMBNAIL_SIZE 256
+#define MIN_WAVEFORM_WIDTH_POWER 4
+#define MAX_WAVEFORM_WIDTH_POWER 9
+#define MIN_WAVEFORM_HEIGHT_POWER 9
+#define MAX_WAVEFORM_HEIGHT_POWER 12
 
 struct Config {
 	char theme[MAX_THEME_NAME_LENGTH + 1];
@@ -66,8 +70,8 @@ struct Config {
 	bool include_glyphs[GLYPH_RANGE__COUNT];
 	int thumbnail_size;
 	int preview_thumbnail_size;
-	int waveform_width;
-	int waveform_height;
+	int waveform_width_power;
+	int waveform_height_power;
 };
 
 extern Config g_config;
