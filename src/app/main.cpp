@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
-#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_dx10.h>
 #include <backends/imgui_impl_win32.h>
 #include "stream.h"
 #include "ui.h"
@@ -28,10 +28,9 @@
 #include <imgui.h>
 #include <locale.h>
 #include <time.h>
-#include <gl/glew.h>
-#include <GL/gl.h>
 #include <stb_image.h>
 #include <ini.h>
+#include <d3d10.h>
 
 #define MIN_FONT_SIZE 8
 #define DEFAULT_FONT_SIZE 14
@@ -59,18 +58,24 @@ static struct {
 	char background_path[512];
 	HICON icon;
 	HMENU tray_popup;
-	GLuint thumbnail;
+	Texture thumbnail;
 	uint64 time_of_last_input;
 	struct {
-		GLuint texture;
-		GLuint framebuffer;
+		Texture texture;
 		int width, height;
 	} background;
 	bool need_load_thumbnail;
 	bool need_load_font;
 	int font_size;
 	int icon_font_size;
+
 } G;
+
+static struct {
+	ID3D10Device *device;
+	IDXGISwapChain *swapchain;
+	ID3D10RenderTargetView *render_target;
+} dx;
 
 Config g_config;
 
@@ -193,97 +198,122 @@ int get_icon_font_size() {
 	return G.icon_font_size;
 }
 
-static GLuint create_texture(GLenum filter) {
-	GLuint texture;
-	float border_color[4] = {1.f, 1.f, 1.f, 1.f};
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
-	return texture;
+bool create_texture(uint32 width, uint32 height, Texture *texture) {
+	texture->texture = NULL;
+	texture->view = NULL;
+
+	D3D10_TEXTURE2D_DESC desc = {};
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D10_USAGE_DYNAMIC;
+	desc.BindFlags = D3D10_BIND_SHADER_RESOURCE;
+	desc.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE;
+
+	dx.device->CreateTexture2D(&desc, NULL, &texture->texture);
+
+	D3D10_SHADER_RESOURCE_VIEW_DESC sr = {};
+	sr.Format = desc.Format;
+	sr.ViewDimension = D3D10_SRV_DIMENSION_TEXTURE2D;
+	sr.Texture2D.MipLevels = 1;
+	dx.device->CreateShaderResourceView(texture->texture, &sr, &texture->view);
+
+	return true;
 }
 
-Texture_ID create_texture_from_image(const Image *image) {
-	GLuint texture = create_texture(GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image->width, image->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image->data);
-	return (Texture_ID)(uintptr_t)texture;
+bool create_texture_from_image(const Image *image, Texture *texture) {
+	if (!create_texture(image->width, image->height, texture)) return false;
+
+	D3D10_MAPPED_TEXTURE2D mapped;
+	texture->texture->Map(D3D10CalcSubresource(0, 0, 1), D3D10_MAP_WRITE_DISCARD, 0, &mapped);
+	
+	uint8 *out = (uint8*)mapped.pData;
+	uint8 *in = (uint8*)image->data;
+
+	for (uint32 row = 0; row < image->height; ++row) {
+		uint32 row_offset = row * mapped.RowPitch;
+		for (uint32 col = 0; col < image->width; ++col) {
+			uint32 col_offset = col * 4;
+			out[row_offset+col_offset+0] = in[0];
+			out[row_offset+col_offset+1] = in[1];
+			out[row_offset+col_offset+2] = in[2];
+			out[row_offset+col_offset+3] = in[3];
+
+			in += 4;
+		}
+	}
+	
+	texture->texture->Unmap(D3D10CalcSubresource(0, 0, 1));
+	return true;
+}
+
+void destroy_texture(Texture *texture) {
+	if (texture->view) texture->view->Release();
+	if (texture->texture) texture->texture->Release();
+	texture->view = NULL;
+	texture->texture = NULL;
 }
 
 static void load_thumbnail() {
 	Image image;
-	static GLuint texture;
+	static Texture texture;
 	
 	if (stream_get_thumbnail(&image)) {
-		if (texture) {
-			glDeleteTextures(1, &texture);
-			texture = 0;
+		if (texture.texture) {
+			destroy_texture(&texture);
 		}
-		
-		texture = create_texture(GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, g_config.thumbnail_size, g_config.thumbnail_size,
-					 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
-		
-		ui_set_thumbnail((void*)(uintptr_t)texture);
-		
+
+		create_texture_from_image(&image, &texture);
+		ui_set_thumbnail(texture.view);
 		stream_free_thumbnail(&image);
 	}
 	else {
-		ui_set_thumbnail(0);
+		ui_set_thumbnail(NULL);
 	}
 }
 
 void load_background_image(const char *path) {
 	if (!path) {
-		glDeleteTextures(1, &G.background.texture);
-		glDeleteFramebuffers(1, &G.background.framebuffer);
-		G.background.texture = 0;
-		G.background.framebuffer = 0;
+		destroy_texture(&G.background.texture);
 		memset(G.background_path, 0, sizeof(G.background_path));
 		return;
 	}
-	
+
 	int width, height;
 	stbi_uc *image_data = stbi_load(path, &width, &height, NULL, 4);
 	if (!image_data) {
 		log_debug("Could not load background image \"%s\"\n", path);
 		return;
 	}
-	
-	if (!G.background.texture) {
-		float border_color[4] = {1.f, 1.f, 1.f, 1.f};
-		glGenTextures(1, &G.background.texture);
-		glBindTexture(GL_TEXTURE_2D, G.background.texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
-		
-		glGenFramebuffers(1, &G.background.framebuffer);
+
+	if (!G.background.texture.texture) {
+		Image image = {};
+		image.width = width;
+		image.height = height;
+		image.data = image_data;
+
+		create_texture_from_image(&image, &G.background.texture);
 	}
-	
+
 	G.background.width = width;
 	G.background.height = height;
-	
-	glBindTexture(GL_TEXTURE_2D, G.background.texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
-	
+
 	stbi_image_free(image_data);
-	
-	log_debug("Loaded background \"%s\"\n", path);
 	strncpy_s(G.background_path, path, sizeof(G.background_path)-1);
 }
 
 const char *get_background_image_path() {
-	if (G.background.texture) return G.background_path;
+	if (G.background.texture.texture) return G.background_path;
 	else return NULL;
 }
 
 static void draw_background() {
-	if (!G.background.texture) return;
+	ImDrawList *drawlist = ImGui::GetBackgroundDrawList(ImGui::GetMainViewport());
+
+	if (!G.background.texture.view) return;
 	
 	int width = G.background.width;
 	int height = G.background.height;
@@ -302,33 +332,65 @@ static void draw_background() {
 		width = (int)(width * ratio);
 		height = (int)(height * ratio);
 	}
-	
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, G.background.framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, G.background.texture, 0);
-	
-	glBlitFramebuffer(0, 0, G.background.width, G.background.height, 0, height, width, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+	ImVec2 min = ImVec2(0, 0);
+	ImVec2 max = ImVec2((float)width, (float)height);
+
+	drawlist->AddImage(G.background.texture.view, min, max, ImVec2(0, 0), ImVec2(1, 1));
 }
 
-static bool create_wgl_device(HWND hWnd) {
-	HDC hDc = GetDC(hWnd);
-	PIXELFORMATDESCRIPTOR pfd = {0};
-	pfd.nSize = sizeof(pfd);
-	pfd.nVersion = 1;
-	pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-	pfd.iPixelType = PFD_TYPE_RGBA;
-	pfd.cColorBits = 32;
-	
-	const int pf = ChoosePixelFormat(hDc, &pfd);
-	if (pf == 0)
+static void create_render_target() {
+	ID3D10Texture2D *texture;
+	dx.swapchain->GetBuffer(0, IID_PPV_ARGS(&texture));
+	dx.device->CreateRenderTargetView(texture, NULL, &dx.render_target);
+	texture->Release();
+}
+
+static void destroy_render_target() {
+	if (dx.render_target) {
+		dx.render_target->Release();
+		dx.render_target = NULL;
+	}
+}
+
+static bool create_d3d_device(HWND hWnd) {
+	DXGI_SWAP_CHAIN_DESC swapchain = {};
+	swapchain.BufferCount = 2;
+	swapchain.BufferDesc.Width = 0;
+	swapchain.BufferDesc.Height = 0;
+	swapchain.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapchain.BufferDesc.RefreshRate.Numerator = 60;
+	swapchain.BufferDesc.RefreshRate.Denominator = 1;
+	swapchain.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	swapchain.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapchain.OutputWindow = hWnd;
+	swapchain.SampleDesc.Count = 1;
+	swapchain.SampleDesc.Quality = 0;
+	swapchain.Windowed = TRUE;
+	swapchain.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+	int flags = 0;
+#ifndef NDEBUG
+	flags |= D3D10_CREATE_DEVICE_DEBUG;
+#endif
+
+	HRESULT result = D3D10CreateDeviceAndSwapChain(NULL, D3D10_DRIVER_TYPE_HARDWARE, NULL,
+			flags, D3D10_SDK_VERSION,
+			&swapchain, &dx.swapchain, &dx.device);
+
+	if (result == DXGI_ERROR_UNSUPPORTED) {
+		result = D3D10CreateDeviceAndSwapChain(NULL, D3D10_DRIVER_TYPE_HARDWARE, NULL,
+				flags, D3D10_SDK_VERSION,
+				&swapchain, &dx.swapchain, &dx.device);
+	}
+
+	if (result != S_OK) {
+		show_message_box(MESSAGE_BOX_ERROR, "Device does not support DirectX10");
 		return false;
-	if (SetPixelFormat(hDc, pf, &pfd) == FALSE)
-		return false;
-	ReleaseDC(hWnd, hDc);
-	
-	g_window.hDC = GetDC(hWnd);
-	if (!g_window.hRC)
-		g_window.hRC = wglCreateContext(hDc);
+	}
+
+	create_render_target();
+
 	return true;
 }
 
@@ -359,49 +421,23 @@ static void remove_tray_icon(HWND hwnd) {
 }
 
 static void render_frame() {
-	ImGui::Render();
-	ImDrawData *draw_data = ImGui::GetDrawData();
-	glViewport(0, 0, g_window.width, g_window.height);
-	glClearColor(0, 0, 0, 0);
-	glClear(GL_COLOR_BUFFER_BIT);
 	draw_background();
+	ImGui::Render();
+
+	const float clear_color[4] = {0.f, 0.f, 0.f, 1.f};
+	dx.device->OMSetRenderTargets(1, &dx.render_target, NULL);
+	dx.device->ClearRenderTargetView(dx.render_target, clear_color);
+
+	ImDrawData *draw_data = ImGui::GetDrawData();
 	if (draw_data) {
-		ImGui_ImplOpenGL3_RenderDrawData(draw_data);
+		ImGui_ImplDX10_RenderDrawData(draw_data);
 	}
-	SwapBuffers(g_window.hDC);
+	dx.swapchain->Present(1, 0);
 }
 
 void close_window_to_tray() {
 	ShowWindow(g_hWnd, SW_HIDE);
 }
-
-// Might use later
-#if 0
-void begin_main_window_drag() {
-	RECT win;
-	GetCursorPos(&G.drag.mouse_start);
-	GetWindowRect(g_hWnd, &win);
-	G.drag.window_start.x = win.left;
-	G.drag.window_start.y = win.top;
-	G.dragging_window = true;
-}
-
-void update_main_window_drag() {
-	if (!G.dragging_window) return;
-	POINT mouse_delta;
-	POINT mouse;
-	
-	GetCursorPos(&mouse);
-	mouse_delta.x = mouse.x - G.drag.mouse_start.x;
-	mouse_delta.y = mouse.y - G.drag.mouse_start.y;
-	
-	SetWindowPos(g_hWnd, NULL, G.drag.window_start.x + mouse_delta.x, G.drag.window_start.y + mouse_delta.y, 0, 0, SWP_NOSIZE);
-}
-
-void end_main_window_drag() {
-	G.dragging_window = false;
-}
-#endif
 
 static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
@@ -471,17 +507,12 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			return 0;
 		}
 		case WM_USER+EVENT_STREAM_WAVEFORM_READY: {
-			static GLuint texture;
-			if (texture) {
-				glDeleteTextures(1, &texture);
-				texture = 0;
-			}
+			static Texture texture;
+			destroy_texture(&texture);
 			Image image;
-			texture = create_texture(GL_NEAREST);
 			stream_get_waveform(&image);
-			glBindTexture(GL_TEXTURE_2D, texture);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data);
-			ui_set_waveform_image((void*)(uintptr_t)texture);
+			create_texture_from_image(&image, &texture);
+			ui_set_waveform_image(texture.view);
 			return 0;
 		}
 		case WM_USER+EVENT_STREAM_TRACK_LOADED: {
@@ -500,15 +531,6 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 	}
 	
 	return DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-
-static void enable_vsync() {
-	typedef bool wglSwapIntervalEXT_PFN(int);
-	wglSwapIntervalEXT_PFN *wglSwapIntervalEXT;
-	
-	wglSwapIntervalEXT = (wglSwapIntervalEXT_PFN *)wglGetProcAddress("wglSwapIntervalEXT");
-	if (!wglSwapIntervalEXT) log_debug("Failed to load WGL_EXT_swap_control GL extension\n");
-	else wglSwapIntervalEXT(1);
 }
 
 #ifdef SINGLE_INSTANCE
@@ -598,14 +620,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	}
 	
 	UpdateWindow(g_hWnd);
-	START_TIMER(create_wgl_device, "Create WGL device");
-	create_wgl_device(g_hWnd);
-	STOP_TIMER(create_wgl_device);
-	wglMakeCurrent(g_window.hDC, g_window.hRC);
-	START_TIMER(load_opengl, "Load OpenGL library");
-	glewInit();
-	STOP_TIMER(load_opengl);
-	enable_vsync();
+	START_TIMER(create_d3d10_device, "Create DirectX10 device");
+	create_d3d_device(g_hWnd);
+	STOP_TIMER(create_d3d10_device);
 	
 	SendMessage(g_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)G.icon);
 	SendMessage(g_hWnd, WM_SETICON, ICON_BIG, (LPARAM)G.icon);
@@ -624,7 +641,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
 	ImGui_ImplWin32_InitForOpenGL(g_hWnd);
-	ImGui_ImplOpenGL3_Init();
+	ImGui_ImplDX10_Init(dx.device);
 	
 	ImGuiIO &io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
@@ -677,7 +694,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 		
 		if (!running) break;
-		
+
+		if (g_window.resize_width != 0) {
+			destroy_render_target();
+			dx.swapchain->ResizeBuffers(1, g_window.resize_width, g_window.resize_height, DXGI_FORMAT_UNKNOWN, 0);
+			g_window.resize_width = g_window.resize_height = 0;
+			create_render_target();
+		}
+
 		//=========================================================================================
 		// Replace font if needed
 		//=========================================================================================
@@ -699,8 +723,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			log_debug("Load font %s\n", G.font);
 			
 			if (file_exists(path)) {
-				ImGui_ImplOpenGL3_DestroyFontsTexture();
-				
+				ImGui_ImplDX10_InvalidateDeviceObjects();
 				ImVector<ImWchar> ranges = ImVector<ImWchar>();
 				ImFontGlyphRangesBuilder builder = ImFontGlyphRangesBuilder();
 				
@@ -722,7 +745,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				cfg.MergeMode = true;
 				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
 											   G.icon_font_size, &cfg, icon_range);
-				ImGui_ImplOpenGL3_CreateFontsTexture();
+				//ImGui_ImplOpenGL3_CreateFontsTexture()
+				ImGui_ImplDX10_CreateDeviceObjects();
 			}
 			else {
 				show_message_box(MESSAGE_BOX_WARNING, "Could not find font \"%s\"", G.font);
@@ -732,7 +756,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//=========================================================================================
 		// Show UI
 		//=========================================================================================
-		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplDX10_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 		running = show_ui();
@@ -743,7 +767,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	}
 	
 	stream_close();
-	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplDX10_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	remove_tray_icon(g_hWnd);

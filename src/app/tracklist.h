@@ -141,7 +141,7 @@ struct Album {
 	// References the metadata for the first track of each album. The album name can be extracted from there
 	Metadata_Ref metadata;
 	// Thumbnail is loaded when this album is first added
-	Texture_ID thumbnail;
+	Texture thumbnail;
 	Tracklist tracks;
 };
 

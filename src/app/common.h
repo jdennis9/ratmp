@@ -50,12 +50,19 @@ typedef int32_t int32;
 typedef int16_t int16;
 typedef int8_t int8;
 
-typedef void *Texture_ID;
+struct ID3D10Texture2D;
+struct ID3D10ShaderResourceView;
+typedef ID3D10ShaderResourceView *Texture_ID;
 
 struct Image {
 	void *data;
 	int width;
 	int height;
+};
+
+struct Texture {
+	ID3D10Texture2D *texture;
+	ID3D10ShaderResourceView *view;
 };
 
 #define log_debug(...) printf(__VA_ARGS__)
@@ -74,14 +81,14 @@ void event_signal(Event event);
 void event_wait(Event event);
 void destroy_event(Event event);
 
-Texture_ID create_texture_from_image(const Image *image);
-void destroy_texture(Texture_ID texture);
-
 uint64 time_get_tick();
 uint64 time_get_frequency();
 uint32 wchar_to_multibyte(const wchar_t *in, char *out, uint32 out_max);
 uint32 multibyte_to_wchar(const char *in, wchar_t *out, uint32 out_max);
 int format_time(int32 seconds, char *buffer, int buffer_size);
+
+bool create_texture_from_image(const Image *image, Texture *texture);
+void destroy_texture(ID3D10Texture2D *texture);
 
 // Formats a thread-local global buffer and returns a pointer to it
 const char *lazy_format(const char *fmt, ...);
