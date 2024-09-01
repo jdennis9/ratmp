@@ -1186,10 +1186,6 @@ bool show_ui() {
 	ImVec2 popup_min_size = {300.f, 300.f};
 	ImVec2 popup_max_size = {1000.f, 1000.f};
 	
-	ImVec4 window_color = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-	window_color.w = 1.f;
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, window_color);
-	
 	if (show_hotkeys) {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
 		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
@@ -1213,9 +1209,7 @@ bool show_ui() {
 		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
 		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Theme", &show_theme_editor, unsaved)) {
-			ImGui::PopStyleColor();
 			G.dirty_theme = show_theme_editor_gui();
-			ImGui::PushStyleColor(ImGuiCol_WindowBg, window_color);
 		}
 		ImGui::End();
 	}
@@ -1246,8 +1240,6 @@ bool show_ui() {
 		}
 		ImGui::End();
 	}
-	
-	ImGui::PopStyleColor();
 	
 	return running;
 }
@@ -1280,7 +1272,6 @@ static void show_config_editor_gui() {
 	Config& config = g_config;
 	bool apply = false;
 	bool need_save = false;
-	char format_buffer[512];
 	
 	if (ImGui::BeginCombo("Theme", config.theme)) {
 		const char *sel = show_theme_selector_gui();
