@@ -249,6 +249,10 @@ void Tracklist::remove_selection() {
 	m_tracks.remove_range(m_selection.first, m_selection.last);
 }
 
+void Tracklist::remove(uint32 index) {
+	m_tracks.remove(index);
+}
+
 void Tracklist::select(int32 index) {
 	m_selection.first = index;
 	m_selection.last = index;
@@ -419,5 +423,5 @@ void Tracklist::save_to_file(const char *path) {
 
 void Tracklist::delete_file() {
 	if (!m_filename[0]) return;
-	remove(m_filename);
+	::remove(m_filename);
 }

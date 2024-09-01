@@ -108,6 +108,7 @@ struct Tracklist {
 	void copy_selection(Tracklist *dst) const;
 	void copy_with_filter(Tracklist *dst, const Track_Filter *filter) const;
 	void remove_selection();
+	void remove(uint32 index);
 	void select(int32 index);
 	void select_to(int32 index);
 	void shuffle();

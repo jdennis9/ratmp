@@ -219,6 +219,72 @@ static int32 show_playlist_dropdown_selector() {
 	return -1;
 }
 
+static void show_track_list_missing_tracks_ui(Tracklist& tracklist) {
+	Auto_Array<Path_Ref>& tracks = tracklist.m_missing_tracks;
+	ImGuiID rename_popup_id = ImGui::GetID("Rename");
+	static uint32 renaming_file = 0;
+	static char old_path[512];
+	static char new_path[512];
+	const ImGuiStyle& style = ImGui::GetStyle();
+	
+#ifndef NDEBUG
+	if (ImGui::Button("Add test file")) {
+		Path_Ref test_path = store_file_path("test_missing_file.mp3");
+		tracks.append(test_path);
+	}
+#endif
+	
+	if (ImGui::BeginTable("##missing_tracks_table", 2)) {
+		for (uint32 i = 0; i < tracks.m_count; ++i) {
+			char path[512];
+			retrieve_file_path(tracks[i], path, sizeof(path));
+			
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted(path);
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Selectable(lazy_format("Change##%u", i))) {
+				renaming_file = i;
+				strncpy_s(old_path, path, sizeof(old_path)-1);
+				strncpy_s(new_path, path, sizeof(new_path)-1);
+				ImGui::OpenPopup(rename_popup_id);
+			}
+		}
+		ImGui::EndTable();
+	}
+	
+	if (renaming_file < tracks.m_count && ImGui::BeginPopup("Rename")) {
+		bool commit = false;
+		ImGui::Text("Rename file \"%s\" to:", old_path);
+		commit |= ImGui::InputText("##new_path", new_path, sizeof(new_path),
+								   ImGuiInputTextFlags_EnterReturnsTrue);
+		if (ImGui::Button("Browse")) {
+			wchar_t browsed_path[512];
+			if (select_file_dialog(browsed_path, ARRAY_LENGTH(browsed_path))) {
+				wchar_to_multibyte(browsed_path, new_path, sizeof(new_path)-1);
+			}
+		}
+		ImGui::SameLine();
+		commit |= ImGui::Button("OK");
+		
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+		
+		if (commit) {
+			if (tracklist.add(new_path)) {
+				tracks.remove(renaming_file);
+				tracklist.save_to_file();
+			}
+			else {
+				show_message_box(MESSAGE_BOX_WARNING, "Not a playable file");
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		
+		ImGui::EndPopup();
+	}
+}
+
 static int32 show_track_list_range(Tracklist& tracklist, int32 playlist_id, uint32 start, uint32 end, const Track_Filter *filter, bool jump_to_playing) {
 	bool editable = (playlist_id != PLAYLIST_LIBRARY) && (playlist_id >= 0);
 	bool queueable = playlist_id != PLAYLIST_QUEUE;
@@ -1251,23 +1317,6 @@ bool show_ui() {
 				}
 			}
 			
-			ImVec2 missing_tracks_size = ImVec2(0.f, 140.f);
-			if (show_missing_tracks) {
-				ImGui::SeparatorText("Missing Tracks");
-				if (ImGui::BeginListBox("##missing_tracks", missing_tracks_size)) {
-					for (uint32 i = 0; i < playlist.m_missing_tracks.m_count; ++i) {
-						char path[512];
-						retrieve_file_path(playlist.m_missing_tracks[i], path, sizeof(path));
-						ImGui::TextUnformatted(path);
-					}
-					ImGui::EndListBox();
-				}
-				if (ImGui::Button("Remove missing tracks")) {
-					playlist.remove_missing_tracks();
-					playlist.save_to_file();
-				}
-			}
-			
 			int32 play_index = show_track_list_gui(playlist, G.selected_playlist, &filter, jump_to_playing);
 			if (play_index >= 0) {
 				play_track_at(G.selected_playlist, play_index, true);
@@ -1332,6 +1381,12 @@ bool show_ui() {
 			show_playback_stats_gui();
 		}
 		ImGui::End();
+	}
+	
+	if (show_missing_tracks) {
+		if (ImGui::Begin("Missing Tracks", &show_missing_tracks)) {
+			show_track_list_missing_tracks_ui(G.playlists[G.selected_playlist]);
+		} ImGui::End();
 	}
 	
 	return running;

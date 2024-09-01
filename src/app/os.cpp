@@ -186,16 +186,16 @@ void for_each_file_from_dialog(Directory_Iterator_Callback *callback, File_Data_
 	dialog->Release();
 }
 
-bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max) {
+bool single_file_or_folder_select_dialog(wchar_t *buffer, uint32 buffer_max, DWORD flags) {
 	IFileOpenDialog *dialog;
-
+	
 	(void)CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, (void **)&dialog);
-	dialog->SetOptions(FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM | FOS_PICKFOLDERS);
-
+	dialog->SetOptions(FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM | flags);
+	
 	if (SUCCEEDED(dialog->Show(NULL))) {
 		LPWSTR path;
 		IShellItem *folder;
-
+		
 		dialog->GetResult(&folder);
 		folder->GetDisplayName(SIGDN_FILESYSPATH, &path);		
 		if (path) {
@@ -204,11 +204,19 @@ bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max) {
 		}
 		folder->Release();
 		CoTaskMemFree(path);
-
+		
 		return true;
 	}
-
+	
 	return false;
+}
+
+bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max) {
+	return single_file_or_folder_select_dialog(buffer, buffer_max, FOS_PICKFOLDERS);
+}
+
+bool select_file_dialog(wchar_t *buffer, uint32 buffer_max) {
+	return single_file_or_folder_select_dialog(buffer, buffer_max, 0);
 }
 
 bool file_exists(const char *path) {
