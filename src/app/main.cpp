@@ -58,10 +58,10 @@ static struct {
 	char background_path[512];
 	HICON icon;
 	HMENU tray_popup;
-	Texture thumbnail;
+	Texture *thumbnail;
 	uint64 time_of_last_input;
 	struct {
-		Texture texture;
+		Texture *texture;
 		int width, height;
 	} background;
 	bool need_load_thumbnail;
@@ -198,9 +198,9 @@ int get_icon_font_size() {
 	return G.icon_font_size;
 }
 
-bool create_texture(uint32 width, uint32 height, Texture *texture) {
-	texture->texture = NULL;
-	texture->view = NULL;
+Texture *create_texture(uint32 width, uint32 height, void *data) {
+	ID3D10Texture2D *texture;
+	ID3D10ShaderResourceView *view;
 
 	D3D10_TEXTURE2D_DESC desc = {};
 	desc.Width = width;
@@ -213,29 +213,23 @@ bool create_texture(uint32 width, uint32 height, Texture *texture) {
 	desc.BindFlags = D3D10_BIND_SHADER_RESOURCE;
 	desc.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE;
 
-	dx.device->CreateTexture2D(&desc, NULL, &texture->texture);
+	dx.device->CreateTexture2D(&desc, NULL, &texture);
 
 	D3D10_SHADER_RESOURCE_VIEW_DESC sr = {};
 	sr.Format = desc.Format;
 	sr.ViewDimension = D3D10_SRV_DIMENSION_TEXTURE2D;
 	sr.Texture2D.MipLevels = 1;
-	dx.device->CreateShaderResourceView(texture->texture, &sr, &texture->view);
-
-	return true;
-}
-
-bool create_texture_from_image(const Image *image, Texture *texture) {
-	if (!create_texture(image->width, image->height, texture)) return false;
+	dx.device->CreateShaderResourceView(texture, &sr, &view);
 
 	D3D10_MAPPED_TEXTURE2D mapped;
-	texture->texture->Map(D3D10CalcSubresource(0, 0, 1), D3D10_MAP_WRITE_DISCARD, 0, &mapped);
+	texture->Map(D3D10CalcSubresource(0, 0, 1), D3D10_MAP_WRITE_DISCARD, 0, &mapped);
 	
 	uint8 *out = (uint8*)mapped.pData;
-	uint8 *in = (uint8*)image->data;
+	uint8 *in = (uint8*)data;
 
-	for (uint32 row = 0; row < image->height; ++row) {
+	for (uint32 row = 0; row < height; ++row) {
 		uint32 row_offset = row * mapped.RowPitch;
-		for (uint32 col = 0; col < image->width; ++col) {
+		for (uint32 col = 0; col < width; ++col) {
 			uint32 col_offset = col * 4;
 			out[row_offset+col_offset+0] = in[0];
 			out[row_offset+col_offset+1] = in[1];
@@ -246,28 +240,32 @@ bool create_texture_from_image(const Image *image, Texture *texture) {
 		}
 	}
 	
-	texture->texture->Unmap(D3D10CalcSubresource(0, 0, 1));
-	return true;
+	texture->Unmap(D3D10CalcSubresource(0, 0, 1));
+	texture->Release();
+
+	return view;
+}
+
+Texture *create_texture_from_image(const Image *image) {
+	return create_texture(image->width, image->height, image->data);
 }
 
 void destroy_texture(Texture *texture) {
-	if (texture->view) texture->view->Release();
-	if (texture->texture) texture->texture->Release();
-	texture->view = NULL;
-	texture->texture = NULL;
+	texture->Release();
 }
 
 static void load_thumbnail() {
 	Image image;
-	static Texture texture;
+	static Texture *texture;
 	
 	if (stream_get_thumbnail(&image)) {
-		if (texture.texture) {
-			destroy_texture(&texture);
+		if (texture) {
+			destroy_texture(texture);
+			texture = NULL;
 		}
 
-		create_texture_from_image(&image, &texture);
-		ui_set_thumbnail(texture.view);
+		texture = create_texture_from_image(&image);
+		ui_set_thumbnail(texture);
 		stream_free_thumbnail(&image);
 	}
 	else {
@@ -277,7 +275,8 @@ static void load_thumbnail() {
 
 void load_background_image(const char *path) {
 	if (!path) {
-		destroy_texture(&G.background.texture);
+		if (G.background.texture) destroy_texture(G.background.texture);
+		G.background.texture = NULL;
 		memset(G.background_path, 0, sizeof(G.background_path));
 		return;
 	}
@@ -289,13 +288,13 @@ void load_background_image(const char *path) {
 		return;
 	}
 
-	if (!G.background.texture.texture) {
+	if (!G.background.texture) {
 		Image image = {};
 		image.width = width;
 		image.height = height;
 		image.data = image_data;
 
-		create_texture_from_image(&image, &G.background.texture);
+		G.background.texture = create_texture_from_image(&image);
 	}
 
 	G.background.width = width;
@@ -306,14 +305,13 @@ void load_background_image(const char *path) {
 }
 
 const char *get_background_image_path() {
-	if (G.background.texture.texture) return G.background_path;
+	if (G.background.texture) return G.background_path;
 	else return NULL;
 }
 
 static void draw_background() {
+	if (!G.background.texture) return;
 	ImDrawList *drawlist = ImGui::GetBackgroundDrawList(ImGui::GetMainViewport());
-
-	if (!G.background.texture.view) return;
 	
 	int width = G.background.width;
 	int height = G.background.height;
@@ -336,7 +334,7 @@ static void draw_background() {
 	ImVec2 min = ImVec2(0, 0);
 	ImVec2 max = ImVec2((float)width, (float)height);
 
-	drawlist->AddImage(G.background.texture.view, min, max, ImVec2(0, 0), ImVec2(1, 1));
+	drawlist->AddImage(G.background.texture, min, max, ImVec2(0, 0), ImVec2(1, 1));
 }
 
 static void create_render_target() {
@@ -507,12 +505,12 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			return 0;
 		}
 		case WM_USER+EVENT_STREAM_WAVEFORM_READY: {
-			static Texture texture;
-			destroy_texture(&texture);
+			static Texture *texture;
+			if (texture) destroy_texture(texture);
 			Image image;
 			stream_get_waveform(&image);
-			create_texture_from_image(&image, &texture);
-			ui_set_waveform_image(texture.view);
+			texture = create_texture_from_image(&image);
+			ui_set_waveform_image(texture);
 			return 0;
 		}
 		case WM_USER+EVENT_STREAM_TRACK_LOADED: {

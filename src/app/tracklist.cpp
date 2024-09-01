@@ -120,17 +120,17 @@ void check_album_thumbnail_queue() {
 	for (uint32 i = 0; i < results.m_count; ++i) {
 		uint32 index = results[i].album_index;
 		if (results[i].image.data) {
-			create_texture_from_image(&results[i].image, &g_albums.albums[index].thumbnail);
+			g_albums.albums[index].thumbnail = create_texture_from_image(&results[i].image);
 		}
 		else {
-			static Texture missing_thumbnail;
-			if (!missing_thumbnail.texture) {
+			static Texture *missing_thumbnail;
+			if (!missing_thumbnail) {
 				Image image;
 				image.data = stbi_load_from_memory(MISSING_THUMBNAIL_DATA, 
 												   MISSING_THUMBNAIL_SIZE, 
 												   &image.width, &image.height, 
 												   NULL, 4);
-				create_texture_from_image(&image, &missing_thumbnail);
+				missing_thumbnail = create_texture_from_image(&image);
 				stbi_image_free(image.data);
 			}
 			g_albums.albums[index].thumbnail = missing_thumbnail;

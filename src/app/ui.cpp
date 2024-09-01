@@ -482,7 +482,7 @@ static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
 			bool play = false;
 			
 			ImGui::TableNextColumn();
-			ImGui::Image((ImTextureID)album.thumbnail.view, ImVec2{128, 128});
+			ImGui::Image((ImTextureID)album.thumbnail, ImVec2{128, 128});
 			
 			hovered |= ImGui::IsItemHovered();
 			if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) play = true;

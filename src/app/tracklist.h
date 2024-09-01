@@ -20,6 +20,7 @@
 #include "files.h"
 #include "metadata.h"
 #include "util/auto_array.h"
+#include "util/auto_array_impl.h"
 #include "stream.h"
 #include <ctype.h>
 
@@ -99,21 +100,6 @@ struct Tracklist {
 	char name[128-16];
 	char m_filename[128];
 
-	// Get position as if repeat mode is on
-	inline uint32 repeat(int32 position) const {
-		int32 track_count = m_tracks.length();
-		if (!track_count) return 0;
-		if (position >= track_count)
-			//position -= (position / (track_count - 1)) * track_count;
-			return 0;
-		else if (position < 0) position = 0;
-		return position;
-	}
-
-	inline bool track_is_selected(int32 index) {
-		return (index >= m_selection.first) && (index <= m_selection.last);
-	}
-
 	int32 index_of_track(const Track &track);
 	bool add(const char *path);
 	bool add(Track track, bool add_to_album_pool = true);
@@ -135,13 +121,28 @@ struct Tracklist {
 	// If path is NULL, creates a randomly named file inside the playlists folder
 	void save_to_file(const char *path = NULL);
 	void delete_file();
+
+	// Get position as if repeat mode is on
+	inline uint32 repeat(int32 position) const {
+		int32 track_count = m_tracks.length();
+		if (!track_count) return 0;
+		if (position >= track_count)
+			//position -= (position / (track_count - 1)) * track_count;
+			return 0;
+		else if (position < 0) position = 0;
+		return position;
+	}
+
+	inline bool track_is_selected(int32 index) {
+		return (index >= m_selection.first) && (index <= m_selection.last);
+	}
 };
 
 struct Album {
 	// References the metadata for the first track of each album. The album name can be extracted from there
 	Metadata_Ref metadata;
 	// Thumbnail is loaded when this album is first added
-	Texture thumbnail;
+	Texture *thumbnail;
 	Tracklist tracks;
 };
 
