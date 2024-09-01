@@ -618,21 +618,39 @@ void ui_accept_drag_drop(const Track_Drag_Drop_Payload *payload) {
 	}
 }
 
-static bool show_navigation_ui() {
-	ImVec2 window_size = ImGui::GetContentRegionAvail();
-	ImVec2 display_size = ImGui::GetIO().DisplaySize;
+static void show_track_info_ui() {
+	if (G.playing_track.metadata) {
+		Metadata_Ref metadata = G.playing_track.metadata;
+		const char *title = get_metadata_string(metadata, METADATA_TITLE);
+		const char *artist = get_metadata_string(metadata, METADATA_ARTIST);
+		const char *album = get_metadata_string(metadata, METADATA_ALBUM);
+		const char *duration = get_metadata_string(metadata, METADATA_DURATION);
 
-	// Image
-	if (G.thumbnail) {
-		float image_dim = MIN(window_size.x, display_size.x*0.5f);
-		ImGui::Image(G.thumbnail, ImVec2{image_dim, image_dim});
+		ImGui::Text("Title: %s\nArtist: %s\nAlbum:%s\nDuration: %s\n", title, artist, album, duration);
 	}
-	else {
-		ImGui::InvisibleButton("##missing_thumbnail", ImVec2{window_size.x, window_size.x});
+}
+
+static bool show_navigation_ui() {
+	ImVec2 window_size = ImGui::GetWindowSize();
+	const ImGuiStyle& style = ImGui::GetStyle();
+	float image_dim = window_size.x - style.WindowPadding.x*2.f;
+	if (image_dim > FLT_EPSILON) {
+		if (G.thumbnail) {
+			ImGui::ImageButton("##playing_track_thumbnail", G.thumbnail, ImVec2{image_dim, image_dim});
+		} else ImGui::InvisibleButton("##missing_thumbnail", ImVec2{image_dim, image_dim});
+		if (G.playing_track.metadata && ImGui::BeginPopupContextItem()) {
+			if (ImGui::BeginMenu("Add to playlist")) {
+				int32 iplaylist = show_playlist_dropdown_selector();
+				if (iplaylist >= 0) {
+					Tracklist& playlist = G.playlists[iplaylist];
+					playlist.add(G.playing_track, false);
+				}
+				ImGui::EndMenu();
+			}
+			ImGui::EndPopup();
+		}
 	}
-	
-	ImGui::SeparatorText("Navigation");
-	
+
 	// Library and queue
 	if (ImGui::BeginTable("##navigation", 1, ImGuiTableFlags_BordersInner)) {
 		ImGui::TableSetupColumn("##names");
@@ -1090,6 +1108,10 @@ bool show_ui() {
 		ImGui::End();
 	}
 	ImGui::PopStyleVar(2);
+
+	//if (ImGui::Begin("Track Info", NULL, 0)) {
+	//	show_track_info_ui();
+	//} ImGui::End();
 
 	if (ImGui::Begin("Navigation", NULL, 0)) {
 		show_navigation_ui();
