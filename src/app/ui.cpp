@@ -636,7 +636,9 @@ static bool show_navigation_ui() {
 	float image_dim = window_size.x - style.WindowPadding.x*2.f;
 	if (image_dim > FLT_EPSILON) {
 		if (G.thumbnail) {
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
 			ImGui::ImageButton("##playing_track_thumbnail", G.thumbnail, ImVec2{image_dim, image_dim});
+			ImGui::PopStyleVar();
 		} else ImGui::InvisibleButton("##missing_thumbnail", ImVec2{image_dim, image_dim});
 		if (G.playing_track.metadata && ImGui::BeginPopupContextItem()) {
 			if (ImGui::BeginMenu("Add to playlist")) {
