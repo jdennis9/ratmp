@@ -100,6 +100,7 @@ enum Message_Box_Type {
 };
 
 void show_message_box(Message_Box_Type type, const char *message, ...);
+bool show_confirmation_dialog(const char *title, const char *message, ...);
 
 #define USER_ASSERT_WARN(cond, ...) if (!(cond)) show_message_box(MESSAGE_BOX_WARNING, __VA_ARGS__)
 #define USER_ASSERT_FATAL(cond, ...) if (!(cond)) { show_message_box(MESSAGE_BOX_ERROR, __VA_ARGS__); exit(0); }

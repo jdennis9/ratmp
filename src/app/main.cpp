@@ -153,7 +153,7 @@ void save_config() {
 	
 	fprintf(file, "; Note: Time values are in milliseconds\n");
 	fprintf(file, "[Main]\n");
-	fprintf(file, "sTheme = %s\n", g_config.theme);
+	fprintf(file, "sTheme = \"%s\"\n", g_config.theme);
 	fprintf(file, "iClosePolicy = %d\n", g_config.close_policy);
 	fprintf(file, "iThumbnailSize = %d\n", g_config.thumbnail_size);
 	fprintf(file, "iPreviewThumbnailSize = %d\n", g_config.preview_thumbnail_size);

@@ -32,79 +32,46 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
+static const char DEFAULT_LAYOUT_INI[] =
+"[Window][Main Window]\n"
+"Collapsed=0\n"
+"\n"
+"[Window][Debug##Default]\n"
+"Collapsed=0\n"
+"\n"
+"[Window][Navigation]\n"
+"Collapsed=0\n"
+"DockId=0x00000001,0\n"
+"\n"
+"[Window][Control Panel]\n"
+"Collapsed=0\n"
+"DockId=0x00000004,0\n"
+"\n"
+"[Window][Track View]\n"
+"Collapsed=0\n"
+"DockId=0x00000002,0\n"
+"\n"
+"[Docking][Data]\n"
+"DockSpace     ID=0xF97EAFDC Window=0x8FE86BE8 Pos=0,20 Size=1858,1000 Split=Y\n"
+"  DockNode    ID=0x00000003 Parent=0xF97EAFDC SizeRef=1858,917 Split=X\n"
+"    DockNode  ID=0x00000001 Parent=0x00000003 SizeRef=294,1000 CentralNode=1 Selected=0x5127E491\n"
+"    DockNode  ID=0x00000002 Parent=0x00000003 SizeRef=1562,1000 Selected=0xD2ADD0F1\n"
+"  DockNode    ID=0x00000004 Parent=0xF97EAFDC SizeRef=1858,81 HiddenTabBar=1 Selected=0xA008732B\n"
+;
+
 enum Main_View {
 	MAIN_VIEW_TRACKS,
 	MAIN_VIEW_ALBUMS,
-};
-
-struct Box { ImVec2 pos; ImVec2 size; };
-
-// Layout helper for ImGui windows
-class Layout {
-	ImVec2 m_base_size;
-	ImVec2 m_size;
-	ImVec2 m_cursor;
-
-public:
-	void init(ImVec2 size) {
-		m_base_size = size;
-		m_size = size;
-	}
-
-	inline Box push_right_pixels(float width) {
-		Box box;
-
-		if (width < 0.f) {
-			width = fabsf(width);
-			width = m_size.x - width;
-		}
-
-		box.pos = ImVec2{m_cursor.x, m_cursor.y};
-		box.size = ImVec2{width, m_size.y};
-
-		m_cursor.x += width;
-		m_size.x -= width;
-	}
-
-	inline Box push_right(float width) {
-		Box box;
-		width *= m_size.x;
-		width = ceilf(width);
-		box.pos = m_cursor;
-		box.size = ImVec2{width, m_size.y};
-		m_cursor.x += width;
-		m_size.x -= width;
-
-		return box;
-	}
-
-	inline Box push_down_pixels(float height) {
-		Box box;
-
-		if (height < 0.f) {
-			height = fabsf(height);
-			height = m_size.y - height;
-		}
-
-		box.pos = m_cursor;
-		box.size = ImVec2{m_size.x, height};
-
-		m_cursor.y += height;
-		m_size.y -= height;
-
-		return box;
-	}
-
-	inline Box push_down(float height) {
-		return push_down_pixels(height * m_size.y);
-
-	}
 };
 
 enum {
 	PLAYLIST_LIBRARY,
 	PLAYLIST_QUEUE,
 	PLAYLIST_USER,
+};
+
+struct Layout {
+	char name[64];
 };
 
 static struct {
@@ -123,17 +90,14 @@ static struct {
 	Track playing_track;
 	bool shuffle_enabled;
 	bool dirty_theme;
+	Auto_Array<Layout> layouts;
 } G;
 
 static void show_config_editor_gui();
 static void show_hotkey_gui();
 static void show_about_gui();
 static void queue_tracklist(const Tracklist &tracklist);
-
-static void set_next_window_box(const Box &box) {
-	ImGui::SetNextWindowPos(box.pos);
-	ImGui::SetNextWindowSize(box.size);
-}
+static void refresh_layouts();
 
 static bool is_track_playing(const Track &track) {
 	if (G.state == STREAM_STATE_STOPPED) return false;
@@ -525,6 +489,12 @@ void init_ui() {
 	load_metadata_cache();
 	STOP_TIMER(load_metadata);
 	
+	refresh_layouts();
+	
+	if (!file_exists(".\\imgui.ini")) {
+		ImGui::LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
+	}
+	
 	// Library and queue
 	{
 		Tracklist library = {};
@@ -646,6 +616,7 @@ static bool show_navigation_ui() {
 				if (iplaylist >= 0) {
 					Tracklist& playlist = G.playlists[iplaylist];
 					playlist.add(G.playing_track, false);
+					playlist.save_to_file();
 				}
 				ImGui::EndMenu();
 			}
@@ -843,7 +814,7 @@ static bool show_navigation_ui() {
 	return true;
 }
 
-static bool show_control_panel_ui(/*const Box& window*/) {
+static bool show_control_panel_ui() {
 	const ImGuiStyle &style = ImGui::GetStyle();
 	const int64 playback_position = stream_get_pos();
 	const int64 playback_duration = stream_get_duration();
@@ -974,6 +945,38 @@ static bool show_control_panel_ui(/*const Box& window*/) {
 	return true;
 }
 
+static int32 show_layout_selector_ui() {
+	if (G.layouts.m_count) {
+		for (uint32 i = 0; i < G.layouts.m_count; ++i) {
+			if (ImGui::Selectable(G.layouts[i].name)) {
+				return i;
+			}
+		}
+	} else {
+		ImGui::TextDisabled("No layouts founds");
+	}
+	return -1;
+}
+
+static int32 get_layout_from_name(const char *name) {
+	for (uint32 i = 0; i < G.layouts.m_count; ++i) {
+		if (!strcmp(G.layouts[i].name, name)) {
+			return i;
+		}
+	}
+	
+	return -1;
+}
+
+static const char *get_layout_path(int32 index) {
+	return lazy_format("layouts/%s.ini", G.layouts[index].name);
+}
+
+static const char *get_layout_path(const Layout& layout) {
+	return lazy_format("layouts/%s.ini", layout.name);
+}
+
+
 bool show_ui() {
 	ImGuiIO &io = ImGui::GetIO();
 	ImGuiStyle& style = ImGui::GetStyle();
@@ -1080,6 +1083,68 @@ bool show_ui() {
 			ImGui::EndMenu();
 		}
 		
+		if (ImGui::BeginMenu("Layout")) {
+			static char layout_name[512];
+			
+			if (ImGui::MenuItem("Refresh layouts")) {
+				refresh_layouts();
+			}
+			
+			if (ImGui::MenuItem("Reset layout")) {
+				ImGui::LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
+			}
+			
+			if (ImGui::BeginMenu("Load layout")) {
+				int32 layout = show_layout_selector_ui();
+				if (layout >= 0) {
+					ImGui::LoadIniSettingsFromDisk(get_layout_path(layout));
+				}
+				ImGui::EndMenu();
+			}
+			
+			if (ImGui::BeginMenu("Save layout")) {
+				int32 layout = show_layout_selector_ui();
+				if (layout >= 0) {
+					bool confirm = show_confirmation_dialog("Overwrite Layout",
+															"Do you want to overwrite layout \"%s\"?",
+															G.layouts[layout].name);
+					if (confirm) ImGui::SaveIniSettingsToDisk(get_layout_path(layout));
+				}
+				ImGui::EndMenu();
+			}
+			
+			if (ImGui::BeginMenu("Save as")) {
+				static Layout new_layout = {};
+				bool commit = ImGui::InputText("Name", new_layout.name, 
+											   sizeof(new_layout.name),
+											   ImGuiInputTextFlags_EnterReturnsTrue);
+				commit |= ImGui::MenuItem("Save");
+				
+				if (commit) {
+					if (new_layout.name[0] == 0) {
+						commit = false;
+						show_message_box(MESSAGE_BOX_WARNING, "Must enter a name");
+					} else if (get_layout_from_name(new_layout.name) >= 0) {
+						// Layout already exists, ask for overwrite
+						commit = show_confirmation_dialog("Overwrite Layout", 
+														  "Overwrite existing layout \"%s\"?",
+														  new_layout.name);	
+					}
+					
+					if (commit) {
+						ImGui::SaveIniSettingsToDisk(get_layout_path(new_layout));
+						G.layouts.append(new_layout);
+					}
+					
+					memset(new_layout.name, 0, sizeof(new_layout.name));
+				}
+				
+				ImGui::EndMenu();
+			}
+			
+			ImGui::EndMenu();
+		}
+		
 		if (ImGui::BeginMenu("Help")) {
 			if (ImGui::MenuItem("Hotkeys")) {
 				show_hotkeys = true;
@@ -1101,10 +1166,14 @@ bool show_ui() {
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
 		ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
-		bool showing = ImGui::Begin("Main Window", NULL, 
-				ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoNavFocus|
-				ImGuiWindowFlags_NoBackground);
-		ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode|ImGuiDockNodeFlags_AutoHideTabBar;
+		ImGuiWindowFlags window_flags =
+			ImGuiWindowFlags_NoBringToFrontOnFocus|
+			ImGuiWindowFlags_NoNavFocus|
+			ImGuiWindowFlags_NoBackground|
+			ImGuiWindowFlags_NoDecoration;
+		bool showing = ImGui::Begin("Main Window", NULL, window_flags);
+		ImGuiDockNodeFlags dockspace_flags =
+			ImGuiDockNodeFlags_PassthruCentralNode;
 		if (!showing) dockspace_flags |= ImGuiDockNodeFlags_KeepAliveOnly;
 		ImGui::DockSpace(ImGui::GetID("MainDockSpace"), ImVec2(0, 0), dockspace_flags);
 		ImGui::End();
@@ -1297,6 +1366,7 @@ static void show_config_editor_gui() {
 	bool apply = false;
 	bool need_save = false;
 	
+	// Theme
 	if (ImGui::BeginCombo("Theme", config.theme)) {
 		const char *sel = show_theme_selector_gui();
 		if (sel) {
@@ -1443,3 +1513,21 @@ static void show_about_gui() {
 	ImGui::TextUnformatted("Copyright (c) 2012-2021 Yann Collet");
 	ImGui::TextUnformatted("All rights reserved.");
 }
+
+static void refresh_layouts() {
+	auto add_layout = [](const char *path) {
+		Layout layout = {};
+		const char *filename = get_file_name(path);
+		int filename_length = get_file_name_length_without_extension(path);
+		if (filename_length >= sizeof(layout.name)) return true;
+		memcpy(layout.name, filename, filename_length);
+		log_debug("Add layout: %s\n", layout.name);
+		G.layouts.append(layout);
+		return true;
+	};
+	
+	G.layouts.reset();
+	for_each_file_in_directory(L".\\layouts", add_layout, 1);
+}
+	
+	

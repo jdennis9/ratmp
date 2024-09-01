@@ -151,11 +151,16 @@ void for_each_file_from_dialog(Directory_Iterator_Callback *callback, File_Data_
 		{L"Supported font types", L"*.ttf;*.otf"},
 	};
 	
+	COMDLG_FILTERSPEC ini_types[] = {
+		{L"Layout configuration", L"*.ini"},
+	};
+	
 	(void)CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, (void **)&dialog);
 	dialog->SetOptions(FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM | (FOS_ALLOWMULTISELECT*allow_multi));
 	if (file_type == FILE_DATA_TYPE_IMAGE) dialog->SetFileTypes(1, image_types);
 	else if (file_type == FILE_DATA_TYPE_MUSIC) dialog->SetFileTypes(1, music_types);
 	else if (file_type == FILE_DATA_TYPE_FONT) dialog->SetFileTypes(1, font_types);
+	else if (file_type == FILE_DATA_TYPE_INI) dialog->SetFileTypes(1, ini_types);
 
 	if (SUCCEEDED(dialog->Show(NULL))) {
 		LPWSTR path;
@@ -237,6 +242,17 @@ void show_message_box(Message_Box_Type type, const char *message, ...) {
 	captions[MESSAGE_BOX_INFO] = "Information";
 
 	MessageBoxA(NULL, formatted, captions[type], types[type]);
+}
+
+bool show_confirmation_dialog(const char *title, const char *message, ...) {
+	char formatted[2048];
+	va_list va;
+	va_start(va, message);
+	vsnprintf(formatted, sizeof(formatted), message, va);
+	va_end(va);
+	
+	int result = MessageBox(NULL, formatted, title, MB_ICONEXCLAMATION|MB_YESNO);
+	return result == IDYES;
 }
 
 struct Thread_Func_Caller {

@@ -120,6 +120,7 @@ enum File_Data_Type {
 	FILE_DATA_TYPE_MUSIC,
 	FILE_DATA_TYPE_IMAGE,
 	FILE_DATA_TYPE_FONT,
+	FILE_DATA_TYPE_INI,
 };
 
 typedef bool Directory_Iterator_Callback(const char *path);
