@@ -1066,7 +1066,7 @@ static int32 show_layout_selector_ui() {
 			}
 		}
 	} else {
-		ImGui::TextDisabled("No layouts founds");
+		ImGui::TextDisabled("No layouts found");
 	}
 	return -1;
 }
