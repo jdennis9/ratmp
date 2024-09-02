@@ -307,23 +307,24 @@ bool show_theme_editor_gui() {
 	ImGui::SameLine();
 	if (ImGui::Button("Save")) {
 		if (theme_name[0]) {
-			save_theme(theme_name);
-			dirty = false;
+			bool confirm = true;
+			if (!new_theme) {
+				confirm = show_confirmation_dialog("Confirm Overwrite Theme", "Overwrite existing theme?");
+			}
+			if (confirm) {
+				save_theme(theme_name);
+				dirty = false;
+			}
+			new_theme = false;
 		}
 		else {
-			ImGui::OpenPopup("##warning_popup");
+			show_message_box(MESSAGE_BOX_WARNING, "Cannot create theme with an empty name.");
 		}
 	}
 	
 	ImGui::SameLine();
 	if (ImGui::Button("Load")) {
 		load_theme(theme_name);
-	}
-	
-	if (ImGui::BeginPopup("##warning_popup")) {
-		ImGui::TextUnformatted("Cannot save theme without a name");
-		if (ImGui::Button("Ok")) ImGui::CloseCurrentPopup();
-		ImGui::EndPopup();
 	}
 	
 	ImGui::SeparatorText("RatMP Colors");
@@ -351,7 +352,7 @@ bool show_theme_editor_gui() {
 	for (uint32 i = 0; i < ImGuiCol_COUNT; ++i) {
 		ImGuiCol_ color_idx = (ImGuiCol_)i;
 		const char *name = ImGui::GetStyleColorName(color_idx);
-		ImGui::ColorEdit4(name, &style.Colors[i].x);
+		dirty |= ImGui::ColorEdit4(name, &style.Colors[i].x);
 	}
 	
 	
@@ -437,10 +438,15 @@ uint32 get_theme_color(Theme_Color color) {
 }
 
 const char *show_theme_selector_gui() {
-	for (uint32 i = 0; i < g_themes.length(); ++i) {
-		if (ImGui::Selectable(g_themes[i].name)) {
-			return g_themes[i].name;
+	if (g_themes.m_count) {
+		for (uint32 i = 0; i < g_themes.m_count; ++i) {
+			if (ImGui::Selectable(g_themes[i].name)) {
+				return g_themes[i].name;
+			}
 		}
+	}
+	else {
+		ImGui::TextDisabled("No themes loaded");
 	}
 	
 	return NULL;
