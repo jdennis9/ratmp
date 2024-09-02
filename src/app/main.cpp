@@ -68,7 +68,7 @@ static struct {
 	bool need_load_font;
 	int font_size;
 	int icon_font_size;
-
+	float dpi_scale;
 } G;
 
 static struct {
@@ -496,6 +496,11 @@ static LRESULT WINAPI window_proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 			}
 			return 0;
 		}
+		case WM_DPICHANGED: {
+			G.dpi_scale = ImGui_ImplWin32_GetDpiScaleForHwnd(g_hWnd);
+			G.need_load_font = true;
+			return 0;
+		}
 		case WM_USER+EVENT_STREAM_END_OF_TRACK: {
 			ui_next_track();
 			return 0;
@@ -553,6 +558,9 @@ int main(int argc, char *argv[])
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 #endif
 {
+	// This needs to go before any window creation
+	ImGui_ImplWin32_EnableDpiAwareness();
+	
 	const wchar_t *WNDCLASS_NAME = L"RAT_WINDOW";
 	
 #ifdef SINGLE_INSTANCE
@@ -578,11 +586,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	srand(time(NULL));
 	init_stats();
 	
-	// First time launch, generate default config
-	/*if (is_first_time_launch()) {
-		strcpy(g_config.theme, "default-dark");
-		save_config();
-	}*/
 	load_config();
 	
 	G.icon = LoadIconA(hInstance, "WindowIcon");
@@ -609,6 +612,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 							 NULL,
 							 wndclass.hInstance,
 							 NULL);
+	
+	G.dpi_scale = ImGui_ImplWin32_GetDpiScaleForHwnd(g_hWnd);
 	
 	// Set dark title bar
 	{
@@ -638,11 +643,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	// Initialize ImGui
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_InitForOpenGL(g_hWnd);
+	ImGui_ImplWin32_Init(g_hWnd);
 	ImGui_ImplDX10_Init(dx.device);
 	
 	ImGuiIO &io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |=
+		ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
 	
 	// In case font size is not defined in the theme, use a reasonable default
 	G.font_size = DEFAULT_FONT_SIZE;
@@ -708,6 +714,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			G.need_load_font = false;
 			
 			ImFontConfig cfg = ImFontConfig();
+			cfg.RasterizerDensity = G.dpi_scale;
+			
 			char path[512];
 			snprintf(path, 512, "fonts\\%s", G.font);
 			
@@ -738,12 +746,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				builder.BuildRanges(&ranges);
 				
 				io.Fonts->Clear();
-				io.Fonts->AddFontFromFileTTF(path, MAX(G.font_size, 8), &cfg, ranges.Data);
+				io.Fonts->AddFontFromFileTTF(path, 
+											 MAX((int)(G.font_size*G.dpi_scale), 8), 
+											 &cfg, ranges.Data);
 				cfg.FontDataOwnedByAtlas = false;
 				cfg.MergeMode = true;
 				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
-											   G.icon_font_size, &cfg, icon_range);
-				//ImGui_ImplOpenGL3_CreateFontsTexture()
+											   (int)(G.icon_font_size*G.dpi_scale), &cfg, icon_range);
 				ImGui_ImplDX10_CreateDeviceObjects();
 			}
 			else {
