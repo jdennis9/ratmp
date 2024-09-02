@@ -60,8 +60,7 @@ static void settings_read_line_fn(ImGuiContext *ctx, ImGuiSettingsHandler *handl
 	if (!strcmp(name, "Open")) {
 		int open = atoi(value);
 		if (open) ui_show_window(window);
-		log_debug("%s\n", value);
-	} else log_debug("???\n");
+	}
 }
 
 static void settings_write_fn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, ImGuiTextBuffer *buf) {

@@ -45,8 +45,6 @@ static struct {
 	int32 resize_width;
 	int32 resize_height;
 	uint32 width, height;
-	HDC hDC;
-	HGLRC hRC;
 } g_window;
 
 static HWND g_hWnd;
@@ -802,7 +800,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	remove_tray_icon(g_hWnd);
-	wglDeleteContext(g_window.hRC);
 	DestroyWindow(g_hWnd);
 	UnregisterClassW(L"main_window", wndclass.hInstance);
 #ifdef SINGLE_INSTANCE
