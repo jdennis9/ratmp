@@ -278,6 +278,9 @@ static void show_track_list_missing_tracks_ui(Tracklist& tracklist) {
 	}
 #endif
 	
+	ImGui::Text("Edit missing tracks for playlist: %s", tracklist.name);
+	ImGui::Separator();
+	
 	if (ImGui::Button("Remove all")) {
 		const char *message = 
 			"Are you sure to want to remove all missing tracks from this playlist?"
@@ -290,7 +293,7 @@ static void show_track_list_missing_tracks_ui(Tracklist& tracklist) {
 		}
 	}
 	
-	if (ImGui::BeginTable("##missing_tracks_table", 2)) {
+	if (ImGui::BeginTable("##missing_tracks_table", 2, ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInner)) {
 		for (uint32 i = 0; i < tracks.m_count; ++i) {
 			char path[512];
 			retrieve_file_path(tracks[i], path, sizeof(path));
