@@ -891,12 +891,12 @@ static bool show_navigation_ui() {
 						Tracklist *track_payload = *(Tracklist **)payload->Data;
 						track_payload->copy(&playlist);
 						delete track_payload;
-						ImGui::EndDragDropTarget();
 						playlist.save_to_file();
 						if (iplaylist == G.queued_playlist) {
 							queue_playlist(iplaylist);
 						}
 					}
+					ImGui::EndDragDropTarget();
 				}
 				
 				// Right click context menu
