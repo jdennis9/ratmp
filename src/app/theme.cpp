@@ -33,49 +33,15 @@ struct Theme {
 static ImVec4 g_theme_colors[THEME_COLOR__COUNT];
 
 static const struct Color_Info {
-	ImGuiCol color;
+	int color;
 	const char *name;
 	const char *ini_name;
 } g_color_info[] = {
-	{ImGuiCol_Text, "Text", "Text"},
-	{ImGuiCol_WindowBg, "Bg.", "Bg"},
-	{ImGuiCol_PopupBg, "Popup", "Popup"},
-	{ImGuiCol_Border, "Borders", "Borders"},
-	{ImGuiCol_TitleBg, "Title Bar", "TitleBar"},
-	{ImGuiCol_TitleBgActive, "Title Bar (Active)", "TitleBarActive"},
-	{ImGuiCol_MenuBarBg, "Menu Bar", "MenuBar"},
-	{ImGuiCol_TableHeaderBg, "Table Header", "TableHeader"},
-	{ImGuiCol_TableRowBgAlt, "Alt Table Bg.", "AltTableBg"},
-	{ImGuiCol_TableBorderLight, "Table Borders", "TableBorders"},
-	{ImGuiCol_FrameBg, "Frame", "Frame"},
-	{ImGuiCol_FrameBgHovered, "Frame (Hovered)", "FrameHovered"},
-	{ImGuiCol_FrameBgActive, "Frame (Active)", "FrameActive"},
-	{ImGuiCol_Header, "Header", "Header"},
-	{ImGuiCol_HeaderHovered, "Header (Hovered)", "HeaderHovered"},
-	{ImGuiCol_HeaderActive, "Header (Active)", "HeaderActive"},
-	{ImGuiCol_Button, "Button", "Button"},
-	{ImGuiCol_ButtonHovered, "Button (Hovered)", "ButtonHovered"},
-	{ImGuiCol_ButtonActive, "Button (Active)", "ButtonActive"},
-	{ImGuiCol_Separator, "Separator", "Separator"},
-	{ImGuiCol_TabDimmed, "Background Tab", "BackgroundTab"},
-	{ImGuiCol_TabDimmedSelected, "Background Tab (Selected)", "BackgroundTabSelected"},
-	{ImGuiCol_TabDimmedSelectedOverline, "Background Tab Overline", "BackgroundTabOverline"},
-	{ImGuiCol_Tab, "Tab", "Tab"},
-	{ImGuiCol_TabHovered, "Tab (Hovered)", "TabHovered"},
-	{ImGuiCol_TabActive, "Tab (Selected)", "TabSelected"},
-	{ImGuiCol_TabSelectedOverline, "Tab Overline", "TabOverline"},
-	{ImGuiCol_ScrollbarGrab, "Scrollbar", "Scrollbar"},
-	{ImGuiCol_ScrollbarGrabHovered, "Scrollbar (Hovered)", "ScrollbarHovered"},
-	{ImGuiCol_ScrollbarGrabActive, "Scrollbar (Active)", "ScrollbarActive"},
-	{ImGuiCol_ScrollbarBg, "Scrollbar Bg.", "ScrollbarBg"},
-	{ImGuiCol_ResizeGrip, "Resize Grip", "ResizeGrip"},
-	{ImGuiCol_ResizeGripHovered, "Resize Grip (Hovered)", "ResizeGripHovered"},
-	{ImGuiCol_ResizeGripActive, "Resize Grip (Active)", "ResizeGripActive"},
-	{ImGuiCol_COUNT + THEME_COLOR_PLAYING_INDICATOR, "Playing Indicator", "PlayingIndicator"},
-	{ImGuiCol_COUNT + THEME_COLOR_PLAYING_TEXT, "Playing Text", "PlayingText"},
-	{ImGuiCol_COUNT + THEME_COLOR_SEEK_BAR, "Seek Bar", "SeekBar"},
-	{ImGuiCol_COUNT + THEME_COLOR_SEEK_BAR_BG, "Seek Bar Bg.", "SeekBarBg"},
-	{ImGuiCol_COUNT + THEME_COLOR_TRACK_PREVIEW, "Track Preview.", "TrackPreview"},
+	{THEME_COLOR_PLAYING_INDICATOR, "Playing Indicator", "PlayingIndicator"},
+	{THEME_COLOR_PLAYING_TEXT, "Playing Text", "PlayingText"},
+	{THEME_COLOR_SEEK_BAR, "Seek Bar", "SeekBar"},
+	{THEME_COLOR_SEEK_BAR_BG, "Seek Bar Bg.", "SeekBarBg"},
+	{THEME_COLOR_TRACK_PREVIEW, "Track Preview", "TrackPreview"},
 };
 
 static Auto_Array<Theme> g_themes;
@@ -97,21 +63,24 @@ static uint32 flip_endian(uint32 v) {
 static int theme_ini_handler(void *data, const char *section, const char *key, const char *value) {
 	ImGuiStyle& style = ImGui::GetStyle();
 	
-	if (!strcmp(section, "Colors")) {
+	if (!strcmp(section, "ImGuiColors")) {
+		for (uint32 i = 0; i < ImGuiCol_COUNT; ++i) {
+			const char *name = ImGui::GetStyleColorName(i);
+			if (!strcmp(key, name)) {
+				uint32 color = (uint32)strtoll(value, NULL, 16);
+				color = flip_endian(color);
+				style.Colors[i] = ImColor(color).Value;
+			}
+		}
+	}
+	else if (!strcmp(section, "InternalColors")) {
 		for (uint32 i = 0; i < ARRAY_LENGTH(g_color_info); ++i) {
 			const Color_Info& info = g_color_info[i];
 			
 			if (!strcmp(key, info.ini_name)) {
 				uint32 color = (uint32)strtoll(value, NULL, 16);
 				color = flip_endian(color);
-				
-				if (info.color < ImGuiCol_COUNT) {
-					style.Colors[info.color] = ImColor(color).Value;
-				}
-				else {
-					g_theme_colors[info.color - ImGuiCol_COUNT] = ImColor(color).Value;
-				}
-				
+				g_theme_colors[info.color] = ImColor(color).Value;
 				break;
 			}
 		}
@@ -208,9 +177,12 @@ static void refresh_fonts() {
 }
 
 void set_default_theme() {
-	g_theme_colors[THEME_COLOR_PLAYING_INDICATOR] = ImVec4{1, 0.6f, 0, 0.8f};
-	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImGui::GetStyleColorVec4(ImGuiCol_Header);
-	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
+	g_theme_colors[THEME_COLOR_PLAYING_INDICATOR] = ImColor(0xff0074ff).Value;
+	g_theme_colors[THEME_COLOR_PLAYING_TEXT] = ImColor(0xff000000).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImColor(0xffffffff).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImColor(0x97282828).Value;
+	g_theme_colors[THEME_COLOR_TRACK_PREVIEW] = ImColor(0xff000000).Value;
+	g_theme_colors[THEME_COLOR_VOLUME_SLIDER] = ImColor(0xff000000).Value;
 	refresh_themes();
 	refresh_fonts();
 }
@@ -271,16 +243,20 @@ void save_theme(const char *name) {
 	FILE *file = fopen(path, "w");
 	if (!file) return;
 	
-	fprintf(file, "[Colors]\n");
+	fprintf(file, "[InternalColors]\n");
 	for (uint32 i = 0; i < ARRAY_LENGTH(g_color_info); ++i) {
 		const Color_Info& info = g_color_info[i];
 		uint32 color;
-		
-		if (info.color < ImGuiCol_COUNT) color = ImGui::GetColorU32(style.Colors[info.color]);
-		else color = ImGui::GetColorU32(g_theme_colors[info.color - ImGuiCol_COUNT]);
-		
+		color = ImGui::GetColorU32(g_theme_colors[info.color]);
 		color = flip_endian(color);
 		fprintf(file, "%s = %x\n", info.ini_name, color);
+	}
+	
+	fprintf(file, "[ImGuiColors]\n");
+	for (uint32 i = 0; i < ImGuiCol_COUNT; ++i) {
+		uint32 color = ImGui::GetColorU32(style.Colors[i]);
+		color = flip_endian(color);
+		fprintf(file, "%s = %x\n", ImGui::GetStyleColorName(i), color);
 	}
 	
 	const char *background_path = get_background_image_path();
@@ -391,21 +367,19 @@ bool show_theme_editor_gui() {
 		ImGui::EndPopup();
 	}
 	
-	ImGui::SeparatorText("Colors");
-	
-	for (uint32 icolor = 0; icolor < ARRAY_LENGTH(g_color_info); ++icolor) {
-		const Color_Info& info = g_color_info[icolor];
-		if (info.color < ImGuiCol_COUNT) {
-			ImVec4 color = ImGui::GetStyleColorVec4(info.color);
-			if (ImGui::ColorEdit4(info.name, &color.x)) {
-				style.Colors[info.color] = color;
-				dirty = true;
-			}
-		}
-		else {
-			dirty |= ImGui::ColorEdit4(info.name, &g_theme_colors[info.color - ImGuiCol_COUNT].x);
-		}
+	ImGui::SeparatorText("RatMP Colors");
+	for (uint32 i = 0; i < ARRAY_LENGTH(g_color_info); ++i) {
+		dirty |= ImGui::ColorEdit4(g_color_info[i].name, &g_theme_colors[i].x);
 	}
+	
+	ImGui::SeparatorText("ImGui Colors");
+	
+	for (uint32 i = 0; i < ImGuiCol_COUNT; ++i) {
+		ImGuiCol_ color_idx = (ImGuiCol_)i;
+		const char *name = ImGui::GetStyleColorName(color_idx);
+		ImGui::ColorEdit4(name, &style.Colors[i].x);
+	}
+	
 	
 	const char *background_path = get_background_image_path();
 	ImGui::SeparatorText("Style");
