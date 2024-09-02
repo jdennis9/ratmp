@@ -38,7 +38,8 @@ static const struct Color_Info {
 } g_color_info[] = {
 	{THEME_COLOR_PLAYING_INDICATOR, "Playing Indicator", "PlayingIndicator"},
 	{THEME_COLOR_PLAYING_TEXT, "Playing Text", "PlayingText"},
-	{THEME_COLOR_SEEK_BAR, "Seek Bar", "SeekBar"},
+	{THEME_COLOR_SEEK_FG, "Seek Wave Fg.", "SeekFg"},
+	{THEME_COLOR_SEEK_BG, "Seek Wave Bg.", "SeekBg"},
 	{THEME_COLOR_SEEK_BAR_BG, "Seek Bar Bg.", "SeekBarBg"},
 };
 
@@ -147,8 +148,9 @@ static void refresh_themes() {
 void set_default_theme() {
 	g_theme_colors[THEME_COLOR_PLAYING_INDICATOR] = ImColor(0xff0074ff).Value;
 	g_theme_colors[THEME_COLOR_PLAYING_TEXT] = ImColor(0xff000000).Value;
-	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImColor(0x80ffffff).Value;
-	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImColor(0x97282828).Value;
+	g_theme_colors[THEME_COLOR_SEEK_FG] = ImColor(0x80ffffff).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BG] = ImColor(0x97282828).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImColor(0x00282828).Value;
 	g_theme_colors[THEME_COLOR_VOLUME_SLIDER] = ImColor(0xff000000).Value;
 	refresh_themes();
 }
@@ -173,6 +175,8 @@ void load_theme(const char *name) {
 	
 	style = ImGuiStyle();
 	ImGui::StyleColorsDark();
+	
+	set_default_theme();
 	
 	char path[256];
 	snprintf(path, 256, "themes\\%s.ini", name);
@@ -317,7 +321,8 @@ bool show_theme_editor_gui() {
 	
 	ImGui::SeparatorText("RatMP Colors");
 	for (uint32 i = 0; i < ARRAY_LENGTH(g_color_info); ++i) {
-		dirty |= ImGui::ColorEdit4(g_color_info[i].name, &g_theme_colors[i].x);
+		int index = g_color_info[i].color;
+		dirty |= ImGui::ColorEdit4(g_color_info[i].name, &g_theme_colors[index].x);
 	}
 	
 	ImGui::SeparatorText("ImGui Colors");
@@ -379,7 +384,7 @@ bool show_theme_editor_gui() {
 
 uint32 get_theme_color(Theme_Color color) {
 	uint32 c = ImGui::GetColorU32(g_theme_colors[color]);
-	return c ? c : 0xff000000;
+	return c;
 }
 
 const char *show_theme_selector_gui() {
