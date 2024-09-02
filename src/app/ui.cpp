@@ -617,6 +617,10 @@ void init_ui() {
 	refresh_layouts();
 	install_imgui_settings_handler();
 	
+	if (!file_exists(".\\layouts")) {
+		create_directory(".\\layouts");
+	}
+	
 	if (!file_exists(".\\imgui.ini")) {
 		ImGui::LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
 	}
