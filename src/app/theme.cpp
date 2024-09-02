@@ -332,6 +332,21 @@ bool show_theme_editor_gui() {
 	}
 	
 	ImGui::SeparatorText("ImGui Colors");
+	if (ImGui::Button("Set to default light theme")) {
+		const char *message = 
+			"Reset all ImGui colors to the default light theme? This cannot be undone.";
+		if (show_confirmation_dialog("Confirm Reset Colors", message)) {
+			ImGui::StyleColorsLight();
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Set to default dark theme")) {
+		const char *message = 
+			"Reset all ImGui colors to the default dark theme? This cannot be undone.";
+		if (show_confirmation_dialog("Confirm Reset Colors", message)) {
+			ImGui::StyleColorsDark();
+		}
+	}
 	
 	for (uint32 i = 0; i < ImGuiCol_COUNT; ++i) {
 		ImGuiCol_ color_idx = (ImGuiCol_)i;
