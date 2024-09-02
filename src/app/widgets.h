@@ -29,9 +29,6 @@ bool volume_slider(const char *name, float *p_position, float width);
 bool vertical_volume_slider(const char *str_id, const ImVec2& size, float *p_value, float min, float max);
 bool small_selectable(const char *text, bool selected = false);
 bool small_selectable(const char *text, bool *p_value);
-bool minimize_button(const char *id, float width);
-bool maximize_button(const char *id, float width);
-bool exit_button(const char *id, float width);
 bool circle_handle_slider(const char *name, float *p_position, float min, float max, float width);
 
 #endif //WIDGETS_H

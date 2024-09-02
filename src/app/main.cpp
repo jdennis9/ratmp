@@ -735,13 +735,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				
 				builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
 				
-				if (g_config.include_glyphs[GLYPH_RANGE_JAPANESE]) builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
-				if (g_config.include_glyphs[GLYPH_RANGE_KOREAN]) builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
-				if (g_config.include_glyphs[GLYPH_RANGE_CYRILLIC]) builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
-				if (g_config.include_glyphs[GLYPH_RANGE_GREEK]) builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
-				if (g_config.include_glyphs[GLYPH_RANGE_CHINESE]) builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-				if (g_config.include_glyphs[GLYPH_RANGE_THAI]) builder.AddRanges(io.Fonts->GetGlyphRangesThai());
-				if (g_config.include_glyphs[GLYPH_RANGE_VIETNAMESE]) builder.AddRanges(io.Fonts->GetGlyphRangesVietnamese());
+				if (g_config.include_glyphs[GLYPH_RANGE_JAPANESE]) 
+					builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
+				if (g_config.include_glyphs[GLYPH_RANGE_KOREAN]) 
+					builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
+				if (g_config.include_glyphs[GLYPH_RANGE_CYRILLIC])
+					builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+				if (g_config.include_glyphs[GLYPH_RANGE_GREEK]) 
+					builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
+				if (g_config.include_glyphs[GLYPH_RANGE_CHINESE])
+					builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+				if (g_config.include_glyphs[GLYPH_RANGE_THAI])
+					builder.AddRanges(io.Fonts->GetGlyphRangesThai());
+				if (g_config.include_glyphs[GLYPH_RANGE_VIETNAMESE])
+					builder.AddRanges(io.Fonts->GetGlyphRangesVietnamese());
 				
 				builder.BuildRanges(&ranges);
 				
@@ -770,7 +777,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		ImGui::EndFrame();
 		
 		render_frame();
-		//glFinish();
 	}
 	
 	stream_close();

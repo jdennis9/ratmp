@@ -1300,10 +1300,6 @@ bool show_ui() {
 	}
 	ImGui::PopStyleVar(2);
 
-	//if (ImGui::Begin("Track Info", NULL, 0)) {
-	//	show_track_info_ui();
-	//} ImGui::End();
-
 	if (ImGui::Begin("Navigation", NULL, 0)) {
 		show_navigation_ui();
 	} ImGui::End();
@@ -1447,14 +1443,6 @@ void ui_handle_hotkey(uintptr_t hotkey) {
 	case GLOBAL_HOTKEY_PREVIOUS_TRACK: goto_previous_track(); break;
 	case GLOBAL_HOTKEY_TOGGLE_PLAYBACK: stream_toggle_playing(); break;
 	}
-}
-
-// Formats a string into the buffer and returns the buffer
-static const char *format_string(char *buffer, int max, const char *format, ...) {
-	va_list va;
-	va_start(va, format);
-	vsnprintf(buffer, max, format, va);
-	va_end(va);
 }
 
 static void show_config_editor_gui() {
