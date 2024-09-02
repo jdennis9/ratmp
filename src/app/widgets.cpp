@@ -15,8 +15,72 @@
 */
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <ctype.h>
 #include "widgets.h"
 #include "theme.h"
+#include "ui.h"
+
+// Trim spaces from string
+static void trim_string(const char *str, char *buffer, int buffer_size) {
+	while (*str && isspace(*str)) str++;
+	if (!*str) return;
+	int written = 0;
+	
+	while (*str && !isspace(*str) && written < (buffer_size-1)) {
+		buffer[written] = *str;
+		str++;
+		written++;
+	}
+	
+	buffer[written] = 0;
+}
+
+static void *settings_open_fn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, const char *name) {
+	UI_Window window = ui_get_window_from_name(name);
+	// Have to add 1 because returning NULL causes ImGui to ignore this entry
+	return (void*)(uintptr_t)(window + 1);
+}
+
+static void settings_read_line_fn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, 
+								  void *entry, const char *line) {
+	// -1 because we added 1 in settings_open_fn()
+	UI_Window window = (UI_Window)((uintptr_t)entry - 1);
+	if (window >= UI_WINDOW__COUNT) return;
+	const char *name_ptr = line;
+	const char *value_ptr = strchr(line, '=');
+	if (!value_ptr) return;
+	value_ptr++;
+	
+	char name[8];
+	char value[8];
+	
+	trim_string(name_ptr, name, sizeof(name));
+	trim_string(value_ptr, value, sizeof(value));
+	
+	if (!strcmp(name, "Open")) {
+		int open = atoi(value);
+		if (open) ui_show_window(window);
+		log_debug("%s\n", value);
+	} else log_debug("???\n");
+}
+
+static void settings_write_fn(ImGuiContext *ctx, ImGuiSettingsHandler *handler, ImGuiTextBuffer *buf) {
+	for (uint32 window = 0; window < UI_WINDOW__COUNT; ++window) {
+		buf->appendf("[RatMP][%s]\n", ui_get_window_name((UI_Window)window));
+		buf->appendf("Open = %u\n", ui_is_window_open((UI_Window)window));
+	}
+}
+
+void install_imgui_settings_handler() {
+	ImGuiSettingsHandler handler = {};
+	handler.TypeName = "RatMP";
+	handler.TypeHash = ImHashStr(handler.TypeName);
+	handler.ReadOpenFn = &settings_open_fn;
+	handler.ReadLineFn = &settings_read_line_fn;
+	handler.WriteAllFn = &settings_write_fn;
+	
+	ImGui::AddSettingsHandler(&handler);
+}
 
 bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_position, float thickness, void *waveform) {
 	ImDrawList *draw_list = ImGui::GetWindowDrawList();

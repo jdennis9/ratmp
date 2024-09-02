@@ -23,6 +23,7 @@
 #include "common.h"
 #include <imgui.h>
 
+void install_imgui_settings_handler();
 bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_position, float thickness, ImTextureID waveform_image = 0);
 bool volume_slider(const char *name, float *p_position, float width);
 bool vertical_volume_slider(const char *str_id, const ImVec2& size, float *p_value, float min, float max);

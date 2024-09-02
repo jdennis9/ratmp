@@ -29,6 +29,15 @@ enum {
 	GLOBAL_HOTKEY_NEXT_TRACK,
 };
 
+enum UI_Window {
+	UI_WINDOW_MISSING_TRACKS,
+	UI_WINDOW_PREFERENCES,
+	UI_WINDOW_THEME_EDITOR,
+	UI_WINDOW_PLAYBACK_STATS,
+	UI_WINDOW_SEARCH_RESULTS,
+	UI_WINDOW__COUNT,
+};
+
 struct Track_Drag_Drop_Payload {
 	Path_Pool path_pool;
 	Auto_Array<Path_Ref> paths;
@@ -40,6 +49,11 @@ bool show_ui();
 void ui_add_to_library(Track& track);
 void ui_next_track();
 void ui_handle_hotkey(uintptr_t hotkey);
+// Returns UI_WINDOW__COUNT if there is no such window
+UI_Window ui_get_window_from_name(const char *name);
+const char *ui_get_window_name(UI_Window window);
+void ui_show_window(UI_Window window);
+bool ui_is_window_open(UI_Window window);
 
 void ui_accept_drag_drop(const Track_Drag_Drop_Payload *payload);
 

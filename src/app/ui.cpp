@@ -74,7 +74,13 @@ struct Layout {
 	char name[64];
 };
 
+struct Optional_Window {
+	bool show;
+	bool bring_to_front;
+};
+
 static struct {
+	Optional_Window windows[UI_WINDOW__COUNT];
 	Tracklist search_results;
 	Stream_State state;
 	int32 queue_position;
@@ -92,6 +98,44 @@ static struct {
 	bool dirty_theme;
 	Auto_Array<Layout> layouts;
 } G;
+
+const char *ui_get_window_name(UI_Window window) {
+	switch (window) {
+		case UI_WINDOW_MISSING_TRACKS: return "Missing Tracks";
+		case UI_WINDOW_PREFERENCES: return "Preferences";
+		case UI_WINDOW_THEME_EDITOR: return "Theme";
+		case UI_WINDOW_PLAYBACK_STATS: return "Playback Statistics";
+		case UI_WINDOW_SEARCH_RESULTS: return "Search Results";
+		case UI_WINDOW__COUNT: return "<unknown>";
+	}
+	
+	return "<unknown>";
+}
+
+UI_Window ui_get_window_from_name(const char *name) {
+	for (uint32 i = 0; i < UI_WINDOW__COUNT; ++i) {
+		if (!strcmp(ui_get_window_name((UI_Window)i), name)) {
+			return (UI_Window)i;
+		}
+	}
+	
+	return UI_WINDOW__COUNT;
+}
+
+void ui_show_window(UI_Window window) {
+	if (window < 0 || window > UI_WINDOW__COUNT) return;
+	G.windows[window].show = true;
+}
+
+void ui_bring_window_to_front(UI_Window window) {
+	if (window < 0 || window > UI_WINDOW__COUNT) return;
+	G.windows[window].bring_to_front = true;
+}
+
+bool ui_is_window_open(UI_Window window) {
+	if (window < 0 || window > UI_WINDOW__COUNT) return false;
+	return G.windows[window].show;
+}
 
 static void show_config_editor_gui();
 static void show_hotkey_gui();
@@ -556,6 +600,7 @@ void init_ui() {
 	STOP_TIMER(load_metadata);
 	
 	refresh_layouts();
+	install_imgui_settings_handler();
 	
 	if (!file_exists(".\\imgui.ini")) {
 		ImGui::LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
@@ -1042,19 +1087,18 @@ static const char *get_layout_path(const Layout& layout) {
 	return lazy_format("layouts/%s.ini", layout.name);
 }
 
-
 bool show_ui() {
 	ImGuiIO &io = ImGui::GetIO();
 	ImGuiStyle& style = ImGui::GetStyle();
 	bool running = true;
 	bool jump_to_playing = false;
 	static bool show_hotkeys = false;
-	static bool show_theme_editor = false;
-	static bool show_config_editor = false;
-	static bool show_playback_stats = false;
 	static bool show_about = false;
-	static bool show_missing_tracks = false;
 	static bool show_search_results = false;
+	bool &show_theme_editor = G.windows[UI_WINDOW_THEME_EDITOR].show;
+	bool &show_preferences = G.windows[UI_WINDOW_PREFERENCES].show;
+	bool &show_missing_tracks = G.windows[UI_WINDOW_MISSING_TRACKS].show;
+	bool &show_playback_stats = G.windows[UI_WINDOW_PLAYBACK_STATS].show;
 	
 	G.state = stream_get_state();
 
@@ -1131,20 +1175,20 @@ bool show_ui() {
 		
 		if (ImGui::BeginMenu("Edit")) {
 			if (ImGui::MenuItem("Edit theme")) {
-				show_theme_editor = true;
+				ui_show_window(UI_WINDOW_THEME_EDITOR);
 			}
 			if (ImGui::MenuItem("Preferences")) {
-				show_config_editor = true;
+				ui_show_window(UI_WINDOW_PREFERENCES);
 			}
 			ImGui::EndMenu();
 		}
 		
 		if (ImGui::BeginMenu("View")) {
-			if (ImGui::MenuItem("Show missing tracks", NULL, show_missing_tracks)) {
-				show_missing_tracks = !show_missing_tracks;
+			if (ImGui::MenuItem("Show missing tracks")) {
+				ui_show_window(UI_WINDOW_MISSING_TRACKS);
 			}
 			if (ImGui::MenuItem("Playback statistics")) {
-				show_playback_stats = true;
+				ui_show_window(UI_WINDOW_PLAYBACK_STATS);
 			}
 			ImGui::EndMenu();
 		}
@@ -1324,69 +1368,56 @@ bool show_ui() {
 		}
 	} ImGui::End();
 	
-	ImVec2 popup_size = {500.f, 500.f};
-	ImVec2 popup_min_size = {300.f, 300.f};
-	ImVec2 popup_max_size = {1000.f, 1000.f};
-	
 	if (show_hotkeys) {
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("Hotkeys", &show_hotkeys)) {
 			show_hotkey_gui();
 		}
 		ImGui::End();
 	}
 	
-	if (show_config_editor) {
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
-		if (ImGui::Begin("Preferences", &show_config_editor)) {
-			show_config_editor_gui();
-		}
-		ImGui::End();
-	}
-	
-	if (show_theme_editor) {
-		ImGuiWindowFlags unsaved = G.dirty_theme ? ImGuiWindowFlags_UnsavedDocument : 0;
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
-		if (ImGui::Begin("Theme", &show_theme_editor, unsaved)) {
-			G.dirty_theme = show_theme_editor_gui();
-		}
-		ImGui::End();
-	}
-	
-	if (show_search_results) {
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
-		if (ImGui::Begin("Search Results", &show_search_results, 0)) {
-			show_track_list_gui(G.search_results, -1, NULL);
-		}
-		ImGui::End();
-	}
-	
 	if (show_about) {
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
 		if (ImGui::Begin("About", &show_about)) {
 			show_about_gui();
 		}
 		ImGui::End();
 	}
 	
-	if (show_playback_stats) {
-		ImGui::SetNextWindowSize(popup_size, ImGuiCond_Once);
-		ImGui::SetNextWindowSizeConstraints(popup_min_size, popup_max_size);
-		if (ImGui::Begin("Playback Statistics", &show_playback_stats)) {
-			show_playback_stats_gui();
+	for (uint32 i = 0; i < UI_WINDOW__COUNT; ++i) {
+		UI_Window window_id = (UI_Window)i;
+		Optional_Window& window = G.windows[i];
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoFocusOnAppearing;
+		
+		if (!window.show) continue;
+		const char *title = ui_get_window_name(window_id);
+		if (window.bring_to_front) {
+			ImGui::SetNextWindowFocus();
+			window.bring_to_front = false;
+		}
+		
+		if (window_id == UI_WINDOW_THEME_EDITOR && G.dirty_theme)
+			flags |= ImGuiWindowFlags_UnsavedDocument;
+		
+		if (ImGui::Begin(title, &window.show, flags)) {
+			switch (window_id) {
+				case UI_WINDOW_THEME_EDITOR:
+				G.dirty_theme = show_theme_editor_gui();
+				break;
+				case UI_WINDOW_PREFERENCES:
+				show_config_editor_gui();
+				break;
+				case UI_WINDOW_PLAYBACK_STATS:
+				show_playback_stats_gui();
+				break;
+				case UI_WINDOW_MISSING_TRACKS:
+				show_track_list_missing_tracks_ui(G.playlists[G.selected_playlist]);
+				break;
+				case UI_WINDOW_SEARCH_RESULTS:
+				show_track_list_gui(G.search_results, -1, NULL);
+				break;
+				case UI_WINDOW__COUNT: break;
+			}
 		}
 		ImGui::End();
-	}
-	
-	if (show_missing_tracks) {
-		if (ImGui::Begin("Missing Tracks", &show_missing_tracks)) {
-			show_track_list_missing_tracks_ui(G.playlists[G.selected_playlist]);
-		} ImGui::End();
 	}
 	
 	return running;
