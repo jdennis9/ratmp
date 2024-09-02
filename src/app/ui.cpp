@@ -278,6 +278,18 @@ static void show_track_list_missing_tracks_ui(Tracklist& tracklist) {
 	}
 #endif
 	
+	if (ImGui::Button("Remove all")) {
+		const char *message = 
+			"Are you sure to want to remove all missing tracks from this playlist?"
+			" This cannot be undone.";
+		bool remove_all = show_confirmation_dialog("Remove All Missing Tracks", message);
+		if (remove_all) {
+			tracklist.remove_missing_tracks();
+			tracklist.save_to_file();
+			return;
+		}
+	}
+	
 	if (ImGui::BeginTable("##missing_tracks_table", 2)) {
 		for (uint32 i = 0; i < tracks.m_count; ++i) {
 			char path[512];
