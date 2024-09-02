@@ -412,8 +412,7 @@ bool show_theme_editor_gui() {
 		ImGui::EndTable();
 	}
 	
-	ImGui::TextUnformatted("Background image");
-	ImGui::SameLine();
+	ImGui::SeparatorText("Background Image");
 	if (ImGui::Button("Browse")) {
 		for_each_file_from_dialog(&set_background_image, FILE_DATA_TYPE_IMAGE, false);
 	}
@@ -422,8 +421,10 @@ bool show_theme_editor_gui() {
 		load_background_image(NULL);
 		dirty = true;
 	}
+	ImGui::SameLine();
 	ImGui::TextUnformatted(background_path ? background_path : "<none>");
 	
+	ImGui::SeparatorText("Font");
 	if (ImGui::BeginCombo("Font", g_fonts.length() ? g_fonts[g_selected_font].name : "<none>")) {
 		for (uint32 i = 0; i < g_fonts.length(); ++i) {
 			if (ImGui::Selectable(g_fonts[i].name)) {
