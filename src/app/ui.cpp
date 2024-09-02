@@ -1038,6 +1038,7 @@ static bool show_control_panel_ui() {
 			ImGui::SetCursorPos(cursor);
 			
 			if (circle_handle_slider(icon, &volume, 0.f, 1.f, width)) {
+				stream_set_volume(volume);
 				ImGui::SetTooltip("%d%%", (int)(100.f * volume));
 			}
 		}
