@@ -1173,9 +1173,11 @@ bool show_ui() {
 		if (ImGui::BeginMenu("Edit")) {
 			if (ImGui::MenuItem("Edit theme")) {
 				ui_show_window(UI_WINDOW_THEME_EDITOR);
+				ui_bring_window_to_front(UI_WINDOW_THEME_EDITOR);
 			}
 			if (ImGui::MenuItem("Preferences")) {
 				ui_show_window(UI_WINDOW_PREFERENCES);
+				ui_bring_window_to_front(UI_WINDOW_PREFERENCES);
 			}
 			ImGui::EndMenu();
 		}
@@ -1183,9 +1185,11 @@ bool show_ui() {
 		if (ImGui::BeginMenu("View")) {
 			if (ImGui::MenuItem("Show missing tracks")) {
 				ui_show_window(UI_WINDOW_MISSING_TRACKS);
+				ui_bring_window_to_front(UI_WINDOW_MISSING_TRACKS);
 			}
 			if (ImGui::MenuItem("Playback statistics")) {
 				ui_show_window(UI_WINDOW_PLAYBACK_STATS);
+				ui_bring_window_to_front(UI_WINDOW_PLAYBACK_STATS);
 			}
 			ImGui::EndMenu();
 		}
@@ -1325,6 +1329,7 @@ bool show_ui() {
 				if (filter.enabled && filter.filter[0]) {
 					playlist.copy_with_filter(&G.search_results, &filter);
 					ui_show_window(UI_WINDOW_SEARCH_RESULTS);
+					ui_bring_window_to_front(UI_WINDOW_SEARCH_RESULTS);
 				}
 			}
 			
@@ -1379,6 +1384,7 @@ bool show_ui() {
 		UI_Window window_id = (UI_Window)i;
 		Optional_Window& window = G.windows[i];
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoFocusOnAppearing;
+		ImVec2 default_size = ImVec2(500, 500);
 		
 		if (!window.show) continue;
 		const char *title = ui_get_window_name(window_id);
@@ -1390,6 +1396,7 @@ bool show_ui() {
 		if (window_id == UI_WINDOW_THEME_EDITOR && G.dirty_theme)
 			flags |= ImGuiWindowFlags_UnsavedDocument;
 		
+		ImGui::SetNextWindowSize(default_size, ImGuiCond_Once);
 		if (ImGui::Begin(title, &window.show, flags)) {
 			switch (window_id) {
 				case UI_WINDOW_THEME_EDITOR:
@@ -1404,9 +1411,14 @@ bool show_ui() {
 				case UI_WINDOW_MISSING_TRACKS:
 				show_track_list_missing_tracks_ui(G.playlists[G.selected_playlist]);
 				break;
-				case UI_WINDOW_SEARCH_RESULTS:
-				show_track_list_gui(G.search_results, -1, NULL);
-				break;
+				case UI_WINDOW_SEARCH_RESULTS: {
+					int32 play_track = show_track_list_gui(G.search_results, -1, NULL);
+					if (play_track >= 0) {
+						queue_tracklist(G.search_results);
+						play_track_at(PLAYLIST_QUEUE, 0);
+					}
+					break;
+				}
 				case UI_WINDOW__COUNT: break;
 			}
 		}

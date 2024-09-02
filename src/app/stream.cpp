@@ -692,9 +692,18 @@ static DWORD generate_waveform_image(LPVOID data_ptr) {
 		int32 wave_height = half_width*segment_values[seg]*line_factor;
 		if (wave_height > half_width) wave_height = half_width;
 		
+		float alpha_scaling_factor = 1.f-(float)wave_height/(float)half_width;
+		//alpha_scaling_factor *= alpha_scaling_factor*alpha_scaling_factor;
+		
 		for (int32 i = 0; i < wave_height; ++i) {
+			float t = clamp(((float)i/(float)half_width)*alpha_scaling_factor, 0.f, 1.f);
+			uint32 alpha = (uint32)lerp(255.f, 0.f, t);
 			line[(half_width) + i] = UINT32_MAX;
+			line[(half_width) + i] &= ~(0xff<<24);
+			line[(half_width) + i] |= (alpha & 0xff)<<24;
 			line[(half_width) - i] = UINT32_MAX;
+			line[(half_width) - i] &= ~(0xff<<24);
+			line[(half_width) - i] |= (alpha & 0xff)<<24;
 		}
 	}
 	
