@@ -318,10 +318,7 @@ static void show_track_list_missing_tracks_ui(Tracklist& tracklist) {
 		commit |= ImGui::InputText("##new_path", new_path, sizeof(new_path),
 								   ImGuiInputTextFlags_EnterReturnsTrue);
 		if (ImGui::Button("Browse")) {
-			wchar_t browsed_path[512];
-			if (select_file_dialog(browsed_path, ARRAY_LENGTH(browsed_path))) {
-				wchar_to_multibyte(browsed_path, new_path, sizeof(new_path)-1);
-			}
+			select_file_dialog(new_path, sizeof(new_path));
 		}
 		ImGui::SameLine();
 		commit |= ImGui::Button("OK");
@@ -1522,6 +1519,52 @@ static void show_config_editor_gui() {
 			}
 		}
 		ImGui::EndCombo();
+	}
+	
+	ImGui::SeparatorText("Font");
+	{
+		char *font_path = get_font_path_buffer();
+		int font_path_size = get_font_path_buffer_size();
+		
+		ImGui::InputText("Font", font_path, font_path_size);
+		ImGui::SameLine();
+		if (ImGui::Button("Browse##font")) {
+			if (select_file_dialog(font_path, font_path_size)) {
+				set_font(NULL);
+			}
+		}
+		
+		int font_size = get_font_size();
+		if (ImGui::InputInt("Font size", &font_size)) {
+			set_font_size(font_size);
+			need_save = true;
+		}
+		
+		int icon_size = get_icon_font_size();
+		if (ImGui::InputInt("Icon size", &icon_size)) {
+			set_icon_font_size(icon_size);
+			need_save = true;
+		}
+		
+		if (ImGui::Button("Apply")) set_font(NULL);
+	}
+	
+	const char *background_path = g_config.background_path;
+	ImGui::SeparatorText("Background");
+	{
+		ImGui::Text("Background Image: %s", background_path[0] ? background_path : "<none>");
+		if (ImGui::Button("Browse##background")) {
+			char buffer[512];
+			if (select_file_dialog(buffer, sizeof(buffer))) {
+				load_background_image(buffer);
+				need_save = true;
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Remove")) {
+			load_background_image(NULL);
+			need_save = true;
+		}
 	}
 	
 	need_save |= apply;

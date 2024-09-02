@@ -215,8 +215,14 @@ bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max) {
 	return single_file_or_folder_select_dialog(buffer, buffer_max, FOS_PICKFOLDERS);
 }
 
-bool select_file_dialog(wchar_t *buffer, uint32 buffer_max) {
-	return single_file_or_folder_select_dialog(buffer, buffer_max, 0);
+bool select_file_dialog(char *buffer, uint32 buffer_max) {
+	wchar_t wbuffer[512];
+	if (single_file_or_folder_select_dialog(wbuffer, ARRAY_LENGTH(wbuffer), 0)) {
+		wchar_to_multibyte(wbuffer, buffer, buffer_max);
+		return true;
+	}
+	
+	return false;
 }
 
 bool file_exists(const char *path) {

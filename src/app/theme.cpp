@@ -176,7 +176,6 @@ void load_theme(const char *name) {
 	
 	char path[256];
 	snprintf(path, 256, "themes\\%s.ini", name);
-	load_background_image(NULL); // Unload current background image
 	ini_parse(path, &theme_ini_handler, NULL);
 	
 	style.SeparatorTextBorderSize = 1.f;
@@ -216,12 +215,7 @@ void save_theme(const char *name) {
 		fprintf(file, "%s = %x\n", ImGui::GetStyleColorName(i), color);
 	}
 	
-	const char *background_path = get_background_image_path();
 	fprintf(file, "[Style]\n");
-	if (background_path) fprintf(file, "BackgroundImage= %s\n", background_path);
-	fprintf(file, "Font = %s\n", get_font());
-	fprintf(file, "FontSize = %d\n", get_font_size());
-	fprintf(file, "IconFontSize = %d\n", get_icon_font_size());
 	fprintf(file, "WindowPaddingX = %d\n", (int)style.WindowPadding.x);
 	fprintf(file, "WindowPaddingY = %d\n", (int)style.WindowPadding.y);
 	fprintf(file, "WindowBorderSize = %d\n", (int)style.WindowBorderSize);
@@ -239,10 +233,6 @@ void save_theme(const char *name) {
 	fclose(file);
 }
 
-static bool set_background_image(const char *path) {
-	load_background_image(path);
-	return true;
-}
 
 static inline float clamp(float x, float min, float max) {
 	return (x < min) ? min : ((x > max) ? max : x);
@@ -354,7 +344,6 @@ bool show_theme_editor_gui() {
 	}
 	
 	
-	const char *background_path = get_background_image_path();
 	ImGui::SeparatorText("Style");
 	
 	if (ImGui::BeginTable("##style_table", 2)) {
@@ -383,48 +372,6 @@ bool show_theme_editor_gui() {
 		dirty |= input_float_clamped("Scrollbar Size", &style.ScrollbarSize, 8.f, 32.f);
 		
 		ImGui::EndTable();
-	}
-	
-	ImGui::SeparatorText("Background Image");
-	if (ImGui::Button("Browse##background")) {
-		for_each_file_from_dialog(&set_background_image, FILE_DATA_TYPE_IMAGE, false);
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Remove")) {
-		load_background_image(NULL);
-		dirty = true;
-	}
-	ImGui::SameLine();
-	ImGui::TextUnformatted(background_path ? background_path : "<none>");
-	
-	ImGui::SeparatorText("Font");
-	{
-		char *font_path = get_font_path_buffer();
-		int font_path_size = get_font_path_buffer_size();
-		
-		ImGui::InputText("Font", font_path, font_path_size);
-		ImGui::SameLine();
-		if (ImGui::Button("Browse##font")) {
-			wchar_t buffer[512];
-			if (select_file_dialog(buffer, ARRAY_LENGTH(buffer))) {
-				wchar_to_multibyte(buffer, font_path, font_path_size);
-				set_font(NULL);
-			}
-		}
-		
-		int font_size = get_font_size();
-		if (ImGui::InputInt("Font size", &font_size)) {
-			set_font_size(font_size);
-			dirty = true;
-		}
-		
-		int icon_size = get_icon_font_size();
-		if (ImGui::InputInt("Icon size", &icon_size)) {
-			set_icon_font_size(icon_size);
-			dirty = true;
-		}
-		
-		if (ImGui::Button("Apply")) set_font(NULL);
 	}
 	
 	return dirty;

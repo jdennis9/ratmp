@@ -131,7 +131,7 @@ void for_each_file_in_directory(const wchar_t *directory, Directory_Iterator_Cal
 void for_each_file_from_dialog(Directory_Iterator_Callback *callback, File_Data_Type type, bool allow_multi = true);
 // Open dialog to select single folder and write the path to buffer
 bool select_folder_dialog(wchar_t *buffer, uint32 buffer_max);
-bool select_file_dialog(wchar_t *buffer, uint32 buffer_max);
+bool select_file_dialog(char *buffer, uint32 buffer_max);
 bool file_exists(const char *path);
 bool create_directory(const char *path);
 

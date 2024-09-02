@@ -17,6 +17,7 @@
 #include <backends/imgui_impl_win32.h>
 #include "stream.h"
 #include "ui.h"
+#include "util.h"
 #include "util/auto_array_impl.h"
 #include "main.h"
 #include "embedded.gen.h"
@@ -53,9 +54,6 @@ static HANDLE g_foreground_event;
 #endif
 
 static struct {
-	char font[512];
-	char background_path[512];
-	bool loose_font;
 	HICON icon;
 	HMENU tray_popup;
 	Texture *thumbnail;
@@ -66,8 +64,6 @@ static struct {
 	} background;
 	bool need_load_thumbnail;
 	bool need_load_font;
-	int font_size;
-	int icon_font_size;
 	float dpi_scale;
 } G;
 
@@ -94,6 +90,23 @@ static int load_config_ini_handler(void *dont_care, const char *section, const c
 		if (!strcmp(key, "sTheme")) {
 			log_debug("Theme: %s\n", value);
 			strncpy(g_config.theme, value, sizeof(g_config.theme) - 1);
+		}
+		else if (!strcmp(key, "iFontSize")) {
+			g_config.font_size = iclamp(atoi(value),
+										MIN_FONT_SIZE,
+										MAX_FONT_SIZE);
+		}
+		else if (!strcmp(key, "iIconFontSize")) {
+			g_config.icon_font_size = iclamp(atoi(value),
+											 MIN_FONT_SIZE,
+											 MAX_FONT_SIZE);
+		}
+		else if (!strcmp(key, "sBackground")) {
+			strncpy(g_config.background_path, value, sizeof(g_config.background_path)-1);
+			log_debug("Background: %s\n", g_config.background_path);
+		}
+		else if (!strcmp(key, "sFont")) {
+			strncpy(g_config.font_path, value, sizeof(g_config.font_path)-1);
 		}
 		else if (!strcmp(key, "iClosePolicy")) {
 			g_config.close_policy = (Close_Policy)atoi(value);
@@ -137,6 +150,8 @@ void load_config() {
 	g_config.preview_thumbnail_size = 128;
 	g_config.waveform_height_power = 10; // 1024
 	g_config.waveform_width_power = 7; // 128
+	g_config.font_size = DEFAULT_FONT_SIZE;
+	g_config.icon_font_size = DEFAULT_ICON_FONT_SIZE;
 	if (!is_first_time_launch()) {
 		ini_parse("config.ini", &load_config_ini_handler, NULL);
 	} else {
@@ -153,7 +168,11 @@ void save_config() {
 	
 	fprintf(file, "; Note: Time values are in milliseconds\n");
 	fprintf(file, "[Main]\n");
-	fprintf(file, "sTheme = \"%s\"\n", g_config.theme);
+	fprintf(file, "sTheme = %s\n", g_config.theme);
+	fprintf(file, "sBackground = %s\n", g_config.background_path);
+	fprintf(file, "sFont = %s\n", g_config.font_path);
+	fprintf(file, "iFontSize = %d\n", g_config.font_size);
+	fprintf(file, "iIconFontSize = %d\n", g_config.icon_font_size);
 	fprintf(file, "iClosePolicy = %d\n", g_config.close_policy);
 	fprintf(file, "iThumbnailSize = %d\n", g_config.thumbnail_size);
 	fprintf(file, "iPreviewThumbnailSize = %d\n", g_config.preview_thumbnail_size);
@@ -169,41 +188,43 @@ void save_config() {
 
 void set_font(const char *path) {
 	G.need_load_font = true;
-	if (path) strncpy(G.font, path, sizeof(G.font) - 1);
+	if (path) strncpy(g_config.font_path, path, sizeof(g_config.font_path) - 1);
 }
 
 const char *get_font() {
-	return G.font;
+	return g_config.font_path;
 }
 
 char *get_font_path_buffer() {
-	return G.font;
+	return g_config.font_path;
 }
 
 int get_font_path_buffer_size() {
-	return sizeof(G.font);
+	return sizeof(g_config.font_path);
 }
 
 void set_font_size(int size) {
 	G.need_load_font = true;
 	size = MIN(size, MAX_FONT_SIZE);
 	size = MAX(size, MIN_FONT_SIZE);
-	G.font_size = size;
+	g_config.font_size = size;
+	save_config();
 }
 
 void set_icon_font_size(int size) {
 	G.need_load_font = true;
 	size = MIN(size, MAX_FONT_SIZE);
 	size = MAX(size, MIN_FONT_SIZE);
-	G.icon_font_size = size;
+	g_config.icon_font_size = size;
+	save_config();
 }
 
 int get_font_size() {
-	return G.font_size;
+	return g_config.font_size;
 }
 
 int get_icon_font_size() {
-	return G.icon_font_size;
+	return g_config.icon_font_size;
 }
 
 // Pass in NULL to load default font
@@ -247,7 +268,7 @@ static void load_font(const char *path) {
 	
 	if (path && file_exists(path)) {
 		io.Fonts->AddFontFromFileTTF(path, 
-									 MAX((int)(G.font_size*G.dpi_scale), 8), 
+									 MAX((int)(g_config.font_size*G.dpi_scale), 8), 
 									 &cfg, ranges.Data);
 	}
 	else {
@@ -260,7 +281,7 @@ static void load_font(const char *path) {
 	cfg.FontDataOwnedByAtlas = false;
 	cfg.MergeMode = true;
 	io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
-								   (int)(G.icon_font_size*G.dpi_scale), &cfg, icon_range);
+								   (int)(g_config.icon_font_size*G.dpi_scale), &cfg, icon_range);
 	
 	ImGui_ImplDX10_CreateDeviceObjects();
 }
@@ -281,13 +302,23 @@ Texture *create_texture(uint32 width, uint32 height, void *data) {
 	desc.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE;
 
 	dx.device->CreateTexture2D(&desc, NULL, &texture);
+	
+	if (!texture) {
+		return NULL;
+	}
 
 	D3D10_SHADER_RESOURCE_VIEW_DESC sr = {};
 	sr.Format = desc.Format;
 	sr.ViewDimension = D3D10_SRV_DIMENSION_TEXTURE2D;
 	sr.Texture2D.MipLevels = 1;
 	dx.device->CreateShaderResourceView(texture, &sr, &view);
-
+	
+	if (!view) {
+		texture->Release();
+		return NULL;
+	}
+	
+	
 	D3D10_MAPPED_TEXTURE2D mapped;
 	texture->Map(D3D10CalcSubresource(0, 0, 1), D3D10_MAP_WRITE_DISCARD, 0, &mapped);
 	
@@ -341,39 +372,48 @@ static void load_thumbnail() {
 }
 
 void load_background_image(const char *path) {
-	if (!path) {
+	log_debug("Load background %s (configured %s)\n", path, g_config.background_path);
+	if (!path || !path[0]) {
 		if (G.background.texture) destroy_texture(G.background.texture);
 		G.background.texture = NULL;
-		memset(G.background_path, 0, sizeof(G.background_path));
+		log_debug("Resetting background\n");
+		memset(g_config.background_path, 0, sizeof(g_config.background_path));
 		return;
 	}
 
 	int width, height;
 	stbi_uc *image_data = stbi_load(path, &width, &height, NULL, 4);
+	defer(stbi_image_free(image_data));
+	
 	if (!image_data) {
 		log_debug("Could not load background image \"%s\"\n", path);
 		return;
 	}
-
+	
+	if (G.background.texture) {
+		destroy_texture(G.background.texture);
+		G.background.texture = NULL;
+	}
+	
+	Image image = {};
+	image.width = width;
+	image.height = height;
+	image.data = image_data;
+	
+	G.background.texture = create_texture_from_image(&image);
+	
 	if (!G.background.texture) {
-		Image image = {};
-		image.width = width;
-		image.height = height;
-		image.data = image_data;
-
-		G.background.texture = create_texture_from_image(&image);
+		log_error("Failed to create texture for background image");
+		return;
 	}
 
 	G.background.width = width;
 	G.background.height = height;
-
-	stbi_image_free(image_data);
-	strncpy_s(G.background_path, path, sizeof(G.background_path)-1);
-}
-
-const char *get_background_image_path() {
-	if (G.background.texture) return G.background_path;
-	else return NULL;
+	
+	if (G.background.texture && path != g_config.background_path) {
+		strncpy_s(g_config.background_path, path, sizeof(g_config.background_path)-1);
+		save_config();
+	}
 }
 
 static void draw_background() {
@@ -717,10 +757,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	io.ConfigFlags |=
 		ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
 	
-	// In case font size is not defined in the theme, use a reasonable default
-	G.font_size = DEFAULT_FONT_SIZE;
-	G.icon_font_size = DEFAULT_ICON_FONT_SIZE;
-	
 	set_font(DEFAULT_FONT_PATH);
 	
 	START_TIMER(init_ui, "Initialize UI");
@@ -730,6 +766,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	
 	apply_config();
 	ShowWindow(g_hWnd, SW_NORMAL);
+	
+	load_background_image(g_config.background_path);
 	
 	bool running = true;
 	while (running) {
@@ -780,7 +818,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//@TODO: Support custom icon fonts
 		if (G.need_load_font) {
 			G.need_load_font = false;
-			load_font(G.font);
+			load_font(g_config.font_path);
 		}
 		
 		//=========================================================================================

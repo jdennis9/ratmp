@@ -67,6 +67,8 @@ name[GLYPH_RANGE_THAI] = "Thai";\
 #define MAX_WAVEFORM_HEIGHT_POWER 12
 
 struct Config {
+	char background_path[512];
+	char font_path[512];
 	char theme[MAX_THEME_NAME_LENGTH + 1];
 	Close_Policy close_policy;
 	bool include_glyphs[GLYPH_RANGE__COUNT];
@@ -74,6 +76,8 @@ struct Config {
 	int preview_thumbnail_size;
 	int waveform_width_power;
 	int waveform_height_power;
+	int font_size;
+	int icon_font_size;
 };
 
 extern Config g_config;
