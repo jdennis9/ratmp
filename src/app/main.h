@@ -92,6 +92,8 @@ const char *get_background_image_path();
 // program and not lose their theme fonts.
 void set_font(const char *path);
 const char *get_font();
+char *get_font_path_buffer();
+int get_font_path_buffer_size();
 void set_font_size(int size);
 void set_icon_font_size(int size);
 int get_font_size();

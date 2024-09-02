@@ -33,9 +33,10 @@
 #include <d3d10.h>
 
 #define MIN_FONT_SIZE 8
-#define DEFAULT_FONT_SIZE 14
+#define DEFAULT_FONT_SIZE 16
 #define DEFAULT_ICON_FONT_SIZE 12
 #define MAX_FONT_SIZE 32
+#define DEFAULT_FONT_PATH "C:\\Windows\\Fonts\\seguisb.ttf"
 #define SINGLE_INSTANCE
 
 IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -56,6 +57,7 @@ static HANDLE g_foreground_event;
 static struct {
 	char font[512];
 	char background_path[512];
+	bool loose_font;
 	HICON icon;
 	HMENU tray_popup;
 	Texture *thumbnail;
@@ -169,11 +171,19 @@ void save_config() {
 
 void set_font(const char *path) {
 	G.need_load_font = true;
-	strncpy(G.font, path, sizeof(G.font) - 1);
+	if (path) strncpy(G.font, path, sizeof(G.font) - 1);
 }
 
 const char *get_font() {
 	return G.font;
+}
+
+char *get_font_path_buffer() {
+	return G.font;
+}
+
+int get_font_path_buffer_size() {
+	return sizeof(G.font);
 }
 
 void set_font_size(int size) {
@@ -196,6 +206,65 @@ int get_font_size() {
 
 int get_icon_font_size() {
 	return G.icon_font_size;
+}
+
+// Pass in NULL to load default font
+static void load_font(const char *path) {
+	ImGuiIO& io = ImGui::GetIO();
+	// Add ranges according to configuration
+	ImVector<ImWchar> ranges = ImVector<ImWchar>();
+	ImFontGlyphRangesBuilder builder = ImFontGlyphRangesBuilder();
+	
+	builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+	
+	if (g_config.include_glyphs[GLYPH_RANGE_JAPANESE]) 
+		builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
+	if (g_config.include_glyphs[GLYPH_RANGE_KOREAN]) 
+		builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
+	if (g_config.include_glyphs[GLYPH_RANGE_CYRILLIC])
+		builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+	if (g_config.include_glyphs[GLYPH_RANGE_GREEK]) 
+		builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
+	if (g_config.include_glyphs[GLYPH_RANGE_CHINESE])
+		builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+	if (g_config.include_glyphs[GLYPH_RANGE_THAI])
+		builder.AddRanges(io.Fonts->GetGlyphRangesThai());
+	if (g_config.include_glyphs[GLYPH_RANGE_VIETNAMESE])
+		builder.AddRanges(io.Fonts->GetGlyphRangesVietnamese());
+	
+	builder.BuildRanges(&ranges);
+	
+	ImFontConfig cfg = ImFontConfig();
+	cfg.RasterizerDensity = G.dpi_scale;
+	
+	static const ImWchar icon_range[] = {
+		0xf048, 0xf052, // playback control icons
+		0xf026, 0xf028, // volume icons
+		0xf074, 0xf074, // shuffle icon
+		0
+	};
+	ImGui_ImplDX10_InvalidateDeviceObjects();
+	
+	io.Fonts->Clear();
+	
+	if (path && file_exists(path)) {
+		io.Fonts->AddFontFromFileTTF(path, 
+									 MAX((int)(G.font_size*G.dpi_scale), 8), 
+									 &cfg, ranges.Data);
+	}
+	else {
+		if (path) log_debug("Font %s does not exist, using fallback\n", path);
+		cfg.FontDataOwnedByAtlas = false;
+		io.Fonts->AddFontDefault();
+	}
+	
+	
+	cfg.FontDataOwnedByAtlas = false;
+	cfg.MergeMode = true;
+	io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
+								   (int)(G.icon_font_size*G.dpi_scale), &cfg, icon_range);
+	
+	ImGui_ImplDX10_CreateDeviceObjects();
 }
 
 Texture *create_texture(uint32 width, uint32 height, void *data) {
@@ -654,12 +723,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	G.font_size = DEFAULT_FONT_SIZE;
 	G.icon_font_size = DEFAULT_ICON_FONT_SIZE;
 	
+	set_font(DEFAULT_FONT_PATH);
+	
 	START_TIMER(init_ui, "Initialize UI");
 	init_drag_drop(g_hWnd);
 	init_ui();
 	STOP_TIMER(init_ui);
 	
-	//load_config(); // Config needs to be loaded after ImGui and OpenGL are initialized
 	apply_config();
 	ShowWindow(g_hWnd, SW_NORMAL);
 	
@@ -712,59 +782,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//@TODO: Support custom icon fonts
 		if (G.need_load_font) {
 			G.need_load_font = false;
-			
-			ImFontConfig cfg = ImFontConfig();
-			cfg.RasterizerDensity = G.dpi_scale;
-			
-			char path[512];
-			snprintf(path, 512, "fonts\\%s", G.font);
-			
-			static const ImWchar icon_range[] = {
-				0xf048, 0xf052, // playback control icons
-				0xf026, 0xf028, // volume icons
-				0xf074, 0xf074, // shuffle icon
-				0
-			};
-			
-			log_debug("Load font %s\n", G.font);
-			
-			if (file_exists(path)) {
-				ImGui_ImplDX10_InvalidateDeviceObjects();
-				ImVector<ImWchar> ranges = ImVector<ImWchar>();
-				ImFontGlyphRangesBuilder builder = ImFontGlyphRangesBuilder();
-				
-				builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
-				
-				if (g_config.include_glyphs[GLYPH_RANGE_JAPANESE]) 
-					builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
-				if (g_config.include_glyphs[GLYPH_RANGE_KOREAN]) 
-					builder.AddRanges(io.Fonts->GetGlyphRangesKorean());
-				if (g_config.include_glyphs[GLYPH_RANGE_CYRILLIC])
-					builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
-				if (g_config.include_glyphs[GLYPH_RANGE_GREEK]) 
-					builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
-				if (g_config.include_glyphs[GLYPH_RANGE_CHINESE])
-					builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-				if (g_config.include_glyphs[GLYPH_RANGE_THAI])
-					builder.AddRanges(io.Fonts->GetGlyphRangesThai());
-				if (g_config.include_glyphs[GLYPH_RANGE_VIETNAMESE])
-					builder.AddRanges(io.Fonts->GetGlyphRangesVietnamese());
-				
-				builder.BuildRanges(&ranges);
-				
-				io.Fonts->Clear();
-				io.Fonts->AddFontFromFileTTF(path, 
-											 MAX((int)(G.font_size*G.dpi_scale), 8), 
-											 &cfg, ranges.Data);
-				cfg.FontDataOwnedByAtlas = false;
-				cfg.MergeMode = true;
-				io.Fonts->AddFontFromMemoryTTF(FontAwesome_otf, FontAwesome_otf_len, 
-											   (int)(G.icon_font_size*G.dpi_scale), &cfg, icon_range);
-				ImGui_ImplDX10_CreateDeviceObjects();
-			}
-			else {
-				show_message_box(MESSAGE_BOX_WARNING, "Could not find font \"%s\"", G.font);
-			}
+			load_font(G.font);
 		}
 		
 		//=========================================================================================

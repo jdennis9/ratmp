@@ -27,7 +27,6 @@ struct Font_Name {
 
 struct Theme {
 	char name[MAX_THEME_NAME_LENGTH+1];
-	char font[512];
 };
 
 static ImVec4 g_theme_colors[THEME_COLOR__COUNT];
@@ -46,8 +45,6 @@ static const struct Color_Info {
 
 static Auto_Array<Theme> g_themes;
 static uint32 g_selected_theme;
-static Auto_Array<Font_Name> g_fonts;
-static uint32 g_selected_font;
 
 static uint32 flip_endian(uint32 v) {
 	uint32 ret;
@@ -148,34 +145,6 @@ static void refresh_themes() {
 	for_each_file_in_directory(L"themes\\", &add_theme_from_dir, 1);
 }
 
-static bool add_font_from_dir(const char *path) {
-	const char *filename = get_file_name(path);
-	Font_Name name = {};
-	strncpy(name.name, filename, sizeof(name.name) - 1);
-	g_fonts.append(name);
-	return true;
-}
-
-static void refresh_fonts() {
-	bool update_selected_font = false;
-	Font_Name current_font;
-	if (g_fonts.length()) {
-		strcpy(current_font.name, g_fonts[g_selected_font].name);
-		update_selected_font = true;
-	}
-	
-	g_fonts.reset();
-	for_each_file_in_directory(L"fonts\\", &add_font_from_dir, 1);
-	
-	g_selected_font = 0;
-	if (update_selected_font) for (uint32 i = 0; i < g_fonts.length(); ++i) {
-		if (!strcmp(current_font.name, g_fonts[i].name)) {
-			g_selected_font = i;
-			break;
-		}
-	}
-}
-
 void set_default_theme() {
 	g_theme_colors[THEME_COLOR_PLAYING_INDICATOR] = ImColor(0xff0074ff).Value;
 	g_theme_colors[THEME_COLOR_PLAYING_TEXT] = ImColor(0xff000000).Value;
@@ -184,7 +153,6 @@ void set_default_theme() {
 	g_theme_colors[THEME_COLOR_TRACK_PREVIEW] = ImColor(0xff000000).Value;
 	g_theme_colors[THEME_COLOR_VOLUME_SLIDER] = ImColor(0xff000000).Value;
 	refresh_themes();
-	refresh_fonts();
 }
 
 static uint32 get_theme_index(const char *name) {
@@ -197,7 +165,6 @@ static uint32 get_theme_index(const char *name) {
 void load_theme(const char *name) {
 	ImGuiStyle& style = ImGui::GetStyle();
 	refresh_themes();
-	refresh_fonts();
 	g_selected_theme = get_theme_index(name);
 	
 	if (g_selected_theme == UINT32_MAX) {
@@ -215,14 +182,6 @@ void load_theme(const char *name) {
 	ini_parse(path, &theme_ini_handler, NULL);
 	
 	style.SeparatorTextBorderSize = 1.f;
-	
-	const char *font = get_font();
-	for (uint32 i = 0; i < g_fonts.length(); ++i) {
-		if (!strcmp(g_fonts[i].name, font)) {
-			g_selected_font = i;
-			break;
-		}
-	}
 }
 
 void save_theme(const char *name) {
@@ -413,7 +372,7 @@ bool show_theme_editor_gui() {
 	}
 	
 	ImGui::SeparatorText("Background Image");
-	if (ImGui::Button("Browse")) {
+	if (ImGui::Button("Browse##background")) {
 		for_each_file_from_dialog(&set_background_image, FILE_DATA_TYPE_IMAGE, false);
 	}
 	ImGui::SameLine();
@@ -425,28 +384,33 @@ bool show_theme_editor_gui() {
 	ImGui::TextUnformatted(background_path ? background_path : "<none>");
 	
 	ImGui::SeparatorText("Font");
-	if (ImGui::BeginCombo("Font", g_fonts.length() ? g_fonts[g_selected_font].name : "<none>")) {
-		for (uint32 i = 0; i < g_fonts.length(); ++i) {
-			if (ImGui::Selectable(g_fonts[i].name)) {
-				g_selected_font = i;
-				set_font(g_fonts[i].name);
+	{
+		char *font_path = get_font_path_buffer();
+		int font_path_size = get_font_path_buffer_size();
+		
+		ImGui::InputText("Font", font_path, font_path_size);
+		ImGui::SameLine();
+		if (ImGui::Button("Browse##font")) {
+			wchar_t buffer[512];
+			if (select_file_dialog(buffer, ARRAY_LENGTH(buffer))) {
+				wchar_to_multibyte(buffer, font_path, font_path_size);
+				set_font(NULL);
 			}
 		}
-		ImGui::EndCombo();
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Refresh")) refresh_fonts();
-	
-	int font_size = get_font_size();
-	if (ImGui::InputInt("Font size", &font_size)) {
-		set_font_size(font_size);
-		dirty = true;
-	}
-	
-	int icon_size = get_icon_font_size();
-	if (ImGui::InputInt("Icon size", &icon_size)) {
-		set_icon_font_size(icon_size);
-		dirty = true;
+		
+		int font_size = get_font_size();
+		if (ImGui::InputInt("Font size", &font_size)) {
+			set_font_size(font_size);
+			dirty = true;
+		}
+		
+		int icon_size = get_icon_font_size();
+		if (ImGui::InputInt("Icon size", &icon_size)) {
+			set_icon_font_size(icon_size);
+			dirty = true;
+		}
+		
+		if (ImGui::Button("Apply")) set_font(NULL);
 	}
 	
 	return dirty;
