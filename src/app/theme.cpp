@@ -40,7 +40,6 @@ static const struct Color_Info {
 	{THEME_COLOR_PLAYING_TEXT, "Playing Text", "PlayingText"},
 	{THEME_COLOR_SEEK_BAR, "Seek Bar", "SeekBar"},
 	{THEME_COLOR_SEEK_BAR_BG, "Seek Bar Bg.", "SeekBarBg"},
-	{THEME_COLOR_TRACK_PREVIEW, "Track Preview", "TrackPreview"},
 };
 
 static Auto_Array<Theme> g_themes;
@@ -148,9 +147,8 @@ static void refresh_themes() {
 void set_default_theme() {
 	g_theme_colors[THEME_COLOR_PLAYING_INDICATOR] = ImColor(0xff0074ff).Value;
 	g_theme_colors[THEME_COLOR_PLAYING_TEXT] = ImColor(0xff000000).Value;
-	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImColor(0xffffffff).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BAR] = ImColor(0x80ffffff).Value;
 	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImColor(0x97282828).Value;
-	g_theme_colors[THEME_COLOR_TRACK_PREVIEW] = ImColor(0xff000000).Value;
 	g_theme_colors[THEME_COLOR_VOLUME_SLIDER] = ImColor(0xff000000).Value;
 	refresh_themes();
 }

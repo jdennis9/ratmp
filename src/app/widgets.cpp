@@ -95,18 +95,14 @@ bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_po
 
 	cursor.x += style.ItemInnerSpacing.x;
 	cursor.y += style.ItemInnerSpacing.y/2;
-
-	draw_list->AddRectFilled(cursor, 
-							 ImVec2{cursor.x + size.x, cursor.y + size.y}, 
-							 get_theme_color(THEME_COLOR_SEEK_BAR_BG));
-	draw_list->AddRectFilled(cursor, 
-							 ImVec2{cursor.x + (size.x * progress), cursor.y + size.y}, 
-							 get_theme_color(THEME_COLOR_SEEK_BAR));
 	
 	if (waveform) {
 		ImTextureID waveform_texture = (ImTextureID)waveform;
+		float played_size = size.x * progress;
+		float played_uv_max = progress;
+		float remaining_size = size.x * (1.f-progress);
 		draw_list->AddImageQuad(waveform_texture,
-								cursor, // top-left
+								ImVec2{cursor.x, cursor.y},// top-left
 								ImVec2{cursor.x + size.x, cursor.y}, // top-right
 								ImVec2{cursor.x + size.x, cursor.y + size.y}, // bottom-left
 								ImVec2{cursor.x, cursor.y + size.y}, // bottom-right
@@ -114,8 +110,27 @@ bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_po
 								ImVec2{1, 1},
 								ImVec2{0, 1},
 								ImVec2{0, 0},
-								get_theme_color(THEME_COLOR_TRACK_PREVIEW)
+								get_theme_color(THEME_COLOR_SEEK_BAR_BG)
 								);
+		draw_list->AddImageQuad(waveform_texture,
+								cursor, // top-left
+								ImVec2{cursor.x + played_size, cursor.y}, // top-right
+								ImVec2{cursor.x + played_size, cursor.y + size.y}, // bottom-left
+								ImVec2{cursor.x, cursor.y + size.y}, // bottom-right
+								ImVec2{1, 0},
+								ImVec2{1, played_uv_max},
+								ImVec2{0, played_uv_max},
+								ImVec2{0, 0},
+								get_theme_color(THEME_COLOR_SEEK_BAR)
+								);
+		
+	} else {
+		draw_list->AddRectFilled(cursor, 
+								 ImVec2{cursor.x + size.x, cursor.y + size.y}, 
+								 get_theme_color(THEME_COLOR_SEEK_BAR_BG));
+		draw_list->AddRectFilled(cursor, 
+								 ImVec2{cursor.x + (size.x * progress), cursor.y + size.y}, 
+								 get_theme_color(THEME_COLOR_SEEK_BAR));
 	}
 	
 	if (ImGui::InvisibleButton("##seek_button", size)) {
