@@ -1270,11 +1270,10 @@ bool show_ui() {
 		ImGui::EndMainMenuBar();
 	}
 
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
 	{
-		ImGui::SetNextWindowPos(ImVec2(0, menu_bar_height));
-		ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_bar_height));
+		ImGui::SetNextWindowPos(ImVec2(-style.WindowPadding.x, menu_bar_height - style.WindowPadding.y));
+		ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x + (style.WindowPadding.x*2.f),
+								io.DisplaySize.y - menu_bar_height + (style.WindowPadding.y*2.f)));
 		ImGuiWindowFlags window_flags =
 			ImGuiWindowFlags_NoBringToFrontOnFocus|
 			ImGuiWindowFlags_NoNavFocus|
@@ -1287,7 +1286,6 @@ bool show_ui() {
 		ImGui::DockSpace(ImGui::GetID("MainDockSpace"), ImVec2(0, 0), dockspace_flags);
 		ImGui::End();
 	}
-	ImGui::PopStyleVar(2);
 
 	if (ImGui::Begin("Navigation", NULL, 0)) {
 		show_navigation_ui();
