@@ -397,7 +397,7 @@ const char *show_theme_selector_gui() {
 		}
 	}
 	else {
-		ImGui::TextDisabled("No themes loaded");
+		ImGui::TextDisabled("No themes found");
 	}
 	
 	return NULL;

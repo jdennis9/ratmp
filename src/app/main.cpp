@@ -145,7 +145,6 @@ void apply_config() {
 }
 
 void load_config() {
-	strcpy(g_config.theme, "default-dark");
 	g_config.thumbnail_size = 512;
 	g_config.preview_thumbnail_size = 128;
 	g_config.waveform_height_power = 10; // 1024
