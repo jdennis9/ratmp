@@ -1094,11 +1094,6 @@ bool show_ui() {
 	bool jump_to_playing = false;
 	static bool show_hotkeys = false;
 	static bool show_about = false;
-	static bool show_search_results = false;
-	bool &show_theme_editor = G.windows[UI_WINDOW_THEME_EDITOR].show;
-	bool &show_preferences = G.windows[UI_WINDOW_PREFERENCES].show;
-	bool &show_missing_tracks = G.windows[UI_WINDOW_MISSING_TRACKS].show;
-	bool &show_playback_stats = G.windows[UI_WINDOW_PLAYBACK_STATS].show;
 	
 	G.state = stream_get_state();
 
@@ -1331,7 +1326,7 @@ bool show_ui() {
 				G.search_results.clear();
 				if (filter.enabled && filter.filter[0]) {
 					playlist.copy_with_filter(&G.search_results, &filter);
-					show_search_results = true;
+					ui_show_window(UI_WINDOW_SEARCH_RESULTS);
 				}
 			}
 			
