@@ -151,6 +151,7 @@ void set_default_theme() {
 	g_theme_colors[THEME_COLOR_SEEK_FG] = ImColor(0x80ffffff).Value;
 	g_theme_colors[THEME_COLOR_SEEK_BG] = ImColor(0x97282828).Value;
 	g_theme_colors[THEME_COLOR_SEEK_BAR_BG] = ImColor(0x00282828).Value;
+	g_theme_colors[THEME_COLOR_SEEK_BORDER] = ImColor(0x33ffffff).Value;
 	g_theme_colors[THEME_COLOR_VOLUME_SLIDER] = ImColor(0xff000000).Value;
 	refresh_themes();
 }

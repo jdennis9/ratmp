@@ -99,6 +99,9 @@ bool seek_slider(const char *name, int64 position, int64 length, int64 *p_new_po
 	draw_list->AddRectFilled(cursor, 
 							 ImVec2{cursor.x + size.x, cursor.y + size.y}, 
 							 get_theme_color(THEME_COLOR_SEEK_BAR_BG));
+	draw_list->AddRect(cursor, 
+					   ImVec2{cursor.x + size.x, cursor.y + size.y}, 
+					   get_theme_color(THEME_COLOR_SEEK_BORDER));
 	
 	if (waveform) {
 		ImTextureID waveform_texture = (ImTextureID)waveform;
