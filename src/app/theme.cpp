@@ -41,6 +41,7 @@ static const struct Color_Info {
 	{THEME_COLOR_SEEK_FG, "Seek Wave Fg.", "SeekFg"},
 	{THEME_COLOR_SEEK_BG, "Seek Wave Bg.", "SeekBg"},
 	{THEME_COLOR_SEEK_BAR_BG, "Seek Bar Bg.", "SeekBarBg"},
+	{THEME_COLOR_SEEK_BORDER, "Seek Bar Border", "SeekBarBorder"},
 };
 
 static Auto_Array<Theme> g_themes;

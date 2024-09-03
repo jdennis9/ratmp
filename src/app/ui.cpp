@@ -790,7 +790,7 @@ static bool show_navigation_ui() {
 	
 	ImGui::SeparatorText("Playlists");
 	
-	ImGuiTableFlags table_flags = ImGuiTableFlags_BordersInnerH|
+	ImGuiTableFlags table_flags = ImGuiTableFlags_BordersInner|
 		ImGuiTableFlags_ScrollY;
 	
 	// Playlist list
