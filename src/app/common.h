@@ -25,7 +25,7 @@
 #include <xxhash.h>
 #include <ctype.h>
 
-#define VERSION_STRING "1.3.0"
+#define VERSION_STRING "1.3.1"
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
