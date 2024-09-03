@@ -99,7 +99,7 @@ struct Tracklist {
 
 	char name[128-16];
 	char m_filename[128];
-
+	
 	int32 index_of_track(const Track &track);
 	bool add(const char *path);
 	bool add(Track track, bool add_to_album_pool = true);

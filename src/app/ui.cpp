@@ -106,6 +106,7 @@ const char *ui_get_window_name(UI_Window window) {
 		case UI_WINDOW_THEME_EDITOR: return "Theme";
 		case UI_WINDOW_PLAYBACK_STATS: return "Playback Statistics";
 		case UI_WINDOW_SEARCH_RESULTS: return "Search Results";
+		case UI_WINDOW_ALBUM_LIST: return "Album List";
 		case UI_WINDOW__COUNT: return "<unknown>";
 	}
 	
@@ -129,6 +130,7 @@ void ui_show_window(UI_Window window) {
 
 void ui_bring_window_to_front(UI_Window window) {
 	if (window < 0 || window > UI_WINDOW__COUNT) return;
+	G.windows[window].show = true;
 	G.windows[window].bring_to_front = true;
 }
 
@@ -547,8 +549,8 @@ static int32 show_track_list_gui(Tracklist& tracklist, int32 playlist_id, const 
 	return play_index;
 }
 
-static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
-	uint32 album_count = albums.length();
+static int32 show_album_grid_ui(const Auto_Array<Album>& albums) {
+	uint32 album_count = albums.m_count;
 	const ImGuiTableFlags table_flags =
 		ImGuiTableFlags_ScrollY;
 	
@@ -588,6 +590,44 @@ static int32 show_album_list_gui(const Auto_Array<Album>& albums) {
 	ImGui::PopStyleVar();
 	
 	return -1;
+}
+
+static void show_album_list_ui(const Auto_Array<Album>& albums) {
+	uint32 album_count = albums.m_count;
+	const ImGuiTableFlags table_flags =
+		ImGuiTableFlags_ScrollY|ImGuiTableFlags_BordersInner|ImGuiTableFlags_Resizable|
+		ImGuiTableFlags_SizingFixedFit|ImGuiTableFlags_RowBg|ImGuiTableFlags_NoHostExtendX;
+	
+	if (ImGui::BeginTable("##album_list", 3, table_flags)) {
+		ImGui::TableHeadersRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TableHeader("Artist");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::TableHeader("Album");
+		ImGui::TableSetColumnIndex(2);
+		ImGui::TableHeader("No. Tracks");
+		
+		for (uint32 i = 0; i < album_count; ++i) {
+			ImGui::TableNextRow();
+			const Album& album = albums[i];
+			const char *artist = get_metadata_string(album.metadata, METADATA_ARTIST);
+			const char *name = get_metadata_string(album.metadata, METADATA_ALBUM);
+			
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted(artist);
+			
+			ImGui::TableSetColumnIndex(1);
+			if (ImGui::Selectable(name, false, ImGuiSelectableFlags_SpanAllColumns)) {
+				queue_tracklist(album.tracks);
+				play_track_at(PLAYLIST_QUEUE, 0);
+			}
+			
+			ImGui::TableSetColumnIndex(2);
+			ImGui::Text("%u", album.tracks.length());
+		}
+		
+		ImGui::EndTable();
+	}
 }
 
 static bool add_playlist(const char *path) {
@@ -1262,6 +1302,15 @@ bool show_ui() {
 			ImGui::EndMenu();
 		}
 		
+		if (ImGui::BeginMenu("Show")) {
+			for (uint32 i = 0; i < UI_WINDOW__COUNT; ++i) {
+				if (ImGui::MenuItem(ui_get_window_name((UI_Window)i), NULL, G.windows[i].show)) {
+					ui_bring_window_to_front((UI_Window)i);
+				}
+			}
+			ImGui::EndMenu();
+		}
+		
 		if (ImGui::BeginMenu("Help")) {
 			if (ImGui::MenuItem("Hotkeys")) {
 				show_hotkeys = true;
@@ -1312,7 +1361,7 @@ bool show_ui() {
 		//=============================================================================================
 		if (G.main_view == MAIN_VIEW_ALBUMS) {
 			const Auto_Array<Album>& albums = get_albums();
-			show_album_list_gui(albums);
+			show_album_grid_ui(albums);
 		}
 		else if (G.selected_playlist != -1) {
 			Tracklist &playlist = G.playlists[G.selected_playlist];
@@ -1423,6 +1472,9 @@ bool show_ui() {
 					}
 					break;
 				}
+				case UI_WINDOW_ALBUM_LIST:
+				show_album_list_ui(get_albums());
+				break;
 				case UI_WINDOW__COUNT: break;
 			}
 		}
