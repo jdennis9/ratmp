@@ -790,10 +790,15 @@ static bool show_navigation_ui() {
 	
 	ImGui::SeparatorText("Playlists");
 	
+	ImGuiTableFlags table_flags = ImGuiTableFlags_BordersInnerH|
+		ImGuiTableFlags_ScrollY;
+	
 	// Playlist list
-	ImVec2 playlist_list_size = ImVec2(0, ImGui::GetContentRegionAvail().y - (ImGui::GetTextLineHeight()*2.f));
-	if (ImGui::BeginTable("##playlists", 1, ImGuiTableFlags_BordersInner|ImGuiTableFlags_ScrollY, playlist_list_size)) {
-		ImGui::TableSetupColumn("##names");
+	ImVec2 playlist_list_size = 
+		ImVec2(0, ImGui::GetContentRegionAvail().y - (ImGui::GetTextLineHeight()*2.f));
+	if (ImGui::BeginTable("##playlists", 2, table_flags, playlist_list_size)) {
+		ImGui::TableSetupColumn("##names", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+		ImGui::TableSetupColumn("##sizes", ImGuiTableColumnFlags_WidthStretch, 0.2f);
 		uint32 playlist_count = G.playlists.length();
 		static int deleting_playlist;
 		ImGuiID delete_confirmation_popup_id = ImGui::GetID("##delete_confirmation");
@@ -929,6 +934,9 @@ static bool show_navigation_ui() {
 					ImGui::EndPopup();
 				}
 			}
+			
+			ImGui::TableSetColumnIndex(1);
+			ImGui::TextDisabled("%u", playlist.length());
 		}
 		ImGui::EndTable();
 	}
