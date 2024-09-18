@@ -1,3 +1,5 @@
+Replaced by https://github.com/jdennis9/ZNO
+
 # Rat Music Player
 
 A music player for Windows using ImGui.
