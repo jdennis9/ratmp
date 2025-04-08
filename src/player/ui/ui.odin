@@ -1530,10 +1530,19 @@ _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^l
 				append(&this.selection, playlist.tracks[track_index]);
 			}
 		}
+		else {
+			for track in playlist.tracks {
+				append(&this.selection, track);
+			}
+		}
 	}
 	
 	if action.add_to_queue {
 		playback.append_to_queue(this.selection[:]);
+	}
+
+	if action.play_selection {
+		playback.play_track_array(this.selection[:]);
 	}
 	
 	if action.remove {
