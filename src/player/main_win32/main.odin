@@ -36,6 +36,7 @@ import "../playback";
 import "../library";
 import "../build";
 import "../drag_drop";
+import "../prefs";
 
 @private
 this: struct {
@@ -53,7 +54,6 @@ _WNDCLASS_NAME := intrinsics.constant_utf16_cstring("RATMP_WINDOW_CLASS");
 
 @private
 ICON_DATA := #load("../resources/32x32.ico");
-
 
 foreign import cpp_lib "../../cpp/cpp.lib";
 
@@ -239,14 +239,22 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 			this.resize_height = int(win.HIWORD(lparam));
 		}
 		case win.WM_CLOSE: {
-			//signal.post(.CloseWindow);
-
-			if util.message_box("Minimize to tray?", .YesNo, 
-			"Would you like me to keep running in the background? The default behaviour of this can be changed in your preferences.") {
-				hide_window();
-			}
-			else {
-				signal.post(.Exit);
+			switch prefs.prefs.choices[.ClosePolicy] {
+				case prefs.CLOSE_POLICY_MINIMIZE_TO_TRAY: {
+					hide_window();
+				}
+				case prefs.CLOSE_POLICY_CLOSE: {
+					signal.post(.Exit);
+				}
+				case: {
+					if util.message_box("Minimize to tray?", .YesNo, 
+					"Would you like me to keep running in the background? The default behaviour of this can be changed in your preferences.") {
+						hide_window();
+					}
+					else {
+						signal.post(.Exit);
+					}
+				}
 			}
 
 			return 0;
