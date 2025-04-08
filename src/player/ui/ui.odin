@@ -290,78 +290,92 @@ shutdown :: proc() {
 }
 
 @private
+_load_fonts :: proc() {
+	@static loaded_font: [512]u8;
+	@static loaded_font_size: int;
+	@static loaded_icon_size: int;
+
+	io := imgui.GetIO();
+
+	font_path := cstring(raw_data(prefs.prefs.strings[.Font][:]));
+	log.debug("Font path:", font_path);
+	when ODIN_OS == .Windows {
+		if font_path == "" || !os.exists(string(font_path)) {
+			font_path = "C:\\Windows\\Fonts\\calibrib.ttf";
+		}
+	}
+	font_size := prefs.prefs.numbers[.FontSize];
+	icon_size := prefs.prefs.numbers[.IconSize];
+
+	if cstring(&loaded_font[0]) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
+		return;
+	}
+
+	video.impl.invalidate_imgui_objects();
+	defer video.impl.create_imgui_objects();
+
+	fonts := io.Fonts;
+	cfg := imgui.FontConfig {
+		FontDataOwnedByAtlas = false,
+		OversampleH = 2,
+		OversampleV = 2,
+		GlyphMaxAdvanceX = max(f32),
+		RasterizerMultiply = 1,
+		RasterizerDensity = 1,
+		EllipsisChar = max(imgui.Wchar),
+		MergeMode = true,
+	};
+
+	imgui.FontAtlas_Clear(fonts);
+
+	if font_path != "" && os.exists(string(font_path)) {
+		if imgui.FontAtlas_AddFontFromFileTTF(fonts, font_path, auto_cast font_size) == nil {
+			imgui.FontAtlas_AddFontDefault(fonts);
+		}
+	}
+	else {
+		imgui.FontAtlas_AddFontDefault(fonts);
+	}
+
+	icon_ranges := []imgui.Wchar {
+		0xf048, 0xf052, // Playback controls
+		0xf026, 0xf028, // Volume
+		0xf074, 0xf074, // Shuffle
+		0
+	};
+
+	imgui.FontAtlas_AddFontFromMemoryTTF(fonts, raw_data(ICON_FONT), 
+		cast(i32) len(ICON_FONT), auto_cast icon_size, &cfg, raw_data(icon_ranges));
+
+	util.copy_cstring(loaded_font[:], font_path);
+	loaded_font_size = font_size;
+	loaded_icon_size = icon_size;
+}
+
+@private
 _apply_prefs :: proc() {
 	log.debug("Applying preferences...");
 	io := imgui.GetIO();
 	
 	// Load background
 	{
-		video.impl.destroy_texture(this.background);
+		@static loaded_background: [512]u8;
 		path := prefs.get_string(.Background);
-		if path != "" {
-			this.background, this.background_width, this.background_height, _ = 
-				video.load_texture(path);
+
+		if string(cstring(&loaded_background[0])) != path {
+			video.impl.destroy_texture(this.background);
+			if path != "" {
+				this.background, this.background_width, this.background_height, _ = 
+					video.load_texture(path);
+			}
+			else {
+				this.background = {};
+			}
+			util.copy_string_to_buf(loaded_background[:], path);
 		}
 	}
 
-	// Load fonts
-	{
-		video.impl.invalidate_imgui_objects();
-		defer video.impl.create_imgui_objects();
-
-		fonts := io.Fonts;
-		cfg := imgui.FontConfig {
-			FontDataOwnedByAtlas = false,
-			OversampleH = 2,
-			OversampleV = 2,
-			GlyphMaxAdvanceX = max(f32),
-			RasterizerMultiply = 1,
-			RasterizerDensity = 1,
-			EllipsisChar = max(imgui.Wchar),
-			MergeMode = true,
-		};
-
-		imgui.FontAtlas_Clear(fonts);
-
-		font_path := cstring(raw_data(prefs.prefs.strings[.Font][:]));
-		log.debug("Font path:", font_path);
-		when ODIN_OS == .Windows {
-			if font_path == "" || !os.exists(string(font_path)) {
-				font_path = "C:\\Windows\\Fonts\\calibrib.ttf";
-			}
-		}
-		font_size := prefs.prefs.numbers[.FontSize];
-		icon_size := prefs.prefs.numbers[.IconSize];
-
-		log.debug(font_size, icon_size);
-
-		if font_path != "" && os.exists(string(font_path)) {
-			/*ranges: imgui.FontGlyphRangesBuilder;
-			imgui.FontGlyphRangesBuilder_AddRanges(&ranges, imgui.FontAtlas_GetGlyphRangesDefault(fonts));
-			imgui.FontGlyphRangesBuilder_AddRanges(&ranges, imgui.FontAtlas_GetGlyphRangesCyrillic(fonts));
-			imgui.FontGlyphRangesBuilder_AddRanges(&ranges, imgui.FontAtlas_GetGlyphRangesGreek(fonts));
-			imgui.FontGlyphRangesBuilder_AddRanges(&ranges, imgui.FontAtlas_GetGlyphRangesJapanese(fonts));
-			imgui.FontGlyphRangesBuilder_AddRanges(&ranges, imgui.FontAtlas_GetGlyphRangesKorean(fonts));*/
-
-			if imgui.FontAtlas_AddFontFromFileTTF(fonts, font_path, auto_cast font_size) == nil {
-				imgui.FontAtlas_AddFontDefault(fonts);
-			}
-		}
-		else {
-			imgui.FontAtlas_AddFontDefault(fonts);
-		}
-
-
-		icon_ranges := []imgui.Wchar {
-			0xf048, 0xf052, // Playback controls
-			0xf026, 0xf028, // Volume
-			0xf074, 0xf074, // Shuffle
-			0
-		};
-
-		imgui.FontAtlas_AddFontFromMemoryTTF(fonts, raw_data(ICON_FONT), 
-			cast(i32) len(ICON_FONT), auto_cast icon_size, &cfg, raw_data(icon_ranges));
-	}
+	_load_fonts();
 
 	// Load default theme
 	theme.load(prefs.get_string(.Theme));
