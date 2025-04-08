@@ -119,15 +119,23 @@ _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
 _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, req_size: [2]f32 = {0, 0}) {
 	drawlist := imgui.GetWindowDrawList();
 	avail_size := imgui.GetContentRegionAvail();
+	cursor := imgui.GetCursorScreenPos();
 
 	size := [2]f32{
 		req_size.x == 0 ? avail_size.x : req_size.x,
 		req_size.y == 0 ? avail_size.y : req_size.y,
 	};
 
-	max_bar_height := size.y;
+	bar_width := size.x / f32(len(values));
 
-	for value, index in values {
-
-	}
+    for value in values {
+        bar_size := [2]f32{bar_width, size.y};
+		frac := (maxval - value) / (maxval - minval);
+        imgui.DrawList_AddRectFilled(drawlist, 
+            {cursor.x, cursor.y + bar_size.y}, 
+            {cursor.x + bar_size.x, cursor.y + bar_size.y * frac},
+            imgui.GetColorU32(.PlotHistogram),
+        );
+        cursor.x += bar_size.x + 1;
+    }
 }

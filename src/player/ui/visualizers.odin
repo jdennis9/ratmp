@@ -81,33 +81,19 @@ _show_spectrum_window :: proc() {
 
 _show_spectrum_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
     avail_size := imgui.GetContentRegionAvail();
-    cursor := imgui.GetCursorScreenPos();
-    drawlist := imgui.GetWindowDrawList();
     spectrum := analysis.get_spectrum();
-    //imgui.PushStyleColor(.FrameBg, 0);
-    //imgui.PlotHistogram(str_id, &spectrum.peaks[0], len(spectrum.peaks), {}, nil, 0, 1, {width, 0});
-    //imgui.PopStyleColor();
 
     graph_size := [2]f32 {
         req_size.x == 0 ? avail_size.x : req_size.x,
         req_size.y == 0 ? avail_size.y : req_size.y,
     };
 
-    band_width := graph_size.x / analysis.SPECTRUM_BANDS;
-    band_width -= 1;
-
-    for peak in spectrum.peaks {
-        size := [2]f32{band_width, graph_size.y};
-        imgui.DrawList_AddRectFilled(drawlist, 
-            {cursor.x, cursor.y + size.y}, 
-            {cursor.x + size.x, cursor.y + size.y * (1 - peak)},
-            imgui.GetColorU32(.PlotHistogram),
-        );
-        cursor.x += band_width + 1;
-    }
+    _show_bars_widget(str_id, spectrum.peaks[:], 0, 1, graph_size);
 
     return imgui.InvisibleButton(str_id, graph_size);
 }
 
 _show_peak_window :: proc() {
+    peaks := analysis.get_channel_peaks();
+    _show_bars_widget("##peaks", peaks, 0, 1);
 }
