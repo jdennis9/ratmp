@@ -47,7 +47,7 @@ _show_spectrum_window :: proc() {
             buf: [32]u8;
             name: string;
             if band > 10000 {
-                name = fmt.bprintf(buf[:31], "%gK", f32(band)/1000);
+                name = fmt.bprintf(buf[:31], "%d", int(f32(band)/1000));
             }
             else if band > 1000 {
                 name = fmt.bprintf(buf[:31], "%1.1fK", f32(band)/1000);

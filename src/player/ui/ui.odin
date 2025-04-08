@@ -1277,8 +1277,40 @@ _show_preferences_window :: proc() {
 		return;
 	}
 
+	choice_row :: proc(id: prefs.ChoiceID, name: cstring) -> (commit: bool) {
+		info := prefs.CHOICE_INFO[id];
+		value := prefs.prefs.choices[id];
+		current_choice_name: cstring;
+
+		for choice in info.values {
+			if choice.value == value {
+				current_choice_name = choice.name;
+				break;
+			}
+		}
+
+		imgui.PushID(name);
+		imgui.TableNextRow();
+		imgui.TableSetColumnIndex(0);
+		imgui.TextUnformatted(name);
+		imgui.TableSetColumnIndex(1);
+		if imgui.BeginCombo("##combo", current_choice_name) {
+			for choice in info.values {
+				if imgui.MenuItem(choice.name) {
+					prefs.prefs.choices[id] = choice.value;
+					commit = true;
+				}
+			}
+			imgui.EndCombo();
+		}
+		imgui.PopID();
+
+		return;
+	}
+
 	if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		changes := false;
+		changes |= choice_row(.ClosePolicy, "Close Policy");
 		changes |= path_input_row(.Background, "##background", "Background");
 		changes |= path_input_row(.Font, "##font", "Font");
 		changes |= number_input_row(.FontSize, "##font_size", "Font size");

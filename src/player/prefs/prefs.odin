@@ -46,9 +46,14 @@ NumberID :: enum {
 	IconSize,
 };
 
+ChoiceID :: enum {
+	ClosePolicy,
+};
+
 Prefs :: struct {
 	strings: [StringID]String_Buffer,
 	numbers: [NumberID]int,
+	choices: [ChoiceID]int,
 };
 
 prefs: Prefs;
@@ -62,13 +67,36 @@ STRING_INFO := [StringID]struct{name: string} {
 	.Background = {"Background"},
 	.Font = {"Font"},
 	.Theme = {"Theme"},
-}
+};
+
+Choice_Value :: struct {
+	name: cstring,
+	ini_name: cstring,
+	value: int,
+};
+
+CLOSE_POLICY_ALWAYS_ASK :: 0;
+CLOSE_POLICY_MINIMIZE_TO_TRAY :: 1;
+CLOSE_POLICY_CLOSE :: 2;
+
+CHOICE_INFO := [ChoiceID]struct{name: string, def: int, values: []Choice_Value} {
+	.ClosePolicy = {
+		name = "ClosePolicy",
+		def = CLOSE_POLICY_ALWAYS_ASK,
+		values = {
+			{"Always ask", "AlwaysAsk", CLOSE_POLICY_ALWAYS_ASK},
+			{"Minimize to tray", "MinimizeToTray", CLOSE_POLICY_MINIMIZE_TO_TRAY},
+			{"Close", "Close", CLOSE_POLICY_CLOSE},
+		},
+	},
+};
 
 @private
 Section :: struct {
 	name: string,
 	strings: []StringID,
 	numbers: []NumberID,
+	choices: []ChoiceID,
 };
 
 @private
@@ -77,6 +105,7 @@ _sections := []Section {
 		name = "ui",
 		strings = {.Font, .Background, .Theme},
 		numbers = {.FontSize, .IconSize},
+		choices = {.ClosePolicy},
 	}
 };
 
@@ -84,6 +113,10 @@ _sections := []Section {
 _set_defaults :: proc() {
 	for entry, index in NUMBER_INFO {
 		prefs.numbers[index] = entry.def;
+	}
+
+	for entry, index in CHOICE_INFO {
+		prefs.choices[index] = entry.def;
 	}
 }
 
@@ -122,6 +155,21 @@ load :: proc() {
 			parsed := strconv.parse_i64(value_string) or_continue;
 			prefs.numbers[index] = int(parsed);
 		}
+
+		for index in section.choices {
+			value_string := section_map[CHOICE_INFO[index].name] or_continue;
+			info := CHOICE_INFO[index];
+			choice := info.def;
+
+			for value in info.values {
+				if value_string == string(value.ini_name) {
+					choice = value.value;
+					break;
+				}
+			}
+
+			prefs.choices[index] = choice;
+		}
 	}
 	
 	signal.post(.ApplyPrefs);
@@ -143,6 +191,16 @@ save :: proc() {
 
 		for number in section.numbers {
 			fmt.fprintln(fd, NUMBER_INFO[number].name, "=", prefs.numbers[number], sep = "");
+		}
+
+		for choice in section.choices {
+			info := CHOICE_INFO[choice];
+			for value in info.values {
+				if prefs.choices[choice] == value.value {
+					fmt.fprintln(fd, CHOICE_INFO[choice].name, "=", value.ini_name, sep = "");
+					break;
+				}
+			}
 		}
 	}
 }
