@@ -61,7 +61,8 @@ _show_spectrum_window :: proc() {
         imgui.TableAngledHeadersRow();
         
         imgui.TableNextRow();
-        for &band, index in spectrum.peaks {
+        for unclamped_band, index in spectrum.peaks {
+            band := clamp(unclamped_band, 0, 1);
             freq := analysis.SPECTRUM_BAND_OFFSETS[index+1];
 
             if imgui.TableNextColumn() {

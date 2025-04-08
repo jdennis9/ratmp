@@ -128,7 +128,8 @@ _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, r
 
 	bar_width := size.x / f32(len(values));
 
-    for value in values {
+    for unclamped_value in values {
+		value := clamp(unclamped_value, minval, maxval);
         bar_size := [2]f32{bar_width, size.y};
 		frac := (maxval - value) / (maxval - minval);
         imgui.DrawList_AddRectFilled(drawlist, 
