@@ -224,7 +224,7 @@ this: struct {
 
 	want_reset_layout: bool,
 
-	metadata_save_job: ^lib.Metadata_Save_Job,
+	//metadata_save_job: ^lib.Metadata_Save_Job,
 };
 
 init :: proc() -> bool {
@@ -430,7 +430,7 @@ _begin_async_scan :: proc() {
 	thread.start(tp);
 }
 
-@private
+/*@private
 _begin_metadata_save_job :: proc() {
 	if util.message_box(
 		"Save Metadata Changes", .OkCancel,
@@ -438,7 +438,7 @@ _begin_metadata_save_job :: proc() {
 	) {
 		this.metadata_save_job = lib.save_metadata_changes_async();
 	}
-}
+}*/
 
 show :: proc() {
 	@static tick_last_frame: time.Tick;
@@ -529,7 +529,7 @@ show :: proc() {
 		return;
 	}
 
-	if this.metadata_save_job != nil {
+	/*if this.metadata_save_job != nil {
 		job := this.metadata_save_job;
 
 		if !job.done {
@@ -539,7 +539,7 @@ show :: proc() {
 	
 			imgui.SetNextWindowPos(pos);
 			imgui.SetNextWindowSize(size);
-			if imgui.Begin("Metadata Scan Progress", nil, imgui.WindowFlags_NoDecoration) {
+			if imgui.Begin("Metadata Save Progress", nil, imgui.WindowFlags_NoDecoration) {
 				progress := cast(f32)job.tracks_completed / cast(f32)job.total_tracks;
 				imgui.Text("Saving files (%d/%d)", cast(i32) job.tracks_completed, cast(i32) job.total_tracks);
 				imgui.ProgressBar(progress, {imgui.GetContentRegionAvail().x, 0});
@@ -550,7 +550,7 @@ show :: proc() {
 		else {
 			this.metadata_save_job = nil;
 		}
-	}
+	}*/
 
 	// -------------------------------------------------------------------------
 	// Drag-drop
@@ -609,10 +609,10 @@ show :: proc() {
 			if imgui.MenuItem("Add folders") {
 				util.for_each_file_in_dialog(nil, _add_files_iterator, nil, true);
 			}
-			imgui.Separator();
+			/*imgui.Separator();
 			if imgui.MenuItem("Save metadata changes") {
 				_begin_metadata_save_job();
-			}
+			}*/
 			imgui.EndMenu();
 		}
 
@@ -1792,11 +1792,11 @@ _show_metadata_editor :: proc() {
 			imgui.EndTable();
 		}
 
-		if imgui.Button("Save to file") {
+		/*if imgui.Button("Save to file") {
 			if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata? This cannot be undone.") {
 				lib.save_track_metadata(this.selection[0]);
 			}
-		}
+		}*/
 	}
 	else {
 		imgui.TextDisabled("Editing %d tracks", i32(len(this.selection)));
@@ -1842,14 +1842,14 @@ _show_metadata_editor :: proc() {
 			}
 		}
 
-		imgui.SameLine();
+		/*imgui.SameLine();
 		if imgui.Button("Save all") {
 			if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata for all selected tracks? This cannot be undone.") {
 				for track in this.selection {
 					lib.save_track_metadata(track);
 				}
 			}
-		}
+		}*/
 	}
 }
 

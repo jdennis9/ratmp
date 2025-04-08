@@ -879,7 +879,7 @@ _save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
 	taglib.tag_set_genre(tag, cstring(&track.genre[0]));
 	taglib.tag_set_track(tag, auto_cast track.track_number);
 	taglib.tag_set_year(tag, auto_cast track.year);
-	taglib.file_save(file);
+	//taglib.file_save(file);
 }
 
 save_track_metadata :: proc(track_id: Track) {
