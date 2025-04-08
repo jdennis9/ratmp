@@ -63,10 +63,6 @@ MAX_TRACK_GENRE_LENGTH :: 31;
 @private
 Track_Info_Priv :: struct {
 	path: path_pool.Path,
-	//title: Pool_String,
-	//artist: Pool_String,
-	//album: Pool_String,
-	//genre: Pool_String,
 	title: [MAX_TRACK_TITLE_LENGTH+1]u8,
 	artist: [MAX_TRACK_ARTIST_LENGTH+1]u8,
 	album: [MAX_TRACK_ALBUM_LENGTH+1]u8,
@@ -220,10 +216,6 @@ _load_library :: proc(filename: string) -> bool {
 
 		track_data: Track_Info_Priv;
 		track_data.path = path_pool.store(&this.paths, path);
-		//track_data.title = _store_string_native(title);
-		//track_data.artist = _store_string_native(artist);
-		//track_data.album = _store_string_native(album);
-		//track_data.genre = _store_string_native(genre);
 		util.copy_string_to_buf(track_data.title[:], title);
 		util.copy_string_to_buf(track_data.artist[:], artist);
 		util.copy_string_to_buf(track_data.album[:], album);
@@ -350,7 +342,6 @@ _replace_or_store_string :: proc(orig: Pool_String, str: cstring) -> Pool_String
 @private
 _get_track_default_metadata :: proc(track: ^Track_Info_Priv, path: string) {
 	filename := filepath.base(path);
-	//track.title = _store_string_native(filename);
 	util.copy_string_to_buf(track.title[:], filename);
 }
 
@@ -396,14 +387,6 @@ _read_track_metadata :: proc(track: ^Track_Info_Priv, path: string) {
 			track_index := taglib.tag_track(tag);
 			year := taglib.tag_year(tag);
 
-			/*util.copy_cstring(track.title[:], title);
-			util.copy_cstring(track.artist[:], artist);
-			util.copy_cstring(track.album[:], album);
-			util.copy_cstring(track.genre[:], genre);*/
-			//track.title = _replace_or_store_string(track.title, title);
-			//track.artist = _replace_or_store_string(track.artist, artist);
-			//track.album = _replace_or_store_string(track.album, album);
-			//track.genre = _replace_or_store_string(track.genre, genre);
 			util.copy_cstring(track.title[:], title);
 			util.copy_cstring(track.album[:], album);
 			util.copy_cstring(track.artist[:], artist);
@@ -457,10 +440,6 @@ get_track_info :: proc(track: Track) -> Track_Info {
 	info := &this.tracks[track-1];
 	return {
 		id = track,
-		//title = get_metadata_cstring(info.title),
-		//artist = get_metadata_cstring(info.artist),
-		//album = get_metadata_cstring(info.album),
-		//genre = get_metadata_cstring(info.genre),
 		title = cstring(&info.title[0]),
 		artist = cstring(&info.artist[0]),
 		album = cstring(&info.album[0]),
@@ -477,7 +456,6 @@ refresh_track_metadata :: proc(track_id: Track) {
 	path := get_track_path(track_id, buf[:]);
 	track := &this.tracks[track_id-1];
 	_read_track_metadata(track, path);
-	//log.debug(track.artist, get_metadata_cstring(track.artist));
 	info := get_track_info(track_id);
 	log.debug(track);
 }
@@ -544,8 +522,6 @@ add_file :: proc(file: string) -> Track {
 
 	append(&this.library.tracks, index+1);
 
-	//add_to_playlist_group(index+1, string(get_metadata_cstring(track.artist)), &this.artists);
-	//add_to_playlist_group(index+1, string(get_metadata_cstring(track.album)), &this.albums);
 	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &this.artists);
 	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &this.albums);
 	_add_to_playlist_group(index+1, filepath.base(filepath.dir(file)), &this.folders);
@@ -898,8 +874,7 @@ _save_track_metadata_to_file :: proc(track: ^Track_Info_Priv) {
 	taglib.tag_set_genre(tag, cstring(&track.genre[0]));
 	taglib.tag_set_track(tag, auto_cast track.track_number);
 	taglib.tag_set_year(tag, auto_cast track.year);
-	//taglib.file_save(file);
-	//log.debug("Save file", path);
+	taglib.file_save(file);
 }
 
 save_track_metadata :: proc(track_id: Track) {
