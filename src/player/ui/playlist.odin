@@ -73,10 +73,6 @@ _show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Trac
 	if imgui.MenuItem("Refresh metadata") {
 		_refresh_metadata_of_selected_tracks();
 	}
-
-	if imgui.MenuItem("Edit metadata") {
-		_select_track_for_metadata_edit(track);
-	}
 }
 
 _show_track_playlist_context_menu :: proc(track: lib.Track, action: ^Track_Table_Action, flags: Track_Table_Flags) {

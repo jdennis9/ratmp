@@ -133,7 +133,7 @@ window_info := [Window]Window_Info {
 	.Metadata = {
 		name = "Metadata", internal_name = "metadata",
 		category = .Info,
-		show_proc = _show_metadata_editor,
+		show_proc = _show_metadata_window,
 	},
 	.ThemeEditor = {
 		name = "Edit Theme", internal_name = "theme_editor",
@@ -225,10 +225,6 @@ this: struct {
 	want_reset_layout: bool,
 
 	metadata_save_job: ^lib.Metadata_Save_Job,
-
-	metadata_editor: struct {
-		track: lib.Track,
-	},
 };
 
 init :: proc() -> bool {
@@ -1728,35 +1724,31 @@ _imgui_settings_handler_write_proc :: proc "c" (
 // Metadata editor
 // -----------------------------------------------------------------------------
 @private
-_select_track_for_metadata_edit :: proc(track: lib.Track) {
-	this.metadata_editor.track = track;
-}
-
-@private
 _show_metadata_editor :: proc() {
-	state := this.metadata_editor;
-
-	if state.track == 0 {
-		imgui.TextDisabled("No track selected for editing");
+	if len(this.selection) == 0 {
+		imgui.TextDisabled("No track selected");
 		return;
 	}
 
-	track := lib.get_track_info(state.track);
-
+	
 	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_SizingStretchProp|
-		imgui.TableFlags_BordersInner;
-
-	string_row :: proc(buf: cstring, buf_size: int, name: cstring) {
+	imgui.TableFlags_BordersInner;
+	
+	string_row :: proc(buf: cstring, buf_size: int, name: cstring, enable: ^bool = nil) {
 		imgui.PushID(name);
 		imgui.TableNextRow();
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
 		imgui.InputText("##text", buf, auto_cast buf_size);
+		if enable != nil && imgui.TableSetColumnIndex(2) {
+			imgui.Checkbox("##enable", enable);
+			imgui.SetItemTooltip("Apply");
+		}
 		imgui.PopID();
 	}
-
-	int_row :: proc(val: ^int, name: cstring) {
+	
+	int_row :: proc(val: ^int, name: cstring, enable: ^bool = nil) {
 		val_i32 := i32(val^);
 		imgui.PushID(name);
 		imgui.TableNextRow();
@@ -1766,28 +1758,95 @@ _show_metadata_editor :: proc() {
 		if imgui.InputInt("##number", &val_i32) {
 			val^ = int(val_i32);
 		}
+		if enable != nil && imgui.TableSetColumnIndex(2) {
+			imgui.Checkbox("##enable", enable);
+			imgui.SetItemTooltip("Apply");
+		}
 		imgui.PopID();
 	}
 
-	if imgui.BeginTable("##metadata_editor_table", 2, table_flags) {
-		imgui.TableSetupColumn("Name", {}, 0.3);
-		imgui.TableSetupColumn("Value", {}, 0.7);
+	if len(this.selection) == 1 {
+		path_buf: [384]u8;
+		imgui.TextDisabled("Editing track %s", lib.get_track_path_cstring(this.selection[0], path_buf[:]));
 
-		string_row(track.title, lib.MAX_TRACK_TITLE_LENGTH+1, "Title");
-		string_row(track.artist, lib.MAX_TRACK_ARTIST_LENGTH+1, "Artist");
-		string_row(track.album, lib.MAX_TRACK_ALBUM_LENGTH+1, "Album");
-		string_row(track.genre, lib.MAX_TRACK_GENRE_LENGTH+1, "Genre");
-		int_row(&track.year, "Year");
-		int_row(&track.track_number, "Track No.");
+		if imgui.BeginTable("##metadata_editor_table", 2, table_flags) {
+			imgui.TableSetupColumn("Name", {}, 0.3);
+			imgui.TableSetupColumn("Value", {}, 0.7);
+	
+			track := lib.get_track_info(this.selection[0]);
 
-		imgui.EndTable();
-	}
+			string_row(track.title, lib.MAX_TRACK_TITLE_LENGTH+1, "Title");
+			string_row(track.artist, lib.MAX_TRACK_ARTIST_LENGTH+1, "Artist");
+			string_row(track.album, lib.MAX_TRACK_ALBUM_LENGTH+1, "Album");
+			string_row(track.genre, lib.MAX_TRACK_GENRE_LENGTH+1, "Genre");
+			int_row(&track.year, "Year");
+			int_row(&track.track_number, "Track No.");
+	
+			imgui.EndTable();
+		}
 
-	if imgui.Button("Save to file") {
-		if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata? This cannot be undone.") {
-			lib.save_track_metadata(state.track);
+		if imgui.Button("Save to file") {
+			if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata? This cannot be undone.") {
+				lib.save_track_metadata(this.selection[0]);
+			}
 		}
 	}
+	else {
+		imgui.TextDisabled("Editing %d tracks", i32(len(this.selection)));
+
+		@static
+		changes: struct {
+			title: [lib.MAX_TRACK_TITLE_LENGTH+1]u8,
+			artist: [lib.MAX_TRACK_ARTIST_LENGTH+1]u8,
+			album: [lib.MAX_TRACK_ALBUM_LENGTH+1]u8,
+			genre: [lib.MAX_TRACK_GENRE_LENGTH+1]u8,
+			year: int,
+			track: int,
+
+			enable_title, enable_artist, enable_album, enable_genre, enable_year, enable_track: bool,
+		};
+
+		if imgui.BeginTable("##metadata_editor_table", 3, table_flags) {
+			imgui.TableSetupColumn("Name", {}, 0.3);
+			imgui.TableSetupColumn("Value", {}, 0.6);
+			imgui.TableSetupColumn("Overwrite", {}, 0.1);
+
+			string_row(cstring(&changes.title[0]), lib.MAX_TRACK_TITLE_LENGTH+1, "Title", &changes.enable_title);
+			string_row(cstring(&changes.artist[0]), lib.MAX_TRACK_ARTIST_LENGTH+1, "Artist", &changes.enable_artist);
+			string_row(cstring(&changes.album[0]), lib.MAX_TRACK_ALBUM_LENGTH+1, "Album", &changes.enable_album);
+			string_row(cstring(&changes.genre[0]), lib.MAX_TRACK_GENRE_LENGTH+1, "Genre", &changes.enable_genre);
+			int_row(&changes.year, "Year", &changes.enable_year);
+			int_row(&changes.track, "Track No.", &changes.enable_track);
+	
+			imgui.EndTable();
+		}
+
+		if imgui.Button("Apply") {
+			if util.message_box("Apply Changes?", .YesNo, "Apply these metadata changes to all selected tracks? This cannot be undone.") {
+				for track_id in this.selection {
+					track := lib.get_raw_track_info_pointer(track_id);
+					if changes.enable_title {track.title = changes.title}
+					if changes.enable_artist {track.artist = changes.artist}
+					if changes.enable_album {track.album = changes.album}
+					if changes.enable_genre {track.genre = changes.genre}
+					if changes.enable_track {track.track_number = changes.track}
+					if changes.enable_year {track.year = changes.year}
+				}
+			}
+		}
+
+		if imgui.Button("Save all") {
+			if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata for all selected tracks? This cannot be undone.") {
+				for track in this.selection {
+					lib.save_track_metadata(track);
+				}
+			}
+		}
+	}
+	
+
+
+	
 }
 
 // =============================================================================

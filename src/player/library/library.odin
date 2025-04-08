@@ -60,8 +60,7 @@ MAX_TRACK_ARTIST_LENGTH :: 63;
 MAX_TRACK_ALBUM_LENGTH :: 63;
 MAX_TRACK_GENRE_LENGTH :: 31;
 
-@private
-Track_Info_Priv :: struct {
+Raw_Track_Info :: struct {
 	path: path_pool.Path,
 	title: [MAX_TRACK_TITLE_LENGTH+1]u8,
 	artist: [MAX_TRACK_ARTIST_LENGTH+1]u8,
@@ -129,7 +128,7 @@ Playlist_Group :: struct {
 this: struct {
 	paths: path_pool.Pool,
 	track_ids: [dynamic]u32,
-	tracks: [dynamic]Track_Info_Priv,
+	tracks: [dynamic]Raw_Track_Info,
 	metadata_pool: [dynamic]u8,
 	next_playlist_id: Playlist_ID,
 	playlists: [dynamic]Playlist,
@@ -214,7 +213,7 @@ _load_library :: proc(filename: string) -> bool {
 		path_id := xxhash.XXH32(transmute([]u8) cleaned_path);
 		track_id := cast(Track) len(this.tracks) + 1;
 
-		track_data: Track_Info_Priv;
+		track_data: Raw_Track_Info;
 		track_data.path = path_pool.store(&this.paths, path);
 		util.copy_string_to_buf(track_data.title[:], title);
 		util.copy_string_to_buf(track_data.artist[:], artist);
@@ -340,13 +339,13 @@ _replace_or_store_string :: proc(orig: Pool_String, str: cstring) -> Pool_String
 }
 
 @private
-_get_track_default_metadata :: proc(track: ^Track_Info_Priv, path: string) {
+_get_track_default_metadata :: proc(track: ^Raw_Track_Info, path: string) {
 	filename := filepath.base(path);
 	util.copy_string_to_buf(track.title[:], filename);
 }
 
 @private
-_read_track_metadata :: proc(track: ^Track_Info_Priv, path: string) {
+_read_track_metadata :: proc(track: ^Raw_Track_Info, path: string) {
 	path_cstring_buf: [384]u8;
 	file: taglib.File;
 	tag: taglib.Tag;
@@ -435,6 +434,12 @@ is_supported_format :: proc(filename: string) -> bool {
 		ext == ".opus";
 }
 
+// Use to alter metadata of track
+get_raw_track_info_pointer :: proc(track: Track) -> ^Raw_Track_Info {
+	assert(track != 0);
+	return &this.tracks[track-1];
+}
+
 get_track_info :: proc(track: Track) -> Track_Info {
 	assert(track != 0);
 	info := &this.tracks[track-1];
@@ -511,7 +516,7 @@ add_file :: proc(file: string) -> Track {
 		}
 	}
 
-	track: Track_Info_Priv;
+	track: Raw_Track_Info;
 	index := cast(Track) len(this.tracks);
 	track.path = path_pool.store(&this.paths, file);
 
@@ -856,7 +861,7 @@ Metadata_Replacement :: struct {
 _changed_tracks: [dynamic]Track;
 
 @private
-_save_track_metadata_to_file :: proc(track: ^Track_Info_Priv) {
+_save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
 	path_buf: [512]u8;
 	path := path_pool.retrieve_cstring(&this.paths, track.path, path_buf[:]);
 
