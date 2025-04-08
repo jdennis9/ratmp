@@ -35,7 +35,6 @@ import "../signal";
 import "../util";
 import lib "../library";
 import "../playback";
-//import "../platform";
 import "../video";
 import "../prefs";
 import "../theme";
@@ -67,7 +66,6 @@ Window :: enum {
 	ThemeEditor,
 	ReplaceMetadata,
 	EditMetadata,
-
 	PeakMeter,
 	Spectrum,
 };
@@ -155,7 +153,7 @@ window_info := [Window]Window_Info {
 	.PeakMeter = {
 		name = "Peak Meter", internal_name = "peak_meter",
 		category = .Visualizers,
-		show_proc = nil,
+		show_proc = _show_peak_window,
 	},
 	.Spectrum = {
 		name = "Spectrum", internal_name = "spectrum",
@@ -1631,7 +1629,6 @@ _imgui_settings_handler_open_proc :: proc "c" (
 ) -> rawptr {
 	context = this.ctx;
 	name_str := string(name);
-	fmt.println(name_str);
 	for window, i in window_info {
 		if string(window.internal_name) == name_str {
 			return cast(rawptr) (cast(uintptr) i + 1);

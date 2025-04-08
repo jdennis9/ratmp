@@ -18,13 +18,65 @@
 #+private
 package ui;
 
+import "core:fmt";
+import "core:strings";
+import "core:math";
+
 import "../analysis";
 import imgui "../../libs/odin-imgui";
 
 _show_spectrum_window :: proc() {
 	spectrum := analysis.get_spectrum();
-	size := imgui.GetContentRegionAvail();
-	imgui.PlotHistogram("##spectrum", &spectrum.peaks[0], auto_cast len(spectrum.peaks), {}, nil, 0, 1, size);
+    drawlist := imgui.GetWindowDrawList();
+
+    imgui.PushStyleColor(.TableHeaderBg, 0);
+    defer imgui.PopStyleColor();
+
+    imgui.PushStyleVarImVec2(.CellPadding, {});
+    defer imgui.PopStyleVar();
+
+    imgui.PushStyleVar(.TableAngledHeadersAngle, math.to_radians_f32(20));
+    defer imgui.PopStyleVar();
+
+    imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5});
+    defer imgui.PopStyleVar();
+    
+    table_flags := imgui.TableFlags_BordersInner;
+    if imgui.BeginTable("##spectrum_table", analysis.SPECTRUM_BANDS, table_flags) {
+        for band in analysis.SPECTRUM_BAND_OFFSETS[1:] {
+            buf: [32]u8;
+            name: string;
+            if band > 10000 {
+                name = fmt.bprintf(buf[:31], "%gK", f32(band)/1000);
+            }
+            else if band > 1000 {
+                name = fmt.bprintf(buf[:31], "%1.1fK", f32(band)/1000);
+            }
+            else {
+                name = fmt.bprintf(buf[:31], "%d", band);
+            }
+            imgui.TableSetupColumn(strings.unsafe_string_to_cstring(name), {.AngledHeader});
+        }
+        
+        imgui.TableAngledHeadersRow();
+        
+        imgui.TableNextRow();
+        for &band, index in spectrum.peaks {
+            freq := analysis.SPECTRUM_BAND_OFFSETS[index+1];
+
+            if imgui.TableNextColumn() {
+                size := imgui.GetContentRegionAvail();
+                cursor := imgui.GetCursorScreenPos();
+                imgui.DrawList_AddRectFilled(drawlist, 
+                    {cursor.x, cursor.y + size.y}, 
+                    {cursor.x + size.x, cursor.y + size.y * (1 - band)},
+                    imgui.GetColorU32(.PlotHistogram),
+                );
+            }
+        }
+
+        imgui.EndTable();
+    }
 }
 
 _show_peak_window :: proc() {

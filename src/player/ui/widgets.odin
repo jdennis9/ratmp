@@ -114,3 +114,20 @@ _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) {
 
 	imgui.InvisibleButton(str_id, size);
 }
+
+@private
+_show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, req_size: [2]f32 = {0, 0}) {
+	drawlist := imgui.GetWindowDrawList();
+	avail_size := imgui.GetContentRegionAvail();
+
+	size := [2]f32{
+		req_size.x == 0 ? avail_size.x : req_size.x,
+		req_size.y == 0 ? avail_size.y : req_size.y,
+	};
+
+	max_bar_height := size.y;
+
+	for value, index in values {
+		
+	}
+}
