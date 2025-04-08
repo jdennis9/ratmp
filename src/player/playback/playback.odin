@@ -367,7 +367,9 @@ play_track_at_position :: proc(in_pos: int) {
 		pos = 0;
 	}
 
-	play_track(this.queue.tracks[pos]);
+	if !play_track(this.queue.tracks[pos]) {
+		signal.post(.RequestNext);
+	}
 	this.queue_position = pos;
 }
 
