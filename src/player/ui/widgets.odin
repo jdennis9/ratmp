@@ -84,7 +84,7 @@ _show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, siz
 }
 
 @private
-_show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) {
+_show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
 	drawlist := imgui.GetWindowDrawList();
 	avail_size := imgui.GetContentRegionAvail();
 	cursor := imgui.GetCursorScreenPos();
@@ -94,7 +94,7 @@ _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) {
 	peaks := analysis.get_channel_peaks();
 	channels := len(peaks);
 
-	if channels == 0 {return}
+	if channels == 0 {return false}
 
 	if size.y == 0 {
 		size.y = avail_size.y + style.FramePadding.y;
@@ -112,7 +112,7 @@ _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) {
 		y_offset += bar_height + 1;
 	}
 
-	imgui.InvisibleButton(str_id, size);
+	return imgui.InvisibleButton(str_id, size);
 }
 
 @private
@@ -128,6 +128,6 @@ _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, r
 	max_bar_height := size.y;
 
 	for value, index in values {
-		
+
 	}
 }

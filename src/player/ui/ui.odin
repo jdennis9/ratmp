@@ -702,8 +702,16 @@ show :: proc() {
 		// -----------------------------------------------------------------------------
 		// Mini visualizer
 		// -----------------------------------------------------------------------------
-		_show_peak_meter_widget("##peak_meter", {100, 0});
-		imgui.Separator();
+		{
+			@static use_spectrum := false;
+			if use_spectrum {
+				use_spectrum = !_show_spectrum_widget("##spectrum", {100, imgui.GetFrameHeight()});
+			}
+			else {
+				use_spectrum = _show_peak_meter_widget("##peak_meter", {100, 0});
+			}
+			imgui.Separator();
+		}
 
 		// ---------------------------------------------------------------------
 		// Seek bar
@@ -1729,7 +1737,6 @@ _show_metadata_editor :: proc() {
 		imgui.TextDisabled("No track selected");
 		return;
 	}
-
 	
 	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_SizingStretchProp|
 	imgui.TableFlags_BordersInner;
@@ -1835,6 +1842,7 @@ _show_metadata_editor :: proc() {
 			}
 		}
 
+		imgui.SameLine();
 		if imgui.Button("Save all") {
 			if util.message_box("Save Metadata", .OkCancel, "Overwrite file metadata for all selected tracks? This cannot be undone.") {
 				for track in this.selection {
@@ -1843,10 +1851,6 @@ _show_metadata_editor :: proc() {
 			}
 		}
 	}
-	
-
-
-	
 }
 
 // =============================================================================
