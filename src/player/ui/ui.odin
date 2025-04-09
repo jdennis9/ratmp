@@ -1524,6 +1524,17 @@ _get_selection_size :: proc() -> int {
 // Action handling
 // =============================================================================
 
+@private
+_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dynamic]lib.Track) {
+	for track in playlist.tracks {
+		if _is_track_selected(track) {
+			append(&tracks, track);
+		}
+	}
+
+	return tracks;
+}
+
 // Handles behaviour that is shared across all playlists
 @private
 _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^lib.Playlist) {
@@ -1544,20 +1555,7 @@ _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^l
 			}
 		}
 	}
-	
-	if action.add_to_queue {
-		playback.append_to_queue(this.selection[:]);
-	}
 
-	if action.play_selection {
-		playback.play_track_array(this.selection[:]);
-	}
-	
-	if action.remove {
-		_remove_selection_from_playlist(playlist);
-		altered = true;
-	}
-	
 	if action.select_track != nil {
 		track_id := playlist.tracks[action.select_track.?];
 		already_selected := _is_track_selected(track_id);
@@ -1576,6 +1574,23 @@ _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^l
 			append(&this.selection, playlist.tracks[action.select_track.?]);
 		}
 	}
+
+	selected_tracks := _get_selected_tracks_in_playlist(playlist^);
+	defer delete(selected_tracks);
+
+	if action.add_to_queue {
+		playback.append_to_queue(selected_tracks[:]);
+	}
+
+	if action.play_selection {
+		playback.play_track_array(selected_tracks[:]);
+	}
+	
+	if action.remove {
+		_remove_selection_from_playlist(playlist);
+		altered = true;
+	}
+
 	
 	if action.add_selection_to_playlist {
 		altered = true;
