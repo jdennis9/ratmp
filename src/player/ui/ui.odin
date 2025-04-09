@@ -1247,6 +1247,7 @@ _show_preferences_window :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		commit := imgui.InputText(str_id, cstring(raw_data(buffer)), len(prefs.String_Buffer));
 		imgui.TableSetColumnIndex(2);
 		if imgui.Button("Browse") {
@@ -1265,6 +1266,7 @@ _show_preferences_window :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		commit |= imgui.DragInt(
 			str_id, &value, 0.1,
 			auto_cast prefs.NUMBER_INFO[id].min,
@@ -1282,6 +1284,7 @@ _show_preferences_window :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		if imgui.BeginCombo("##combo", cstring(raw_data(value))) {
 			for choice in choices {
 				if imgui.MenuItem(choice) {
@@ -1312,6 +1315,7 @@ _show_preferences_window :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		if imgui.BeginCombo("##combo", current_choice_name) {
 			for choice in info.values {
 				if imgui.MenuItem(choice.name) {
@@ -1747,6 +1751,7 @@ _show_metadata_editor :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		imgui.InputText("##text", buf, auto_cast buf_size);
 		if enable != nil && imgui.TableSetColumnIndex(2) {
 			imgui.Checkbox("##enable", enable);
@@ -1762,6 +1767,7 @@ _show_metadata_editor :: proc() {
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		if imgui.InputInt("##number", &val_i32) {
 			val^ = int(val_i32);
 		}
