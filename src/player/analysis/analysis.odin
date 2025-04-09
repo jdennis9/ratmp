@@ -24,7 +24,7 @@ import "core:math";
 import "../playback";
 import kiss "../../bindings/kissfft";
 
-PEAK_ROUGHNESS :: 10;
+PEAK_ROUGHNESS :: 15;
 MAX_CHANNELS :: playback.MAX_CHANNELS;
 SPECTRUM_BANDS :: 20;
 
@@ -67,6 +67,8 @@ update :: proc(delta: f32, window_length: f32) {
 	
 	hann_view := _hann_window(view);
 	defer _free_windowed_view(hann_view);
+
+	lerp_t := clamp(delta*PEAK_ROUGHNESS, 0, 1);
 	
 	// -------------------------------------------------------------------------
 	// Peak
@@ -79,7 +81,7 @@ update :: proc(delta: f32, window_length: f32) {
 			}
 
 			if math.is_nan(this.peaks[ch]) {this.peaks[ch] = 0}
-			this.peaks[ch] = glm.lerp(this.peaks[ch], peak, delta*PEAK_ROUGHNESS);
+			this.peaks[ch] = glm.lerp(this.peaks[ch], peak, lerp_t);
 		}
 
 		this.recalc_peak = false;
@@ -94,7 +96,7 @@ update :: proc(delta: f32, window_length: f32) {
 			if math.is_nan(this.spectrum.peaks[index]) {
 				this.spectrum.peaks[index] = 0;
 			}
-			this.spectrum.peaks[index] = math.lerp(this.spectrum.peaks[index], peak, delta*PEAK_ROUGHNESS);
+			this.spectrum.peaks[index] = math.lerp(this.spectrum.peaks[index], peak, lerp_t);
 		}
 		this.recalc_spectrum = false;
 	}

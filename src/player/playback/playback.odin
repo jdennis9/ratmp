@@ -89,6 +89,13 @@ _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
 _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 	context = this.ctx;
 
+	if this.paused || this.decoder.stream == nil {
+		for i in 0..<(frames * this.stream.channels) {
+			buffer[i] = 0;
+		}
+		return;
+	}
+
 	_fill_buffer(
 		buffer[:frames * this.stream.channels], 
 		cast(int) this.stream.sample_rate, cast(int) this.stream.channels
@@ -101,9 +108,7 @@ _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 	capture := &this.buffer_capture;
 	buffer_slice := buffer[:int(frames) * channels];
 
-	if len(this.buffer_capture.prev[0]) > 0 {
-		// @TODO: Timing is off
-
+	if len(this.buffer_capture.next[0]) > 0 {
 		for i in 0..<channels {
 			resize(&capture.prev[i], len(capture.next[i]));
 			copy(capture.prev[i][:], capture.next[i][:]);
@@ -113,8 +118,7 @@ _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 		_deinterlace(buffer_slice, channels, &this.buffer_capture.next);
 		buffer_seconds := f32(frames) / f32(this.stream.sample_rate);
 		capture.timestamp = time.tick_now();
-		// @Volatile
-		capture.timestamp._nsec -= auto_cast(buffer_seconds * 1e9);
+		capture.timestamp._nsec -= auto_cast(buffer_seconds * 1e9)/2;
 	}
 	else {
 		_deinterlace(buffer_slice, channels, &this.buffer_capture.next);
@@ -147,6 +151,15 @@ _play_file :: proc(path: string) -> bool {
 	sync.lock(&this.lock);
 	defer sync.unlock(&this.lock);
 	log.debug("Playing file", filepath.base(path));
+
+	// Clear output buffer
+	for ch in 0..<this.stream.channels {
+		delete(this.buffer_capture.next[ch]);
+		this.buffer_capture.next[ch] = nil;
+		delete(this.buffer_capture.prev[ch]);
+		this.buffer_capture.prev[ch] = nil;
+	}
+
 	return decoder.open(&this.decoder, path);
 }
 
@@ -211,7 +224,7 @@ play_track :: proc(track: lib.Track) -> bool {
 @private
 _deinterlace :: proc(input: []f32, channels: int, out: ^[MAX_CHANNELS][dynamic]f32) {
 	for ch in 0..<channels {
-		resize(&out[ch], len(input));
+		resize(&out[ch], len(input)/channels);
 	}
 
 	sample_count := len(input);
@@ -254,7 +267,7 @@ update_output_copy_buffer :: proc(buffer: ^Output_Buffer) -> bool {
 
 	for i in 0..<buffer.channels {
 		delete(buffer.data[i]);
-		buffer.data[i] = make([]f32, len(capture.prev[0]) + len(capture.next[0]));
+		buffer.data[i] = make([]f32, len(capture.prev[i]) + len(capture.next[i]));
 		copy(buffer.data[i][:], capture.prev[i][:]);
 		copy(buffer.data[i][len(capture.prev[i]):], capture.next[i][:]);
 	}
@@ -265,13 +278,15 @@ update_output_copy_buffer :: proc(buffer: ^Output_Buffer) -> bool {
 get_output_buffer_view :: proc(buffer: ^Output_Buffer, frame_count: int) -> (view: Output_Buffer) {
 	if len(buffer.data[0]) == 0 {return}
 
+	view.channels = buffer.channels;
+	view.samplerate = buffer.samplerate;
+
 	delta := cast(f32) time.duration_seconds(time.tick_diff(buffer.timestamp, time.tick_now()));
 	first_frame := int(delta * f32(buffer.samplerate));
 	first_frame = max(first_frame, 0);
 	frame_count := min(frame_count, len(buffer.data[0]) - first_frame);
 	if frame_count < 0 {return}
 
-	view.channels = buffer.channels;
 	for ch in 0..<view.channels {
 		view.data[ch] = buffer.data[ch][first_frame:][:frame_count];
 	}
