@@ -181,6 +181,7 @@ main :: proc() {
 
 	drag_drop.init_for_windows(this.hwnd);
 	add_tray_icon();
+	defer remove_tray_icon();
 	
 	com.init();
 	defer com.shutdown();
