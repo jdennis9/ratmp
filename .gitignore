@@ -5,3 +5,4 @@ out
 *.lib
 *.pdb
 *.res
+src/cpp/taglib
