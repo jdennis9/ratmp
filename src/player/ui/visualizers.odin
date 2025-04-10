@@ -21,8 +21,10 @@ package ui;
 import "core:fmt";
 import "core:strings";
 import "core:math";
+import "core:log";
 
 import "../analysis";
+import "../playback";
 import imgui "../../libs/odin-imgui";
 
 _show_spectrum_window :: proc() {
@@ -97,4 +99,48 @@ _show_spectrum_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
 _show_peak_window :: proc() {
     peaks := analysis.get_channel_peaks();
     _show_bars_widget("##peaks", peaks, 0, 1);
+}
+
+_show_wave_preview_window :: proc() {
+    samples := analysis.get_waveform_preview();
+    playback_pos := f32(playback.get_second());
+    playback_duration := f32(playback.get_duration());
+
+    if len(samples) > 0 {
+        drawlist := imgui.GetWindowDrawList();
+        size := imgui.GetContentRegionAvail();
+        cursor := imgui.GetCursorScreenPos();
+        style := imgui.GetStyle();
+
+        bar_width := size.x / f32(len(samples));
+        bar_height := size.y * 0.5;
+        middle := cursor.y + size.y * 0.5;
+        x_pos := cursor.x;
+
+        current_sample := int(f32(len(samples)) * (playback_pos/playback_duration));
+
+        for sample, index in samples {
+            peak_height := sample * bar_height;
+            pmin := [2]f32 {x_pos, middle - peak_height};
+            pmax := [2]f32 {x_pos + bar_width, middle + peak_height};
+
+            if (abs(pmin.y - pmax.y) < 1) {
+                pmin.y -= 1;
+                pmax.y = pmin.y + 2;
+            }
+
+            color := imgui.GetStyleColorVec4(.PlotLines)^;
+            if index > current_sample {color.w *= 0.5}
+            imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color));
+            x_pos += bar_width;
+        }
+
+        if imgui.InvisibleButton("##wave", size) {
+            io := imgui.GetIO();
+            click_pos := io.MousePos.x - cursor.x;
+            ratio := clamp(click_pos / size.x, 0, 1);
+            seek_second := playback_duration * ratio;
+            playback.seek(int(seek_second));
+        }
+    }
 }

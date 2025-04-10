@@ -20,9 +20,15 @@ package analysis;
 import glm "core:math/linalg/glsl";
 import "core:log";
 import "core:math";
+import "core:thread";
+import "core:slice";
+import "core:sync";
+
+import kiss "../../bindings/kissfft";
 
 import "../playback";
-import kiss "../../bindings/kissfft";
+import "../decoder";
+import lib "../library";
 
 PEAK_ROUGHNESS :: 15;
 MAX_CHANNELS :: playback.MAX_CHANNELS;
@@ -41,13 +47,25 @@ Spectrum :: struct {
 	peaks: [SPECTRUM_BANDS]f32,
 };
 
+Waveform_Preview :: struct {
+	dec: decoder.Decoder,
+	output: [dynamic]f32,
+	out_count: int,
+	want_cancel: bool,
+	track: lib.Track,
+	thread: ^thread.Thread,
+	lock: sync.Mutex,
+};
+
 @private
 this: struct {
 	peaks: [MAX_CHANNELS]f32,
 	buffer: playback.Output_Buffer,
 	spectrum: Spectrum,
+	waveform_preview: Waveform_Preview,
 	recalc_peak: bool,
 	recalc_spectrum: bool,
+	recalc_wave_preview: bool,
 
 	fft_cfg: kiss.fftr_cfg,
 	fft_cfg_frame_count: int,
@@ -100,6 +118,36 @@ update :: proc(delta: f32, window_length: f32) {
 		}
 		this.recalc_spectrum = false;
 	}
+
+	// -------------------------------------------------------------------------
+	// Wave preview
+	// -------------------------------------------------------------------------
+	if this.recalc_wave_preview {
+		this.recalc_wave_preview = false;
+		data := &this.waveform_preview;
+		track := playback.get_playing_track();
+		if track != 0 && track != data.track {
+			if data.thread != nil {
+				data.want_cancel = true;
+				thread.join(data.thread);
+				thread.destroy(data.thread);
+				data.thread = nil;
+				data.want_cancel = false;
+				decoder.close(&data.dec);
+			}
+			
+			path_buf: [512]u8;
+			data.track = track;
+			path := lib.get_track_path(track, path_buf[:]);
+
+			if decoder.open(&data.dec, path) {
+				data.thread = thread.create_and_start(_waveform_preview_thread_proc);
+				if data.thread == nil {
+					decoder.close(&data.dec);
+				}
+			}
+		}
+	}
 }
 
 shutdown :: proc() {
@@ -114,6 +162,17 @@ get_channel_peaks :: proc() -> []f32 {
 get_spectrum :: proc() -> Spectrum {
 	this.recalc_spectrum = true;
 	return this.spectrum;
+}
+
+get_waveform_preview :: proc() -> (samples: []f32) {
+	this.recalc_wave_preview = true;
+	sync.lock(&this.waveform_preview.lock);
+	defer sync.unlock(&this.waveform_preview.lock);
+	if len(this.waveform_preview.output) > 0 {
+		return this.waveform_preview.output[:];
+	}
+
+	return nil;
 }
 
 @private
@@ -188,4 +247,38 @@ _calc_spectrum :: proc(view: playback.Output_Buffer) -> (spectrum: Spectrum) {
 	}
 
 	return;
+}
+
+@private
+_waveform_preview_thread_proc :: proc() {
+	data := &this.waveform_preview;	
+	dec := &data.dec;
+	data.out_count = 0;
+	
+	samplerate := dec.info.samplerate;
+	channels := dec.info.channels;
+	segment_size := i32(dec.info.frames / 1024);
+	buffer := make([]f32, segment_size * channels);
+	defer delete(buffer);
+	
+	sync.lock(&this.waveform_preview.lock);
+	resize(&data.output, i32(dec.info.frames) / segment_size);
+	sync.unlock(&this.waveform_preview.lock);
+
+	if data.want_cancel {return}
+
+	slice.fill(data.output[:], 0);
+
+	for decoder.fill_buffer(dec, buffer, int(samplerate), int(channels)) == .COMPLETE {
+		peak := f32(0);
+
+		for v in buffer {
+			peak = max(abs(v), peak);
+		}
+
+		data.output[data.out_count] = clamp(peak, 0, 1);
+		data.out_count += 1;
+
+		if data.want_cancel {return}
+	}
 }

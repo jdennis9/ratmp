@@ -68,6 +68,7 @@ Window :: enum {
 	EditMetadata,
 	PeakMeter,
 	Spectrum,
+	WavePreview,
 };
 
 Window_Category :: enum {
@@ -159,6 +160,11 @@ window_info := [Window]Window_Info {
 		name = "Spectrum", internal_name = "spectrum",
 		category = .Visualizers,
 		show_proc = _show_spectrum_window,
+	},
+	.WavePreview = {
+		name = "Wave Preview", internal_name = "wave_preview",
+		category = .Visualizers,
+		show_proc = _show_wave_preview_window,
 	},
 };
 
