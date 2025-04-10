@@ -102,7 +102,7 @@ window_info := [Window]Window_Info {
 		show_proc = _show_navigation_window,
 	},
 	.Artists = {
-		name = "Artist", internal_name = "artists",
+		name = "Artists", internal_name = "artists",
 		category = .Music,
 		show_proc = _show_artists_window,
 	},
@@ -112,7 +112,7 @@ window_info := [Window]Window_Info {
 		show_proc = _show_albums_window,
 	},
 	.Folders = {
-		name = "Folder", internal_name = "folders",
+		name = "Folders", internal_name = "folders",
 		category = .Music,
 		show_proc = _show_folders_window,
 	},

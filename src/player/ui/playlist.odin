@@ -144,8 +144,10 @@ _show_track_row :: proc(
 		// -----------------------------------------------------------------
 		if imgui.BeginPopupContextItem() {
 			_show_track_base_context_menu(playlist.id, track_id);
-			imgui.Separator();
-			_show_track_playlist_context_menu(track_id, action, flags);
+			if .NoAddToQueue not_in flags {
+				imgui.Separator();
+				_show_track_playlist_context_menu(track_id, action, flags);
+			}
 
 			if .NoRemove not_in flags {
 				imgui.Separator();
