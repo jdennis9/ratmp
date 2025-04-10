@@ -1725,8 +1725,6 @@ _imgui_settings_handler_read_line_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, entry: rawptr, line: cstring
 ) {
 	context = this.ctx;
-	log.debug("**** Read line", line);
-
 	if entry == nil {return}
 
 	window: Window = cast(Window) (uintptr(entry) - 1);
@@ -1737,7 +1735,7 @@ _imgui_settings_handler_read_line_proc :: proc "c" (
 
 	parsed, parse_ok := strconv.parse_int(line_parts[1]);
 	if !parse_ok {window_info[window].show = true}
-	else {log.error(window, parsed); window_info[window].show = parsed >= 1}
+	else {window_info[window].show = parsed >= 1}
 }
 
 @private
@@ -1745,7 +1743,6 @@ _imgui_settings_handler_write_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, out_buf: ^imgui.TextBuffer
 ) {
 	context = this.ctx;
-	log.debug("**** Write");
 
 	for window in window_info {
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name);
