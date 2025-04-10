@@ -1,3 +1,4 @@
+#ifdef __linux__
 #include <portaudio.h>
 #include <stdio.h>
 #include "audio.h"
@@ -70,3 +71,4 @@ void audio_set_volume(float volume) {
 float audio_get_volume() {
 	return g.volume;
 }
+#endif
