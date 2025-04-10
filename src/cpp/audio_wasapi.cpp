@@ -65,6 +65,8 @@ static void fill_buffer(void *output, int frames) {
 				break;
 			}
 		}
+
+		delete buffer;
 	}
 	else {
 		g.callback((float*)output, frames, g.callback_data);
