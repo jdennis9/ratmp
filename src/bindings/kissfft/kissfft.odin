@@ -7,7 +7,7 @@ when ODIN_OS == .Windows {
 	foreign import lib "kissfft-float.lib";
 }
 else {
-	foreign import lib "system:kissfft";
+	foreign import lib "system:kissfft-float";
 }
 
 fftr_cfg :: distinct rawptr;

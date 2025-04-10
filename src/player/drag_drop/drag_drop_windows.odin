@@ -21,13 +21,6 @@ foreign import lib "../../cpp/cpp.lib";
 import win "core:sys/windows";
 import imgui "../../libs/odin-imgui";
 
-Interface :: struct {
-	add_file: proc "c" (path: cstring),
-	begin: proc "c" (),
-	mouse_over: proc "c" (x: f32, y: f32),
-	cancel: proc "c" (),
-	drop: proc "c" (),
-};
 
 @(link_prefix="drag_drop_")
 foreign lib {

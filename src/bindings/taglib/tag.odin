@@ -16,7 +16,6 @@ when ODIN_OS == .Linux {
 		"system:tag_c",
 		"system:tag",
 		"system:z",
-		"../../cpp/cpp.a",
 	};
 }
 
@@ -71,7 +70,9 @@ Complex_Property_Picture_Data :: struct {
 @(link_prefix="taglib_")
 foreign taglib {
 	// Defined in taglib_open.cpp
-	wrapped_open :: proc(filename: cstring) -> File ---;
+	when ODIN_OS == .Windows {
+		wrapped_open :: proc(filename: cstring) -> File ---;
+	};
 
 	file_new :: proc(filename: cstring) -> File ---;
 	file_free :: proc(file: File) ---;
@@ -108,4 +109,3 @@ foreign taglib {
 	picture_from_complex_property :: proc(props: ^^^Complex_Property_Attribute, pic: ^Complex_Property_Picture_Data) ---;
 	complex_property_free :: proc(props: ^^^Complex_Property_Attribute) ---;
 }
-

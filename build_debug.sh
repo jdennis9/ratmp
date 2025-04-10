@@ -1,3 +1,3 @@
 #!/bin/sh
 
-odin build src/zno -debug -show-timings -out:out/debug/zno
+odin build src/player/main_linux -debug -show-timings -out:out/debug/ratmp -extra-linker-flags:-lportaudio

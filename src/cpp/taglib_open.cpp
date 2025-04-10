@@ -1,9 +1,8 @@
+#ifdef _WIN32
 #include "taglib/tag_c.h"
 #include "taglib/fileref.h"
-#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#endif
 
 extern "C" TagLib_File *taglib_wrapped_open(const char *utf8) {
 #ifdef _WIN32
@@ -14,3 +13,4 @@ extern "C" TagLib_File *taglib_wrapped_open(const char *utf8) {
 	return reinterpret_cast<TagLib_File*>(new TagLib::FileRef(utf8));
 #endif
 }
+#endif

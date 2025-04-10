@@ -17,7 +17,12 @@
 */
 package audio;
 
-foreign import lib "../../cpp/cpp.lib";
+when ODIN_OS == .Windows {
+    foreign import lib "../../cpp/cpp.lib";
+}
+else {
+    foreign import lib "../../cpp/cpp.a";
+}
 
 Stream_Info :: struct {
 	sample_rate, channels, delay_ms, buffer_duration_ms: i32,
