@@ -86,8 +86,9 @@ _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
 }
 
 @private
-_stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
+_stream_callback :: proc(buffer: []f32, _: rawptr) {
 	context = this.ctx;
+	frames := i32(len(buffer)) / this.stream.channels;
 
 	if this.paused || this.decoder.stream == nil {
 		for i in 0..<(frames * this.stream.channels) {
@@ -97,7 +98,7 @@ _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 	}
 
 	_fill_buffer(
-		buffer[:frames * this.stream.channels], 
+		buffer[:], 
 		cast(int) this.stream.sample_rate, cast(int) this.stream.channels
 	);
 
@@ -106,7 +107,6 @@ _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 	// -------------------------------------------------------------------------
 	channels := int(this.stream.channels);
 	capture := &this.buffer_capture;
-	buffer_slice := buffer[:int(frames) * channels];
 
 	if len(this.buffer_capture.next[0]) > 0 {
 		for i in 0..<channels {
@@ -115,13 +115,13 @@ _stream_callback :: proc "c" (buffer: [^]f32, frames: i32, _: rawptr) {
 		}
 
 		// This probably needs to change for audio backends other than WASAPI
-		_deinterlace(buffer_slice, channels, &this.buffer_capture.next);
+		_deinterlace(buffer, channels, &this.buffer_capture.next);
 		buffer_seconds := f32(frames) / f32(this.stream.sample_rate);
 		capture.timestamp = time.tick_now();
 		capture.timestamp._nsec -= auto_cast(buffer_seconds * 1e9)/2;
 	}
 	else {
-		_deinterlace(buffer_slice, channels, &this.buffer_capture.next);
+		_deinterlace(buffer, channels, &this.buffer_capture.next);
 		this.buffer_capture.timestamp = time.tick_now();
 	}
 }
@@ -139,11 +139,17 @@ init :: proc() -> bool {
 	this.paused = true;
 	this.queue.name = "Queue";
 	signal.install_handler(_signal_handler);
-	return cast(bool) audio.run(_stream_callback, nil, &this.stream);
+	audio.init() or_return;
+	//audio.run(_stream_callback, nil, &this.stream);
+	this.stream = audio.start(audio.get_default_device_index(), _stream_callback, nil);
+	//return cast(bool) audio.run(_stream_callback, nil, &this.stream);
+	return true;
 }
 
 shutdown :: proc() {
-	audio.kill();
+	//audio.kill();
+	audio.stop();
+	audio.shutdown();
 }
 
 @private
