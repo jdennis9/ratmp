@@ -31,6 +31,7 @@ import "../decoder";
 import lib "../library";
 
 PEAK_ROUGHNESS :: 15;
+SLOW_PEAK_ROUGHNESS :: 2;
 MAX_CHANNELS :: playback.MAX_CHANNELS;
 SPECTRUM_BANDS :: 20;
 
@@ -45,6 +46,7 @@ SPECTRUM_BAND_OFFSETS := [?]int {
 
 Spectrum :: struct {
 	peaks: [SPECTRUM_BANDS]f32,
+	slow_peaks: [SPECTRUM_BANDS]f32,
 };
 
 Waveform_Preview :: struct {
@@ -87,6 +89,7 @@ update :: proc(delta: f32, window_length: f32) {
 	defer _free_windowed_view(hann_view);
 
 	lerp_t := clamp(delta*PEAK_ROUGHNESS, 0, 1);
+	slow_lerp_t := clamp(delta*SLOW_PEAK_ROUGHNESS, 0, 1);
 	
 	// -------------------------------------------------------------------------
 	// Peak
@@ -115,6 +118,8 @@ update :: proc(delta: f32, window_length: f32) {
 				this.spectrum.peaks[index] = 0;
 			}
 			this.spectrum.peaks[index] = math.lerp(this.spectrum.peaks[index], peak, lerp_t);
+			this.spectrum.slow_peaks[index] = math.lerp(this.spectrum.slow_peaks[index], peak, slow_lerp_t);
+			this.spectrum.slow_peaks[index] = max(this.spectrum.slow_peaks[index], this.spectrum.peaks[index]);
 		}
 		this.recalc_spectrum = false;
 	}

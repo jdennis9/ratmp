@@ -28,6 +28,7 @@ import "../analysis";
 import "../playback";
 import imgui "../../libs/odin-imgui";
 import "../theme";
+import "../prefs";
 
 _show_spectrum_window :: proc() {
 	spectrum := analysis.get_spectrum();
@@ -85,7 +86,39 @@ _show_spectrum_window :: proc() {
             }
         }
 
+        hide_slow_peaks := prefs.get_property("ui_hide_max_peaks").(bool) or_else false;
+
+        if !hide_slow_peaks && imgui.TableSetColumnIndex(0) {
+            for unclamped_band in spectrum.slow_peaks {
+                band := clamp(unclamped_band, 0, 1);
+
+                cursor := imgui.GetCursorScreenPos();
+                size := imgui.GetContentRegionAvail();
+                y := cursor.y + (size.y * (1 - band));
+
+                imgui.DrawList_AddLine(drawlist, 
+                    {cursor.x, y}, 
+                    {cursor.x + size.x, y},
+                    imgui.GetColorU32(.PlotLines),
+                );
+
+                if !imgui.TableNextColumn() {break}
+            }
+        }
+
         imgui.EndTable();
+    }
+
+    if imgui.BeginPopupContextWindow() {
+        hide_slow_peaks := prefs.get_property("ui_hide_max_peaks").(bool) or_else false;
+        show_slow_peaks := !hide_slow_peaks;
+
+        if imgui.Checkbox("Show max peaks", &show_slow_peaks) {
+            prefs.set_property("ui_hide_max_peaks", !show_slow_peaks);
+            imgui.CloseCurrentPopup();
+        }
+
+        imgui.EndPopup();
     }
 }
 
