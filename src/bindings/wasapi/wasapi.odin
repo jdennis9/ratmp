@@ -153,9 +153,9 @@ ISimpleAudioVolume_UUID_STRING :: "87CE5498-68D6-44E5-9215-6DA47EF883D8";
 ISimpleAudioVolume_UUID := &IID{0x87CE5498, 0x68D6, 0x44E5, {0x92, 0x15, 0x6D, 0xA4, 0x7E, 0xF8, 0x83, 0xD8}};
 ISimpleAudioVolume_VTable :: struct {
 	using iunknown_vtable: IUnknown_VTable,
-	SetMasterVolume: proc "system" (this: ^ISimpleAudioVolume, fLevel: f32) -> win.HRESULT,
+	SetMasterVolume: proc "system" (this: ^ISimpleAudioVolume, fLevel: f32, EventContext: win.LPCGUID) -> win.HRESULT,
 	GetMasterVolume: proc "system" (this: ^ISimpleAudioVolume, pfLevel: ^f32) -> win.HRESULT,
-	SetMute: proc "system" (this: ^ISimpleAudioVolume, bMute: win.BOOL) -> win.HRESULT,
+	SetMute: proc "system" (this: ^ISimpleAudioVolume, bMute: win.BOOL, EventContext: win.LPCGUID) -> win.HRESULT,
 	GetMute: proc "system" (this: ^ISimpleAudioVolume, pbMute: ^win.BOOL) -> win.HRESULT,
 };
 

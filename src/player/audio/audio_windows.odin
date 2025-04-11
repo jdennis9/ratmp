@@ -29,6 +29,7 @@ _audio: struct {
 	device_props: []Device_Props,
 	device_ids: []win.LPCWSTR,
 	device_collection: ^wasapi.IMMDeviceCollection,
+	volume_control: ^wasapi.ISimpleAudioVolume,
 	selected_device_index: int,
 	default_device_index: int,
 	thread: ^thread.Thread,
@@ -76,6 +77,7 @@ _safe_release :: proc(p: ^^$T) {
 _check :: proc(hr: win.HRESULT, loc := #caller_location) -> bool {
 	if !win.SUCCEEDED(hr) {
 		log.error(loc, "HRESULT", hr);
+		log.errorf("%x", transmute(u32)hr);
 		return false;
 	}
 	return true;
@@ -86,7 +88,7 @@ init :: proc() -> (ok: bool) {
 
 	defer if !ok {shutdown()}
 
-	win.CoInitializeEx(nil, .MULTITHREADED);
+	win.CoInitializeEx(nil);
 
 	hr = win.CoCreateInstance(&wasapi.CLSID_MMDeviceEnumerator, nil, 
 		win.CLSCTX_ALL, wasapi.IMMDeviceEnumerator_UUID, auto_cast &_audio.device_enumerator);
@@ -140,8 +142,17 @@ interrupt :: proc() {
 	win.SetEvent(_audio.thread_interrupt_event);
 }
 
-set_volume :: proc(volume: f32) {}
-get_volume :: proc() -> f32 {return 1}
+set_volume :: proc(volume: f32) {
+	if _audio.volume_control != nil {
+		_audio.volume_control->SetMasterVolume(volume, nil);
+	}
+}
+get_volume :: proc() -> (volume: f32) {
+	if _audio.volume_control != nil {
+		_audio.volume_control->GetMasterVolume(&volume);
+	}
+	return;
+}
 
 @private
 _enumerate_devices :: proc() -> (ok: bool) {
@@ -149,6 +160,8 @@ _enumerate_devices :: proc() -> (ok: bool) {
 	count: win.UINT;
 	default_device: ^wasapi.IMMDevice;
 	default_device_id: win.LPCWSTR;
+
+	win.CoInitializeEx(nil);
 
 	delete(_audio.device_props);
 	_audio.device_props = nil;
@@ -221,10 +234,11 @@ _run_audio_session :: proc() -> (ok: bool) {
 	};
 
 	_check(_audio.device_collection->Item(auto_cast _audio.selected_device_index, &device)) or_return;
-	defer _safe_release(&device);
+	defer device->Release();
 
 	_check(device->Activate(wasapi.IAudioClient_UUID, win.CLSCTX_ALL, nil, auto_cast &audio_client)) or_return;
-	defer _safe_release(&audio_client);
+	defer audio_client->Release();
+
 
 	_check(audio_client->GetMixFormat(&format)) or_return;
 	defer win.CoTaskMemFree(format);
@@ -232,7 +246,9 @@ _run_audio_session :: proc() -> (ok: bool) {
 	_check(audio_client->Initialize(.SHARED, 0, 1e7, 0, format, nil)) or_return;
 	audio_client->GetBufferSize(&buffer_frame_count);
 	_check(audio_client->GetService(wasapi.IAudioRenderClient_UUID, auto_cast &render_client)) or_return;
-	defer _safe_release(&render_client);
+	defer render_client->Release();
+	_check(audio_client->GetService(wasapi.ISimpleAudioVolume_UUID, auto_cast &_audio.volume_control)) or_return;
+	defer _safe_release(&_audio.volume_control);
 
 	
 	render_client->GetBuffer(buffer_frame_count, &buffer);
