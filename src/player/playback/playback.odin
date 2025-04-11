@@ -66,11 +66,9 @@ this: struct {
 
 @private
 _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
-	sync.lock(&this.lock);
-
 	if !sync.atomic_load(&this.paused) {
 		status := decoder.fill_buffer(&this.decoder, output, samplerate, channels);
-
+		
 		if status == .EOF {
 			signal.post(.RequestNext);
 		}
@@ -80,16 +78,17 @@ _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
 	}
 	else {
 		for &f in output {f = 0}
-	}
-
-	sync.unlock(&this.lock);
+	}	
 }
 
 @private
 _stream_callback :: proc(buffer: []f32, _: rawptr) {
+	sync.lock(&this.lock);
+	defer sync.unlock(&this.lock);
+
 	context = this.ctx;
 	frames := i32(len(buffer)) / this.stream.channels;
-
+	
 	if this.paused || this.decoder.stream == nil {
 		for i in 0..<(frames * this.stream.channels) {
 			buffer[i] = 0;
