@@ -135,6 +135,8 @@ _get_custom_color_index :: proc(name: string) -> (Color, bool) {
 
 // Name of the theme, not path!
 load :: proc(name: string) -> bool {
+	_set_defaults();
+
 	parse_color :: proc(color: string) -> [4]f32 {
 		out: [4]f32 = {0, 0, 0, 1};
 		components, err := strings.split(color, ",");

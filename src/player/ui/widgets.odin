@@ -22,6 +22,7 @@ import glm "core:math/linalg/glsl";
 import imgui "../../libs/odin-imgui";
 
 import "../analysis";
+import "../theme";
 
 lerp :: glm.lerp_f32;
 
@@ -102,13 +103,16 @@ _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
 
 	bar_height := (size.y / f32(channels)) - 1;
 	y_offset: f32 = style.FramePadding.y;
-	color := imgui.GetColorU32(.PlotHistogram);
 
+	quiet_color := theme.custom_colors[.PeakQuiet];
+	loud_color := theme.custom_colors[.PeakLoud];
+	
 	for &peak in peaks {
 		peak = clamp(peak, 0, 1);
+		color := glm.lerp(quiet_color, loud_color, peak);
 		pmin := [2]f32{cursor.x, cursor.y + y_offset};
 		pmax := [2]f32{pmin.x + size.x*peak, pmin.y + bar_height};
-		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, color);
+		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color));
 		y_offset += bar_height + 1;
 	}
 
@@ -132,10 +136,16 @@ _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, r
 		value := clamp(unclamped_value, minval, maxval);
         bar_size := [2]f32{bar_width, size.y};
 		frac := (maxval - value) / (maxval - minval);
+		frac = clamp(frac, 0, 1);
+
+		quiet_color := theme.custom_colors[.PeakQuiet];
+		loud_color := theme.custom_colors[.PeakLoud];
+		color := glm.lerp(quiet_color, loud_color, frac);
+
         imgui.DrawList_AddRectFilled(drawlist, 
             {cursor.x, cursor.y + bar_size.y}, 
             {cursor.x + bar_size.x, cursor.y + bar_size.y * frac},
-            imgui.GetColorU32(.PlotHistogram),
+            imgui.GetColorU32ImVec4(color),
         );
         cursor.x += bar_size.x + 1;
     }

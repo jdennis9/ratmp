@@ -22,10 +22,12 @@ import "core:fmt";
 import "core:strings";
 import "core:math";
 import "core:log";
+import glm "core:math/linalg/glsl";
 
 import "../analysis";
 import "../playback";
 import imgui "../../libs/odin-imgui";
+import "../theme";
 
 _show_spectrum_window :: proc() {
 	spectrum := analysis.get_spectrum();
@@ -70,10 +72,15 @@ _show_spectrum_window :: proc() {
             if imgui.TableNextColumn() {
                 size := imgui.GetContentRegionAvail();
                 cursor := imgui.GetCursorScreenPos();
+
+                quiet_color := theme.custom_colors[.PeakQuiet];
+                loud_color := theme.custom_colors[.PeakLoud];
+                color := glm.lerp(quiet_color, loud_color, band);
+
                 imgui.DrawList_AddRectFilled(drawlist, 
                     {cursor.x, cursor.y + size.y}, 
                     {cursor.x + size.x, cursor.y + size.y * (1 - band)},
-                    imgui.GetColorU32(.PlotHistogram),
+                    imgui.GetColorU32ImVec4(color),
                 );
             }
         }
