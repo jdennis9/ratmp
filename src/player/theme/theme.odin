@@ -31,6 +31,21 @@ import "../system_paths";
 import "../util";
 import "../prefs";
 
+Color :: enum {
+	PlayingHighlight,
+	PeakQuiet,
+	PeakLoud,
+};
+
+custom_color_info := [Color]struct {
+	name: cstring,
+	default: [4]f32,
+} {
+	.PlayingHighlight = {name = "PlayingHighlight", default = {1, 0.576, 0.227, 0.9}},
+	.PeakQuiet = {name = "PeakQuiet", default = {0.5, 0.5, 0.5, 0.9}},
+	.PeakLoud = {name = "PeakLoud", default = {0.1, 1, 0.1, 1}},
+}
+
 @private
 theme_folder_path: string;
 
@@ -40,7 +55,15 @@ this: struct {
 	scanned_themes: [dynamic]cstring,
 };
 
+custom_colors: [Color][4]f32;
+
+@private
+_set_defaults :: proc() {
+	for col in Color {custom_colors[col] = custom_color_info[col].default}
+}
+
 init :: proc() {
+	_set_defaults();
 	theme_folder_path = filepath.join({system_paths.DATA_DIR, "themes"});
 
 	if !os.exists(theme_folder_path) {
@@ -99,8 +122,32 @@ exists :: proc(name: string) -> bool {
 	return false;
 }
 
+@private
+_get_custom_color_index :: proc(name: string) -> (Color, bool) {
+	for c, index in custom_color_info {
+		if string(c.name) == name {
+			return index, true;
+		}
+	}
+
+	return .PeakLoud, false;
+}
+
 // Name of the theme, not path!
 load :: proc(name: string) -> bool {
+	parse_color :: proc(color: string) -> [4]f32 {
+		out: [4]f32 = {0, 0, 0, 1};
+		components, err := strings.split(color, ",");
+		if err != nil {return out}
+		defer delete(components);
+		if len(components) != 4 {return out}
+		out.r = strconv.parse_f32(components[0]) or_else 0;
+		out.g = strconv.parse_f32(components[1]) or_else 0;
+		out.b = strconv.parse_f32(components[2]) or_else 0;
+		out.a = strconv.parse_f32(components[3]) or_else 1;
+		return out;
+	}
+
 	imgui.StyleColorsDark();
 	style := imgui.GetStyle();
 	
@@ -133,13 +180,18 @@ load :: proc(name: string) -> bool {
 			if col == .COUNT {break}
 			col_name := imgui.GetStyleColorName(col);
 			col_value := section[string(col_name)] or_continue;
-			components := strings.split(col_value, ",") or_continue;
-			defer delete(components);
-			if len(components) != 4 {continue}
-			style.Colors[col].r = strconv.parse_f32(components[0]) or_else 0;
-			style.Colors[col].g = strconv.parse_f32(components[1]) or_else 0;
-			style.Colors[col].b = strconv.parse_f32(components[2]) or_else 0;
-			style.Colors[col].a = strconv.parse_f32(components[3]) or_else 1;
+			style.Colors[col] = parse_color(col_value);
+		}
+
+		return true;
+	}
+
+	load_custom_colors :: proc(m: ini.Map) -> bool {
+		section := m["OtherColors"] or_return;
+
+		for key, value in section {
+			index := _get_custom_color_index(key) or_continue;
+			custom_colors[index] = parse_color(value);
 		}
 
 		return true;
@@ -147,6 +199,7 @@ load :: proc(name: string) -> bool {
 
 	load_style(m, style);
 	load_colors(m, style);
+	load_custom_colors(m);
 
 	slice.fill(this.current_theme[:], 0);
 	copy(this.current_theme[:len(this.current_theme)-1], name);
@@ -154,6 +207,13 @@ load :: proc(name: string) -> bool {
 }
 
 save :: proc(name: string) {
+	write_color :: proc(fd: os.Handle, name: string, v: [4]f32) {
+		fmt.fprintln(
+			fd, name, "=",
+			v.r, ",", v.g, ",", v.b, ",", v.a,  sep=""
+		);
+	}
+
 	path := format_theme_path(name);
 	style := imgui.GetStyle();
 	defer delete(path);
@@ -170,9 +230,11 @@ save :: proc(name: string) {
 		if col == .COUNT {break}
 		col_name := imgui.GetStyleColorName(col);
 		v := style.Colors[col];
-		fmt.fprintln(
-			fd, col_name, "=",
-			v.r, ",", v.g, ",", v.b, ",", v.a,  sep=""
-		);
+		write_color(fd, string(col_name), v);
+	}
+
+	fmt.fprintln(fd, "[OtherColors]");
+	for col, index in custom_colors {
+		write_color(fd, string(custom_color_info[index].name), col);
 	}
 }

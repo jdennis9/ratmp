@@ -26,6 +26,7 @@ import imgui "../../libs/odin-imgui";
 import lib "../library";
 import "../playback";
 import "../util";
+import "../theme";
 
 Track_Table_Flag :: enum {
 	NoRemove,
@@ -110,7 +111,7 @@ _show_track_row :: proc(
 	playing_track := playback.get_playing_track();
 	
 	if track_id == playing_track {
-		imgui.TableSetBgColor(.RowBg0, PLAYING_COLOR);
+		imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]));
 
 		if jump_to_playing {imgui.SetScrollHereY()}
 	}

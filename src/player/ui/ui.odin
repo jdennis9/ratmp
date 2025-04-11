@@ -51,8 +51,6 @@ NEXT_TRACK_ICON :: "";
 PLAY_ICON :: "";
 PAUSE_ICON :: "";
 
-PLAYING_COLOR :: 0xff3a93ff;
-
 Window :: enum {
 	Library,
 	Navigation,
@@ -916,7 +914,7 @@ _show_navigation_window :: proc() {
 				}
 
 				if p.id == queued_playlist_id {
-					imgui.TableSetBgColor(.RowBg0, PLAYING_COLOR);
+					imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]));
 				}
 				
 				if imgui.BeginPopupContextItem() {
@@ -1233,6 +1231,12 @@ _show_theme_editor_window :: proc() {
 		unsaved_changes = false;
 	}
 
+	imgui.SeparatorText(build.PROGRAM_NAME);
+	for col in theme.Color {
+		unsaved_changes |= imgui.ColorEdit4(theme.custom_color_info[col].name, &theme.custom_colors[col]);
+	}
+
+	imgui.SeparatorText("ImGui");
 	for col in imgui.Col {
 		if col == .COUNT {continue}
 		unsaved_changes |= imgui.ColorEdit4(imgui.GetStyleColorName(col), &style.Colors[col]);

@@ -20,6 +20,7 @@ package ui;
 import imgui "../../libs/odin-imgui";
 
 import lib "../library";
+import "../theme";
 
 Playlist_List_Action :: struct {
 	play_playlist: Maybe(int),
@@ -47,7 +48,7 @@ show_playlist_list :: proc(playlists: []lib.Playlist, playing_index: int) -> (ac
 
 			imgui.TableSetColumnIndex(0);
 			if playlist_index == playing_index {
-				imgui.TableSetBgColor(.RowBg0, PLAYING_COLOR);
+				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]));
 			}
 
 			if imgui.Selectable(name, false, {.SpanAllColumns}) {
