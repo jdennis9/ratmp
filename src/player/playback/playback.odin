@@ -29,6 +29,7 @@ import lib "../library";
 import "../audio";
 import "../decoder";
 import "../util";
+import "../prefs";
 
 Audio_Callback :: #type proc(output: []f32, samplerate: int, channels: int, data: rawptr);
 
@@ -131,6 +132,9 @@ _signal_handler :: proc(sig: signal.Signal) {
 	else if sig == .RequestPrev {play_prev_track()}
 	else if sig == .RequestPause {set_paused(true)}
 	else if sig == .RequestPlay {set_paused(false)}
+	else if sig == .ApplyPrefs {
+		this.shuffle = prefs.get_property("playback_shuffle").(bool) or_else false;
+	}
 }
 
 init :: proc() -> bool {
@@ -204,7 +208,11 @@ stop :: proc() {
 	audio.interrupt();
 }
 
-toggle_shuffle :: proc() {this.shuffle = !this.shuffle;}
+toggle_shuffle :: proc() {
+	this.shuffle = !this.shuffle;
+	prefs.set_property("playback_shuffle", this.shuffle);
+}
+
 is_shuffle_enabled :: proc() -> bool {return this.shuffle;}
 
 play_track :: proc(track: lib.Track) -> bool {

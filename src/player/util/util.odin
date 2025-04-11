@@ -60,17 +60,23 @@ json_sanitize_string :: proc(str: cstring, buf: []u8) -> string {
 	return string(buf[:n]);
 }
 
-json_write_kv_pair_cstring :: proc(file: os.Handle, key, value: cstring) {
+json_write_kv_pair_cstring :: proc(file: os.Handle, key, value: cstring, always_write := false) {
 	length := len(value);
-	if value != nil && length > 0 {
+	if always_write || value != nil && length > 0 {
 		buf: [512]u8;
 		sanitized := json_sanitize_string(value, buf[:]);
 		fmt.fprintln(file, "\"", key, "\"", ":", "\"", sanitized, "\",", sep ="", flush=false);
 	}
 }
 
-json_write_kv_pair_int :: proc(file: os.Handle, key: string, value: int) {
-	if value != 0 {
+json_write_kv_pair_int :: proc(file: os.Handle, key: string, value: int, always_write := false) {
+	if always_write || value != 0 {
+		fmt.fprintln(file, "\"", key, "\"", ":", value, ",", sep="", flush=false);
+	}
+}
+
+json_write_kv_pair_bool :: proc(file: os.Handle, key: string, value: bool, always_write := false) {
+	if always_write || value {
 		fmt.fprintln(file, "\"", key, "\"", ":", value, ",", sep="", flush=false);
 	}
 }
@@ -78,4 +84,5 @@ json_write_kv_pair_int :: proc(file: os.Handle, key: string, value: int) {
 json_write_kv_pair :: proc {
 	json_write_kv_pair_int,
 	json_write_kv_pair_cstring,
+	json_write_kv_pair_bool,
 }

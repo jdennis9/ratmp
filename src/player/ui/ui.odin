@@ -707,12 +707,16 @@ show :: proc() {
 		// Mini visualizer
 		// -----------------------------------------------------------------------------
 		{
-			@static use_spectrum := false;
+			use_spectrum := prefs.get_property("ui_prefer_spectrum").(bool) or_else false;
 			if use_spectrum {
-				use_spectrum = !_show_spectrum_widget("##spectrum", {100, imgui.GetFrameHeight()});
+				if _show_spectrum_widget("##spectrum", {100, imgui.GetFrameHeight()}) {
+					prefs.set_property("ui_prefer_spectrum", false);
+				}
 			}
 			else {
-				use_spectrum = _show_peak_meter_widget("##peak_meter", {100, 0});
+				if _show_peak_meter_widget("##peak_meter", {100, 0}) {
+					prefs.set_property("ui_prefer_spectrum", true);
+				}
 			}
 			imgui.Separator();
 		}

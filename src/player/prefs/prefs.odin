@@ -172,6 +172,7 @@ load :: proc() {
 		}
 	}
 	
+	_load_properties();
 	signal.post(.ApplyPrefs);
 }
 
@@ -203,4 +204,6 @@ save :: proc() {
 			}
 		}
 	}
+
+	_save_properties();
 }

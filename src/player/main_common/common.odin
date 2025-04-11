@@ -41,6 +41,7 @@ frame :: proc() {
 }
 
 shutdown :: proc() {
+	prefs.save();
 	ui.shutdown();
 	playback.shutdown();
 	library.shutdown();
