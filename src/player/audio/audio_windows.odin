@@ -147,7 +147,7 @@ set_volume :: proc(volume: f32) {
 		_audio.volume_control->SetMasterVolume(volume, nil);
 	}
 }
-get_volume :: proc() -> (volume: f32) {
+get_volume :: proc() -> (volume: f32 = 1) {
 	if _audio.volume_control != nil {
 		_audio.volume_control->GetMasterVolume(&volume);
 	}

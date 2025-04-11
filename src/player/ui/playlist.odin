@@ -126,6 +126,10 @@ _show_track_row :: proc(
 			action.play_track = track_index;
 		}
 
+		if imgui.IsMouseDoubleClicked(.Left) && imgui.IsItemHovered() {
+			action.play_track = track_index;
+		}
+
 		// ---------------------------------------------------------------------
 		// Drag-drop
 		// ---------------------------------------------------------------------
