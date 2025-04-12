@@ -1,9 +1,5 @@
 package wasapi;
 
-/*foreign import lib {
-	"mm",
-};*/
-
 import win "core:sys/windows";
 import "core:c";
 

@@ -28,6 +28,7 @@ import "core:os";
 import "core:fmt";
 import "core:strconv";
 import "core:time";
+import "core:path/filepath";
 
 import imgui "../../libs/odin-imgui";
 
@@ -41,6 +42,7 @@ import "../theme";
 import "../drag_drop";
 import "../analysis";
 import "../build";
+import "../system_paths";
 
 ICON_FONT := #load("FontAwesome.otf");
 
@@ -50,6 +52,9 @@ PREV_TRACK_ICON :: "";
 NEXT_TRACK_ICON :: "";
 PLAY_ICON :: "";
 PAUSE_ICON :: "";
+
+@private
+_Layout_Name :: [64]u8;
 
 Window :: enum {
 	Library,
@@ -175,7 +180,7 @@ window_category_info := [Window_Category]struct {
 	.Visualizers = {"Visualizers"},
 };
 
-DEFAULT_LAYOUT_INI := #load("default_layout.ini", cstring);
+DEFAULT_LAYOUT_INI := #load("default_layout.ini");
 
 @private
 Playlist_Group_Window :: struct {
@@ -226,8 +231,10 @@ this: struct {
 	platform_drag_drop_payload: [dynamic]string,
 	want_to_drop_platform_drag_drop_payload: bool,
 
-	want_reset_layout: bool,
+	layout_that_we_want_to_load: []u8,
+	free_layout_after_load: bool,
 
+	layout_names: [dynamic]_Layout_Name,
 	//metadata_save_job: ^lib.Metadata_Save_Job,
 };
 
@@ -252,7 +259,7 @@ init :: proc() -> bool {
 	// Load settings if needed
 	if !os.exists(cast(string) io.IniFilename) {
 		log.debug("Loading default layout");
-		imgui.LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
+		imgui.LoadIniSettingsFromMemory(cstring(&DEFAULT_LAYOUT_INI[0]), len(DEFAULT_LAYOUT_INI));
 	}
 
 	log.debug("ImGui version: ", imgui.VERSION);
@@ -273,6 +280,7 @@ init :: proc() -> bool {
 		}
 	);
 
+	_scan_layouts();
 
 	return true;
 }
@@ -458,9 +466,12 @@ show :: proc() {
 
 	// Layouts need to be loaded before NewFrame or else docking settings
 	// aren't respected
-	if this.want_reset_layout {
-		imgui.LoadIniSettingsFromMemory(DEFAULT_LAYOUT_INI);
-		this.want_reset_layout = false;
+	if this.layout_that_we_want_to_load != nil {
+		imgui.LoadIniSettingsFromMemory(cstring(&this.layout_that_we_want_to_load[0]), len(this.layout_that_we_want_to_load));
+		if this.free_layout_after_load {
+			delete(this.layout_that_we_want_to_load);
+		}
+		this.layout_that_we_want_to_load = nil;
 	}
 
 	io := imgui.GetIO();
@@ -632,10 +643,47 @@ show :: proc() {
 				}
 			}
 
-			imgui.Separator();
-			if imgui.MenuItem("Reset layout") {
-				this.want_reset_layout = true;
+			if imgui.BeginMenu("Layout") {
+				@static new_layout_name: _Layout_Name;
+
+				if imgui.MenuItem("Default") {
+					this.layout_that_we_want_to_load = DEFAULT_LAYOUT_INI;
+					this.free_layout_after_load = false;
+				}
+
+				imgui.Separator();
+
+				for &layout_name, layout_index in this.layout_names {
+					if imgui.MenuItem(cstring(&layout_name[0])) {
+						_load_layout(layout_index);
+					}
+				}
+
+				imgui.Separator();
+				imgui.InputTextWithHint("##layout_name", "Layout Name", cstring(&new_layout_name[0]), len(new_layout_name));
+				if imgui.MenuItem("Save current...") {
+					new_layout_index := len(this.layout_names);
+					layout_exists := false;
+					for &layout_name, layout_index in this.layout_names {
+						if cstring(&layout_name[0]) == cstring(&new_layout_name[0]) {
+							new_layout_index = layout_index;
+							layout_exists = true;
+							break;
+						}
+					}
+
+					if !layout_exists {
+						append(&this.layout_names, new_layout_name);
+					}
+
+					_save_layout(new_layout_index);
+
+					slice.fill(new_layout_name[:], 0);
+				}
+
+				imgui.EndMenu();
 			}
+
 			imgui.EndMenu();
 		}
 
@@ -1883,6 +1931,72 @@ _show_metadata_editor :: proc() {
 			}
 		}*/
 	}
+}
+
+// =============================================================================
+// Layouts
+// =============================================================================
+@private
+_ensure_layout_folder :: proc() {
+	layouts_folder_path := filepath.join({system_paths.CONFIG_DIR, "layouts"});
+	defer delete(layouts_folder_path);
+	if !os.exists(layouts_folder_path) {os.make_directory(layouts_folder_path)}
+}
+
+@private
+_get_layout_path :: proc(index: int) -> string {
+	name := string(cstring(&this.layout_names[index][0]));
+	return filepath.join({system_paths.CONFIG_DIR, "layouts", name});
+}
+
+@private
+_set_layout_from_ini :: proc(ini: []u8) {
+	imgui.LoadIniSettingsFromMemory(cstring(&ini[0]), len(ini));
+}
+
+@private
+_scan_layouts :: proc() {
+	folder_path := filepath.join({system_paths.CONFIG_DIR, "layouts"});
+	defer delete(folder_path);
+
+	clear(&this.layout_names);
+	
+	iterator :: proc(fullpath: string, is_folder: bool, data: rawptr) {
+		if is_folder {return}
+		filename := filepath.base(fullpath);
+		name_buf: _Layout_Name;
+		util.copy_string_to_buf(name_buf[:], filename);
+		append(&this.layout_names, name_buf);
+	}
+	
+	if !util.for_each_file_in_folder(folder_path, iterator, nil) {
+		if !os.exists(folder_path) {os.make_directory(folder_path)}
+	}
+}
+
+@private
+_save_layout :: proc(index: int) {
+	path := _get_layout_path(index);
+	defer delete(path);
+	path_cstring := strings.clone_to_cstring(path);
+	defer delete(path_cstring);	
+	imgui.SaveIniSettingsToDisk(path_cstring);
+}
+
+@private
+_load_layout :: proc(index: int) {
+	path := _get_layout_path(index);
+	defer delete(path);
+	data, ok := os.read_entire_file_from_filename(path);
+	if !ok {return}
+
+	this.layout_that_we_want_to_load = data;
+	this.free_layout_after_load = true;
+}
+
+@private @fini
+_cleanup_layouts :: proc() {
+	delete(this.layout_names);
 }
 
 // =============================================================================
