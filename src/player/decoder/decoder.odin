@@ -78,7 +78,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 
 	if dec.resampler == nil {
 		error: i32;
-		dec.resampler = src.new(.SINC_FASTEST, 2, &error);
+		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error);
 	}
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate);
