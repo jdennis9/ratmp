@@ -62,6 +62,7 @@ Window :: enum {
 	Artists,
 	Albums,
 	Folders,
+	Genres,
 	Queue,
 	PlaylistTabs,
 	Playlist,
@@ -118,6 +119,11 @@ window_info := [Window]Window_Info {
 		name = "Folders", internal_name = "folders",
 		category = .Music,
 		show_proc = _show_folders_window,
+	},
+	.Genres = {
+		name = "Genres", internal_name = "genres",
+		category = .Music,
+		show_proc = _show_genres_window,
 	},
 	.Queue = {
 		name = "Queue", internal_name = "queue",
@@ -224,6 +230,7 @@ this: struct {
 	artists_window: Playlist_Group_Window,
 	albums_window: Playlist_Group_Window,
 	folders_window: Playlist_Group_Window,
+	genres_window: Playlist_Group_Window,
 
 	enable_imgui_theme_editor: bool,
 	enable_imgui_demo_window: bool,
@@ -1058,6 +1065,11 @@ _show_artists_window :: proc() {
 @private
 _show_folders_window :: proc() {
 	_show_playlist_group_window(lib.get_folders(), &this.folders_window);
+}
+
+@private
+_show_genres_window :: proc() {
+	_show_playlist_group_window(lib.get_genres(), &this.genres_window);
 }
 
 @private

@@ -145,6 +145,7 @@ this: struct {
 	albums: Playlist_List,
 	artists: Playlist_List,
 	folders: Playlist_List,
+	genres: Playlist_List,
 
 	library: Playlist,
 };
@@ -241,6 +242,7 @@ _load_library :: proc(filename: string) -> bool {
 		_add_to_playlist_group(track_id, artist, &this.artists);
 		_add_to_playlist_group(track_id, album, &this.albums);
 		_add_to_playlist_group(track_id, filepath.base(filepath.dir(path)), &this.folders);
+		_add_to_playlist_group(track_id, genre, &this.genres);
 	}
 
 	return true;
@@ -539,14 +541,25 @@ add_file :: proc(file: string) -> Track {
 
 	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &this.artists);
 	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &this.albums);
+	_add_to_playlist_group(index+1, string(cstring(&track.genre[0])), &this.genres, case_insensitive=true);
 	_add_to_playlist_group(index+1, filepath.base(filepath.dir(file)), &this.folders);
 
 	return index+1;
 }
 
 @private
-_add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playlist_List) {
-	hash := xxhash.XXH32(transmute([]u8)group_string);
+_add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playlist_List, case_insensitive := false) {
+	hash: u32;
+
+	if case_insensitive {
+		lower := strings.to_lower(group_string);
+		defer delete(lower);
+		hash = xxhash.XXH32(transmute([]u8)lower);
+	}
+	else {
+		hash = xxhash.XXH32(transmute([]u8)group_string);
+	}
+
 	for h, index in group.hashes {
 		if h == hash {
 			playlist_add_tracks(&group.playlists[index], {track});
@@ -577,6 +590,10 @@ get_artists :: proc() -> ^Playlist_List {
 
 get_folders :: proc() -> ^Playlist_List {
 	return &this.folders;
+}
+
+get_genres :: proc() -> ^Playlist_List {
+	return &this.genres;
 }
 
 get_track_path :: proc(track: Track, buf: []u8) -> string {
