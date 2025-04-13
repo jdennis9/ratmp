@@ -924,18 +924,22 @@ _show_navigation_window :: proc() {
 
 		row :: proc(name: cstring, window: Window, length: int) {
 			imgui.TableNextRow();
+
+			if imgui.TableSetColumnIndex(1) && length != 0 {
+				imgui.TextDisabled("%d", cast(i32) length);
+			}
+
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Selectable(name, false, {.SpanAllColumns}) {
 					bring_window_to_front(window);
 				}
 			}
-
-			if imgui.TableSetColumnIndex(1) && length != 0 {
-				imgui.TextDisabled("%d", cast(i32) length);
-			}
 		}
 		
 		row("Library", .Library, len(lib.get_default_playlist().tracks));
+		if imgui.IsItemClicked(.Middle) {
+			playback.play_playlist(lib.get_default_playlist()^);
+		}
 		row("Artists", .Artists, len(lib.get_artists()));
 		row("Albums", .Albums, len(lib.get_albums()));
 		row("Folders", .Folders, len(lib.get_folders()));
