@@ -630,18 +630,14 @@ show :: proc() {
 		}
 
 		if imgui.BeginMenu("View") {
-			//if imgui.BeginMenu("Windows") {
-				//for i in Window {
-				//	imgui.MenuItemBoolPtr(window_info[i].name, nil, &this.show_window[i]);
-				//}
-				//imgui.EndMenu();
-			//}
 			for &window in window_info {
 				if imgui.BeginMenu(window_category_info[window.category].name) {
 					imgui.MenuItemBoolPtr(window.name, nil, &window.show);
 					imgui.EndMenu();
 				}
 			}
+
+			imgui.Separator();
 
 			if imgui.BeginMenu("Layout") {
 				@static new_layout_name: _Layout_Name;
