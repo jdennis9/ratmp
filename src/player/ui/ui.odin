@@ -936,9 +936,9 @@ _show_navigation_window :: proc() {
 		if imgui.IsItemClicked(.Middle) {
 			playback.play_playlist(lib.get_default_playlist()^);
 		}
-		row("Artists", .Artists, len(lib.get_artists()));
-		row("Albums", .Albums, len(lib.get_albums()));
-		row("Folders", .Folders, len(lib.get_folders()));
+		row("Artists", .Artists, len(lib.get_artists().playlists));
+		row("Albums", .Albums, len(lib.get_albums().playlists));
+		row("Folders", .Folders, len(lib.get_folders().playlists));
 	}
 
 	imgui.SeparatorText("Your Playlists");
@@ -989,13 +989,13 @@ _show_navigation_window :: proc() {
 }
 
 @private
-_show_playlist_group_window :: proc(playlists: []lib.Playlist, state: ^Playlist_Group_Window) {
+_show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_Group_Window) {
 	
 	if state.selected_group_id != nil {
 		window_focused := imgui.IsWindowFocused();
 		playlist: ^lib.Playlist;
 
-		for &p in playlists {
+		for &p in list.playlists {
 			if p.group_id == state.selected_group_id.? {
 				playlist = &p;
 				break;
@@ -1018,20 +1018,28 @@ _show_playlist_group_window :: proc(playlists: []lib.Playlist, state: ^Playlist_
 	else {
 		index_of_queued_playlist := -1;
 		queued_group_id := playback.get_queued_group_id();
-		for p, index in playlists {
+		for p, index in list.playlists {
 			if p.group_id == queued_group_id {
 				index_of_queued_playlist = index;
 				break;
 			}
 		}
 
-		action := show_playlist_list(playlists, index_of_queued_playlist);
+		action := _show_playlist_list(list^, index_of_queued_playlist);
+		lib.update_playlist_list_filter(list, action.filter, action.filter_hash);
+
+		if action.sort_spec != nil {
+			list.sort_metric = action.sort_spec.?.metric;
+			list.sort_order = action.sort_spec.?.order;
+			lib.sort_playlist_list(list);
+		}
+
 		if action.select_playlist != nil {
-			state.selected_group_id = playlists[action.select_playlist.?].group_id;
+			state.selected_group_id = list.playlists[action.select_playlist.?].group_id;
 		}
 
 		if action.play_playlist != nil {
-			playlist := playlists[action.play_playlist.?];
+			playlist := list.playlists[action.play_playlist.?];
 			playback.play_playlist(playlist);
 		}
 	}

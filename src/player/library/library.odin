@@ -116,12 +116,22 @@ Playlist :: struct {
 	sort_order: Sort_Order,
 };
 
-// For grouping tracks by a common string
-@private
-Playlist_Group :: struct {
+Playlist_List_Sort_Metric :: enum {
+	None,
+	Name,
+	Length,
+};
+
+Playlist_List :: struct {
 	// Hashes of the group strings
 	hashes: [dynamic]u32,
 	playlists: [dynamic]Playlist,
+	filter_indices: [dynamic]i32,
+	filter_hash: u32,
+	min_filter_index: i32,
+	max_filter_index: i32,
+	sort_metric: Playlist_List_Sort_Metric,
+	sort_order: Sort_Order,
 };
 
 @private
@@ -132,9 +142,9 @@ this: struct {
 	metadata_pool: [dynamic]u8,
 	next_playlist_id: Playlist_ID,
 	playlists: [dynamic]Playlist,
-	albums: Playlist_Group,
-	artists: Playlist_Group,
-	folders: Playlist_Group,
+	albums: Playlist_List,
+	artists: Playlist_List,
+	folders: Playlist_List,
 
 	library: Playlist,
 };
@@ -535,7 +545,7 @@ add_file :: proc(file: string) -> Track {
 }
 
 @private
-_add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playlist_Group) {
+_add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playlist_List) {
 	hash := xxhash.XXH32(transmute([]u8)group_string);
 	for h, index in group.hashes {
 		if h == hash {
@@ -557,16 +567,16 @@ _add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playl
 	append(&group.playlists, playlist);
 }
 
-get_albums :: proc() -> []Playlist {
-	return this.albums.playlists[:];
+get_albums :: proc() -> ^Playlist_List {
+	return &this.albums;
 }
 
-get_artists :: proc() -> []Playlist {
-	return this.artists.playlists[:];
+get_artists :: proc() -> ^Playlist_List {
+	return &this.artists;
 }
 
-get_folders :: proc() -> []Playlist {
-	return this.folders.playlists[:];
+get_folders :: proc() -> ^Playlist_List {
+	return &this.folders;
 }
 
 get_track_path :: proc(track: Track, buf: []u8) -> string {
