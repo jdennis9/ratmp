@@ -35,16 +35,6 @@ save_playlist_to_file :: proc(playlist: Playlist, filename: string) {
 	if error != os.ERROR_NONE {return}
 	defer os.close(file);
 
-	/*fmt.fprintln(file, 1);
-	fmt.fprintln(file, playlist.name);
-
-	for track, index in playlist.tracks {
-		track_path_buf: [512]u8;
-		track_path := get_track_path(track, track_path_buf[:]);
-
-		fmt.fprintln(file, track_path, flush = false);
-	}*/
-
 	fmt.fprintln(file, "{");
 	write_kv_pair(file, "name", playlist.name);
 	write_kv_pair(file, "sort_metric", int(playlist.sort_metric));
@@ -65,31 +55,6 @@ load_playlist_from_file :: proc(filename: string) -> (playlist: Playlist, succes
 	file_data, file_ok := os.read_entire_file_from_filename(filename);
 	if !file_ok {return}
 	defer delete(file_data);
-
-	/*lines, error := strings.split_lines(string(file_data));
-	if error != .None {return}
-	defer delete(lines);
-
-	if len(lines) < 2 {
-		return;
-	}
-
-	name, name_error := strings.clone_to_cstring(lines[1]);
-	if name_error != .None {return}
-	if len(name) == 0 {
-		log.error("Empty name for playlist", filename);
-		return
-	}
-	playlist.name = name;
-
-	for track_path in lines[2:] {
-		track_id := add_file(track_path);
-		if track_id != 0 {
-			append(&playlist.tracks, track_id);
-		}
-	}
-
-	playlist.id = alloc_playlist_id();*/
 
 	// Helper for getting json strings
 	get_string :: proc(obj: json.Object, key: string) -> (string, bool) {
@@ -237,9 +202,6 @@ sort_playlist :: proc(playlist: ^Playlist) {
 		playlist.tracks[j] = temp;
 	}
 
-	timer: time.Stopwatch;
-	time.stopwatch_start(&timer);
-
 	iface: sort.Interface;
 	iface.collection = playlist;
 	iface.len = len_proc;
@@ -257,9 +219,6 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	else {sort.reverse_sort(iface)}
 
 	playlist_make_dirty(playlist);
-
-	time.stopwatch_stop(&timer);
-	//log.debug("Sort playlist:", time.duration_milliseconds(time.stopwatch_duration(timer)), "ms");
 }
 
 playlist_make_dirty :: proc(playlist: ^Playlist) {

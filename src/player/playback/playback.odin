@@ -143,14 +143,11 @@ init :: proc() -> bool {
 	this.queue.name = "Queue";
 	signal.install_handler(_signal_handler);
 	audio.init() or_return;
-	//audio.run(_stream_callback, nil, &this.stream);
 	this.stream = audio.start(audio.get_default_device_index(), _stream_callback, nil);
-	//return cast(bool) audio.run(_stream_callback, nil, &this.stream);
 	return true;
 }
 
 shutdown :: proc() {
-	//audio.kill();
 	audio.stop();
 	audio.shutdown();
 }

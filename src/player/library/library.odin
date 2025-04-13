@@ -570,9 +570,6 @@ _add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playl
 	playlist := Playlist {
 		name = strings.clone_to_cstring(group_string),
 		group_id = hash,
-		// Sorting these playlist adds a huge amount of time to loading
-		//sort_metric = .Artist,
-		//sort_order = .Descending,
 	};
 
 	append(&playlist.tracks, track);

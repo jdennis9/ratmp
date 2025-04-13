@@ -288,7 +288,6 @@ _run_audio_session :: proc() -> (ok: bool) {
 
 		audio_client->GetCurrentPadding(&frame_padding);
 		avail_frames = buffer_frame_count - frame_padding;
-		//log.debug(buffer_frame_count, frame_padding);
 
 		render_client->GetBuffer(avail_frames, &buffer);
 		_audio.callback((cast([^]f32)buffer)[:int(avail_frames)*channels], _audio.callback_data);
