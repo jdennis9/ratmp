@@ -1846,7 +1846,9 @@ _show_metadata_editor :: proc() {
 		imgui.TextUnformatted(name);
 		imgui.TableSetColumnIndex(1);
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
-		imgui.InputText("##text", buf, auto_cast buf_size);
+		if imgui.InputText("##text", buf, auto_cast buf_size) && enable != nil {
+			enable^ = true;
+		}
 		if enable != nil && imgui.TableSetColumnIndex(2) {
 			imgui.Checkbox("##enable", enable);
 			imgui.SetItemTooltip("Apply");
@@ -1864,6 +1866,7 @@ _show_metadata_editor :: proc() {
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		if imgui.InputInt("##number", &val_i32) {
 			val^ = int(val_i32);
+			if enable != nil {enable^ = true}
 		}
 		if enable != nil && imgui.TableSetColumnIndex(2) {
 			imgui.Checkbox("##enable", enable);
