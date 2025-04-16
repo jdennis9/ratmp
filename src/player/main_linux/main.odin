@@ -69,6 +69,7 @@ main_linux :: proc() -> bool {
 	glfw.Init();
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3);
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0);
+	glfw.WindowHint_bool(glfw.TRANSPARENT_FRAMEBUFFER, true);
 	this.window = glfw.CreateWindow(800, 800, build.PROGRAM_NAME_AND_VERSION, nil, nil);
 	imgui_glfw.InitForOpenGL(this.window, true);
 
