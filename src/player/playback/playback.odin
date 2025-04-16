@@ -143,7 +143,7 @@ init :: proc() -> bool {
 	this.queue.name = "Queue";
 	signal.install_handler(_signal_handler);
 	audio.init() or_return;
-	this.stream = audio.start(audio.get_default_device_index(), _stream_callback, nil);
+	this.stream = audio.start(audio.get_default_device_index(), _stream_callback, nil) or_return;
 	return true;
 }
 

@@ -115,7 +115,7 @@ get_default_device_index :: proc() -> int {
 	return _audio.default_device_index;
 }
 
-start :: proc(device_index: int, callback: Callback, callback_data: rawptr) -> Stream_Info {
+start :: proc(device_index: int, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
 	_audio.selected_device_index = device_index;
 	_audio.callback = callback;
 	_audio.callback_data = callback_data;
@@ -123,7 +123,9 @@ start :: proc(device_index: int, callback: Callback, callback_data: rawptr) -> S
 	_audio.thread = thread.create_and_start(_thread_proc, context);
 	win.WaitForSingleObject(_audio.thread_ready_event, win.INFINITE);
 
-	return _audio.stream_info;
+	info = _audio.stream_info;
+	ok = true;
+	return;
 }
 
 stop :: proc() {
