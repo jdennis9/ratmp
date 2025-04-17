@@ -263,7 +263,6 @@ _run_audio_session :: proc() -> (ok: bool) {
 	log.debug("Sample rate:", format.nSamplesPerSec, "Hz");
 
 	_audio.stream_info = Stream_Info {
-		buffer_duration_ms = auto_cast buffer_duration_ms,
 		channels = auto_cast format.nChannels,
 		sample_rate = auto_cast format.nSamplesPerSec,
 	};
