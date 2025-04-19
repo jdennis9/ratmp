@@ -1411,16 +1411,26 @@ _show_preferences_window :: proc() {
 	}
 
 	select_device_row :: proc() -> (changes: bool) {
+		
 		imgui.PushID("##audio_device");
 		imgui.TableNextRow();
+		
 		imgui.TableSetColumnIndex(0);
 		imgui.TextUnformatted("Audio device");
+		
 		imgui.TableSetColumnIndex(1);
-
+		pref_value := string(cstring(&prefs.prefs.strings[.PlaybackDevice][0]));
 		current_device := playback.get_audio_device();
+		combo_preview := pref_value != "" ? cstring(&current_device.name[0]) : "<Default>";
+
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
-		if imgui.BeginCombo("##device_combo", cstring(&current_device.name[0])) {
+		if imgui.BeginCombo("##device_combo", combo_preview) {
 			devices := playback.get_audio_devices();
+
+			if imgui.MenuItem("<Default>") {
+				slice.fill(prefs.prefs.strings[.PlaybackDevice][:], 0);
+			}
+
 			for &device, index in devices {
 				if imgui.MenuItem(cstring(&device.name[0])) {
 					playback.set_audio_device_index(index);
@@ -1431,6 +1441,12 @@ _show_preferences_window :: proc() {
 	
 			imgui.EndCombo();
 		}
+
+		imgui.TableSetColumnIndex(2);
+		if imgui.Button("Refresh") {
+			playback.refresh_audio_devices();
+		}
+
 		imgui.PopID();
 
 		return;
