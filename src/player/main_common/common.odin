@@ -26,6 +26,7 @@ import "../library";
 import "../ui";
 import "../video";
 import "../playback";
+import "../signal";
 
 init :: proc() {
 	system_paths.init();
@@ -37,6 +38,7 @@ init :: proc() {
 }
 
 frame :: proc() {
+	signal.post(.NewFrame);
 	ui.show();
 }
 

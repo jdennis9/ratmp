@@ -33,6 +33,7 @@ Signal :: enum {
 	ApplyPrefs,
 	CloseWindow,
 	Iconify,
+	NewFrame,
 };
 
 Signal_Handler :: #type proc(sig: Signal);
@@ -55,13 +56,13 @@ install_handler :: proc(handler: Signal_Handler) {
 }
 
 post :: proc(sig: Signal, loc := #caller_location) {
-	log.debug(loc, sig);
+	if sig != .NewFrame {log.debug(loc, sig)}
 	//_signals[sig] = true;
 	_post_callback(sig);
 }
 
 broadcast_immediate :: proc(sig: Signal) {
-	log.debug("Broadcast", sig);
+	if sig != .NewFrame {log.debug("Broadcast", sig)}
 	for h in _handlers {
 		h(sig);
 	}
