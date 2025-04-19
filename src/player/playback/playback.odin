@@ -58,6 +58,9 @@ this: struct {
 
 	stream: audio.Stream_Info,
 
+	devices: []audio.Device_Props,
+	current_device: audio.Device_Props,
+
 	buffer_capture: struct {
 		timestamp: time.Tick,
 		prev: [MAX_CHANNELS][dynamic]f32,
@@ -143,7 +146,8 @@ init :: proc() -> bool {
 	this.queue.name = "Queue";
 	signal.install_handler(_signal_handler);
 	audio.init() or_return;
-	this.stream = audio.start(audio.get_default_device_index(), _stream_callback, nil) or_return;
+	default_device := audio.get_default_device_id() or_return;
+	this.stream = audio.start(&default_device, _stream_callback, nil) or_return;
 	return true;
 }
 
@@ -428,4 +432,22 @@ set_volume :: proc(vol: f32) {
 
 get_volume :: proc() -> f32 {
 	return audio.get_volume();
+}
+
+// =============================================================================
+// Audio
+// =============================================================================
+get_devices :: proc() -> []audio.Device_Props {
+	return this.devices;
+}
+
+set_audio_device_index :: proc(index: int) -> bool {
+	audio.stop();
+	this.stream = audio.start(&this.devices[index].id, _stream_callback, nil) or_return;
+	this.current_device = this.devices[index];
+	return true;
+}
+
+get_audio_device :: proc() -> audio.Device_Props {
+	return this.current_device;
 }

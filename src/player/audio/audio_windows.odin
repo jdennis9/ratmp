@@ -26,12 +26,9 @@ import wasapi "../../bindings/wasapi";
 
 _audio: struct {
 	device_enumerator: ^wasapi.IMMDeviceEnumerator,
-	device_props: []Device_Props,
-	device_ids: []win.LPCWSTR,
-	device_collection: ^wasapi.IMMDeviceCollection,
 	volume_control: ^wasapi.ISimpleAudioVolume,
-	selected_device_index: int,
-	default_device_index: int,
+	current_device_id: [128]u16,
+	default_device_id: [128]u16,
 	thread: ^thread.Thread,
 	stream_info: Stream_Info,
 	
@@ -98,8 +95,6 @@ init :: proc() -> (ok: bool) {
 	_audio.thread_ready_event = win.CreateEventW(nil, false, false, nil);
 	_audio.thread_interrupt_event = win.CreateEventW(nil, false, false, nil);
 
-	_enumerate_devices();
-
 	ok = true;
 	return;
 }
@@ -108,18 +103,13 @@ shutdown :: proc() {
 	_safe_release(&_audio.device_enumerator);
 	win.CloseHandle(_audio.thread_done_event);
 	win.CloseHandle(_audio.thread_ready_event);
-	delete(_audio.device_props);
 }
 
-get_default_device_index :: proc() -> int {
-	return _audio.default_device_index;
-}
 
-start :: proc(device_index: int, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
-	_audio.selected_device_index = device_index;
+start :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
 	_audio.callback = callback;
 	_audio.callback_data = callback_data;
-
+	utf16.encode_string(_audio.current_device_id[:len(_audio.current_device_id)-1], string(cstring(&device_id[0])));
 	_audio.thread = thread.create_and_start(_thread_proc, context);
 	win.WaitForSingleObject(_audio.thread_ready_event, win.INFINITE);
 
@@ -156,64 +146,58 @@ get_volume :: proc() -> (volume: f32 = 1) {
 	return;
 }
 
-@private
-_enumerate_devices :: proc() -> (ok: bool) {
+enumerate_devices :: proc() -> (props_list: []Device_Props, ok: bool) {
 	hr: win.HRESULT;
-	count: win.UINT;
-	default_device: ^wasapi.IMMDevice;
-	default_device_id: win.LPCWSTR;
+	device_count: win.UINT;
+	device_collection: ^wasapi.IMMDeviceCollection;
 
-	win.CoInitializeEx(nil);
-
-	delete(_audio.device_props);
-	_audio.device_props = nil;
-
-	hr = _audio.device_enumerator->EnumAudioEndpoints(.eRender, 0x1, &_audio.device_collection);
+	hr = _audio.device_enumerator->EnumAudioEndpoints(.eRender, 0x1, &device_collection);
 	_check(hr) or_return;
+	_check(device_collection->GetCount(&device_count)) or_return;
+	if device_count == 0 {return}
+	props_list = make([]Device_Props, device_count);
+	defer if !ok {delete(props_list)}
 
-	_check(_audio.device_enumerator->GetDefaultAudioEndpoint(.eRender, .eConsole, &default_device)) or_return;
-	defer default_device->Release();
-	_check(default_device->GetId(&default_device_id)) or_return;
-	defer win.CoTaskMemFree(default_device_id);
-
-	_check(_audio.device_collection->GetCount(&count)) or_return;
-	if count == 0 {
-		return;
-	}
-
-	_audio.device_props = make([]Device_Props, count);
-
-	for i in 0..<count {
-		propstore: ^win.IPropertyStore;
+	for &props, device_index in props_list {
+		property_store: ^win.IPropertyStore;
 		device: ^wasapi.IMMDevice;
-		name_container: wasapi.PROPVARIANT;
+		name_propvar: wasapi.PROPVARIANT;
 		id: win.LPCWSTR;
 
-		props := &_audio.device_props[i];
-		
-		_check(_audio.device_collection->Item(i, &device)) or_continue;
+		_check(device_collection->Item(auto_cast device_index, &device)) or_continue;
 		defer device->Release();
-		_check(device->OpenPropertyStore(0, &propstore)) or_continue;
-		defer propstore->Release();
-
-		propstore->GetValue(wasapi.PKEY_DeviceInterface_FriendlyName, auto_cast &name_container);
-
-		name_ptr := name_container.val.lpwszVal;
-		if name_ptr == nil {continue}
-		name_len := _wstring_length(name_ptr);
-		name_len = max(name_len, _MAX_DEVICE_NAME_LEN);
-		name := name_ptr[:name_len];
-
-		utf16.decode_to_utf8(props.name[:], name);
-		log.debug(cstring(&props.name[0]));
-
+		_check(device->OpenPropertyStore(0, &property_store)) or_continue;
+		defer property_store->Release();
+		_check(property_store->GetValue(wasapi.PKEY_DeviceInterface_FriendlyName, auto_cast &name_propvar)) or_continue;
 		_check(device->GetId(&id)) or_continue;
 		defer win.CoTaskMemFree(id);
 
-		if _wstring_equal(id, default_device_id) {
-			_audio.default_device_index = auto_cast i;
+		id_len := _wstring_length(id);
+		name_len := _wstring_length(name_propvar.val.lpwszVal);
+
+		if id_len >= len(props.id) || name_len >= len(props.name) {
+			log.error("Skipping device", device_index, "because name or ID is too long");
+			continue;
 		}
+
+		utf16.decode_to_utf8(props.name[:], name_propvar.val.lpwszVal[:name_len]);
+		utf16.decode_to_utf8(props.id[:], id[:id_len]);
 	}
+
+	ok = true;
+	return;
+}
+
+get_default_device_id :: proc() -> (device_id: Device_ID, ok: bool) {
+	device: ^wasapi.IMMDevice;
+	id: win.LPCWSTR;
+
+	_check(_audio.device_enumerator->GetDefaultAudioEndpoint(.eRender, .eConsole, &device)) or_return;
+	defer device->Release();
+	_check(device->GetId(&id)) or_return;
+	defer win.CoTaskMemFree(id);
+
+	utf16.decode_to_utf8(device_id[:], id[:_wstring_length(id)]);
 
 	ok = true;
 	return;
@@ -235,12 +219,11 @@ _run_audio_session :: proc() -> (ok: bool) {
 		win.SetEvent(_audio.thread_done_event);
 	};
 
-	_check(_audio.device_collection->Item(auto_cast _audio.selected_device_index, &device)) or_return;
+	_check(_audio.device_enumerator->GetDevice(&_audio.current_device_id[0], &device)) or_return;
 	defer device->Release();
 
 	_check(device->Activate(wasapi.IAudioClient_UUID, win.CLSCTX_ALL, nil, auto_cast &audio_client)) or_return;
 	defer audio_client->Release();
-
 
 	_check(audio_client->GetMixFormat(&format)) or_return;
 	defer win.CoTaskMemFree(format);
