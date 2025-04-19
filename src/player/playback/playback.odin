@@ -437,7 +437,7 @@ get_volume :: proc() -> f32 {
 // =============================================================================
 // Audio
 // =============================================================================
-get_devices :: proc() -> []audio.Device_Props {
+get_audio_devices :: proc() -> []audio.Device_Props {
 	return this.devices;
 }
 
