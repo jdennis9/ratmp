@@ -230,7 +230,7 @@ playlist_clear :: proc(playlist: ^Playlist) {
 	playlist_make_dirty(playlist);
 }
 
-playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track, and_sort := true) {
+playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID, and_sort := true) {
 	for track in tracks {
 		if !slice.contains(playlist.tracks[:], track) {
 			append(&playlist.tracks, track);

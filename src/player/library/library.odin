@@ -41,7 +41,7 @@ import "../system_paths";
 import "../video";
 import "../decoder";
 
-Track :: u32;
+Track_ID :: u32;
 Playlist_ID :: u32;
 
 Add_Playlist_Error :: enum {
@@ -73,7 +73,7 @@ Raw_Track_Info :: struct {
 };
 
 Track_Info :: struct {
-	id: Track,
+	id: Track_ID,
 	title: cstring,
 	artist: cstring,
 	album: cstring,
@@ -222,7 +222,7 @@ _load_library :: proc(filename: string) -> bool {
 		defer delete(cleaned_path);
 
 		path_id := xxhash.XXH32(transmute([]u8) cleaned_path);
-		track_id := cast(Track) len(this.tracks) + 1;
+		track_id := cast(Track_ID) len(this.tracks) + 1;
 
 		track_data: Raw_Track_Info;
 		track_data.path = path_pool.store(&this.paths, path);
@@ -447,12 +447,12 @@ is_supported_format :: proc(filename: string) -> bool {
 }
 
 // Use to alter metadata of track
-get_raw_track_info_pointer :: proc(track: Track) -> ^Raw_Track_Info {
+get_raw_track_info_pointer :: proc(track: Track_ID) -> ^Raw_Track_Info {
 	assert(track != 0);
 	return &this.tracks[track-1];
 }
 
-get_track_info :: proc(track: Track) -> Track_Info {
+get_track_info :: proc(track: Track_ID) -> Track_Info {
 	assert(track != 0);
 	info := &this.tracks[track-1];
 	return {
@@ -468,7 +468,7 @@ get_track_info :: proc(track: Track) -> Track_Info {
 	};
 }
 
-refresh_track_metadata :: proc(track_id: Track) {
+refresh_track_metadata :: proc(track_id: Track_ID) {
 	buf: [384]u8;
 	path := get_track_path(track_id, buf[:]);
 	track := &this.tracks[track_id-1];
@@ -477,7 +477,7 @@ refresh_track_metadata :: proc(track_id: Track) {
 	log.debug(track);
 }
 
-add_directory :: proc(path: string) -> (first: Track, last: Track, ok := true) {
+add_directory :: proc(path: string) -> (first: Track_ID, last: Track_ID, ok := true) {
 	handle, error := os.open(path);
 	if error != os.ERROR_NONE {return 0, 0, false;}
 	defer os.close(handle);
@@ -509,7 +509,7 @@ add_directory :: proc(path: string) -> (first: Track, last: Track, ok := true) {
 	return;
 }
 
-add_file :: proc(file: string) -> Track {
+add_file :: proc(file: string) -> Track_ID {
 	cleaned_path, err := filepath.clean(file);
 	if err != .None {return 0;}
 	defer delete(cleaned_path);
@@ -524,12 +524,12 @@ add_file :: proc(file: string) -> Track {
 	// Check if the track is already in the library
 	for iter_id, index in this.track_ids {
 		if iter_id == id {
-			return cast(Track) (index+1);
+			return cast(Track_ID) (index+1);
 		}
 	}
 
 	track: Raw_Track_Info;
-	index := cast(Track) len(this.tracks);
+	index := cast(Track_ID) len(this.tracks);
 	track.path = path_pool.store(&this.paths, file);
 
 	_read_track_metadata(&track, file);
@@ -548,7 +548,7 @@ add_file :: proc(file: string) -> Track {
 }
 
 @private
-_add_to_playlist_group :: proc(track: Track, group_string: string, group: ^Playlist_List, case_insensitive := false) {
+_add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Playlist_List, case_insensitive := false) {
 	hash: u32;
 
 	if case_insensitive {
@@ -593,13 +593,13 @@ get_genres :: proc() -> ^Playlist_List {
 	return &this.genres;
 }
 
-get_track_path :: proc(track: Track, buf: []u8) -> string {
+get_track_path :: proc(track: Track_ID, buf: []u8) -> string {
 	if track == 0 {return "";}
 	track_info := this.tracks[track-1];
 	return path_pool.retrieve(&this.paths, track_info.path, buf);
 }
 
-get_track_path_cstring :: proc(track: Track, buf: []u8) -> cstring {
+get_track_path_cstring :: proc(track: Track_ID, buf: []u8) -> cstring {
 	if track == 0 {return nil;}
 	track_info := this.tracks[track-1];
 	return path_pool.retrieve_cstring(&this.paths, track_info.path, buf);
@@ -818,7 +818,7 @@ Detailed_Metadata :: struct {
 	comment: cstring,
 };
 
-load_track_thumbnail :: proc(track_id: Track) -> (texture: video.Texture, ok: bool) {
+load_track_thumbnail :: proc(track_id: Track_ID) -> (texture: video.Texture, ok: bool) {
 	path_buf: [512]u8;
 	path := get_track_path_cstring(track_id, path_buf[:]);
 
@@ -844,7 +844,7 @@ load_track_thumbnail :: proc(track_id: Track) -> (texture: video.Texture, ok: bo
 	return;
 }
 
-load_track_comment :: proc(track_id: Track) -> cstring {
+load_track_comment :: proc(track_id: Track_ID) -> cstring {
 	path_buf: [512]u8;
 	path := get_track_path_cstring(track_id, path_buf[:]);
 
@@ -882,7 +882,7 @@ Metadata_Replacement :: struct {
 };
 
 @private
-_changed_tracks: [dynamic]Track;
+_changed_tracks: [dynamic]Track_ID;
 
 @private
 _save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
@@ -906,7 +906,7 @@ _save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
 	//taglib.file_save(file);
 }
 
-save_track_metadata :: proc(track_id: Track) {
+save_track_metadata :: proc(track_id: Track_ID) {
 	if track_id == 0 {
 		return;
 	}
@@ -914,7 +914,7 @@ save_track_metadata :: proc(track_id: Track) {
 	_save_track_metadata_to_file(track);
 }
 
-perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track = nil) -> (replacement_count: int) {
+perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track_ID = nil) -> (replacement_count: int) {
 	do_replacement :: proc(dst: []u8, replace: string, with: string) -> bool {
 		str := string(cstring(&dst[0]));
 		if strings.contains(str, replace) {
@@ -930,7 +930,7 @@ perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track =
 	}
 
 	for &track, index in this.tracks {
-		track_id := cast (Track) (index + 1);
+		track_id := cast (Track_ID) (index + 1);
 		changed := false;
 		if filter != nil && !slice.contains(filter, track_id) {
 			continue;

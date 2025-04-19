@@ -46,7 +46,7 @@ Output_Buffer :: struct {
 this: struct {
 	ctx: runtime.Context,
 	decoder: decoder.Decoder,
-	playing_track: lib.Track,
+	playing_track: lib.Track_ID,
 	lock: sync.Mutex,
 	paused: bool,
 
@@ -188,7 +188,7 @@ _play_file :: proc(path: string) -> bool {
 	return decoder.open(&this.decoder, path);
 }
 
-get_playing_track :: proc() -> lib.Track {
+get_playing_track :: proc() -> lib.Track_ID {
 	return this.playing_track;
 }
 
@@ -231,7 +231,7 @@ toggle_shuffle :: proc() {
 
 is_shuffle_enabled :: proc() -> bool {return this.shuffle;}
 
-play_track :: proc(track: lib.Track) -> bool {
+play_track :: proc(track: lib.Track_ID) -> bool {
 	buf: [512]u8;
 	path := lib.get_track_path(track, buf[:]);
 	if (_play_file(path)) {
@@ -362,7 +362,7 @@ get_queued_group_id :: proc() -> u32 {
 	return this.queued_group_id;
 }
 
-play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track = 0, use_filter := false) {
+play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use_filter := false) {
 	this.queued_playlist = playlist.id;
 	this.queued_group_id = playlist.group_id;
 	lib.playlist_clear(&this.queue);
@@ -394,7 +394,7 @@ play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track = 0, use_fi
 	play_track_at_position(this.queue_position);
 }
 
-append_to_queue :: proc(tracks: []lib.Track) {
+append_to_queue :: proc(tracks: []lib.Track_ID) {
 	this.queued_playlist = 0;
 	this.queued_group_id = 0;
 	lib.playlist_add_tracks(&this.queue, tracks);
@@ -417,7 +417,7 @@ play_track_at_position :: proc(in_pos: int) {
 	this.queue_position = pos;
 }
 
-play_track_array :: proc(tracks: []lib.Track) {
+play_track_array :: proc(tracks: []lib.Track_ID) {
 	this.queued_playlist = 0;
 	lib.playlist_clear(&this.queue);
 	lib.playlist_add_tracks(&this.queue, tracks);

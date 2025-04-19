@@ -54,7 +54,7 @@ Waveform_Preview :: struct {
 	output: [dynamic]f32,
 	out_count: int,
 	want_cancel: bool,
-	track: lib.Track,
+	track: lib.Track_ID,
 	thread: ^thread.Thread,
 	lock: sync.Mutex,
 };

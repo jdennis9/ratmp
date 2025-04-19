@@ -214,7 +214,7 @@ this: struct {
 		comment: cstring,
 	},
 
-	selection: [dynamic]lib.Track,
+	selection: [dynamic]lib.Track_ID,
 	selected_playlist: lib.Playlist_ID,
 
 	show_help: bool,
@@ -1091,7 +1091,7 @@ _show_playlist_tabs_window :: proc() {
 
 @private
 _show_metadata_window :: proc() {
-	@static loaded_track: lib.Track;
+	@static loaded_track: lib.Track_ID;
 	playing_track := playback.get_playing_track();
 
 	if loaded_track != playing_track {
@@ -1219,7 +1219,7 @@ _show_metadata_replacement_window :: proc() {
 		if state.replace_album {mask |= {.Album}}
 		if state.replace_genre {mask |= {.Genre}}
 
-		filter: []lib.Track = state.in_selection ? this.selection[:] : nil;		
+		filter: []lib.Track_ID = state.in_selection ? this.selection[:] : nil;		
 		repl := lib.Metadata_Replacement {
 			replace = string(cstring(&to_replace[0])),
 			with = string(cstring(&replace_with[0])),
@@ -1520,12 +1520,12 @@ _add_selection_to_playlist :: proc(playlist: ^lib.Playlist) {
 }
 
 @private
-_is_track_selected :: proc(track: lib.Track) -> bool {
+_is_track_selected :: proc(track: lib.Track_ID) -> bool {
 	return slice.contains(this.selection[:], track);
 }
 
 @private
-_add_track_to_selection :: proc(track: lib.Track) {
+_add_track_to_selection :: proc(track: lib.Track_ID) {
 	if (!_is_track_selected(track)) {
 		append(&this.selection, track);
 	}
@@ -1650,7 +1650,7 @@ _get_selection_size :: proc() -> int {
 // =============================================================================
 
 @private
-_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dynamic]lib.Track) {
+_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dynamic]lib.Track_ID) {
 	for track in playlist.tracks {
 		if _is_track_selected(track) {
 			append(&tracks, track);

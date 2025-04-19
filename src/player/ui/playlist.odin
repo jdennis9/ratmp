@@ -58,7 +58,7 @@ Column :: struct {
 	flags: imgui.TableColumnFlags,
 };
 
-_show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Track) {
+_show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Track_ID) {
 	if imgui.BeginMenu("Add to playlist") {
 		targets := lib.get_playlists();
 		for &target in targets {
@@ -76,15 +76,15 @@ _show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Trac
 	}
 }
 
-_show_track_playlist_context_menu :: proc(track: lib.Track, action: ^Track_Table_Action, flags: Track_Table_Flags) {
+_show_track_playlist_context_menu :: proc(track: lib.Track_ID, action: ^Track_Table_Action, flags: Track_Table_Flags) {
 	if (.NoAddToQueue not_in flags) && imgui.MenuItem("Add to queue") {
 		action.add_to_queue |= true;
 	}
 }
 
 @(private="file")
-_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> []lib.Track {
-	out: [dynamic]lib.Track;
+_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> []lib.Track_ID {
+	out: [dynamic]lib.Track_ID;
 	defer delete(out);
 	for track in playlist.tracks {
 		if _is_track_selected(track) {
@@ -186,7 +186,7 @@ _show_track_row :: proc(
 }
 
 @(private="file")
-_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, playlist: lib.Playlist, track: lib.Track, use_filter: bool) {
+_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, playlist: lib.Playlist, track: lib.Track_ID, use_filter: bool) {
 	index, found := slice.linear_search(playlist.tracks[:], track);
 
 	if !found {return}
@@ -209,7 +209,7 @@ Track_Table_Action :: struct {
 	select_track: Maybe(int),
 	play_track: Maybe(int),
 	sort_spec: Maybe(Playlist_Sort_Spec),
-	drag_drop_payload: []lib.Track,
+	drag_drop_payload: []lib.Track_ID,
 	play_selection: bool,
 	select_all: bool,
 	add_selection_to_playlist: bool,
@@ -221,8 +221,8 @@ Track_Table_Action :: struct {
 	filter_hash: u32,
 };
 
-_set_track_drag_drop_payload :: proc(tracks: []lib.Track) {
-	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track) * len(tracks));
+_set_track_drag_drop_payload :: proc(tracks: []lib.Track_ID) {
+	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track_ID) * len(tracks));
 }
 
 _show_playlist_track_table :: proc(
@@ -239,8 +239,8 @@ _show_playlist_track_table :: proc(
 
 		track_payload := imgui.AcceptDragDropPayload("tracks");
 		if track_payload != nil && track_payload.Delivery == true {
-			payload := cast([^]lib.Track) track_payload.Data;
-			payload_size := track_payload.DataSize / size_of(lib.Track);
+			payload := cast([^]lib.Track_ID) track_payload.Data;
+			payload_size := track_payload.DataSize / size_of(lib.Track_ID);
 			action.drag_drop_payload = slice.clone(payload[:payload_size]);
 		}
 
