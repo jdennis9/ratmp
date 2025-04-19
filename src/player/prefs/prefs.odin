@@ -39,6 +39,7 @@ StringID :: enum {
 	Font,
 	Background,
 	Theme,
+	PlaybackDevice,
 };
 
 NumberID :: enum {
@@ -67,6 +68,7 @@ STRING_INFO := [StringID]struct{name: string} {
 	.Background = {"Background"},
 	.Font = {"Font"},
 	.Theme = {"Theme"},
+	.PlaybackDevice = {"PlaybackDevice"},
 };
 
 Choice_Value :: struct {
@@ -106,6 +108,10 @@ _sections := []Section {
 		strings = {.Font, .Background, .Theme},
 		numbers = {.FontSize, .IconSize},
 		choices = {.ClosePolicy},
+	},
+	{
+		name = "playback",
+		strings = {.PlaybackDevice},
 	}
 };
 

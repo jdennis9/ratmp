@@ -1410,9 +1410,36 @@ _show_preferences_window :: proc() {
 		return;
 	}
 
+	select_device_row :: proc() -> (changes: bool) {
+		imgui.PushID("##audio_device");
+		imgui.TableNextRow();
+		imgui.TableSetColumnIndex(0);
+		imgui.TextUnformatted("Audio device");
+		imgui.TableSetColumnIndex(1);
+
+		current_device := playback.get_audio_device();
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
+		if imgui.BeginCombo("##device_combo", cstring(&current_device.name[0])) {
+			devices := playback.get_audio_devices();
+			for &device, index in devices {
+				if imgui.MenuItem(cstring(&device.name[0])) {
+					playback.set_audio_device_index(index);
+					util.copy_cstring(prefs.prefs.strings[.PlaybackDevice][:], cstring(&device.id[0]));
+					changes = true;
+				}
+			}
+	
+			imgui.EndCombo();
+		}
+		imgui.PopID();
+
+		return;
+	}
+
 	if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		changes := false;
-		changes |= choice_row(.ClosePolicy, "Close Policy");
+		changes |= select_device_row();
+		changes |= choice_row(.ClosePolicy, "Close policy");
 		changes |= path_input_row(.Background, "##background", "Background");
 		changes |= path_input_row(.Font, "##font", "Font");
 		changes |= number_input_row(.FontSize, "##font_size", "Font size");
@@ -1427,17 +1454,7 @@ _show_preferences_window :: proc() {
 		imgui.EndTable();
 	}
 
-	current_device := playback.get_audio_device();
-	if imgui.BeginCombo("Audio Device", cstring(&current_device.name[0])) {
-		devices := playback.get_audio_devices();
-		for &device, index in devices {
-			if imgui.MenuItem(cstring(&device.name[0])) {
-				playback.set_audio_device_index(index);
-			}
-		}
 
-		imgui.EndCombo();
-	}
 }
 
 @private

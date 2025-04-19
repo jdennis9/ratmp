@@ -148,7 +148,21 @@ init :: proc() -> bool {
 	signal.install_handler(_signal_handler);
 	audio.init() or_return;
 	refresh_audio_devices() or_return;
-	set_audio_device_index(this.default_device_index) or_return;
+
+	if prefs.prefs.strings[.PlaybackDevice][0] != 0 {
+		want_device_id := cstring(&prefs.prefs.strings[.PlaybackDevice][0]);
+
+		for &device, device_index in this.devices {
+			if cstring(&device.id[0]) == want_device_id {
+				set_audio_device_index(device_index) or_return;
+				break;
+			}
+		}
+	}
+	else {
+		set_audio_device_index(this.default_device_index) or_return;
+	}
+
 	return true;
 }
 
