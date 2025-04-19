@@ -60,6 +60,7 @@ this: struct {
 
 	devices: []audio.Device_Props,
 	current_device: audio.Device_Props,
+	default_device_index: int,
 
 	buffer_capture: struct {
 		timestamp: time.Tick,
@@ -146,8 +147,8 @@ init :: proc() -> bool {
 	this.queue.name = "Queue";
 	signal.install_handler(_signal_handler);
 	audio.init() or_return;
-	default_device := audio.get_default_device_id() or_return;
-	this.stream = audio.start(&default_device, _stream_callback, nil) or_return;
+	refresh_audio_devices() or_return;
+	set_audio_device_index(this.default_device_index) or_return;
 	return true;
 }
 
@@ -437,6 +438,20 @@ get_volume :: proc() -> f32 {
 // =============================================================================
 // Audio
 // =============================================================================
+refresh_audio_devices :: proc() -> bool {
+	delete(this.devices);
+	this.devices = audio.enumerate_devices() or_return;
+	default_id := audio.get_default_device_id() or_return;
+
+	for &device, index in this.devices {
+		if cstring(&device.id[0]) == cstring(&default_id[0]) {
+			this.default_device_index = index;
+		}
+	}
+
+	return true;
+}
+
 get_audio_devices :: proc() -> []audio.Device_Props {
 	return this.devices;
 }
@@ -446,6 +461,10 @@ set_audio_device_index :: proc(index: int) -> bool {
 	this.stream = audio.start(&this.devices[index].id, _stream_callback, nil) or_return;
 	this.current_device = this.devices[index];
 	return true;
+}
+
+get_default_audio_device_index :: proc() -> int {
+	return this.default_device_index;
 }
 
 get_audio_device :: proc() -> audio.Device_Props {

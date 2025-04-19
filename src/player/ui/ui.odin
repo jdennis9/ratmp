@@ -1426,6 +1426,18 @@ _show_preferences_window :: proc() {
 
 		imgui.EndTable();
 	}
+
+	current_device := playback.get_audio_device();
+	if imgui.BeginCombo("Audio Device", cstring(&current_device.name[0])) {
+		devices := playback.get_audio_devices();
+		for &device, index in devices {
+			if imgui.MenuItem(cstring(&device.name[0])) {
+				playback.set_audio_device_index(index);
+			}
+		}
+
+		imgui.EndCombo();
+	}
 }
 
 @private
