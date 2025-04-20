@@ -881,9 +881,13 @@ show :: proc() {
 @private
 _show_library_window :: proc() {
 	playlist := lib.get_default_playlist();
-	action := _show_playlist_track_table(playlist^, {.NoRemove});
+	action := _show_playlist_track_table(playlist^);
 	_handle_base_track_table_action(action, playlist);
 	_handle_playlist_playback_action(action, playlist^);
+
+	if action.remove {
+		lib.remove_tracks(this.selection[:]);
+	}
 }
 
 @private

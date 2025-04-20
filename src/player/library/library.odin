@@ -70,6 +70,7 @@ Raw_Track_Info :: struct {
 	track_number: int,
 	year: int,
 	bitrate: int,
+	marked_for_removal: bool,
 };
 
 Track_Info :: struct {
@@ -82,6 +83,7 @@ Track_Info :: struct {
 	track_number: int,
 	year: int,
 	bitrate: int,
+	marked_for_removal: bool,
 };
 
 // Serialized
@@ -268,6 +270,7 @@ _save_library :: proc(filename: string) {
 		fmt.fprintln(file, "{");
 		defer fmt.fprintln(file, "},");
 		track := get_track_info(track_id);
+		if track.marked_for_removal {continue}
 		track_path_buf: [512]u8;
 		track_path := get_track_path_cstring(track_id, track_path_buf[:]);
 		write_kv_pair(file, "path", track_path);
@@ -446,6 +449,36 @@ is_supported_format :: proc(filename: string) -> bool {
 		ext == ".opus";
 }
 
+remove_tracks :: proc(tracks: []Track_ID) {
+	playlist_altered := make([]bool, len(this.playlists));
+	defer delete(playlist_altered);
+
+	for track in tracks {
+		if track == 0 {continue}
+		track_index := track-1;
+		this.tracks[track_index].marked_for_removal = true;
+
+		index_in_library, found_in_library := slice.linear_search(this.library.tracks[:], track);
+		if found_in_library {
+			ordered_remove(&this.library.tracks, index_in_library);
+			playlist_make_dirty(&this.library);
+		}
+
+		for &playlist, playlist_index in this.playlists {
+			index_in_playlist := slice.linear_search(playlist.tracks[:], track) or_continue;
+			ordered_remove(&playlist.tracks, index_in_playlist);
+			playlist_make_dirty(&playlist);
+			playlist_altered[playlist_index] = true;
+		}
+	}
+
+	for playlist, playlist_index in this.playlists {
+		if playlist_altered[playlist_index] {
+			save_playlist(playlist.id);
+		}
+	}
+}
+
 // Use to alter metadata of track
 get_raw_track_info_pointer :: proc(track: Track_ID) -> ^Raw_Track_Info {
 	assert(track != 0);
@@ -465,6 +498,7 @@ get_track_info :: proc(track: Track_ID) -> Track_Info {
 		duration_seconds = info.duration_seconds,
 		track_number = info.track_number,
 		year = info.year,
+		marked_for_removal = info.marked_for_removal,
 	};
 }
 
@@ -474,7 +508,6 @@ refresh_track_metadata :: proc(track_id: Track_ID) {
 	track := &this.tracks[track_id-1];
 	_read_track_metadata(track, path);
 	info := get_track_info(track_id);
-	log.debug(track);
 }
 
 add_directory :: proc(path: string) -> (first: Track_ID, last: Track_ID, ok := true) {
