@@ -1455,7 +1455,21 @@ _show_preferences_window :: proc() {
 		return;
 	}
 
-	if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
+	begin_table :: proc(name: cstring) -> bool {
+		imgui.SeparatorText(name);
+		if imgui.BeginTable(name, 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
+			imgui.TableSetupColumn("name", {}, 0.3);
+			imgui.TableSetupColumn("value", {}, 0.6);
+			imgui.TableSetupColumn("button", {}, 0.1);
+			return true;
+		}
+
+		return false;
+	}
+
+	end_table :: proc() {imgui.EndTable()}
+
+	/*if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		changes := false;
 		changes |= select_device_row();
 		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
@@ -1472,9 +1486,29 @@ _show_preferences_window :: proc() {
 		}
 
 		imgui.EndTable();
+	}*/
+
+	changes := false;
+
+	if begin_table("Audio") {
+		changes |= select_device_row();
+		end_table();
 	}
 
-
+	if begin_table("UI") {
+		changes |= path_input_row(.Background, "##background", "Background");
+		changes |= path_input_row(.Font, "##font", "Font");
+		changes |= number_input_row(.FontSize, "##font_size", "Font size");
+		changes |= number_input_row(.IconSize, "##icon_size", "Icon size");
+		changes |= string_choice_row(.Theme, theme.get_list(), "Theme");
+		end_table();
+	}
+	
+	if begin_table("Windows") {
+		changes |= choice_row(.ClosePolicy, "Close policy");
+		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
+		end_table();
+	}
 }
 
 @private
