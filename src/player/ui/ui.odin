@@ -1424,15 +1424,20 @@ _show_preferences_window :: proc() {
 		imgui.TableSetColumnIndex(1);
 		pref_value := string(cstring(&prefs.prefs.strings[.PlaybackDevice][0]));
 		current_device := playback.get_audio_device();
-		combo_preview := pref_value != "" ? cstring(&current_device.name[0]) : "<Default>";
+		combo_preview := pref_value != "" ? cstring(&current_device.name[0]) : "(Default)";
 
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x);
 		if imgui.BeginCombo("##device_combo", combo_preview) {
 			devices := playback.get_audio_devices();
 
-			if imgui.MenuItem("<Default>") {
+			imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled));
+			if imgui.MenuItem("Use default") {
 				slice.fill(prefs.prefs.strings[.PlaybackDevice][:], 0);
+				changes = true;
 			}
+			imgui.PopStyleColor();
+
+			imgui.Separator();
 
 			for &device, index in devices {
 				if imgui.MenuItem(cstring(&device.name[0])) {
