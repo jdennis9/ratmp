@@ -47,6 +47,7 @@ this: struct {
 	icon: win.HICON,
 	tray_popup: win.HMENU,
 	running: bool,
+	enable_media_controls: bool,
 };
 
 @private
@@ -95,7 +96,8 @@ signal_post_callback :: proc(sig: signal.Signal) {
 	win.PostMessageW(this.hwnd, win.WM_USER, auto_cast sig, 0);
 }
 
-signal_handler :: proc(sig: signal.Signal) {
+@private
+_media_controls_signal_handler :: proc(sig: signal.Signal) {
 	if sig == .PlaybackStopped {
 		media_controls.set_status(.Stopped);
 	}
@@ -103,6 +105,21 @@ signal_handler :: proc(sig: signal.Signal) {
 		track_id := playback.get_playing_track();
 		track := library.get_track_info(track_id);
 		media_controls.set_metadata(track.album, track.artist, track.title);
+	}
+	else if sig == .PlaybackStateChanged {
+		if playback.is_paused() {
+			media_controls.set_status(.Paused);
+		}
+		else {
+			media_controls.set_status(.Playing);
+		}
+	}
+}
+
+signal_handler :: proc(sig: signal.Signal) {
+	if sig == .TrackChanged {
+		track_id := playback.get_playing_track();
+		track := library.get_track_info(track_id);
 
 		buf: [256]u8;
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title));
@@ -111,12 +128,10 @@ signal_handler :: proc(sig: signal.Signal) {
 		buf: [256]u8;
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION));
 	}
-	else if sig == .PlaybackStateChanged {
-		if playback.is_paused() {
-			media_controls.set_status(.Paused);
-		}
-		else {
-			media_controls.set_status(.Playing);
+	else if sig == .ApplyPrefs {
+		if prefs.prefs.choices[.EnableWindowsMediaControls] == 1 {
+			media_controls.install_handler(media_controls_handler);
+			signal.install_handler(_media_controls_signal_handler);
 		}
 	}
 	else if sig == .Exit {
@@ -145,10 +160,9 @@ main :: proc() {
 	
 	signal.init(signal_post_callback);
 	signal.install_handler(signal_handler);
-	media_controls.install_handler(media_controls_handler);
-
+	
 	this.icon = win.LoadIconA(this.hinstance, "WindowIcon");
-
+	
 	{
 		wndclass := win.RegisterClassExW(&win.WNDCLASSEXW{
 			hInstance = this.hinstance,
@@ -158,7 +172,7 @@ main :: proc() {
 			cbSize = size_of(win.WNDCLASSEXW),
 			hIcon = this.icon,
 		});
-
+		
 		assert(wndclass != 0);
 		
 		this.hwnd = win.CreateWindowExW(
@@ -171,21 +185,21 @@ main :: proc() {
 			nil, nil, this.hinstance, nil
 		);
 	}
-
+	
 	dwm_set_dark_title_bar(this.hwnd, true);
 	win.UpdateWindow(this.hwnd);
 	win.ShowWindow(this.hwnd, win.SW_HIDE);
-
+	
 	dx11.init_for_windows(this.hwnd);
 	defer dx11.shutdown_for_windows();
-
+	
 	drag_drop.init_for_windows(this.hwnd);
 	add_tray_icon();
 	defer remove_tray_icon();
 	
 	com.init();
 	defer com.shutdown();
-	
+
 	// Flush signal events
 	{
 		msg: win.MSG;
@@ -204,14 +218,12 @@ main :: proc() {
 		minimized := !win.IsWindowVisible(this.hwnd);
 
 		if visible && !minimized {
-			log.debug("Visible");
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
 				win.TranslateMessage(&msg);
 				win.DispatchMessageW(&msg);
 			}
 		}
 		else {
-			log.debug("NOT visible");
 			win.GetMessageW(&msg, nil, 0, 0);
 			win.TranslateMessage(&msg);
 			win.DispatchMessageW(&msg);

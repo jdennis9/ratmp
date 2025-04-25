@@ -1415,7 +1415,6 @@ _show_preferences_window :: proc() {
 	}
 
 	select_device_row :: proc() -> (changes: bool) {
-		
 		imgui.PushID("##audio_device");
 		imgui.TableNextRow();
 		
@@ -1459,6 +1458,7 @@ _show_preferences_window :: proc() {
 	if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		changes := false;
 		changes |= select_device_row();
+		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
 		changes |= choice_row(.ClosePolicy, "Close policy");
 		changes |= path_input_row(.Background, "##background", "Background");
 		changes |= path_input_row(.Font, "##font", "Font");

@@ -49,6 +49,7 @@ NumberID :: enum {
 
 ChoiceID :: enum {
 	ClosePolicy,
+	EnableWindowsMediaControls,
 };
 
 Prefs :: struct {
@@ -89,6 +90,14 @@ CHOICE_INFO := [ChoiceID]struct{name: string, def: int, values: []Choice_Value} 
 			{"Always ask", "AlwaysAsk", CLOSE_POLICY_ALWAYS_ASK},
 			{"Minimize to tray", "MinimizeToTray", CLOSE_POLICY_MINIMIZE_TO_TRAY},
 			{"Close", "Close", CLOSE_POLICY_CLOSE},
+		},
+	},
+	.EnableWindowsMediaControls = {
+		name = "EnableWindowsMediaControls",
+		def = 1,
+		values = {
+			{"No", "No", 0},
+			{"Yes", "Yes", 1},
 		},
 	},
 };
