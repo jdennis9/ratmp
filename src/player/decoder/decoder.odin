@@ -83,7 +83,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate);
 	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio);
-	raw_buffer: [dynamic]f32 = make([dynamic]f32, input_frames * dec.info.channels);
+	raw_buffer: []f32 = make([]f32, input_frames * dec.info.channels);
 	defer delete(raw_buffer);
 
 	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames));
