@@ -1487,14 +1487,16 @@ _show_preferences_window :: proc() {
 		changes |= number_input_row(.FontSize, "##font_size", "Font size");
 		changes |= number_input_row(.IconSize, "##icon_size", "Icon size");
 		changes |= string_choice_row(.Theme, theme.get_list(), "Theme");
+		changes |= choice_row(.ClosePolicy, "Close policy");
 		end_table();
 	}
 	
-	if begin_table("Windows") {
-		changes |= choice_row(.ClosePolicy, "Close policy");
-		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
-		imgui.SetItemTooltip("(Requires restart)");
-		end_table();
+	when ODIN_OS == .Windows {
+		if begin_table("Windows") {
+			changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
+			imgui.SetItemTooltip("(Requires restart)");
+			end_table();
+		}
 	}
 
 	if changes {
