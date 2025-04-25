@@ -1469,25 +1469,6 @@ _show_preferences_window :: proc() {
 
 	end_table :: proc() {imgui.EndTable()}
 
-	/*if imgui.BeginTable("Preferences Table", 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
-		changes := false;
-		changes |= select_device_row();
-		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
-		changes |= choice_row(.ClosePolicy, "Close policy");
-		changes |= path_input_row(.Background, "##background", "Background");
-		changes |= path_input_row(.Font, "##font", "Font");
-		changes |= number_input_row(.FontSize, "##font_size", "Font size");
-		changes |= number_input_row(.IconSize, "##icon_size", "Icon size");
-		changes |= string_choice_row(.Theme, theme.get_list(), "Theme");
-
-		if changes {
-			prefs.save();
-			signal.post(.ApplyPrefs);
-		}
-
-		imgui.EndTable();
-	}*/
-
 	changes := false;
 
 	if begin_table("Audio") {
@@ -1508,6 +1489,11 @@ _show_preferences_window :: proc() {
 		changes |= choice_row(.ClosePolicy, "Close policy");
 		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
 		end_table();
+	}
+
+	if changes {
+		prefs.save();
+		signal.post(.ApplyPrefs);
 	}
 }
 
