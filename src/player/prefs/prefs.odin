@@ -121,6 +121,10 @@ _sections := []Section {
 	{
 		name = "playback",
 		strings = {.PlaybackDevice},
+	},
+	{
+		name = "windows",
+		choices = {.EnableWindowsMediaControls},
 	}
 };
 
