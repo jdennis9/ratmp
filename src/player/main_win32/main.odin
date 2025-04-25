@@ -204,12 +204,14 @@ main :: proc() {
 		minimized := !win.IsWindowVisible(this.hwnd);
 
 		if visible && !minimized {
+			log.debug("Visible");
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
 				win.TranslateMessage(&msg);
 				win.DispatchMessageW(&msg);
 			}
 		}
 		else {
+			log.debug("NOT visible");
 			win.GetMessageW(&msg, nil, 0, 0);
 			win.TranslateMessage(&msg);
 			win.DispatchMessageW(&msg);

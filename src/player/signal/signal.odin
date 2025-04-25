@@ -56,9 +56,13 @@ install_handler :: proc(handler: Signal_Handler) {
 }
 
 post :: proc(sig: Signal, loc := #caller_location) {
-	if sig != .NewFrame {log.debug(loc, sig)}
-	//_signals[sig] = true;
-	_post_callback(sig);
+	if sig != .NewFrame {
+		log.debug(loc, sig)
+		_post_callback(sig);
+	}
+	else {
+		broadcast_immediate(sig);
+	}
 }
 
 broadcast_immediate :: proc(sig: Signal) {
