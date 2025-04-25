@@ -1419,7 +1419,7 @@ _show_preferences_window :: proc() {
 		imgui.TableNextRow();
 		
 		imgui.TableSetColumnIndex(0);
-		imgui.TextUnformatted("Audio device");
+		imgui.TextUnformatted("Device");
 		
 		imgui.TableSetColumnIndex(1);
 		pref_value := string(cstring(&prefs.prefs.strings[.PlaybackDevice][0]));
@@ -1493,6 +1493,7 @@ _show_preferences_window :: proc() {
 	if begin_table("Windows") {
 		changes |= choice_row(.ClosePolicy, "Close policy");
 		changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls");
+		imgui.SetItemTooltip("(Requires restart)");
 		end_table();
 	}
 
