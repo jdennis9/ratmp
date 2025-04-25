@@ -201,8 +201,9 @@ main :: proc() {
 	this.running = true;
 	for this.running {
 		msg: win.MSG;
+		minimized := !win.IsWindowVisible(this.hwnd);
 
-		if visible {
+		if visible && !minimized {
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
 				win.TranslateMessage(&msg);
 				win.DispatchMessageW(&msg);
@@ -220,7 +221,7 @@ main :: proc() {
 			this.resize_height = 0;
 		}
 
-		if dx11.begin_frame() {
+		if !minimized && dx11.begin_frame() {
 			com.frame();
 			visible = dx11.present();
 		}

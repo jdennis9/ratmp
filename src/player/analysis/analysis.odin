@@ -95,6 +95,7 @@ update :: proc(delta: f32, window_length: f32) {
 	// Peak
 	// -------------------------------------------------------------------------
 	if this.recalc_peak {
+		this.recalc_peak = false;
 		for ch in 0..<view.channels {
 			peak: f32;
 			for sample in view.data[ch] {
@@ -105,13 +106,13 @@ update :: proc(delta: f32, window_length: f32) {
 			this.peaks[ch] = glm.lerp(this.peaks[ch], peak, lerp_t);
 		}
 
-		this.recalc_peak = false;
 	}
 
 	// -------------------------------------------------------------------------
 	// Spectrum
 	// -------------------------------------------------------------------------
 	if this.recalc_spectrum {
+		this.recalc_spectrum = false;
 		spectrum := _calc_spectrum(view);
 		for peak, index in spectrum.peaks {
 			if math.is_nan(this.spectrum.peaks[index]) {
@@ -121,7 +122,6 @@ update :: proc(delta: f32, window_length: f32) {
 			this.spectrum.slow_peaks[index] = math.lerp(this.spectrum.slow_peaks[index], peak, slow_lerp_t);
 			this.spectrum.slow_peaks[index] = max(this.spectrum.slow_peaks[index], this.spectrum.peaks[index]);
 		}
-		this.recalc_spectrum = false;
 	}
 
 	// -------------------------------------------------------------------------
