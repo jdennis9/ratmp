@@ -232,9 +232,9 @@ playlist_clear :: proc(playlist: ^Playlist) {
 
 playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID, and_sort := true) {
 	for track in tracks {
-		if !slice.contains(playlist.tracks[:], track) {
+		//if !slice.contains(playlist.tracks[:], track) {
 			append(&playlist.tracks, track);
-		}
+		//}
 	}
 	playlist_make_dirty(playlist);
 	if and_sort {sort_playlist(playlist)}

@@ -90,6 +90,10 @@ get_list :: proc() -> []cstring {
 	return this.scanned_themes[:];
 }
 
+get_color_u32 :: proc(color: Color) -> u32 {
+	return imgui.GetColorU32ImVec4(custom_colors[color])
+}
+
 refresh_themes :: proc() {
 	iterator :: proc(fullpath: string, is_folder: bool, _: rawptr) {
 		stem := filepath.short_stem(filepath.base(fullpath));

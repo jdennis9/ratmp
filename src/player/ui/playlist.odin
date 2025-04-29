@@ -20,6 +20,7 @@ package ui;
 
 import "core:slice";
 import "core:hash/xxhash";
+import "core:time"
 
 import imgui "../../libs/odin-imgui";
 
@@ -96,7 +97,7 @@ _get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> []lib.Track_
 	return slice.clone(out[:]);
 }
 
-@(private="file")
+/*@(private="file")
 _show_track_row :: proc(
 	action: ^Track_Table_Action, playlist: lib.Playlist, track_index: int, selected: bool, 
 	have_filter: bool, jump_to_playing: bool, flags: Track_Table_Flags
@@ -185,20 +186,13 @@ _show_track_row :: proc(
 	}
 
 	return;
-}
+}*/
 
 @(private="file")
-_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, playlist: lib.Playlist, track: lib.Track_ID, use_filter: bool) {
-	index, found := slice.linear_search(playlist.tracks[:], track);
+_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []lib.Track_ID, track: lib.Track_ID, use_filter: bool) {
+	index, found := slice.linear_search(tracks[:], track);
 
 	if !found {return}
-
-	if use_filter {
-		filtered_index, found_in_filter := slice.linear_search(playlist.filter_tracks[:], index);
-		if !found_in_filter {return}
-		index = filtered_index;
-	}
-
 	imgui.ListClipper_ForceDisplayRangeByIndices(clipper, cast(i32) index, cast(i32) index + 1);
 }
 
@@ -227,9 +221,95 @@ _set_track_drag_drop_payload :: proc(tracks: []lib.Track_ID) {
 	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track_ID) * len(tracks));
 }
 
-_show_playlist_track_table :: proc(
-	playlist: lib.Playlist,
-	flags: Track_Table_Flags = {}
+_Track_Table_Iterator :: struct {
+	tracks: []lib.Track_ID,
+	selection: []lib.Track_ID,
+	track: lib.Track_ID,
+	track_index: int,
+
+	_list_clipper: imgui.ListClipper,
+	_pos: int,
+	_min, _max: int,
+}
+
+_begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) -> bool {
+	table_flags := 
+	imgui.TableFlags_Resizable|imgui.TableFlags_Hideable|
+	imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
+	imgui.TableFlags_Reorderable|imgui.TableFlags_ScrollY|
+	imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate;
+
+	columns := [Column_Index]Column {
+		.Artist = {name = "Artist", sort_metric = .Artist},
+		.Album = {name = "Album", sort_metric = .Album},
+		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
+		.Genre = {name = "Genre", flags = {.DefaultHide}, sort_metric = .Genre},
+		.Duration = {name = "Duration", sort_metric = .Duration},
+	};
+
+	if imgui.BeginTable(str_id, auto_cast len(Column_Index), table_flags) {
+		for col in columns {imgui.TableSetupColumn(col.name, col.flags)}
+		imgui.TableSetupScrollFreeze(1, 1)
+		imgui.TableHeadersRow()
+		imgui.ListClipper_Begin(&iterator._list_clipper, auto_cast len(iterator.tracks), imgui.GetTextLineHeightWithSpacing())
+		return true
+	}
+
+	return false
+}
+
+_show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
+	if it._pos >= it._max {
+		if !imgui.ListClipper_Step(&it._list_clipper) {
+			return false
+		}
+
+		it._min = int(it._list_clipper.DisplayStart)
+		it._max = int(it._list_clipper.DisplayEnd)
+		it._pos = it._min
+	}
+
+	imgui.TableNextRow()
+
+	it.track_index = it._pos
+	it.track = it.tracks[it._pos]
+	track := lib.get_track_info(it.track)
+	it._pos += 1
+
+	if imgui.TableSetColumnIndex(auto_cast Column_Index.Album) {imgui.TextUnformatted(track.album)}
+	if imgui.TableSetColumnIndex(auto_cast Column_Index.Artist) {imgui.TextUnformatted(track.artist)}
+	if imgui.TableSetColumnIndex(auto_cast Column_Index.Genre) {imgui.TextUnformatted(track.genre)}
+
+	if imgui.TableSetColumnIndex(auto_cast Column_Index.Duration) {
+		buf: [64]u8
+		hours, minutes, seconds := time.clock_from_seconds(auto_cast track.duration_seconds)
+		imgui.Text("%02d:%02d:%02d", i32(hours), i32(minutes), i32(seconds))
+	}
+
+	if imgui.TableSetColumnIndex(auto_cast Column_Index.Title) {
+		if playback.get_playing_track() == it.track {
+			imgui.TableSetBgColor(.RowBg0, theme.get_color_u32(.PlayingHighlight))
+		}
+
+		imgui.Selectable(track.title, slice.contains(it.selection, it.track), {.SpanAllColumns})
+	}
+
+	return true
+}
+
+_end_track_table :: proc(iterator: ^_Track_Table_Iterator) {
+	imgui.ListClipper_End(&iterator._list_clipper)
+	imgui.EndTable()
+}
+
+//@Unused: Keeping for reference
+_show_track_table :: proc(
+	str_id: cstring,
+	tracks: []lib.Track_ID,
+	selection: []lib.Track_ID,
+	flags: Track_Table_Flags = {},
+	row_callback: proc(_: rawptr, _: lib.Track_ID) = nil,
+	row_callback_data: rawptr = nil,
 ) -> (action: Track_Table_Action) {
 	// -------------------------------------------------------------------------
 	// Drag-drop
@@ -249,20 +329,15 @@ _show_playlist_track_table :: proc(
 		imgui.EndDragDropTarget();
 	}
 
-	if len(playlist.tracks) == 0 {
-		imgui.TextDisabled("%s is empty", playlist.name);
-		if playlist.id != 0 {
-			if imgui.Button("Browse library") {
-				bring_window_to_front(.Library);
-			}
-		}
+	if len(tracks) == 0 {
+		imgui.TextDisabled("Playlist is empty");
 		return;
 	}
 
 	// -------------------------------------------------------------------------
 	// Update filter input
 	// -------------------------------------------------------------------------
-	@static filter_buf: [128]u8;
+	/*@static filter_buf: [128]u8;
 	have_filter := false;
 
 	if .NoFilter not_in flags {
@@ -278,7 +353,7 @@ _show_playlist_track_table :: proc(
 
 		action.filter = filter;
 		action.filter_hash = filter_hash;
-	}
+	}*/
 
 	// -------------------------------------------------------------------------
 	// Set up some variables
@@ -342,7 +417,6 @@ _show_playlist_track_table :: proc(
 	// -----------------------------------------------------------------------------
 	// Track table
 	// -----------------------------------------------------------------------------
-	str_id := len(playlist.name) > 0 ? playlist.name : "##unnamed";
 	if imgui.BeginTable(str_id, cast(i32) len(Column_Index), table_flags) {
 		defer imgui.EndTable();
 
@@ -352,23 +426,15 @@ _show_playlist_track_table :: proc(
 		
 		for col in columns {
 			flags := col.flags;
-			// This makes disabling sorting not work
-			/*col.sort_metric != .None && playlist.sort_metric == col.sort_metric {
-				flags |= {.DefaultSort};
-				if playlist.sort_order == .Descending {flags |= {.PreferSortDescending}}
-				if playlist.sort_order == .Ascending {flags |= {.PreferSortAscending}}
-			}*/
 			imgui.TableSetupColumn(col.name, flags);
 		}
 		
 		imgui.TableSetupScrollFreeze(1, 1);
 		imgui.TableHeadersRow();
 		
-		update_sort_specs(playlist, columns, &action);
+		// @FIX
+		//update_sort_specs(playlist, columns, &action);
 
-		// ---------------------------------------------------------------------
-		// Handle hotkeys
-		// ---------------------------------------------------------------------
 		if focused {
 			jump_to_playing = imgui.IsKeyChordPressed(cast(i32) (imgui.Key.Space | imgui.Key.ImGuiMod_Ctrl));
 
@@ -383,47 +449,38 @@ _show_playlist_track_table :: proc(
 			}
 		}
 
-		// ---------------------------------------------------------------------
-		// Show tracks
-		// ---------------------------------------------------------------------
-		if !have_filter {
-			imgui.ListClipper_Begin(&list_clipper, auto_cast len(playlist.tracks), imgui.GetTextLineHeightWithSpacing());
+		show_row :: proc(track_id: lib.Track_ID, selected: bool) {
+			imgui.TableNextRow()
+			track := lib.get_track_info(track_id)
 
-			if jump_to_playing {_force_track_in_list_clipper(&list_clipper, playlist, playing_track, false)}
-			
-			for imgui.ListClipper_Step(&list_clipper) {
-				range_start := int(list_clipper.DisplayStart);
-				range_end := int(list_clipper.DisplayEnd);
-				for track_index in range_start..<range_end {
-					track_id := playlist.tracks[track_index];
-					selected := _is_track_selected(track_id);
-					_show_track_row(&action, playlist, track_index, selected, have_filter, jump_to_playing, flags);
-				}
-			}
-			
-			imgui.ListClipper_End(&list_clipper);
-		}
-		else {
-			imgui.ListClipper_Begin(&list_clipper, auto_cast len(playlist.filter_tracks), imgui.GetTextLineHeightWithSpacing());
-			
-			if jump_to_playing {_force_track_in_list_clipper(&list_clipper, playlist, playing_track, true)}
-
-			for imgui.ListClipper_Step(&list_clipper) {
-				range_start := int(list_clipper.DisplayStart);
-				range_end := int(list_clipper.DisplayEnd);
-
-				for filter_index in range_start..<range_end {
-					track_index := playlist.filter_tracks[filter_index];
-					track_id := playlist.tracks[track_index];
-					selected := _is_track_selected(track_id);
-
-					if select_all_filtered_tracks {_add_track_to_selection(track_id)};
-					_show_track_row(&action, playlist, track_index, selected, have_filter, jump_to_playing, flags);
-				}
+			if track_id == playback.get_playing_track() {
+				imgui.TableSetBgColor(.RowBg0, theme.get_color_u32(.PlayingHighlight))
 			}
 
-			imgui.ListClipper_End(&list_clipper);
+			if imgui.TableSetColumnIndex(auto_cast Column_Index.Artist) {imgui.TextUnformatted(track.artist)}
+			if imgui.TableSetColumnIndex(auto_cast Column_Index.Album) {imgui.TextUnformatted(track.album)}
+			if imgui.TableSetColumnIndex(auto_cast Column_Index.Genre) {imgui.TextUnformatted(track.genre)}
+			if imgui.TableSetColumnIndex(auto_cast Column_Index.Title) {
+				imgui.Selectable(track.title, selected, {.SpanAllColumns})
+			}
 		}
+
+		imgui.ListClipper_Begin(&list_clipper, auto_cast len(tracks), imgui.GetTextLineHeightWithSpacing());
+
+		if jump_to_playing {_force_track_in_list_clipper(&list_clipper, tracks, playing_track, false)}
+		
+		for imgui.ListClipper_Step(&list_clipper) {
+			range_start := int(list_clipper.DisplayStart);
+			range_end := int(list_clipper.DisplayEnd);
+			for track_index in range_start..<range_end {
+				track_id := tracks[track_index];
+				selected := slice.contains(selection, track_id)
+				show_row(track_id, selected)
+				if row_callback != nil {row_callback(row_callback_data, track_id)}
+			}
+		}
+		
+		imgui.ListClipper_End(&list_clipper);
 	}
 
 	return;

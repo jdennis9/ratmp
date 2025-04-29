@@ -215,6 +215,7 @@ this: struct {
 	},
 
 	selection: [dynamic]lib.Track_ID,
+	selection_playlist_id: lib.Playlist_ID,
 	selected_playlist: lib.Playlist_ID,
 
 	show_help: bool,
@@ -880,22 +881,148 @@ show :: proc() {
 
 @private
 _show_library_window :: proc() {
-	playlist := lib.get_default_playlist();
-	action := _show_playlist_track_table(playlist^);
-	_handle_base_track_table_action(action, playlist);
-	_handle_playlist_playback_action(action, playlist^);
+	playlist := lib.get_default_playlist()
+	_show_playlist_track_table(playlist)
+}
 
-	if action.remove {
-		lib.remove_tracks(this.selection[:]);
+@private
+_handle_select_track :: proc(playlist_id: lib.Playlist_ID, from: []lib.Track_ID, track_id: lib.Track_ID, force_no_clear := false) {
+	if this.selection_playlist_id != playlist_id {
+		clear(&this.selection)
+		this.selection_playlist_id = playlist_id
+	}
+
+	selected := slice.contains(this.selection[:], track_id)
+
+	if imgui.IsKeyDown(.ImGuiMod_Shift) {
+		if track_index, found := slice.linear_search(from, track_id); found {
+			range_start := 0
+
+			for sel in this.selection {
+				index := slice.linear_search(from, sel) or_continue
+				if index < track_index {range_start = max(range_start, index)}
+			}
+
+			for sel in from[range_start:track_index] {
+				if !slice.contains(this.selection[:], sel) {
+					append(&this.selection, sel)
+				}
+			}
+
+			append(&this.selection, track_id)
+		}
+	}
+	else {
+		if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
+			if !(force_no_clear && selected) {clear(&this.selection)}
+			append(&this.selection, track_id)
+		}
+		else if !selected {append(&this.selection, track_id)}
+	}
+}
+
+@private
+_show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, track_id: lib.Track_ID, selection: []lib.Track_ID) {
+	track := lib.get_track_info(track_id)
+	if imgui.BeginMenu("Add to playlist") {
+		for &target_playlist in lib.get_playlists() {
+			if target_playlist.id == from_playlist {continue}
+			if imgui.MenuItem(target_playlist.name) {
+				lib.playlist_add_tracks(&target_playlist, selection)
+			}
+		}
+		imgui.EndMenu()
+	}
+}
+
+@private
+_show_playlist_track_table :: proc(playlist: ^lib.Playlist) {
+	want_remove_selection: bool
+
+	table := _Track_Table_Iterator {
+		tracks = playlist.tracks[:],
+		selection = this.selection_playlist_id == playlist.id ? this.selection[:] : nil,
+	}
+
+	if _begin_track_table(&table, "##tracks") {
+		for _show_next_track_table_row(&table) {
+			track := table.track
+			left_clicked := imgui.IsItemClicked(.Left)
+			middle_clicked := imgui.IsItemClicked(.Middle)
+			right_clicked := imgui.IsItemClicked(.Right)
+
+			if left_clicked || middle_clicked {
+				_handle_select_track(playlist.id, table.tracks, table.track)
+			}
+
+			if middle_clicked {
+				playback.play_playlist(playlist^, table.track)
+			}
+
+			if imgui.BeginPopupContextItem() {
+				_handle_select_track(playlist.id, table.tracks, table.track, true)
+				_show_track_generic_context_menu_items(playlist.id, track, table.selection)
+
+				if imgui.MenuItem("Add to queue") {
+					playback.append_to_queue(this.selection[:])
+				}
+
+				if imgui.MenuItem("Play") {
+					playback.play_track_array(this.selection[:])
+				}
+
+				imgui.Separator()
+
+				if imgui.MenuItem("Remove") {
+					want_remove_selection = true
+				}
+
+				imgui.EndPopup()
+			}
+		}
+		_end_track_table(&table)
 	}
 }
 
 @private
 _show_queue_window :: proc() {
-	playlist := playback.get_queue();
-	action := _show_playlist_track_table(playback.get_queue()^, {.NoAddToQueue, .NoFilter, .NoSort});
-	_handle_base_track_table_action(action, playlist);
-	_handle_queue_playback_action(action, playlist^);
+	want_remove_selection: bool
+
+	queue_id := max(lib.Playlist_ID)
+	table := _Track_Table_Iterator {
+		tracks = playback.get_queue().tracks[:],
+		selection = this.selection_playlist_id == queue_id ? this.selection[:] : nil,
+	}
+
+	if _begin_track_table(&table, "##queue") {
+		for _show_next_track_table_row(&table) {
+			track := table.track
+			left_clicked := imgui.IsItemClicked(.Left)
+			middle_clicked := imgui.IsItemClicked(.Middle)
+			right_clicked := imgui.IsItemClicked(.Right)
+
+			if left_clicked || middle_clicked || right_clicked {
+				_handle_select_track(queue_id, table.tracks, table.track)
+			}
+
+			if middle_clicked {
+				playback.play_track_at_position(table._pos)
+			}
+
+			if imgui.BeginPopupContextItem() {
+				_show_track_generic_context_menu_items(queue_id, track, table.selection)
+				imgui.Separator()
+
+				if imgui.MenuItem("Remove") {
+					want_remove_selection = true
+				}
+
+				imgui.EndPopup()
+			}
+		}
+
+		_end_track_table(&table)
+	}
 }
 
 @private
@@ -906,9 +1033,7 @@ _show_selected_playlist_window :: proc() {
 		return;
 	}
 
-	action := _show_playlist_track_table(playlist^);
-	_handle_base_track_table_action(action, playlist);
-	_handle_playlist_playback_action(action, playlist^);
+	_show_playlist_track_table(playlist)
 }
 
 @private
@@ -1022,9 +1147,7 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 			state.selected_group_id = nil;
 		}
 
-		action := _show_playlist_track_table(playlist^, {.NoRemove, .NoFilter});
-		_handle_base_track_table_action(action, playlist);
-		_handle_playlist_playback_action(action, playlist^);
+		_show_playlist_track_table(playlist)
 	}
 	else {
 		index_of_queued_playlist := -1;
@@ -1083,9 +1206,7 @@ _show_playlist_tabs_window :: proc() {
 	if imgui.BeginTabBar("##playlists") {
 		for &playlist in playlists {
 			if imgui.BeginTabItem(playlist.name) {
-				action := _show_playlist_track_table(playlist);
-				_handle_base_track_table_action(action, &playlist);
-				_handle_playlist_playback_action(action, playlist);
+				_show_playlist_track_table(&playlist)
 				imgui.EndTabItem();
 			}
 		}
