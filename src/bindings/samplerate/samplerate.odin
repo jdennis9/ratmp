@@ -1,12 +1,12 @@
-package samplerate;
+package samplerate
 
-import "core:c";
+import "core:c"
 
 when ODIN_OS == .Windows {
-	foreign import samplerate "samplerate.lib";
+	foreign import samplerate "samplerate.lib"
 }
 else {
-	foreign import samplerate "system:samplerate";
+	foreign import samplerate "system:samplerate"
 }
 
 Converter_Type :: enum c.int {
@@ -15,7 +15,7 @@ Converter_Type :: enum c.int {
 	SINC_FASTEST = 2,
 	ZERO_ORDER_HOLD = 3,
 	LINEAR = 4,
-};
+}
 
 Data :: struct {
 	data_in: [^]f32,
@@ -24,15 +24,15 @@ Data :: struct {
 	input_frames_used, output_frames_gen: c.long,
 	end_of_input: c.int,
 	src_ratio: f64,
-};
+}
 
-State :: rawptr;
+State :: rawptr
 
 @(link_prefix="src_")
 foreign samplerate {
-	new :: proc(converter_type: Converter_Type, channels: c.int, error: ^c.int) -> State ---;
-	delete :: proc(state: State) -> State ---;
-	process :: proc(state: State, data: ^Data) -> c.int ---;
-	reset :: proc(state: State) -> c.int ---;
+	new :: proc(converter_type: Converter_Type, channels: c.int, error: ^c.int) -> State ---
+	delete :: proc(state: State) -> State ---
+	process :: proc(state: State, data: ^Data) -> c.int ---
+	reset :: proc(state: State) -> c.int ---
 }
 

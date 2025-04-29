@@ -1,7 +1,7 @@
-package sndfile;
+package sndfile
 
-import "core:c";
-import "core:c/libc";
+import "core:c"
+import "core:c/libc"
 
 when ODIN_OS == .Windows {
 	foreign import sndfile {
@@ -16,12 +16,12 @@ when ODIN_OS == .Windows {
 		"vorbisenc.lib",
 		"vorbisfile.lib",
 		"system:shlwapi.lib",
-	};
+	}
 }
 else {
 	foreign import sndfile {
 		"system:sndfile",
-	};
+	}
 }
 
 Format_Bits :: enum c.int {
@@ -110,7 +110,7 @@ Format_Bits :: enum c.int {
 	SUBMASK		= 0x0000FFFF,
 	TYPEMASK		= 0x0FFF0000,
 	ENDMASK		= 0x30000000
-};
+}
 
 Channel :: enum c.int {
 	INVALID = 0,
@@ -141,19 +141,19 @@ Channel :: enum c.int {
 	AMBISONIC_B_X,
 	AMBISONIC_B_Y,
 	AMBISONIC_B_Z,
-};
+}
 
-MODE_READ :: 0x10;
-MODE_WRITE :: 0x20;
-MODE_RDWR :: 0x30;
+MODE_READ :: 0x10
+MODE_WRITE :: 0x20
+MODE_RDWR :: 0x30
 
 Seek_Whence :: enum c.int {
 	SEEK_SET = libc.SEEK_SET,
 	SEEK_CUR = libc.SEEK_CUR,
 	SEEK_END = libc.SEEK_END,
-};
+}
 
-count_t :: c.int64_t;
+count_t :: c.int64_t
 
 Info :: struct {
 	frames: count_t,
@@ -162,16 +162,16 @@ Info :: struct {
 	format: c.int,
 	sections: c.int,
 	seekable: c.int,
-};
+}
 
-Stream :: distinct rawptr;
+Stream :: distinct rawptr
 
 @(link_prefix="sf_")
 foreign sndfile {
-	open :: proc(path: cstring, mode: c.int, info: ^Info) -> Stream ---;
-	wchar_open :: proc(path: [^]u16, mode: c.int, info: ^Info) -> Stream ---;
-	close :: proc(stream: Stream) -> c.int ---;
-	seek :: proc(stream: Stream, frames: count_t, whence: Seek_Whence) -> count_t ---;
-	readf_float :: proc(stream: Stream, buffer: [^]f32, frames: count_t) -> count_t ---;
+	open :: proc(path: cstring, mode: c.int, info: ^Info) -> Stream ---
+	wchar_open :: proc(path: [^]u16, mode: c.int, info: ^Info) -> Stream ---
+	close :: proc(stream: Stream) -> c.int ---
+	seek :: proc(stream: Stream, frames: count_t, whence: Seek_Whence) -> count_t ---
+	readf_float :: proc(stream: Stream, buffer: [^]f32, frames: count_t) -> count_t ---
 }
 

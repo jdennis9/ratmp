@@ -15,40 +15,40 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package ui;
+package ui
 
-import glm "core:math/linalg/glsl";
+import glm "core:math/linalg/glsl"
 
-import imgui "../../libs/odin-imgui";
+import imgui "../../libs/odin-imgui"
 
-import "player:analysis";
-import "player:theme";
+import "player:analysis"
+import "player:theme"
 
-lerp :: glm.lerp_f32;
+lerp :: glm.lerp_f32
 
 @private
 _show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.Vec2 = {}) -> bool {
-	size := size_arg;
-	draw_list := imgui.GetWindowDrawList();
-	available_size := imgui.GetContentRegionAvail();
-	cursor := imgui.GetCursorScreenPos();
-	mouse := imgui.GetMousePos();
-	frac := (p_value^ - min) / (max - min);
-	style := imgui.GetStyle();
+	size := size_arg
+	draw_list := imgui.GetWindowDrawList()
+	available_size := imgui.GetContentRegionAvail()
+	cursor := imgui.GetCursorScreenPos()
+	mouse := imgui.GetMousePos()
+	frac := (p_value^ - min) / (max - min)
+	style := imgui.GetStyle()
 
-	if size.x <= 0 {size.x = available_size.x - style.WindowPadding.x;}
-	if size.y <= 0 {size.y = imgui.GetTextLineHeight();}
+	if size.x <= 0 {size.x = available_size.x - style.WindowPadding.x}
+	if size.y <= 0 {size.y = imgui.GetTextLineHeight()}
 
 	clickbox_size := imgui.Vec2{
 		size.x + (style.FramePadding.x*2),
 		size.y + (style.FramePadding.y*2),
-	};
-	bg_pos := imgui.Vec2{cursor.x, cursor.y + style.FramePadding.y + (size.y*0.25),};
+	}
+	bg_pos := imgui.Vec2{cursor.x, cursor.y + style.FramePadding.y + (size.y*0.25),}
 
-	imgui.InvisibleButton(str_id, clickbox_size);
+	imgui.InvisibleButton(str_id, clickbox_size)
 
 	if imgui.IsItemActive() || imgui.IsItemDeactivated() {
-		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0);
+		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
 	}
 
 	// Background rect
@@ -58,7 +58,7 @@ _show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, siz
 		{bg_pos.x + size.x, bg_pos.y + (size.y*0.5)},
 		imgui.GetColorU32ImVec4(style.Colors[imgui.Col.Header]),
 		4
-	);
+	)
 	// Foreground rect
 	imgui.DrawList_AddRectFilled(
 		draw_list,
@@ -66,87 +66,87 @@ _show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, siz
 		{bg_pos.x + (size.x*frac), bg_pos.y + (size.y*0.5)},
 		imgui.GetColorU32ImVec4(style.Colors[imgui.Col.HeaderActive]),
 		4
-	);
+	)
 	// Handle
 	imgui.DrawList_AddCircleFilled(
 		draw_list,
 		{bg_pos.x + (size.x * frac), bg_pos.y + (size.y*0.25)},
 		size.y * 0.5,
 		imgui.GetColorU32ImVec4(style.Colors[imgui.Col.HeaderActive]),
-	);
+	)
 
 	if imgui.IsItemDeactivated() {
-		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0);
-		p_value^ = lerp(min, max, frac);
-		return true;
+		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
+		p_value^ = lerp(min, max, frac)
+		return true
 	}
 
-	return false;
+	return false
 }
 
 @private
 _show_peak_meter_widget :: proc(str_id: cstring, req_size: [2]f32) -> bool {
-	drawlist := imgui.GetWindowDrawList();
-	avail_size := imgui.GetContentRegionAvail();
-	cursor := imgui.GetCursorScreenPos();
-	style := imgui.GetStyle();
-	size := req_size;
+	drawlist := imgui.GetWindowDrawList()
+	avail_size := imgui.GetContentRegionAvail()
+	cursor := imgui.GetCursorScreenPos()
+	style := imgui.GetStyle()
+	size := req_size
 
-	peaks := analysis.get_channel_peaks();
-	channels := len(peaks);
+	peaks := analysis.get_channel_peaks()
+	channels := len(peaks)
 
 	if channels == 0 {return false}
 
 	if size.y == 0 {
-		size.y = avail_size.y + style.FramePadding.y;
+		size.y = avail_size.y + style.FramePadding.y
 	}
 
-	bar_height := (size.y / f32(channels)) - 1;
-	y_offset: f32 = style.FramePadding.y;
+	bar_height := (size.y / f32(channels)) - 1
+	y_offset: f32 = style.FramePadding.y
 
-	quiet_color := theme.custom_colors[.PeakQuiet];
-	loud_color := theme.custom_colors[.PeakLoud];
+	quiet_color := theme.custom_colors[.PeakQuiet]
+	loud_color := theme.custom_colors[.PeakLoud]
 	
 	for &peak in peaks {
-		peak = clamp(peak, 0, 1);
-		color := glm.lerp(quiet_color, loud_color, peak);
-		pmin := [2]f32{cursor.x, cursor.y + y_offset};
-		pmax := [2]f32{pmin.x + size.x*peak, pmin.y + bar_height};
-		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color));
-		y_offset += bar_height + 1;
+		peak = clamp(peak, 0, 1)
+		color := glm.lerp(quiet_color, loud_color, peak)
+		pmin := [2]f32{cursor.x, cursor.y + y_offset}
+		pmax := [2]f32{pmin.x + size.x*peak, pmin.y + bar_height}
+		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color))
+		y_offset += bar_height + 1
 	}
 
-	return imgui.InvisibleButton(str_id, size);
+	return imgui.InvisibleButton(str_id, size)
 }
 
 @private
 _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, req_size: [2]f32 = {0, 0}) {
-	drawlist := imgui.GetWindowDrawList();
-	avail_size := imgui.GetContentRegionAvail();
-	cursor := imgui.GetCursorScreenPos();
+	drawlist := imgui.GetWindowDrawList()
+	avail_size := imgui.GetContentRegionAvail()
+	cursor := imgui.GetCursorScreenPos()
 
 	size := [2]f32{
 		req_size.x == 0 ? avail_size.x : req_size.x,
 		req_size.y == 0 ? avail_size.y : req_size.y,
-	};
+	}
 
-	bar_width := size.x / f32(len(values));
+	bar_width := size.x / f32(len(values))
 
     for unclamped_value in values {
-		value := clamp(unclamped_value, minval, maxval);
-        bar_size := [2]f32{bar_width, size.y};
-		frac := (maxval - value) / (maxval - minval);
-		frac = clamp(frac, 0, 1);
+		value := clamp(unclamped_value, minval, maxval)
+        bar_size := [2]f32{bar_width, size.y}
+		frac := (maxval - value) / (maxval - minval)
+		frac = clamp(frac, 0, 1)
 
-		quiet_color := theme.custom_colors[.PeakQuiet];
-		loud_color := theme.custom_colors[.PeakLoud];
-		color := glm.lerp(quiet_color, loud_color, frac);
+		quiet_color := theme.custom_colors[.PeakQuiet]
+		loud_color := theme.custom_colors[.PeakLoud]
+		color := glm.lerp(quiet_color, loud_color, frac)
 
         imgui.DrawList_AddRectFilled(drawlist, 
             {cursor.x, cursor.y + bar_size.y}, 
             {cursor.x + bar_size.x, cursor.y + bar_size.y * frac},
             imgui.GetColorU32ImVec4(color),
-        );
-        cursor.x += bar_size.x + 1;
+        )
+        cursor.x += bar_size.x + 1
     }
 }

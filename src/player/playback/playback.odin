@@ -15,23 +15,23 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package playback;
+package playback
 
-import "base:runtime";
-import "core:log";
-import "core:sync";
-import "core:math/rand";
-import "core:path/filepath";
-import "core:time";
+import "base:runtime"
+import "core:log"
+import "core:sync"
+import "core:math/rand"
+import "core:path/filepath"
+import "core:time"
 
-import "player:signal";
-import lib "player:library";
-import "player:audio";
-import "player:decoder";
-import "player:util";
-import "player:prefs";
+import "player:signal"
+import lib "player:library"
+import "player:audio"
+import "player:decoder"
+import "player:util"
+import "player:prefs"
 
-Audio_Callback :: #type proc(output: []f32, samplerate: int, channels: int, data: rawptr);
+Audio_Callback :: #type proc(output: []f32, samplerate: int, channels: int, data: rawptr)
 
 MAX_CHANNELS :: 2
 
@@ -40,7 +40,7 @@ Output_Buffer :: struct {
 	data: [MAX_CHANNELS][]f32,
 	samplerate: int,
 	channels: int,
-};
+}
 
 @private
 this: struct {
@@ -67,15 +67,15 @@ this: struct {
 		prev: [MAX_CHANNELS][dynamic]f32,
 		next: [MAX_CHANNELS][dynamic]f32,
 	},
-};
+}
 
 @private
 _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
 	if !sync.atomic_load(&this.paused) {
-		status := decoder.fill_buffer(&this.decoder, output, samplerate, channels);
+		status := decoder.fill_buffer(&this.decoder, output, samplerate, channels)
 		
 		if status == .EOF {
-			signal.post(.RequestNext);
+			signal.post(.RequestNext)
 		}
 		else if status == .NO_FILE {
 			for &f in output {f = 0}
@@ -88,45 +88,45 @@ _fill_buffer :: proc(output: []f32, samplerate: int, channels: int) {
 
 @private
 _stream_callback :: proc(buffer: []f32, _: rawptr) {
-	sync.lock(&this.lock);
-	defer sync.unlock(&this.lock);
+	sync.lock(&this.lock)
+	defer sync.unlock(&this.lock)
 
-	context = this.ctx;
-	frames := i32(len(buffer)) / this.stream.channels;
+	context = this.ctx
+	frames := i32(len(buffer)) / this.stream.channels
 	
 	if this.paused || this.decoder.stream == nil {
 		for i in 0..<(frames * this.stream.channels) {
-			buffer[i] = 0;
+			buffer[i] = 0
 		}
-		return;
+		return
 	}
 
 	_fill_buffer(
 		buffer[:], 
 		cast(int) this.stream.sample_rate, cast(int) this.stream.channels
-	);
+	)
 
 	// -------------------------------------------------------------------------
 	// Update output capture buffer
 	// -------------------------------------------------------------------------
-	channels := int(this.stream.channels);
-	capture := &this.buffer_capture;
+	channels := int(this.stream.channels)
+	capture := &this.buffer_capture
 
 	if len(this.buffer_capture.next[0]) > 0 {
 		for i in 0..<channels {
-			resize(&capture.prev[i], len(capture.next[i]));
-			copy(capture.prev[i][:], capture.next[i][:]);
+			resize(&capture.prev[i], len(capture.next[i]))
+			copy(capture.prev[i][:], capture.next[i][:])
 		}
 
 		// This probably needs to change for audio backends other than WASAPI
-		_deinterlace(buffer, channels, &this.buffer_capture.next);
-		buffer_seconds := f32(frames) / f32(this.stream.sample_rate);
-		capture.timestamp = time.tick_now();
-		capture.timestamp._nsec -= auto_cast(buffer_seconds * 1e9)/2;
+		_deinterlace(buffer, channels, &this.buffer_capture.next)
+		buffer_seconds := f32(frames) / f32(this.stream.sample_rate)
+		capture.timestamp = time.tick_now()
+		capture.timestamp._nsec -= auto_cast(buffer_seconds * 1e9)/2
 	}
 	else {
-		_deinterlace(buffer, channels, &this.buffer_capture.next);
-		this.buffer_capture.timestamp = time.tick_now();
+		_deinterlace(buffer, channels, &this.buffer_capture.next)
+		this.buffer_capture.timestamp = time.tick_now()
 	}
 }
 
@@ -137,113 +137,113 @@ _signal_handler :: proc(sig: signal.Signal) {
 	else if sig == .RequestPause {set_paused(true)}
 	else if sig == .RequestPlay {set_paused(false)}
 	else if sig == .ApplyPrefs {
-		this.shuffle = prefs.get_property("playback_shuffle").(bool) or_else false;
+		this.shuffle = prefs.get_property("playback_shuffle").(bool) or_else false
 	}
 }
 
 init :: proc() -> bool {
-	this.ctx = context;
-	this.paused = true;
-	this.queue.name = "Queue";
-	signal.install_handler(_signal_handler);
-	audio.init() or_return;
-	refresh_audio_devices() or_return;
+	this.ctx = context
+	this.paused = true
+	this.queue.name = "Queue"
+	signal.install_handler(_signal_handler)
+	audio.init() or_return
+	refresh_audio_devices() or_return
 
 	if prefs.prefs.strings[.PlaybackDevice][0] != 0 {
-		want_device_id := cstring(&prefs.prefs.strings[.PlaybackDevice][0]);
+		want_device_id := cstring(&prefs.prefs.strings[.PlaybackDevice][0])
 
 		for &device, device_index in this.devices {
 			if cstring(&device.id[0]) == want_device_id {
-				set_audio_device_index(device_index) or_return;
-				break;
+				set_audio_device_index(device_index) or_return
+				break
 			}
 		}
 	}
 	else {
-		set_audio_device_index(this.default_device_index) or_return;
+		set_audio_device_index(this.default_device_index) or_return
 	}
 
-	return true;
+	return true
 }
 
 shutdown :: proc() {
-	audio.stop();
-	audio.shutdown();
+	audio.stop()
+	audio.shutdown()
 }
 
 @private
 _play_file :: proc(path: string) -> bool {
-	sync.lock(&this.lock);
-	defer sync.unlock(&this.lock);
-	log.debug("Playing file", filepath.base(path));
+	sync.lock(&this.lock)
+	defer sync.unlock(&this.lock)
+	log.debug("Playing file", filepath.base(path))
 
 	// Clear output buffer
 	for ch in 0..<this.stream.channels {
-		delete(this.buffer_capture.next[ch]);
-		this.buffer_capture.next[ch] = nil;
-		delete(this.buffer_capture.prev[ch]);
-		this.buffer_capture.prev[ch] = nil;
+		delete(this.buffer_capture.next[ch])
+		this.buffer_capture.next[ch] = nil
+		delete(this.buffer_capture.prev[ch])
+		this.buffer_capture.prev[ch] = nil
 	}
 
-	return decoder.open(&this.decoder, path);
+	return decoder.open(&this.decoder, path)
 }
 
 get_playing_track :: proc() -> lib.Track_ID {
-	return this.playing_track;
+	return this.playing_track
 }
 
 is_paused :: proc() -> bool {
-	return this.paused || (this.playing_track == 0);
+	return this.paused || (this.playing_track == 0)
 }
 
 set_paused :: proc(paused: bool) {
 	if !paused && this.playing_track == 0 {
-		sync.atomic_store(&this.paused, true);
-		return;
+		sync.atomic_store(&this.paused, true)
+		return
 	}
-	sync.atomic_store(&this.paused, paused);
-	signal.post(.PlaybackStateChanged);
-	audio.interrupt();
+	sync.atomic_store(&this.paused, paused)
+	signal.post(.PlaybackStateChanged)
+	audio.interrupt()
 }
 
 toggle :: proc() {
-	paused := sync.atomic_load(&this.paused);
+	paused := sync.atomic_load(&this.paused)
 	if paused {set_paused(false)}
 	else {set_paused(true)}
 }
 
 stop :: proc() {
-	sync.lock(&this.lock);
-	decoder.close(&this.decoder);
-	sync.unlock(&this.lock);
+	sync.lock(&this.lock)
+	decoder.close(&this.decoder)
+	sync.unlock(&this.lock)
 	
-	clear(&this.queue.tracks);
-	this.playing_track = 0;
+	clear(&this.queue.tracks)
+	this.playing_track = 0
 	
-	signal.post(.PlaybackStopped);
-	audio.interrupt();
+	signal.post(.PlaybackStopped)
+	audio.interrupt()
 }
 
 toggle_shuffle :: proc() {
-	this.shuffle = !this.shuffle;
-	prefs.set_property("playback_shuffle", this.shuffle);
+	this.shuffle = !this.shuffle
+	prefs.set_property("playback_shuffle", this.shuffle)
 }
 
-is_shuffle_enabled :: proc() -> bool {return this.shuffle;}
+is_shuffle_enabled :: proc() -> bool {return this.shuffle}
 
 play_track :: proc(track: lib.Track_ID) -> bool {
-	buf: [512]u8;
-	path := lib.get_track_path(track, buf[:]);
+	buf: [512]u8
+	path := lib.get_track_path(track, buf[:])
 	if (_play_file(path)) {
-		this.playing_track = track;
-		set_paused(false);
-		signal.post(.TrackChanged);
-		return true;
+		this.playing_track = track
+		set_paused(false)
+		signal.post(.TrackChanged)
+		return true
 	}
 
-	this.playing_track = 0;
+	this.playing_track = 0
 
-	return false;
+	return false
 }
 
 // =============================================================================
@@ -253,74 +253,74 @@ play_track :: proc(track: lib.Track_ID) -> bool {
 @private
 _deinterlace :: proc(input: []f32, channels: int, out: ^[MAX_CHANNELS][dynamic]f32) {
 	for ch in 0..<channels {
-		resize(&out[ch], len(input)/channels);
+		resize(&out[ch], len(input)/channels)
 	}
 
-	sample_count := len(input);
-	sample: int;
-	frame: int;
+	sample_count := len(input)
+	sample: int
+	frame: int
 
 	for sample < sample_count {
 		for ch in 0..<channels {
-			out[ch][frame] = input[sample + ch];
+			out[ch][frame] = input[sample + ch]
 		}
 
-		sample += channels;
-		frame += 1;
+		sample += channels
+		frame += 1
 	}
 }
 
 update_output_copy_buffer :: proc(buffer: ^Output_Buffer) -> bool {
-	sync.lock(&this.lock);
-	defer sync.unlock(&this.lock);
+	sync.lock(&this.lock)
+	defer sync.unlock(&this.lock)
 
-	capture := &this.buffer_capture;
+	capture := &this.buffer_capture
 
 	if this.paused {
 		for c in 0..<MAX_CHANNELS {
-			delete(buffer.data[c]);
-			buffer.data[c] = nil;
+			delete(buffer.data[c])
+			buffer.data[c] = nil
 		}
 
-		return false;
+		return false
 	}
 
 	// No need to update
 	if buffer.data[0] != nil && buffer.timestamp == this.buffer_capture.timestamp {
-		return false;
+		return false
 	}
 
-	buffer.channels = auto_cast this.stream.channels;
-	buffer.samplerate = auto_cast this.stream.sample_rate;
-	buffer.timestamp = this.buffer_capture.timestamp;
+	buffer.channels = auto_cast this.stream.channels
+	buffer.samplerate = auto_cast this.stream.sample_rate
+	buffer.timestamp = this.buffer_capture.timestamp
 
 	for i in 0..<buffer.channels {
-		delete(buffer.data[i]);
-		buffer.data[i] = make([]f32, len(capture.prev[i]) + len(capture.next[i]));
-		copy(buffer.data[i][:], capture.prev[i][:]);
-		copy(buffer.data[i][len(capture.prev[i]):], capture.next[i][:]);
+		delete(buffer.data[i])
+		buffer.data[i] = make([]f32, len(capture.prev[i]) + len(capture.next[i]))
+		copy(buffer.data[i][:], capture.prev[i][:])
+		copy(buffer.data[i][len(capture.prev[i]):], capture.next[i][:])
 	}
 
-	return true;
+	return true
 }
 
 get_output_buffer_view :: proc(buffer: ^Output_Buffer, frame_count: int) -> (view: Output_Buffer) {
 	if len(buffer.data[0]) == 0 {return}
 
-	view.channels = buffer.channels;
-	view.samplerate = buffer.samplerate;
+	view.channels = buffer.channels
+	view.samplerate = buffer.samplerate
 
-	delta := cast(f32) time.duration_seconds(time.tick_diff(buffer.timestamp, time.tick_now()));
-	first_frame := int(delta * f32(buffer.samplerate));
-	first_frame = max(first_frame, 0);
-	frame_count := min(frame_count, len(buffer.data[0]) - first_frame);
+	delta := cast(f32) time.duration_seconds(time.tick_diff(buffer.timestamp, time.tick_now()))
+	first_frame := int(delta * f32(buffer.samplerate))
+	first_frame = max(first_frame, 0)
+	frame_count := min(frame_count, len(buffer.data[0]) - first_frame)
 	if frame_count < 0 {return}
 
 	for ch in 0..<view.channels {
-		view.data[ch] = buffer.data[ch][first_frame:][:frame_count];
+		view.data[ch] = buffer.data[ch][first_frame:][:frame_count]
 	}
 
-	return;
+	return
 }
 
 // =============================================================================
@@ -328,22 +328,22 @@ get_output_buffer_view :: proc(buffer: ^Output_Buffer, frame_count: int) -> (vie
 // =============================================================================
 
 seek :: proc(second: int) {
-	sync.lock(&this.lock);
-	decoder.seek(&this.decoder, second);
-	sync.unlock(&this.lock);
-	audio.interrupt();
+	sync.lock(&this.lock)
+	decoder.seek(&this.decoder, second)
+	sync.unlock(&this.lock)
+	audio.interrupt()
 }
 
 get_second :: proc() -> int {
-	sync.lock(&this.lock);
-	defer sync.unlock(&this.lock);
-	return decoder.get_second(&this.decoder);
+	sync.lock(&this.lock)
+	defer sync.unlock(&this.lock)
+	return decoder.get_second(&this.decoder)
 }
 
 get_duration :: proc() -> int {
-	sync.lock(&this.lock);
-	defer sync.unlock(&this.lock);
-	return decoder.get_duration(&this.decoder);
+	sync.lock(&this.lock)
+	defer sync.unlock(&this.lock)
+	return decoder.get_duration(&this.decoder)
 }
 
 // =============================================================================
@@ -351,90 +351,90 @@ get_duration :: proc() -> int {
 // =============================================================================
 
 get_queue :: proc() -> ^lib.Playlist {
-	return &this.queue;
+	return &this.queue
 }
 
 get_queued_playlist :: proc() -> lib.Playlist_ID {
-	return this.queued_playlist;
+	return this.queued_playlist
 }
 
 get_queued_group_id :: proc() -> u32 {
-	return this.queued_group_id;
+	return this.queued_group_id
 }
 
 play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use_filter := false) {
-	this.queued_playlist = playlist.id;
-	this.queued_group_id = playlist.group_id;
-	lib.playlist_clear(&this.queue);
+	this.queued_playlist = playlist.id
+	this.queued_group_id = playlist.group_id
+	lib.playlist_clear(&this.queue)
 
 	if use_filter && playlist.filter_hash != 0 {
 		for index in playlist.filter_tracks {
-			lib.playlist_add_tracks(&this.queue, {playlist.tracks[index]}, false);
+			lib.playlist_add_tracks(&this.queue, {playlist.tracks[index]}, false)
 		}	
 	}
 	else {
-		lib.playlist_add_tracks(&this.queue, playlist.tracks[:]);
+		lib.playlist_add_tracks(&this.queue, playlist.tracks[:])
 	}
 
 	if this.shuffle {
-		rand.shuffle(this.queue.tracks[:]);
+		rand.shuffle(this.queue.tracks[:])
 	}
 
-	this.queue_position = 0;
+	this.queue_position = 0
 
 	if first_track != 0 {
 		for track, index in this.queue.tracks {
 			if track == first_track {
-				this.queue_position = index;
-				break;
+				this.queue_position = index
+				break
 			}
 		}
 	}
 
-	play_track_at_position(this.queue_position);
+	play_track_at_position(this.queue_position)
 }
 
 append_to_queue :: proc(tracks: []lib.Track_ID) {
-	this.queued_playlist = 0;
-	this.queued_group_id = 0;
-	lib.playlist_add_tracks(&this.queue, tracks);
+	this.queued_playlist = 0
+	this.queued_group_id = 0
+	lib.playlist_add_tracks(&this.queue, tracks)
 }
 
 play_track_at_position :: proc(in_pos: int) {
-	pos := in_pos;
+	pos := in_pos
 
 	if len(this.queue.tracks) == 0 {
-		return;
+		return
 	}
 
 	if pos >= len(this.queue.tracks) || pos < 0 {
-		pos = 0;
+		pos = 0
 	}
 
 	if !play_track(this.queue.tracks[pos]) {
-		signal.post(.RequestNext);
+		signal.post(.RequestNext)
 	}
-	this.queue_position = pos;
+	this.queue_position = pos
 }
 
 play_track_array :: proc(tracks: []lib.Track_ID) {
-	this.queued_playlist = 0;
-	lib.playlist_clear(&this.queue);
-	lib.playlist_add_tracks(&this.queue, tracks);
+	this.queued_playlist = 0
+	lib.playlist_clear(&this.queue)
+	lib.playlist_add_tracks(&this.queue, tracks)
 
 	if this.shuffle {
-		rand.shuffle(this.queue.tracks[:]);
+		rand.shuffle(this.queue.tracks[:])
 	}
 
-	play_track_at_position(0);
+	play_track_at_position(0)
 }
 
 play_next_track :: proc() {
-	play_track_at_position(this.queue_position + 1);
+	play_track_at_position(this.queue_position + 1)
 }
 
 play_prev_track :: proc() {
-	play_track_at_position(this.queue_position - 1);
+	play_track_at_position(this.queue_position - 1)
 }
 
 // =============================================================================
@@ -442,45 +442,45 @@ play_prev_track :: proc() {
 // =============================================================================
 
 set_volume :: proc(vol: f32) {
-	audio.set_volume(vol);
+	audio.set_volume(vol)
 }
 
 get_volume :: proc() -> f32 {
-	return audio.get_volume();
+	return audio.get_volume()
 }
 
 // =============================================================================
 // Audio
 // =============================================================================
 refresh_audio_devices :: proc() -> bool {
-	delete(this.devices);
-	this.devices = audio.enumerate_devices() or_return;
-	default_id := audio.get_default_device_id() or_return;
+	delete(this.devices)
+	this.devices = audio.enumerate_devices() or_return
+	default_id := audio.get_default_device_id() or_return
 
 	for &device, index in this.devices {
 		if cstring(&device.id[0]) == cstring(&default_id[0]) {
-			this.default_device_index = index;
+			this.default_device_index = index
 		}
 	}
 
-	return true;
+	return true
 }
 
 get_audio_devices :: proc() -> []audio.Device_Props {
-	return this.devices;
+	return this.devices
 }
 
 set_audio_device_index :: proc(index: int) -> bool {
-	audio.stop();
-	this.stream = audio.start(&this.devices[index].id, _stream_callback, nil) or_return;
-	this.current_device = this.devices[index];
-	return true;
+	audio.stop()
+	this.stream = audio.start(&this.devices[index].id, _stream_callback, nil) or_return
+	this.current_device = this.devices[index]
+	return true
 }
 
 get_default_audio_device_index :: proc() -> int {
-	return this.default_device_index;
+	return this.default_device_index
 }
 
 get_audio_device :: proc() -> audio.Device_Props {
-	return this.current_device;
+	return this.current_device
 }

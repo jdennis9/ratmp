@@ -15,16 +15,16 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package ui;
+package ui
 
-import imgui "libs:odin-imgui";
+import imgui "libs:odin-imgui"
 
 @private
 _begin_window_drag_drop_target :: proc(str_id: cstring) -> bool {
 	rect := imgui.Rect {
 		Min = imgui.GetWindowPos(),
 		Max = imgui.GetWindowPos() + imgui.GetWindowSize(),
-	};
+	}
 
-	return imgui.BeginDragDropTargetCustom(rect, imgui.GetID(str_id));
+	return imgui.BeginDragDropTargetCustom(rect, imgui.GetID(str_id))
 }

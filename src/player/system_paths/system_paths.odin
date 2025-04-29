@@ -15,8 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package system_paths;
+package system_paths
 
 init :: proc() {
-	init_os_specific();
+	init_os_specific()
 }

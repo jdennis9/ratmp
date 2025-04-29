@@ -15,14 +15,14 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package decoder;
+package decoder
 
-import "core:unicode/utf16";
-import "core:math";
-import "core:log";
+import "core:unicode/utf16"
+import "core:math"
+import "core:log"
 
-import sf "bindings:sndfile";
-import src "bindings:samplerate";
+import sf "bindings:sndfile"
+import src "bindings:samplerate"
 
 
 Decoder :: struct {
@@ -30,66 +30,66 @@ Decoder :: struct {
 	info: sf.Info,
 	resampler: src.State,
 	frame: int,
-};
+}
 
 Decode_Status :: enum {
 	NO_FILE,
 	COMPLETE,
 	EOF,
-};
+}
 
 open :: proc(dec: ^Decoder, file: string) -> bool {
-	close(dec);
+	close(dec)
 	when ODIN_OS == .Windows {
-		path: [512]u16;
-		utf16.encode_string(path[:511], file);
-		dec.stream = sf.wchar_open(raw_data(path[:]), sf.MODE_READ, &dec.info);
+		path: [512]u16
+		utf16.encode_string(path[:511], file)
+		dec.stream = sf.wchar_open(raw_data(path[:]), sf.MODE_READ, &dec.info)
 	}
 	else {
-		path: [512]u8;
-		copy(path[:511], file);
-		dec.stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &dec.info);
+		path: [512]u8
+		copy(path[:511], file)
+		dec.stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &dec.info)
 	}
-	return dec.stream != nil;
+	return dec.stream != nil
 }
 
 close :: proc(dec: ^Decoder) {
-	if dec.stream != nil {sf.close(dec.stream); dec.stream = nil;}
-	if dec.resampler != nil {src.delete(dec.resampler); dec.resampler = nil;}
-	dec.frame = 0;
+	if dec.stream != nil {sf.close(dec.stream); dec.stream = nil}
+	if dec.resampler != nil {src.delete(dec.resampler); dec.resampler = nil}
+	dec.frame = 0
 }
 
 fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
 	if dec.stream == nil {
-		return .NO_FILE;
+		return .NO_FILE
 	}
 
-	status = .COMPLETE;
+	status = .COMPLETE
 
-	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels;
-	output_frames := len(output) / channels;
+	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
+	output_frames := len(output) / channels
 
 	if !needs_resampling {
-		frames_read := sf.readf_float(dec.stream, raw_data(output), sf.count_t(output_frames));
-		if (frames_read < i64(output_frames)) {return .EOF;}
-		dec.frame += int(frames_read);
-		return .COMPLETE;
+		frames_read := sf.readf_float(dec.stream, raw_data(output), sf.count_t(output_frames))
+		if (frames_read < i64(output_frames)) {return .EOF}
+		dec.frame += int(frames_read)
+		return .COMPLETE
 	}
 
 	if dec.resampler == nil {
-		error: i32;
-		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error);
+		error: i32
+		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error)
 	}
 
-	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate);
-	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio);
-	raw_buffer: []f32 = make([]f32, input_frames * dec.info.channels);
-	defer delete(raw_buffer);
+	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
+	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio)
+	raw_buffer: []f32 = make([]f32, input_frames * dec.info.channels)
+	defer delete(raw_buffer)
 
-	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames));
+	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
 
 	if (frames_read < sf.count_t(input_frames)) {
-		status = .EOF;
+		status = .EOF
 	}
 
 	rs := src.Data {
@@ -98,31 +98,31 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 		input_frames = auto_cast input_frames,
 		output_frames = auto_cast output_frames,
 		src_ratio = f64(in_to_out_sample_ratio),
-	};
+	}
 
-	src.process(dec.resampler, &rs);
+	src.process(dec.resampler, &rs)
 
-	dec.frame += cast(int) frames_read;
+	dec.frame += cast(int) frames_read
 
-	return;
+	return
 }
 
 seek :: proc(dec: ^Decoder, second: int) {
 	if dec.stream == nil {
-		return;
+		return
 	}
 
-	frame := sf.count_t(dec.info.samplerate) * sf.count_t(second);
-	sf.seek(dec.stream, frame, .SEEK_SET);
-	dec.frame = int(frame);
+	frame := sf.count_t(dec.info.samplerate) * sf.count_t(second)
+	sf.seek(dec.stream, frame, .SEEK_SET)
+	dec.frame = int(frame)
 }
 
 get_second :: proc(dec: ^Decoder) -> int {
 	if dec.stream == nil {return 0}
-	return dec.frame / int(dec.info.samplerate);
+	return dec.frame / int(dec.info.samplerate)
 }
 
 get_duration :: proc(dec: ^Decoder) -> int {
 	if dec.stream == nil {return 0}
-	return int(dec.info.frames) / int(dec.info.samplerate);
+	return int(dec.info.frames) / int(dec.info.samplerate)
 }

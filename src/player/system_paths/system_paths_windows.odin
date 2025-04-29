@@ -15,13 +15,13 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package system_paths;
+package system_paths
 
-import "core:path/filepath";
-import "core:fmt";
+import "core:path/filepath"
+import "core:fmt"
 
-DATA_DIR :: ".";
-CONFIG_DIR :: ".";
+DATA_DIR :: "."
+CONFIG_DIR :: "."
 
 @private
 init_os_specific :: proc() {

@@ -15,40 +15,40 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package media_controls;
+package media_controls
 
-foreign import lib "../../cpp/cpp.lib";
+foreign import lib "../../cpp/cpp.lib"
 
-import "base:runtime";
-import "core:c";
+import "base:runtime"
+import "core:c"
 
-import "player:playback";
-import "player:library";
-import "player:signal";
+import "player:playback"
+import "player:library"
+import "player:signal"
 
 Event :: enum c.int {
 	Pause,
 	Play,
 	Prev,
 	Next,
-};
+}
 
 Status :: enum c.int {
 	Stopped,
 	Paused,
 	Playing,
-};
+}
 
 @private
 this: struct {
 	ctx: runtime.Context,
-};
+}
 
-Event_Handler :: #type proc "c" (event: Event);
+Event_Handler :: #type proc "c" (event: Event)
 
 @(link_prefix="media_controls_")
 foreign lib {
-	install_handler :: proc(handler: Event_Handler) -> bool ---;
-	set_status :: proc(status: Status) ---;
-	set_metadata :: proc(album: cstring, artist: cstring, title: cstring) ---;
+	install_handler :: proc(handler: Event_Handler) -> bool ---
+	set_status :: proc(status: Status) ---
+	set_metadata :: proc(album: cstring, artist: cstring, title: cstring) ---
 }

@@ -15,9 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package build;
+package build
 
-PROGRAM_NAME :: "RAT MP";
-VERSION_STRING :: "0.4.0";
-PROGRAM_NAME_AND_VERSION :: "RAT MP 0.4.0";
+PROGRAM_NAME :: "RAT MP"
+VERSION_STRING :: "0.4.0"
+PROGRAM_NAME_AND_VERSION :: "RAT MP 0.4.0"
 

@@ -15,36 +15,36 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main_common;
+package main_common
 
-import imgui "../../libs/odin-imgui";
+import imgui "../../libs/odin-imgui"
 
-import "player:system_paths";
-import "player:prefs";
-import "player:theme";
-import "player:library";
-import "player:ui";
-import "player:video";
-import "player:playback";
-import "player:signal";
+import "player:system_paths"
+import "player:prefs"
+import "player:theme"
+import "player:library"
+import "player:ui"
+import "player:video"
+import "player:playback"
+import "player:signal"
 
 init :: proc() {
-	system_paths.init();
-	prefs.load();
-	theme.init();
-	library.init();
-	playback.init();
-	ui.init();
+	system_paths.init()
+	prefs.load()
+	theme.init()
+	library.init()
+	playback.init()
+	ui.init()
 }
 
 frame :: proc() {
-	signal.post(.NewFrame);
-	ui.show();
+	signal.post(.NewFrame)
+	ui.show()
 }
 
 shutdown :: proc() {
-	prefs.save();
-	ui.shutdown();
-	playback.shutdown();
-	library.shutdown();
+	prefs.save()
+	ui.shutdown()
+	playback.shutdown()
+	library.shutdown()
 }

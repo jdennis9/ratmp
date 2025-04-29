@@ -15,15 +15,15 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package drag_drop;
+package drag_drop
 
-foreign import lib "../../cpp/cpp.lib";
-import win "core:sys/windows";
-import imgui "libs:odin-imgui";
+foreign import lib "../../cpp/cpp.lib"
+import win "core:sys/windows"
+import imgui "libs:odin-imgui"
 
 
 @(link_prefix="drag_drop_")
 foreign lib {
-	init_for_windows :: proc(hwnd: win.HWND) ---;
-	set_interface :: proc(iface: ^Interface) ---;
+	init_for_windows :: proc(hwnd: win.HWND) ---
+	set_interface :: proc(iface: ^Interface) ---
 }

@@ -16,18 +16,18 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #+private
-package ui;
+package ui
 
-import "core:slice";
-import "core:hash/xxhash";
+import "core:slice"
+import "core:hash/xxhash"
 import "core:time"
 
-import imgui "../../libs/odin-imgui";
+import imgui "../../libs/odin-imgui"
 
-import lib "player:library";
-import "player:playback";
-import "player:util";
-import "player:theme";
+import lib "player:library"
+import "player:playback"
+import "player:util"
+import "player:theme"
 
 Track_Table_Flag :: enum {
 	NoRemove,
@@ -37,11 +37,11 @@ Track_Table_Flag :: enum {
 	NoSort,
 }
 
-Track_Table_Flags :: bit_set[Track_Table_Flag];
+Track_Table_Flags :: bit_set[Track_Table_Flag]
 
 Playlist_Filter :: struct {
 	text: string,
-};
+}
 
 @(private="file")
 Column_Index :: enum {
@@ -50,51 +50,51 @@ Column_Index :: enum {
 	Title,
 	Duration,
 	Genre,
-};
+}
 
 @(private="file")
 Column :: struct {
 	name: cstring,
 	sort_metric: lib.Playlist_Sort_Metric,
 	flags: imgui.TableColumnFlags,
-};
+}
 
 _show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Track_ID) {
 	if imgui.BeginMenu("Add to playlist") {
-		targets := lib.get_playlists();
+		targets := lib.get_playlists()
 		for &target in targets {
 			if target.id == playlist {continue}
 			if imgui.MenuItem(target.name) {
-				_add_selection_to_playlist(&target);
-				lib.save_playlist(target.id);
+				_add_selection_to_playlist(&target)
+				lib.save_playlist(target.id)
 			}
 		}
-		imgui.EndMenu();
+		imgui.EndMenu()
 	}
 
 	if imgui.MenuItem("Refresh metadata") {
-		_refresh_metadata_of_selected_tracks();
+		_refresh_metadata_of_selected_tracks()
 	}
 }
 
 _show_track_playlist_context_menu :: proc(track: lib.Track_ID, action: ^Track_Table_Action, flags: Track_Table_Flags) {
 	if (.NoAddToQueue not_in flags) && imgui.MenuItem("Add to queue") {
-		action.add_to_queue |= true;
+		action.add_to_queue |= true
 	}
 }
 
 @(private="file")
 _get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> []lib.Track_ID {
-	out: [dynamic]lib.Track_ID;
-	defer delete(out);
+	out: [dynamic]lib.Track_ID
+	defer delete(out)
 	for track in playlist.tracks {
 		if _is_track_selected(track) {
-			append(&out, track);
+			append(&out, track)
 		}
 	}
 
 	if len(out) == 0 {return nil}
-	return slice.clone(out[:]);
+	return slice.clone(out[:])
 }
 
 /*@(private="file")
@@ -190,16 +190,16 @@ _show_track_row :: proc(
 
 @(private="file")
 _force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []lib.Track_ID, track: lib.Track_ID, use_filter: bool) {
-	index, found := slice.linear_search(tracks[:], track);
+	index, found := slice.linear_search(tracks[:], track)
 
 	if !found {return}
-	imgui.ListClipper_ForceDisplayRangeByIndices(clipper, cast(i32) index, cast(i32) index + 1);
+	imgui.ListClipper_ForceDisplayRangeByIndices(clipper, cast(i32) index, cast(i32) index + 1)
 }
 
 Playlist_Sort_Spec :: struct {
 	metric: lib.Playlist_Sort_Metric,
 	order: lib.Sort_Order,
-};
+}
 
 Track_Table_Action :: struct {
 	select_track: Maybe(int),
@@ -215,10 +215,10 @@ Track_Table_Action :: struct {
 
 	filter: string,
 	filter_hash: u32,
-};
+}
 
 _set_track_drag_drop_payload :: proc(tracks: []lib.Track_ID) {
-	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track_ID) * len(tracks));
+	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track_ID) * len(tracks))
 }
 
 _Track_Table_Iterator :: struct {
@@ -237,7 +237,7 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 	imgui.TableFlags_Resizable|imgui.TableFlags_Hideable|
 	imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
 	imgui.TableFlags_Reorderable|imgui.TableFlags_ScrollY|
-	imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate;
+	imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 
 	columns := [Column_Index]Column {
 		.Artist = {name = "Artist", sort_metric = .Artist},
@@ -245,7 +245,7 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
 		.Genre = {name = "Genre", flags = {.DefaultHide}, sort_metric = .Genre},
 		.Duration = {name = "Duration", sort_metric = .Duration},
-	};
+	}
 
 	if imgui.BeginTable(str_id, auto_cast len(Column_Index), table_flags) {
 		for col in columns {imgui.TableSetupColumn(col.name, col.flags)}
@@ -316,22 +316,22 @@ _show_track_table :: proc(
 	// -------------------------------------------------------------------------
 	if _begin_window_drag_drop_target("##playlist_drag_drop") {
 		if imgui.AcceptDragDropPayload("selection") != nil {
-			action.add_selection_to_playlist = true;
+			action.add_selection_to_playlist = true
 		}
 
-		track_payload := imgui.AcceptDragDropPayload("tracks");
+		track_payload := imgui.AcceptDragDropPayload("tracks")
 		if track_payload != nil && track_payload.Delivery == true {
-			payload := cast([^]lib.Track_ID) track_payload.Data;
-			payload_size := track_payload.DataSize / size_of(lib.Track_ID);
-			action.drag_drop_payload = slice.clone(payload[:payload_size]);
+			payload := cast([^]lib.Track_ID) track_payload.Data
+			payload_size := track_payload.DataSize / size_of(lib.Track_ID)
+			action.drag_drop_payload = slice.clone(payload[:payload_size])
 		}
 
-		imgui.EndDragDropTarget();
+		imgui.EndDragDropTarget()
 	}
 
 	if len(tracks) == 0 {
-		imgui.TextDisabled("Playlist is empty");
-		return;
+		imgui.TextDisabled("Playlist is empty")
+		return
 	}
 
 	// -------------------------------------------------------------------------
@@ -358,9 +358,9 @@ _show_track_table :: proc(
 	// -------------------------------------------------------------------------
 	// Set up some variables
 	// -------------------------------------------------------------------------
-	select_all_filtered_tracks := false;
-	playing_track := playback.get_playing_track();
-	style := imgui.GetStyle();
+	select_all_filtered_tracks := false
+	playing_track := playback.get_playing_track()
+	style := imgui.GetStyle()
 
 	// -------------------------------------------------------------------------
 	// Set up table
@@ -370,10 +370,10 @@ _show_track_table :: proc(
 		imgui.TableFlags_Resizable|imgui.TableFlags_Hideable|
 		imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
 		imgui.TableFlags_Reorderable|imgui.TableFlags_ScrollY|
-		imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate;
+		imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 	
 	if .NoSort in flags {
-		table_flags &= ~(imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate);
+		table_flags &= ~(imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate)
 	}
 
 	columns := [Column_Index]Column {
@@ -382,69 +382,69 @@ _show_track_table :: proc(
 		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
 		.Genre = {name = "Genre", flags = {.DefaultHide}, sort_metric = .Genre},
 		.Duration = {name = "Duration", sort_metric = .Duration},
-	};
+	}
 
 	// -------------------------------------------------------------------------
 	// Sort specs helper
 	// -------------------------------------------------------------------------
 	update_sort_specs :: proc(playlist: lib.Playlist, columns: [Column_Index]Column, action: ^Track_Table_Action) -> bool {
-		sort_specs := imgui.TableGetSortSpecs();
+		sort_specs := imgui.TableGetSortSpecs()
 		if sort_specs == nil {return false}
 
 		if sort_specs.SpecsDirty {
-			specs := sort_specs.Specs;
+			specs := sort_specs.Specs
 			if specs == nil {
 				action.sort_spec = Playlist_Sort_Spec{
 					metric = .None,
-				};
-				return true;
+				}
+				return true
 			}
 			
-			out_spec := Playlist_Sort_Spec{};
-			out_spec.metric = columns[auto_cast specs.ColumnIndex].sort_metric;
+			out_spec := Playlist_Sort_Spec{}
+			out_spec.metric = columns[auto_cast specs.ColumnIndex].sort_metric
 			if specs.SortDirection == .Ascending {out_spec.order = .Ascending}
 			else if specs.SortDirection == .Descending {out_spec.order = .Descending}
 
-			action.sort_spec = out_spec;
+			action.sort_spec = out_spec
 
-			sort_specs.SpecsDirty = false;
-			return true;
+			sort_specs.SpecsDirty = false
+			return true
 		}
 
-		return false;
+		return false
 	}
 
 	// -----------------------------------------------------------------------------
 	// Track table
 	// -----------------------------------------------------------------------------
 	if imgui.BeginTable(str_id, cast(i32) len(Column_Index), table_flags) {
-		defer imgui.EndTable();
+		defer imgui.EndTable()
 
-		list_clipper: imgui.ListClipper;
-		focused := imgui.IsWindowFocused();
-		jump_to_playing := false;
+		list_clipper: imgui.ListClipper
+		focused := imgui.IsWindowFocused()
+		jump_to_playing := false
 		
 		for col in columns {
-			flags := col.flags;
-			imgui.TableSetupColumn(col.name, flags);
+			flags := col.flags
+			imgui.TableSetupColumn(col.name, flags)
 		}
 		
-		imgui.TableSetupScrollFreeze(1, 1);
-		imgui.TableHeadersRow();
+		imgui.TableSetupScrollFreeze(1, 1)
+		imgui.TableHeadersRow()
 		
 		// @FIX
 		//update_sort_specs(playlist, columns, &action);
 
 		if focused {
-			jump_to_playing = imgui.IsKeyChordPressed(cast(i32) (imgui.Key.Space | imgui.Key.ImGuiMod_Ctrl));
+			jump_to_playing = imgui.IsKeyChordPressed(cast(i32) (imgui.Key.Space | imgui.Key.ImGuiMod_Ctrl))
 
 			if imgui.IsKeyChordPressed(cast(i32) (imgui.Key.A | imgui.Key.ImGuiMod_Ctrl)) {
-				action.select_all = true;
+				action.select_all = true
 			}
 
 			if .NoAddToQueue not_in flags {
 				if imgui.IsKeyChordPressed(cast(i32) (imgui.Key.Q | imgui.Key.ImGuiMod_Ctrl)) {
-					action.play_selection = true;
+					action.play_selection = true
 				}
 			}
 		}
@@ -465,23 +465,23 @@ _show_track_table :: proc(
 			}
 		}
 
-		imgui.ListClipper_Begin(&list_clipper, auto_cast len(tracks), imgui.GetTextLineHeightWithSpacing());
+		imgui.ListClipper_Begin(&list_clipper, auto_cast len(tracks), imgui.GetTextLineHeightWithSpacing())
 
 		if jump_to_playing {_force_track_in_list_clipper(&list_clipper, tracks, playing_track, false)}
 		
 		for imgui.ListClipper_Step(&list_clipper) {
-			range_start := int(list_clipper.DisplayStart);
-			range_end := int(list_clipper.DisplayEnd);
+			range_start := int(list_clipper.DisplayStart)
+			range_end := int(list_clipper.DisplayEnd)
 			for track_index in range_start..<range_end {
-				track_id := tracks[track_index];
+				track_id := tracks[track_index]
 				selected := slice.contains(selection, track_id)
 				show_row(track_id, selected)
 				if row_callback != nil {row_callback(row_callback_data, track_id)}
 			}
 		}
 		
-		imgui.ListClipper_End(&list_clipper);
+		imgui.ListClipper_End(&list_clipper)
 	}
 
-	return;
+	return
 }

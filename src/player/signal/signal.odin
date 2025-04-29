@@ -15,9 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package events;
+package events
 
-import "core:log";
+import "core:log"
 
 Signal :: enum {
 	None,
@@ -34,40 +34,40 @@ Signal :: enum {
 	CloseWindow,
 	Iconify,
 	NewFrame,
-};
+}
 
-Signal_Handler :: #type proc(sig: Signal);
-Post_Callback :: #type proc(sig: Signal);
-
-@private
-_handlers: [dynamic]Signal_Handler;
+Signal_Handler :: #type proc(sig: Signal)
+Post_Callback :: #type proc(sig: Signal)
 
 @private
-_post_callback: Post_Callback;
+_handlers: [dynamic]Signal_Handler
+
+@private
+_post_callback: Post_Callback
 
 // Platform backend needs to initialize this and provide a callback
 // to post signal events
 init :: proc(post_callback: Post_Callback) {
-	_post_callback = post_callback;
+	_post_callback = post_callback
 }
 
 install_handler :: proc(handler: Signal_Handler) {
-	append(&_handlers, handler);
+	append(&_handlers, handler)
 }
 
 post :: proc(sig: Signal, loc := #caller_location) {
 	if sig != .NewFrame {
 		log.debug(loc, sig)
-		_post_callback(sig);
+		_post_callback(sig)
 	}
 	else {
-		broadcast_immediate(sig);
+		broadcast_immediate(sig)
 	}
 }
 
 broadcast_immediate :: proc(sig: Signal) {
 	if sig != .NewFrame {log.debug("Broadcast", sig)}
 	for h in _handlers {
-		h(sig);
+		h(sig)
 	}
 }
