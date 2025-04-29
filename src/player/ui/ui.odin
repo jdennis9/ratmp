@@ -933,6 +933,25 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 		}
 		imgui.EndMenu()
 	}
+
+	if imgui.BeginMenu("Go to") {
+		if imgui.MenuItem("Artist") {
+			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.artist))
+			bring_window_to_front(.Artists)
+		}
+
+		if imgui.MenuItem("Album") {
+			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.album))
+			bring_window_to_front(.Albums)
+		}
+
+		if imgui.MenuItem("Genre") {
+			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.genre))
+			bring_window_to_front(.Genres)
+		}
+
+		imgui.EndMenu()
+	}
 }
 
 @private
@@ -1135,9 +1154,6 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 	) {return}
 	defer imgui.EndTable()
 	
-	//imgui.TableSetupColumn("Groups", {}, 200)
-	//imgui.TableSetupColumn("Tracks", {}, 400)
-
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) {
 		index_of_queued_playlist := -1
