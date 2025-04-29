@@ -153,6 +153,8 @@ _show_wave_preview_window :: proc() {
         cursor := imgui.GetCursorScreenPos()
         style := imgui.GetStyle()
 
+        if size.x == 0 || size.y == 0 {return}
+
         bar_width := size.x / f32(len(samples))
         bar_height := size.y * 0.5
         middle := cursor.y + size.y * 0.5
