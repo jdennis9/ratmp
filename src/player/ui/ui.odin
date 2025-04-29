@@ -967,6 +967,11 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, no_remove := false) 
 		selection = this.selection_playlist_id == playlist.id ? this.selection[:] : nil,
 	}
 
+	if len(table.tracks) == 0 {
+		imgui.TextDisabled("Playlist is empty")
+		return
+	}
+
 	if _begin_track_table(&table, "##tracks") {
 		for _show_next_track_table_row(&table) {
 			if !table.visible {continue}
@@ -1008,11 +1013,11 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, no_remove := false) 
 			}
 		}
 		_end_track_table(&table)
-	}
 
-	if want_remove_selection {
-		lib.playlist_remove_tracks(playlist, table.selection)
-		lib.save_playlist(playlist.id)
+		if want_remove_selection {
+			lib.playlist_remove_tracks(playlist, table.selection)
+			lib.save_playlist(playlist.id)
+		}
 	}
 }
 
@@ -1065,7 +1070,9 @@ _show_selected_playlist_window :: proc() {
 		imgui.TextDisabled("No playlist selected")
 		return
 	}
-
+			
+	imgui.TextUnformatted(playlist.name)
+	imgui.Separator()
 	_show_playlist_track_table(playlist)
 }
 
@@ -1198,19 +1205,21 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 	if state.selected_group_id != nil && imgui.TableSetColumnIndex(1) {
 		window_focused := imgui.IsWindowFocused()
 		playlist: ^lib.Playlist
-
+		
 		for &p in list.playlists {
 			if p.group_id == state.selected_group_id.? {
 				playlist = &p
 				break
 			}
 		}
-
+		
 		if playlist == nil {
 			state.selected_group_id = nil
 			return
 		}
-
+			
+		imgui.TextUnformatted(playlist.name)
+		imgui.Separator()
 		_show_playlist_track_table(playlist, no_remove=true)
 	}
 }
