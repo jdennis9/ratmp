@@ -945,12 +945,12 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 		}
 
 		if imgui.MenuItem("Album") {
-			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.album))
+			this.albums_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.album))
 			bring_window_to_front(.Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
-			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.genre))
+			this.genres_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
 			bring_window_to_front(.Genres)
 		}
 
