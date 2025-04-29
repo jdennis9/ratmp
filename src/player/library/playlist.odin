@@ -232,10 +232,19 @@ playlist_clear :: proc(playlist: ^Playlist) {
 
 playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID, and_sort := true) {
 	for track in tracks {
-		//if !slice.contains(playlist.tracks[:], track) {
+		if !slice.contains(playlist.tracks[:], track) {
 			append(&playlist.tracks, track)
-		//}
+		}
 	}
 	playlist_make_dirty(playlist)
 	if and_sort {sort_playlist(playlist)}
+}
+
+playlist_remove_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
+	for track in tracks {
+		index := slice.linear_search(playlist.tracks[:], track) or_continue
+		ordered_remove(&playlist.tracks, index)
+	}
+
+	playlist_make_dirty(playlist)
 }

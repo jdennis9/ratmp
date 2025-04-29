@@ -914,8 +914,11 @@ _handle_select_track :: proc(playlist_id: lib.Playlist_ID, from: []lib.Track_ID,
 	}
 	else {
 		if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
-			if !(force_no_clear && selected) {clear(&this.selection)}
-			append(&this.selection, track_id)
+			if !(force_no_clear && selected) {
+				clear(&this.selection)
+				append(&this.selection, track_id)
+			}
+			if !selected {append(&this.selection, track_id)}
 		}
 		else if !selected {append(&this.selection, track_id)}
 	}
@@ -955,7 +958,7 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 }
 
 @private
-_show_playlist_track_table :: proc(playlist: ^lib.Playlist) {
+_show_playlist_track_table :: proc(playlist: ^lib.Playlist, no_remove := false) {
 	want_remove_selection: bool
 
 	table := _Track_Table_Iterator {
@@ -992,16 +995,23 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist) {
 					playback.play_track_array(this.selection[:])
 				}
 
-				imgui.Separator()
+				if !no_remove {
+					imgui.Separator()
 
-				if imgui.MenuItem("Remove") {
-					want_remove_selection = true
+					if imgui.MenuItem("Remove") {
+						want_remove_selection = true
+					}
 				}
 
 				imgui.EndPopup()
 			}
 		}
 		_end_track_table(&table)
+	}
+
+	if want_remove_selection {
+		lib.playlist_remove_tracks(playlist, table.selection)
+		lib.save_playlist(playlist.id)
 	}
 }
 
@@ -1200,7 +1210,7 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 			return
 		}
 
-		_show_playlist_track_table(playlist)
+		_show_playlist_track_table(playlist, no_remove=true)
 	}
 }
 
