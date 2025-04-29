@@ -148,6 +148,8 @@ _show_track_row :: proc(
 		// Context menu
 		// -----------------------------------------------------------------
 		if imgui.BeginPopupContextItem() {
+			action.select_track = track_index;
+
 			_show_track_base_context_menu(playlist.id, track_id);
 			if .NoAddToQueue not_in flags {
 				imgui.Separator();
