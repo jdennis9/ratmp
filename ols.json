@@ -1,0 +1,7 @@
+{
+	"collections": [
+		{ "name": "player", "path": "src/player" },
+		{ "name": "libs", "path": "src/libs" },
+		{ "name": "bindings", "path": "src/bindings" }
+	]
+}

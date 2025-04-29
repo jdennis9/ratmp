@@ -19,14 +19,14 @@ package main_common;
 
 import imgui "../../libs/odin-imgui";
 
-import "../system_paths";
-import "../prefs";
-import "../theme";
-import "../library";
-import "../ui";
-import "../video";
-import "../playback";
-import "../signal";
+import "player:system_paths";
+import "player:prefs";
+import "player:theme";
+import "player:library";
+import "player:ui";
+import "player:video";
+import "player:playback";
+import "player:signal";
 
 init :: proc() {
 	system_paths.init();

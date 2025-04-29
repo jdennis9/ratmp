@@ -26,9 +26,9 @@ import "core:fmt";
 import "core:bytes";
 import "core:log";
 
-import "../system_paths";
-import "../util";
-import "../signal";
+import "player:system_paths";
+import "player:util";
+import "player:signal";
 
 FONT_SIZE_MIN :: 8
 FONT_SIZE_MAX :: 24

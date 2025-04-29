@@ -20,7 +20,7 @@ package video;
 import stbi "vendor:stb/image";
 import "core:os";
 
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
 //Texture :: imgui.TextureID;
 

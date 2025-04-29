@@ -17,7 +17,7 @@
 */
 package ui;
 
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
 @private
 _begin_window_drag_drop_target :: proc(str_id: cstring) -> bool {

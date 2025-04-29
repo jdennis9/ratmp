@@ -21,8 +21,8 @@ import "core:unicode/utf16";
 import "core:math";
 import "core:log";
 
-import sf "../../bindings/sndfile";
-import src "../../bindings/samplerate";
+import sf "bindings:sndfile";
+import src "bindings:samplerate";
 
 
 Decoder :: struct {

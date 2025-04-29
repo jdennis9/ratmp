@@ -25,11 +25,11 @@ import "core:slice";
 import "core:sync";
 import "core:time";
 
-import kiss "../../bindings/kissfft";
+import kiss "bindings:kissfft";
 
-import "../playback";
-import "../decoder";
-import lib "../library";
+import "player:playback";
+import "player:decoder";
+import lib "player:library";
 
 PEAK_ROUGHNESS :: 15;
 SLOW_PEAK_ROUGHNESS :: 2;

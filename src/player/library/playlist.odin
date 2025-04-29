@@ -26,7 +26,7 @@ import "core:strings";
 import "core:time";
 import "core:encoding/json";
 
-import "../util";
+import "player:util";
 
 save_playlist_to_file :: proc(playlist: Playlist, filename: string) {
 	write_kv_pair :: util.json_write_kv_pair;

@@ -22,9 +22,9 @@ foreign import lib "../../cpp/cpp.lib";
 import "base:runtime";
 import "core:c";
 
-import "../playback";
-import "../library";
-import "../signal";
+import "player:playback";
+import "player:library";
+import "player:signal";
 
 Event :: enum c.int {
 	Pause,

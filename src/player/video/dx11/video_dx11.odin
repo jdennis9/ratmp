@@ -23,9 +23,9 @@ import "core:time";
 import win "core:sys/windows";
 import dx "vendor:directx/d3d11";
 import dxgi "vendor:directx/dxgi";
-import imgui "../../../libs/odin-imgui";
-import imgui_dx11 "../../../libs/odin-imgui/imgui_impl_dx11";
-import imgui_win32 "../../../libs/odin-imgui/imgui_impl_win32";
+import imgui "libs:odin-imgui";
+import imgui_dx11 "libs:odin-imgui/imgui_impl_dx11";
+import imgui_win32 "libs:odin-imgui/imgui_impl_win32";
 
 import com "..";
 

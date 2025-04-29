@@ -24,11 +24,12 @@ import "core:math";
 import "core:log";
 import glm "core:math/linalg/glsl";
 
-import "../analysis";
-import "../playback";
-import imgui "../../libs/odin-imgui";
-import "../theme";
-import "../prefs";
+import imgui "libs:odin-imgui";
+
+import "player:analysis";
+import "player:playback";
+import "player:theme";
+import "player:prefs";
 
 _show_spectrum_window :: proc() {
 	spectrum := analysis.get_spectrum();

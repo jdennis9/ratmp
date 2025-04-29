@@ -24,19 +24,19 @@ import win "core:sys/windows";
 import "core:unicode/utf16";
 import "core:fmt";
 
-import imgui_win32 "../../libs/odin-imgui/imgui_impl_win32";
-import imgui "../../libs/odin-imgui";
+import imgui_win32 "libs:odin-imgui/imgui_impl_win32"
+import imgui "libs:odin-imgui"
 
-import "../util";
-import com "../main_common";
-import dx11 "../video/dx11";
-import "../signal";
-import "../media_controls";
-import "../playback";
-import "../library";
-import "../build";
-import "../drag_drop";
-import "../prefs";
+import "player:util";
+import com "player:main_common";
+import dx11 "player:video/dx11";
+import "player:signal";
+import "player:media_controls";
+import "player:playback";
+import "player:library";
+import "player:build";
+import "player:drag_drop";
+import "player:prefs";
 
 @private
 this: struct {

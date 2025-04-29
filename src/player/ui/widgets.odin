@@ -21,8 +21,8 @@ import glm "core:math/linalg/glsl";
 
 import imgui "../../libs/odin-imgui";
 
-import "../analysis";
-import "../theme";
+import "player:analysis";
+import "player:theme";
 
 lerp :: glm.lerp_f32;
 

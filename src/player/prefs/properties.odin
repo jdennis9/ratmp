@@ -7,8 +7,8 @@ import "core:os";
 import "core:fmt";
 import "core:hash/xxhash";
 
-import "../system_paths";
-import "../util";
+import "player:system_paths";
+import "player:util";
 
 Property :: union {
 	int,

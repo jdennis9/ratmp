@@ -30,19 +30,19 @@ import "core:strconv";
 import "core:time";
 import "core:path/filepath";
 
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
-import "../signal";
-import "../util";
-import lib "../library";
-import "../playback";
-import "../video";
-import "../prefs";
-import "../theme";
-import "../drag_drop";
-import "../analysis";
-import "../build";
-import "../system_paths";
+import lib "player:library";
+import "player:signal";
+import "player:util";
+import "player:playback";
+import "player:video";
+import "player:prefs";
+import "player:theme";
+import "player:drag_drop";
+import "player:analysis";
+import "player:build";
+import "player:system_paths";
 
 ICON_FONT := #load("FontAwesome.otf");
 

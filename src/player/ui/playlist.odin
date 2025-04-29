@@ -24,10 +24,10 @@ import "core:time"
 
 import imgui "../../libs/odin-imgui";
 
-import lib "../library";
-import "../playback";
-import "../util";
-import "../theme";
+import lib "player:library";
+import "player:playback";
+import "player:util";
+import "player:theme";
 
 Track_Table_Flag :: enum {
 	NoRemove,

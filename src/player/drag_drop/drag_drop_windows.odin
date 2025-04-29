@@ -19,7 +19,7 @@ package drag_drop;
 
 foreign import lib "../../cpp/cpp.lib";
 import win "core:sys/windows";
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
 
 @(link_prefix="drag_drop_")

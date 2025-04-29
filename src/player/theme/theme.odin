@@ -25,11 +25,11 @@ import "core:encoding/ini";
 import "core:strconv";
 import "core:slice";
 
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
-import "../system_paths";
-import "../util";
-import "../prefs";
+import "player:system_paths";
+import "player:util";
+import "player:prefs";
 
 Color :: enum {
 	PlayingHighlight,

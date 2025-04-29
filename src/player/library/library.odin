@@ -34,12 +34,12 @@ import "core:thread";
 import "core:slice";
 import stbi "vendor:stb/image";
 
-import "../path_pool";
-import "../../bindings/taglib";
-import "../util";
-import "../system_paths";
-import "../video";
-import "../decoder";
+import "bindings:taglib";
+import "player:path_pool";
+import "player:util";
+import "player:system_paths";
+import "player:video";
+import "player:decoder";
 
 Track_ID :: u32;
 Playlist_ID :: u32;

@@ -22,7 +22,7 @@ import win "core:sys/windows";
 import "core:unicode/utf16";
 import "core:thread";
 
-import wasapi "../../bindings/wasapi";
+import wasapi "bindings:wasapi";
 
 _audio: struct {
 	device_enumerator: ^wasapi.IMMDeviceEnumerator,

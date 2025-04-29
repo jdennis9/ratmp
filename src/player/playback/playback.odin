@@ -24,12 +24,12 @@ import "core:math/rand";
 import "core:path/filepath";
 import "core:time";
 
-import "../signal";
-import lib "../library";
-import "../audio";
-import "../decoder";
-import "../util";
-import "../prefs";
+import "player:signal";
+import lib "player:library";
+import "player:audio";
+import "player:decoder";
+import "player:util";
+import "player:prefs";
 
 Audio_Callback :: #type proc(output: []f32, samplerate: int, channels: int, data: rawptr);
 

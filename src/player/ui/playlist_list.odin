@@ -21,10 +21,10 @@ package ui;
 import "core:hash/xxhash"
 import "core:log";
 
-import imgui "../../libs/odin-imgui";
+import imgui "libs:odin-imgui";
 
-import lib "../library";
-import "../theme";
+import lib "player:library";
+import "player:theme";
 
 _Playlist_List_Sort_Spec :: struct {
 	metric: lib.Playlist_List_Sort_Metric,
