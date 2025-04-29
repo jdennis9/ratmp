@@ -194,6 +194,16 @@ Playlist_Group_Window :: struct {
 }
 
 @private
+_Playlist_Window :: struct {
+	filter: [256]u8,
+	filtered_tracks: []lib.Track_ID,
+	length_of_playlist_when_filtered: int,
+
+	sort_spec: lib.Track_Sort_Spec,
+	length_of_playlist_when_sorted: int,
+}
+
+@private
 Offset_Length :: struct {
 	offset, length: int,
 }
@@ -244,6 +254,9 @@ this: struct {
 
 	layout_names: [dynamic]_Layout_Name,
 	//metadata_save_job: ^lib.Metadata_Save_Job,
+
+	library_window: _Playlist_Window,
+	playlist_windows: map[lib.Playlist_ID]_Playlist_Window,
 }
 
 init :: proc() -> bool {
@@ -1859,7 +1872,7 @@ _get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dy
 }
 
 // Handles behaviour that is shared across all playlists
-@private
+/*@private
 _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^lib.Playlist) {
 	ctrl_is_down := imgui.IsKeyDown(.ImGuiMod_Ctrl)
 	altered := false
@@ -1938,9 +1951,9 @@ _handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^l
 	}
 
 	lib.update_playlist_filter(playlist, action.filter, action.filter_hash)
-}
+}*/
 
-@private
+/*@private
 _handle_playlist_playback_action :: proc(action: Track_Table_Action, playlist: lib.Playlist) {
 	ctrl_is_down := imgui.IsKeyDown(.ImGuiMod_Ctrl)
 	if action.play_track != nil {
@@ -1952,14 +1965,14 @@ _handle_playlist_playback_action :: proc(action: Track_Table_Action, playlist: l
 		
 		playback.play_playlist(playlist, track, true)
 	}
-}
+}*/
 
-@private
+/*@private
 _handle_queue_playback_action :: proc(action: Track_Table_Action, playlist: lib.Playlist) {
 	if action.play_track != nil {
 		playback.play_track_at_position(action.play_track.?)
 	}
-}
+}*/
 
 // =============================================================================
 // Drag-drop

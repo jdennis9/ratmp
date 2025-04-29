@@ -41,6 +41,22 @@ copy_string_to_buf :: proc(dest: []u8, src: string) {
 	dest[length] = 0
 }
 
+decode_utf8_to_runes :: proc(buf: []rune, str: string) -> []rune {
+	n: int
+	m := len(buf)
+
+	for r in str {
+		if n >= m {
+			break
+		}
+
+		buf[n] = r
+		n += 1
+	}
+
+	return buf[:n]
+}
+
 json_sanitize_string :: proc(str: cstring, buf: []u8) -> string {
 	value_slice := (cast([^]u8)str)[:len(str)]
 

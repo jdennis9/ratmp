@@ -84,7 +84,7 @@ load_playlist_from_file :: proc(filename: string) -> (playlist: Playlist, succes
 	tracks := tracks_value.(json.Array) or_return
 
 	playlist.name = strings.clone_to_cstring(name)
-	playlist.sort_metric = cast(Playlist_Sort_Metric) get_int(root, "sort_metric")
+	playlist.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
 	playlist.sort_order = cast(Sort_Order) get_int(root, "sort_order")
 	playlist.id = _alloc_playlist_id()
 
@@ -104,7 +104,7 @@ free_playlist :: proc(p: Playlist) {
 }
 
 //@TODO: Detect when the playlist has changed since the last update
-update_playlist_filter :: proc(playlist: ^Playlist, filter: string, filter_hash: u32) {
+/*update_playlist_filter :: proc(playlist: ^Playlist, filter: string, filter_hash: u32) {
 	if playlist.filter_hash != filter_hash {
 		timer: time.Stopwatch
 		time.stopwatch_start(&timer)
@@ -128,24 +128,44 @@ update_playlist_filter :: proc(playlist: ^Playlist, filter: string, filter_hash:
 		time.stopwatch_stop(&timer)
 		log.debug("Filter playlist:", time.duration_milliseconds(time.stopwatch_duration(timer)), "ms")
 	}
+}*/
+
+filter_tracks :: proc(tracks: []Track_ID, filter: string) -> []Track_ID {
+	result: [dynamic]Track_ID
+	defer delete(result)
+
+	filter_runes: []rune
+	filter_buf: [256]rune
+
+	filter_runes = util.decode_utf8_to_runes(filter_runes, filter)
+
+	for track in tracks {
+		if filter_track_from_runes(get_track_info(track), filter_runes) {
+			append(&result, track)
+		}
+	}
+
+	return result != nil ? slice.clone(result[:]) : nil
 }
 
-sort_playlist :: proc(playlist: ^Playlist) {
+sort_tracks :: proc(track_slice: []Track_ID, spec: Track_Sort_Spec) {
+	tracks := track_slice
+
 	len_proc :: proc(iface: sort.Interface) -> int {
-		return len((cast(^Playlist)iface.collection).tracks)
+		return len(cast(^[]Track_ID)iface.collection)
 	}
 
 	compare_title_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
-		playlist := cast(^Playlist)iface.collection
-		a := get_track_info(playlist.tracks[i])
-		b := get_track_info(playlist.tracks[j])
+		tracks := cast(^[]Track_ID)iface.collection
+		a := get_track_info(tracks[i])
+		b := get_track_info(tracks[j])
 		return strings.compare(string(a.title), string(b.title)) < 0
 	}
 
 	compare_artist_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
-		playlist := cast(^Playlist)iface.collection
-		a := get_track_info(playlist.tracks[i])
-		b := get_track_info(playlist.tracks[j])
+		tracks := cast(^[]Track_ID)iface.collection
+		a := get_track_info(tracks[i])
+		b := get_track_info(tracks[j])
 		cmp := strings.compare(string(a.artist), string(b.artist))
 		if cmp != 0 {return cmp < 0}
 		cmp = strings.compare(string(a.album), string(b.album))
@@ -155,9 +175,9 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	}
 
 	compare_album_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
-		playlist := cast(^Playlist)iface.collection
-		a := get_track_info(playlist.tracks[i])
-		b := get_track_info(playlist.tracks[j])
+		tracks := cast(^[]Track_ID)iface.collection
+		a := get_track_info(tracks[i])
+		b := get_track_info(tracks[j])
 		cmp := strings.compare(string(a.album), string(b.album))
 		if cmp != 0 {return cmp < 0}
 		cmp = strings.compare(string(a.artist), string(b.artist))
@@ -167,9 +187,9 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	}
 
 	compare_duration_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
-		playlist := cast(^Playlist)iface.collection
-		a := get_track_info(playlist.tracks[i])
-		b := get_track_info(playlist.tracks[j])
+		tracks := cast(^[]Track_ID)iface.collection
+		a := get_track_info(tracks[i])
+		b := get_track_info(tracks[j])
 		if a.duration_seconds != b.duration_seconds {
 			return a.duration_seconds < b.duration_seconds
 		}
@@ -182,9 +202,9 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	}
 
 	compare_genre_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
-		playlist := cast(^Playlist)iface.collection
-		a := get_track_info(playlist.tracks[i])
-		b := get_track_info(playlist.tracks[j])
+		tracks := cast(^[]Track_ID)iface.collection
+		a := get_track_info(tracks[i])
+		b := get_track_info(tracks[j])
 		cmp := strings.compare(string(a.genre), string(b.genre))
 		if cmp != 0 {return cmp < 0}
 		cmp = strings.compare(string(a.album), string(b.album))
@@ -196,16 +216,16 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	}
 
 	swap_proc :: proc(iface: sort.Interface, i, j: int) {
-		playlist := cast(^Playlist)iface.collection
-		temp := playlist.tracks[i]
-		playlist.tracks[i] = playlist.tracks[j]
-		playlist.tracks[j] = temp
+		tracks := cast(^[]Track_ID)iface.collection
+		temp := tracks[i]
+		tracks[i] = tracks[j]
+		tracks[j] = temp
 	}
 
 	iface: sort.Interface
-	iface.collection = playlist
+	iface.collection = &tracks
 	iface.len = len_proc
-	switch playlist.sort_metric {
+	switch spec.metric {
 		case .None: {return}
 		case .Title: {iface.less = compare_title_proc}
 		case .Album: {iface.less = compare_album_proc}
@@ -215,9 +235,17 @@ sort_playlist :: proc(playlist: ^Playlist) {
 	}
 	iface.swap = swap_proc
 
-	if playlist.sort_order == .Ascending {sort.sort(iface)}
+	if spec.order == .Ascending {sort.sort(iface)}
 	else {sort.reverse_sort(iface)}
+}
 
+sort_playlist :: proc(playlist: ^Playlist) {
+	spec := Track_Sort_Spec {
+		metric = playlist.sort_metric,
+		order = playlist.sort_order,
+	}
+
+	sort_tracks(playlist.tracks[:], spec)
 	playlist_make_dirty(playlist)
 }
 

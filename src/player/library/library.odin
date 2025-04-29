@@ -93,13 +93,18 @@ Sort_Order :: enum {
 }
 
 // Serialized
-Playlist_Sort_Metric :: enum {
+Track_Sort_Metric :: enum {
 	None,
 	Title,
 	Artist,
 	Album,
 	Duration,
 	Genre,
+}
+
+Track_Sort_Spec :: struct {
+	metric: Track_Sort_Metric,
+	order: Sort_Order,
 }
 
 Playlist :: struct {
@@ -114,7 +119,7 @@ Playlist :: struct {
 	filter_hash: u32,
 	min_filter_index: int,
 	max_filter_index: int,
-	sort_metric: Playlist_Sort_Metric,
+	sort_metric: Track_Sort_Metric,
 	sort_order: Sort_Order,
 }
 
@@ -205,7 +210,7 @@ _load_library :: proc(filename: string) -> bool {
 	tracks_value := root["tracks"] or_return
 	tracks := tracks_value.(json.Array) or_return
 
-	this.library.sort_metric = cast(Playlist_Sort_Metric) get_int(root, "sort_metric")
+	this.library.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
 	this.library.sort_order = cast(Sort_Order) get_int(root, "sort_order")
 
 	for track_value in tracks {
@@ -742,30 +747,12 @@ _scan_playlist_folder :: proc() {
 	util.for_each_file_in_folder("playlists", walk_proc, nil)
 }
 
-
-@private
-_decode_utf8_to_buffer :: proc(str: string, buf: []rune) -> []rune {
-	n: int
-	m := len(buf)
-
-	for r in str {
-		if n >= m {
-			break
-		}
-
-		buf[n] = r
-		n += 1
-	}
-
-	return buf[:n]
-}
-
 @private
 _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	if len(utf8_str) == 0 {return false}
 
 	str_rune_buf: [256]rune
-	str := _decode_utf8_to_buffer(utf8_str, str_rune_buf[:])
+	str := util.decode_utf8_to_runes(str_rune_buf[:], utf8_str)
 	filter_len := len(filter)
 	
 	i, j: int
@@ -790,35 +777,40 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	return false
 }
 
-filter_track :: proc(track: Track_Info, filter: string) -> bool {
-	filter_rune_buf: [256]rune
-	filter_runes := _decode_utf8_to_buffer(filter, filter_rune_buf[:])
-	
-	if _filter_track_string(string(track.title), filter_runes) {
+filter_track_from_runes :: proc(track: Track_Info, runes: []rune) -> bool {
+	if _filter_track_string(string(track.title), runes) {
 		return true
 	}
 
-	if _filter_track_string(string(track.artist), filter_runes) {
+	if _filter_track_string(string(track.artist), runes) {
 		return true
 	}
 	
-	if _filter_track_string(string(track.album), filter_runes) {
+	if _filter_track_string(string(track.album), runes) {
 		return true
 	}
 	
-	if _filter_track_string(string(track.genre), filter_runes) {
+	if _filter_track_string(string(track.genre), runes) {
 		return true
 	}
 
 	path_buf: [512]u8
 	path := get_track_path(track.id, path_buf[:])
 
-	if _filter_track_string(path, filter_runes) {
+	if _filter_track_string(path, runes) {
 		return true
 	}
 
 	return false
 }
+
+filter_track_from_string :: proc(track: Track_Info, filter: string) -> bool {
+	filter_rune_buf: [256]rune
+	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter)
+	return filter_track_from_runes(track, filter_runes)
+}
+
+filter_track :: proc {filter_track_from_string, filter_track_from_runes}
 
 // WARNING: The returned pointer may be invalidated after a call
 // to add_playlist or delete_playlist

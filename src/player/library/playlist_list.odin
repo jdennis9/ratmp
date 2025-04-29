@@ -21,9 +21,11 @@ import "core:sort"
 import "core:strings"
 import "core:log"
 
+import "player:util"
+
 filter_playlist :: proc(playlist: Playlist, filter_string: string) -> bool {
 	filter_rune_buf: [128]rune
-	filter_runes := _decode_utf8_to_buffer(filter_string, filter_rune_buf[:])
+	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter_string)
 
 	return _filter_track_string(string(playlist.name), filter_runes)
 }

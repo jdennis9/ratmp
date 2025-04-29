@@ -55,7 +55,7 @@ Column_Index :: enum {
 @(private="file")
 Column :: struct {
 	name: cstring,
-	sort_metric: lib.Playlist_Sort_Metric,
+	sort_metric: lib.Track_Sort_Metric,
 	flags: imgui.TableColumnFlags,
 }
 
@@ -197,7 +197,7 @@ _force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []lib.
 }
 
 Playlist_Sort_Spec :: struct {
-	metric: lib.Playlist_Sort_Metric,
+	metric: lib.Track_Sort_Metric,
 	order: lib.Sort_Order,
 }
 
@@ -308,7 +308,7 @@ _end_track_table :: proc(iterator: ^_Track_Table_Iterator) {
 }
 
 //@Unused: Keeping for reference
-_show_track_table :: proc(
+/*_show_track_table :: proc(
 	str_id: cstring,
 	tracks: []lib.Track_ID,
 	selection: []lib.Track_ID,
@@ -489,4 +489,4 @@ _show_track_table :: proc(
 	}
 
 	return
-}
+}*/
