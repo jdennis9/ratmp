@@ -42,6 +42,7 @@ Playlist_List_Action :: struct {
 _Playlist_List_Column_Index :: enum {Name, Length}
 _Playlist_List_Column :: struct {
 	name: cstring,
+	width: f32,
 	sort_metric: lib.Playlist_List_Sort_Metric,
 }
 
@@ -82,12 +83,12 @@ _show_playlist_row :: proc(list: lib.Playlist_List, playlist_index: int, playing
 
 _show_playlist_list :: proc(list: lib.Playlist_List, playing_index: int) -> (action: Playlist_List_Action) {
 	table_flags := imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
-		imgui.TableFlags_Reorderable|imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp|
+		imgui.TableFlags_Reorderable|imgui.TableFlags_Resizable|imgui.TableFlags_SizingFixedFit|
 		imgui.TableFlags_ScrollY|imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 
 	columns := [_Playlist_List_Column_Index]_Playlist_List_Column {
-		.Length = {"No. Tracks", .Length},
-		.Name = {"Name", .Name},
+		.Length = {"No. Tracks", 0.1, .Length},
+		.Name = {"Name", 0.9, .Name},
 	}
 
 	// -------------------------------------------------------------------------
@@ -141,7 +142,7 @@ _show_playlist_list :: proc(list: lib.Playlist_List, playing_index: int) -> (act
 	// -------------------------------------------------------------------------
 	if imgui.BeginTable("##playlist_list", 2, table_flags) {
 		for col in columns {
-			imgui.TableSetupColumn(col.name)
+			imgui.TableSetupColumn(col.name, {.WidthStretch}, col.width)
 		}
 
 		imgui.TableSetupScrollFreeze(1, 1)

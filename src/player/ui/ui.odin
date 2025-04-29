@@ -946,6 +946,8 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist) {
 
 	if _begin_track_table(&table, "##tracks") {
 		for _show_next_track_table_row(&table) {
+			if !table.visible {continue}
+
 			track := table.track
 			left_clicked := imgui.IsItemClicked(.Left)
 			middle_clicked := imgui.IsItemClicked(.Middle)
@@ -996,6 +998,7 @@ _show_queue_window :: proc() {
 
 	if _begin_track_table(&table, "##queue") {
 		for _show_next_track_table_row(&table) {
+			if !table.visible {continue}
 			track := table.track
 			left_clicked := imgui.IsItemClicked(.Left)
 			middle_clicked := imgui.IsItemClicked(.Middle)
@@ -1126,30 +1129,17 @@ _show_navigation_window :: proc() {
 
 @private
 _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_Group_Window) {
+	if !imgui.BeginTable(
+		"##layout_table", 2, 
+		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchSame|imgui.TableFlags_NoHostExtendX
+	) {return}
+	defer imgui.EndTable()
 	
-	if state.selected_group_id != nil {
-		window_focused := imgui.IsWindowFocused()
-		playlist: ^lib.Playlist
+	//imgui.TableSetupColumn("Groups", {}, 200)
+	//imgui.TableSetupColumn("Tracks", {}, 400)
 
-		for &p in list.playlists {
-			if p.group_id == state.selected_group_id.? {
-				playlist = &p
-				break
-			}
-		}
-
-		if playlist == nil {
-			state.selected_group_id = nil
-			return
-		}
-
-		if imgui.Button("Go back") || (window_focused && imgui.IsKeyPressed(.Escape)) {
-			state.selected_group_id = nil
-		}
-
-		_show_playlist_track_table(playlist)
-	}
-	else {
+	imgui.TableNextRow()
+	if imgui.TableSetColumnIndex(0) {
 		index_of_queued_playlist := -1
 		queued_group_id := playback.get_queued_group_id()
 		for p, index in list.playlists {
@@ -1176,6 +1166,25 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 			playlist := list.playlists[action.play_playlist.?]
 			playback.play_playlist(playlist)
 		}
+	}
+		
+	if state.selected_group_id != nil && imgui.TableSetColumnIndex(1) {
+		window_focused := imgui.IsWindowFocused()
+		playlist: ^lib.Playlist
+
+		for &p in list.playlists {
+			if p.group_id == state.selected_group_id.? {
+				playlist = &p
+				break
+			}
+		}
+
+		if playlist == nil {
+			state.selected_group_id = nil
+			return
+		}
+
+		_show_playlist_track_table(playlist)
 	}
 }
 

@@ -226,6 +226,8 @@ _Track_Table_Iterator :: struct {
 	selection: []lib.Track_ID,
 	track: lib.Track_ID,
 	track_index: int,
+	// True if the selectable column is visible
+	visible: bool,
 
 	_list_clipper: imgui.ListClipper,
 	_pos: int,
@@ -271,6 +273,7 @@ _show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
 
 	imgui.TableNextRow()
 
+	it.visible = false
 	it.track_index = it._pos
 	it.track = it.tracks[it._pos]
 	track := lib.get_track_info(it.track)
@@ -287,6 +290,8 @@ _show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
 	}
 
 	if imgui.TableSetColumnIndex(auto_cast Column_Index.Title) {
+		it.visible = true
+
 		if playback.get_playing_track() == it.track {
 			imgui.TableSetBgColor(.RowBg0, theme.get_color_u32(.PlayingHighlight))
 		}

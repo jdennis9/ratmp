@@ -580,18 +580,20 @@ add_file :: proc(file: string) -> Track_ID {
 	return index+1
 }
 
-@private
-_add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Playlist_List, case_insensitive := false) {
-	hash: u32
-
+get_playlist_group_id_from_name :: proc(group_string: string, case_insensitive := false) -> u32 {
 	if case_insensitive {
 		lower := strings.to_lower(group_string)
 		defer delete(lower)
-		hash = xxhash.XXH32(transmute([]u8)lower)
+		return xxhash.XXH32(transmute([]u8)lower)
 	}
 	else {
-		hash = xxhash.XXH32(transmute([]u8)group_string)
+		return xxhash.XXH32(transmute([]u8)group_string)
 	}
+}
+
+@private
+_add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Playlist_List, case_insensitive := false) {
+	hash := get_playlist_group_id_from_name(group_string, case_insensitive)
 
 	for h, index in group.hashes {
 		if h == hash {
