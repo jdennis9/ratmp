@@ -932,6 +932,7 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 			if target_playlist.id == from_playlist {continue}
 			if imgui.MenuItem(target_playlist.name) {
 				lib.playlist_add_tracks(&target_playlist, selection)
+				lib.save_playlist(target_playlist.id)
 			}
 		}
 		imgui.EndMenu()
