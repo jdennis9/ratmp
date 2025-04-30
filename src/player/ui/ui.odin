@@ -97,10 +97,6 @@ Window_Info :: struct {
 	name: cstring,
 	internal_name: cstring,
 	category: Window_Category,
-	//show_proc: proc(),
-	show: bool,
-	flags: imgui.WindowFlags,
-	bring_to_front: bool,
 }
 
 window_info := [Window]Window_Info {
@@ -210,6 +206,13 @@ _Metadata_Window :: struct {
 	comment: cstring,
 }
 
+@private
+_Window_State :: struct {
+	flags: imgui.WindowFlags,
+	show: bool,
+	bring_to_front: bool,
+}
+
 State :: struct {
 	ctx: runtime.Context,
 
@@ -255,6 +258,8 @@ State :: struct {
 
 	library_window: _Playlist_Window,
 	playlist_windows: map[library.Playlist_ID]_Playlist_Window,
+
+	windows: [Window]_Window_State,
 }
 
 init :: proc() -> (ui: State, ok: bool) {
@@ -273,7 +278,7 @@ init :: proc() -> (ui: State, ok: bool) {
 	//signal.install_handler(signal_handler)
 
 	// Set window flags
-	window_info[.Metadata].flags |= {.AlwaysVerticalScrollbar}
+	ui.windows[.Metadata].flags |= {.AlwaysVerticalScrollbar}
 
 	// Set up system drag-drop
 	// @FixMe
@@ -421,8 +426,8 @@ signal_handler :: proc(sig: signal.Signal) {
 	}
 }*/
 
-bring_window_to_front :: proc(win: Window) {
-	window_info[win].bring_to_front = true
+bring_window_to_front :: proc(ui: ^State, win: Window) {
+	ui.windows[win].bring_to_front = true
 }
 
 @private
@@ -481,13 +486,19 @@ _begin_metadata_save_job :: proc() {
 }*/
 
 @private
-_begin_window :: proc(window: Window) -> bool {
+_begin_window :: proc(ui: ^State, window: Window) -> bool {
 	name: [256]u8
 	info := &window_info[window]
+	state := &ui.windows[window]
 
 	fmt.bprint(name[:255], info.name, "###", info.internal_name, sep="")
 
-	begin := imgui.Begin(cstring(&name[0]), &window_info[window].show, info.flags)
+	if state.bring_to_front {
+		imgui.SetNextWindowFocus()
+		state.bring_to_front = false
+	}
+
+	begin := imgui.Begin(cstring(&name[0]), &state.show, state.flags)
 	if begin {return true}
 	imgui.End()
 	return false
@@ -674,9 +685,9 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 		}
 
 		if imgui.BeginMenu("View") {
-			for &window in window_info {
+			for &window, window_id in window_info {
 				if imgui.BeginMenu(window_category_info[window.category].name) {
-					imgui.MenuItemBoolPtr(window.name, nil, &window.show)
+					imgui.MenuItemBoolPtr(window.name, nil, &ui.windows[window_id].show)
 					imgui.EndMenu()
 				}
 			}
@@ -875,97 +886,97 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	for window_id in Window {
 		switch window_id {
 			case .Library: {
-				if _begin_window(.Library) {
+				if _begin_window(ui, .Library) {
 					_show_library_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Metadata: {
-				if _begin_window(.Metadata) {
+				if _begin_window(ui, .Metadata) {
 					_show_metadata_window(&ui.metadata, lib^, pb.playing_track)
 					imgui.End()
 				}
 			}
 			case .Queue: {
-				if _begin_window(.Queue) {
+				if _begin_window(ui, .Queue) {
 					_show_queue_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Navigation: {
-				if _begin_window(.Navigation) {
+				if _begin_window(ui, .Navigation) {
 					_show_navigation_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Artists: {
-				if _begin_window(.Artists) {
+				if _begin_window(ui, .Artists) {
 					_show_playlist_group_window(lib^, pb, lib.artists, &ui.artists_window)
 					imgui.End()
 				}
 			}
 			case .Albums: {
-				if _begin_window(.Albums) {
+				if _begin_window(ui, .Albums) {
 					_show_playlist_group_window(lib^, pb, lib.albums, &ui.albums_window)
 					imgui.End()
 				}
 			}
 			case .Genres: {
-				if _begin_window(.Genres) {
+				if _begin_window(ui, .Genres) {
 					_show_playlist_group_window(lib^, pb, lib.genres, &ui.genres_window)
 					imgui.End()
 				}
 			}
 			case .Folders: {
-				if _begin_window(.Folders) {
+				if _begin_window(ui, .Folders) {
 					_show_playlist_group_window(lib^, pb, lib.folders, &ui.folders_window)
 					imgui.End()
 				}
 			}
 			case .Playlist: {		
-				if _begin_window(.Playlist) {
+				if _begin_window(ui, .Playlist) {
 					_show_selected_playlist_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .PlaylistTabs: {
-				if _begin_window(.PlaylistTabs) {
+				if _begin_window(ui, .PlaylistTabs) {
 					_show_playlist_tabs_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .PeakMeter: {
-				if _begin_window(.PeakMeter) {
+				if _begin_window(ui, .PeakMeter) {
 					_show_peak_window()
 					imgui.End()
 				}
 			}
 			case .Spectrum: {
-				if _begin_window(.Spectrum) {
+				if _begin_window(ui, .Spectrum) {
 					_show_spectrum_window()
 					imgui.End()
 				}
 			}
 			case .EditMetadata: {
-				if _begin_window(.EditMetadata) {
+				if _begin_window(ui, .EditMetadata) {
 					_show_metadata_editor(lib^, ui.selection[:])
 					imgui.End()
 				}
 			}
 			case .ThemeEditor: {
-				if _begin_window(.ThemeEditor) {
-					_show_theme_editor_window()
+				if _begin_window(ui, .ThemeEditor) {
+					_show_theme_editor_window(&ui.windows[.ThemeEditor])
 					imgui.End()
 				}
 			}
 			case .WavePreview: {
-				if _begin_window(.WavePreview) {
+				if _begin_window(ui, .WavePreview) {
 					_show_wave_preview_window(pb)
 					imgui.End()
 				}
 			}
 			case .ReplaceMetadata: {
-				if _begin_window(.ReplaceMetadata) {
+				if _begin_window(ui, .ReplaceMetadata) {
 					_show_metadata_replacement_window(lib^, ui.selection[:])
 					imgui.End()
 				}
@@ -1078,17 +1089,17 @@ _show_track_generic_context_menu_items :: proc(ui: ^State, lib: ^Library, from_p
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Artist") {
 			ui.artists_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.artist))
-			bring_window_to_front(.Artists)
+			bring_window_to_front(ui, .Artists)
 		}
 
 		if imgui.MenuItem("Album") {
 			ui.albums_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.album))
-			bring_window_to_front(.Albums)
+			bring_window_to_front(ui, .Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
 			ui.genres_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
-			bring_window_to_front(.Genres)
+			bring_window_to_front(ui, .Genres)
 		}
 
 		imgui.EndMenu()
@@ -1263,7 +1274,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 		setup_columns()
 
-		row :: proc(name: cstring, window: Window, length: int) {
+		row :: proc(ui: ^State, name: cstring, window: Window, length: int) {
 			imgui.TableNextRow()
 
 			if imgui.TableSetColumnIndex(1) && length != 0 {
@@ -1272,18 +1283,18 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Selectable(name, false, {.SpanAllColumns}) {
-					bring_window_to_front(window)
+					bring_window_to_front(ui, window)
 				}
 			}
 		}
 		
-		row("Library", .Library, len(lib.library.tracks))
+		row(ui, "Library", .Library, len(lib.library.tracks))
 		if imgui.IsItemClicked(.Middle) {
 			playback.play_playlist(pb, lib^, lib.library)
 		}
-		row("Artists", .Artists, len(lib.artists.playlists))
-		row("Albums", .Albums, len(lib.albums.playlists))
-		row("Folders", .Folders, len(lib.folders.playlists))
+		row(ui, "Artists", .Artists, len(lib.artists.playlists))
+		row(ui, "Albums", .Albums, len(lib.albums.playlists))
+		row(ui, "Folders", .Folders, len(lib.folders.playlists))
 	}
 
 	imgui.SeparatorText("Your Playlists")
@@ -1302,7 +1313,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Selectable(p.name, p.id == ui.selected_playlist, {.SpanAllColumns}) {
-					bring_window_to_front(.Playlist)
+					bring_window_to_front(ui, .Playlist)
 					ui.selected_playlist = p.id
 				}
 
@@ -1579,7 +1590,7 @@ _show_metadata_replacement_window :: proc(lib: Library, selection: []Track_ID) {
 }
 
 @private
-_show_theme_editor_window :: proc() {
+_show_theme_editor_window :: proc(window: ^_Window_State) {
 	current_theme := theme.get_current()
 	style := imgui.GetStyle()
 	@static unsaved_changes := false
@@ -1646,10 +1657,10 @@ _show_theme_editor_window :: proc() {
 	}
 
 	if unsaved_changes {
-		window_info[.ThemeEditor].flags |= {.UnsavedDocument}
+		window.flags |= {.UnsavedDocument}
 	}
 	else {
-		window_info[.ThemeEditor].flags &= ~{.UnsavedDocument}
+		window.flags &= ~{.UnsavedDocument}
 	}
 }
 
@@ -2073,8 +2084,8 @@ _imgui_settings_handler_read_line_proc :: proc "c" (
 	if len(line_parts) < 2 {return}
 
 	parsed, parse_ok := strconv.parse_int(line_parts[1])
-	if !parse_ok {window_info[window].show = true}
-	else {window_info[window].show = parsed >= 1}
+	if !parse_ok {ui.windows[window].show = true}
+	else {ui.windows[window].show = parsed >= 1}
 }
 
 @private
@@ -2084,9 +2095,9 @@ _imgui_settings_handler_write_proc :: proc "c" (
 	ui := cast(^State) handler.UserData
 	context = ui.ctx
 
-	for window in window_info {
+	for window, window_id in window_info {
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
-		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)window.show)
+		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)ui.windows[window_id].show)
 	}
 }
 
