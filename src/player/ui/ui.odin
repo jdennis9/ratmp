@@ -1246,7 +1246,7 @@ _show_queue_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 			}
 
 			if middle_clicked {
-				playback.play_track_at_position(pb, lib^, table._pos)
+				playback.play_track_at_position(pb, lib^, table._pos-1)
 			}
 
 			if imgui.BeginPopupContextItem() {
