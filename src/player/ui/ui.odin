@@ -996,29 +996,6 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 		}
 	}
 
-	// Sort
-	update_sort_spec :: proc(spec: ^lib.Track_Sort_Spec) -> bool {
-		sort_specs := imgui.TableGetSortSpecs()
-		if sort_specs == nil {return false}
-
-		if sort_specs.SpecsDirty {
-			specs := sort_specs.Specs
-			if specs == nil {
-				spec.metric = .None
-				return true
-			}
-			
-			spec.metric = _get_track_column_sort_metric(auto_cast specs.ColumnIndex)
-			if specs.SortDirection == .Ascending {spec.order = .Ascending}
-			else if specs.SortDirection == .Descending {spec.order = .Descending}
-
-			sort_specs.SpecsDirty = false
-			return true
-		}
-
-		return false
-	}
-
 	state.playlist_id = playlist.id
 
 	table := _Track_Table_Iterator {
@@ -1032,7 +1009,7 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 	}
 
 	if _begin_track_table(&table, "##tracks") {
-		if update_sort_spec(&state.sort_spec) {
+		if _track_table_update_sort_spec(&state.sort_spec) {
 			lib.sort_tracks(playlist.tracks[:], state.sort_spec)
 		}
 
@@ -1086,6 +1063,7 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 
 @private
 _show_queue_window :: proc() {
+	@static sort_spec: lib.Track_Sort_Spec
 	want_remove_selection: bool
 
 	queue_id := max(lib.Playlist_ID)
@@ -1095,6 +1073,10 @@ _show_queue_window :: proc() {
 	}
 
 	if _begin_track_table(&table, "##queue") {
+		if _track_table_update_sort_spec(&sort_spec) {
+			playback.sort_queue(sort_spec)
+		}
+
 		for _show_next_track_table_row(&table) {
 			if !table.visible {continue}
 			track := table.track

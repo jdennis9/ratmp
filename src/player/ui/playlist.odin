@@ -275,6 +275,29 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 	return false
 }
 
+// Call right after _begin_track_table returns true
+_track_table_update_sort_spec :: proc(spec: ^lib.Track_Sort_Spec) -> bool {
+	sort_specs := imgui.TableGetSortSpecs()
+	if sort_specs == nil {return false}
+
+	if sort_specs.SpecsDirty {
+		specs := sort_specs.Specs
+		if specs == nil {
+			spec.metric = .None
+			return true
+		}
+		
+		spec.metric = _get_track_column_sort_metric(auto_cast specs.ColumnIndex)
+		if specs.SortDirection == .Ascending {spec.order = .Ascending}
+		else if specs.SortDirection == .Descending {spec.order = .Descending}
+
+		sort_specs.SpecsDirty = false
+		return true
+	}
+
+	return false
+}
+
 _show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
 	if it._pos >= it._max {
 		if !imgui.ListClipper_Step(&it._list_clipper) {

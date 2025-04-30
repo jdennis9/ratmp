@@ -435,6 +435,10 @@ play_prev_track :: proc() {
 	play_track_at_position(this.queue_position - 1)
 }
 
+sort_queue :: proc(spec: lib.Track_Sort_Spec) {
+	lib.sort_tracks(this.queue[:], spec)
+}
+
 // =============================================================================
 // Volume
 // =============================================================================
