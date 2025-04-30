@@ -20,6 +20,7 @@ package main_common
 import "base:runtime"
 import "core:sync"
 import "core:path/filepath"
+import "core:strings"
 
 import imgui "libs:odin-imgui"
 
@@ -72,15 +73,15 @@ audio_callback :: proc(buffer: []f32, data: rawptr) {
 
 init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc: proc()) -> bool {
 	state = state_ptr
-	state.config_path = filepath.join({config_dir, "config.ini"})
-	state.library_path = filepath.join({data_dir, "library.json"})
+	state.config_path = strings.clone(filepath.join({config_dir, "prefs.ini"}))
+	state.library_path = strings.clone(filepath.join({data_dir, "library.json"}))
 	state.wake_proc = wake_proc
 
 	system_paths.init()
 	audio.init() or_return
 	state.library = library.load_library(state.library_path, "playlists") or_return
 	state.playback = playback.init() or_return
-	state.prefs, _ = config.load("config.ini")
+	state.prefs, _ = config.load(state.config_path)
 	theme.init(state.prefs)
 	playback.init()
 	state.ui = ui.init() or_return

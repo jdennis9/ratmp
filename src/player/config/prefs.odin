@@ -145,11 +145,11 @@ get_cstring :: proc(prefs: ^Preferences, str: StringID) -> cstring {
 	return cstring(raw_data(prefs.strings[str][:]))
 }
 
-load :: proc(path: string) -> (prefs: Preferences, ok: bool) {	
+load :: proc(path: string) -> (prefs: Preferences, ok: bool) {
 	_set_defaults(&prefs)
 
 	m, map_error := ini.load_map_from_path(path, context.allocator) or_return
-	if !ok || map_error != nil {
+	if map_error != .None {
 		save(prefs, path)
 		prefs.dirty = true
 		return
