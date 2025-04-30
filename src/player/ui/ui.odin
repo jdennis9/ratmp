@@ -25,6 +25,7 @@ import "core:thread"
 import "core:slice"
 import "core:math"
 import "core:os"
+import "core:os/os2"
 import "core:fmt"
 import "core:strconv"
 import "core:time"
@@ -213,6 +214,14 @@ _Window_State :: struct {
 	bring_to_front: bool,
 }
 
+@private
+_Background_Metadata_Scan :: struct {
+	exclude_path_hashes: []u32,
+	paths: [dynamic][512]u8,
+	input_file_count: int,
+	output: library.Track_Data,
+}
+
 State :: struct {
 	ctx: runtime.Context,
 
@@ -260,6 +269,9 @@ State :: struct {
 	playlist_windows: map[library.Playlist_ID]_Playlist_Window,
 
 	windows: [Window]_Window_State,
+
+	background_metadata_scan: _Background_Metadata_Scan,
+	background_metadata_scan_thread: ^thread.Thread,
 }
 
 init :: proc() -> (ui: State, ok: bool) {
@@ -390,8 +402,7 @@ _load_fonts :: proc() {
 	loaded_icon_size = icon_size
 }
 
-@private
-_apply_prefs :: proc(ui: ^State) {
+apply_prefs :: proc(ui: ^State) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
 	
@@ -435,7 +446,10 @@ _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	ui := cast(^State)data
 	
 	if is_folder {
-		util.for_each_file_in_folder(path, _add_files_iterator, data)
+		//util.for_each_file_in_folder(path, _add_files_iterator, data)
+		path_buf: [512]u8
+		util.copy_string_to_buf(path_buf[:], path)
+		append(&ui.background_metadata_scan.paths, path_buf)
 	}
 	else {
 		offset := len(ui.deferred_files.pool)
@@ -484,6 +498,45 @@ _begin_metadata_save_job :: proc() {
 		this.metadata_save_job = lib.save_metadata_changes_async();
 	}
 }*/
+
+@private
+_metadata_scan_proc :: proc(thread_info: ^thread.Thread) {
+	data := cast(^_Background_Metadata_Scan) thread_info.data
+
+	count_files :: proc(path: string) -> int {
+		count: int
+
+		iterator :: proc(path: string, is_folder: bool, data: rawptr) {
+			count := cast(^int) data
+
+			if is_folder {
+				util.for_each_file_in_folder(path, iterator, data)
+			}
+			else {
+				count^ += 1
+			}
+		}
+
+		if os.is_dir(path) {
+			util.for_each_file_in_folder(path, iterator, &count)
+		}
+		else {
+			count += 1
+		}
+
+		return count
+	}
+
+	for &path_buf in data.paths {
+		path := string(cstring(&path_buf[0]))
+		data.input_file_count += count_files(path)
+	}
+
+	for &path_buf in data.paths {
+		path := string(cstring(&path_buf[0]))
+		library.scan_folder(data.exclude_path_hashes, path, &data.output)
+	}
+}
 
 @private
 _begin_window :: proc(ui: ^State, window: Window) -> bool {
@@ -570,7 +623,7 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 	// Check if there are any files queued for processing and begin processing them if
 	// needed
-	if intrinsics.atomic_load(&ui.deferred_files.files_loaded) < len(ui.deferred_files.files) {
+	/*if intrinsics.atomic_load(&ui.deferred_files.files_loaded) < len(ui.deferred_files.files) {
 		df := &ui.deferred_files
 
 		if !intrinsics.atomic_load(&df.scanning) {
@@ -595,6 +648,39 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 		}
 		imgui.End()
 		return
+	}*/
+
+	if len(ui.background_metadata_scan.paths) > 0 && ui.background_metadata_scan_thread == nil {
+		ui.background_metadata_scan.exclude_path_hashes = slice.clone(lib.track_path_hashes[:])
+		ui.background_metadata_scan.input_file_count = 0
+		ui.background_metadata_scan_thread = thread.create(_metadata_scan_proc)
+		ui.background_metadata_scan_thread.data = &ui.background_metadata_scan
+		log.debug("Starting metadata scan")
+		thread.start(ui.background_metadata_scan_thread)
+	}
+
+	if ui.background_metadata_scan_thread != nil {
+		if thread.is_done(ui.background_metadata_scan_thread) {
+			thread.destroy(ui.background_metadata_scan_thread)
+			ui.background_metadata_scan_thread = nil
+			
+			library.add_tracks_from_track_data(lib, ui.background_metadata_scan.output)
+
+			clear(&ui.background_metadata_scan.paths)
+			delete(ui.background_metadata_scan.exclude_path_hashes)
+		}
+		else {
+			if imgui.Begin("Metadata scan progress") {
+				progress := f32(len(ui.background_metadata_scan.output.metadata)) / f32(ui.background_metadata_scan.input_file_count)
+
+				imgui.Text("Processing files %d/%d",
+					cast(i32) len(ui.background_metadata_scan.output.metadata),
+					cast(i32) ui.background_metadata_scan.input_file_count,
+				)
+				imgui.ProgressBar(progress, {imgui.GetContentRegionAvail().x, 0})
+			}
+			imgui.End()
+		}
 	}
 
 	/*if this.metadata_save_job != nil {
@@ -661,26 +747,17 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	// -------------------------------------------------------------------------
 	if imgui.BeginMainMenuBar() {
 		if imgui.BeginMenu("File") {
+			if imgui.MenuItem("Add folders", nil, false, ui.background_metadata_scan_thread == nil) {
+				util.for_each_file_in_dialog(nil, _add_files_iterator, ui, select_folders=true)
+			}
+
+			imgui.Separator()
 			if imgui.MenuItem("Preferences") {
 				ui.show_preferences = true
 			}
 			imgui.MenuItem("Minimize to tray")
 			imgui.Separator()
 			if imgui.MenuItem("Exit") {signal.post(.Exit)}
-			imgui.EndMenu()
-		}
-
-		if imgui.BeginMenu("Library") {
-			if imgui.MenuItem("Add files") {
-				util.for_each_file_in_dialog(nil, _add_files_iterator, nil)
-			}
-			if imgui.MenuItem("Add folders") {
-				util.for_each_file_in_dialog(nil, _add_files_iterator, nil, true)
-			}
-			/*imgui.Separator();
-			if imgui.MenuItem("Save metadata changes") {
-				_begin_metadata_save_job();
-			}*/
 			imgui.EndMenu()
 		}
 

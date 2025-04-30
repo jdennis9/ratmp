@@ -67,6 +67,8 @@ init :: proc() -> bool {
 		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
 	}
 
+	ui.apply_prefs(&state.ui)
+
 	return true
 }
 

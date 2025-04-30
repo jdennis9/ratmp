@@ -18,6 +18,7 @@
 package library
 
 import "core:os"
+import "core:os/os2"
 import "core:log"
 import "core:path/filepath"
 import "core:hash/xxhash"
@@ -141,9 +142,15 @@ Playlist_List :: struct {
 	sort_order: Sort_Order,
 }
 
+Track_Data :: struct {
+	paths: path_pool.Pool,
+	path_ids: [dynamic]u32,
+	metadata: [dynamic]Raw_Track_Info,
+}
+
 Library :: struct {
 	paths: path_pool.Pool,
-	track_ids: [dynamic]u32,
+	track_path_hashes: [dynamic]u32,
 	tracks: [dynamic]Raw_Track_Info,
 	next_playlist_id: Playlist_ID,
 	playlists: [dynamic]Playlist,
@@ -151,7 +158,6 @@ Library :: struct {
 	artists: Playlist_List,
 	folders: Playlist_List,
 	genres: Playlist_List,
-
 	library: Playlist,
 }
 
@@ -258,14 +264,15 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 		track_data.duration_seconds = duration
 		track_data.bitrate = bitrate
 
-		append(&lib.track_ids, path_id)
+		/*append(&lib.track_path_hashes, path_id)
 		append(&lib.tracks, track_data)
 		append(&lib.library.tracks, track_id)
 
 		_add_to_playlist_group(track_id, artist, &lib.artists)
 		_add_to_playlist_group(track_id, album, &lib.albums)
 		_add_to_playlist_group(track_id, filepath.base(filepath.dir(path)), &lib.folders)
-		_add_to_playlist_group(track_id, genre, &lib.genres)
+		_add_to_playlist_group(track_id, genre, &lib.genres)*/
+		_add_track(&lib, cleaned_path, track_data)
 	}
 
 	ok = true
@@ -316,10 +323,67 @@ destroy :: proc(lib: Library) {
 		free_playlist(p)
 	}
 
-	delete(lib.track_ids)
+	delete(lib.track_path_hashes)
 	delete(lib.tracks)
 	delete(lib.playlists)
 	path_pool.destroy(lib.paths)
+}
+
+scan_folder :: proc(exclude_path_hashes: []u32, path: string, output: ^Track_Data) {
+	dir, dir_error := os2.open(path)
+	if dir_error != nil {return}
+	files, read_error := os2.read_dir(dir, max(int), context.allocator)
+	if read_error != nil {return}
+	defer os2.file_info_slice_delete(files, context.allocator)
+
+	for file in files {
+		track: Raw_Track_Info
+
+		path_id := xxhash.XXH32(transmute([]u8) file.fullpath)
+		
+		if slice.contains(exclude_path_hashes, path_id) {continue}
+		if !is_supported_format(file.fullpath) {continue}
+
+		_read_track_metadata(&track, file.fullpath)
+		track.path = path_pool.store(&output.paths, file.fullpath)
+
+		append(&output.path_ids, path_id)
+		append(&output.metadata, track)
+	}
+}
+
+free_track_data :: proc(data: Track_Data) {
+	delete(data.metadata)
+	delete(data.path_ids)
+	path_pool.destroy(data.paths)
+}
+
+add_tracks_from_track_data :: proc(lib: ^Library, track_data: Track_Data) {
+	outer_loop: for track_index in 0..<len(track_data.metadata) {
+		path_buf: [512]u8
+		track := track_data.metadata[track_index]
+		path := path_pool.retrieve(track_data.paths, track.path, path_buf[:])
+		_add_track(lib, path, track_data.metadata[track_index])
+	}
+}
+
+@private
+_add_track :: proc(lib: ^Library, path: string, metadata: Raw_Track_Info) {
+	path_hash := xxhash.XXH32(transmute([]u8)path)
+	if slice.contains(lib.track_path_hashes[:], path_hash) {return}
+
+	track := metadata
+	track.path = path_pool.store(&lib.paths, path)
+
+	id := cast(Track_ID) len(lib.tracks)+1
+
+	append(&lib.track_path_hashes, path_hash)
+	append(&lib.tracks, track)
+	append(&lib.library.tracks, id)
+	_add_to_playlist_group(id, string(cstring(&track.artist[0])), &lib.artists)
+	_add_to_playlist_group(id, string(cstring(&track.album[0])), &lib.albums)
+	_add_to_playlist_group(id, filepath.base(filepath.dir(path)), &lib.folders)
+	_add_to_playlist_group(id, string(cstring(&track.genre[0])), &lib.genres)
 }
 
 @private
@@ -517,7 +581,7 @@ add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 	id := xxhash.XXH32(transmute([]u8) cleaned_path)
 
 	// Check if the track is already in the library
-	for iter_id, index in lib.track_ids {
+	for iter_id, index in lib.track_path_hashes {
 		if iter_id == id {
 			return cast(Track_ID) (index+1)
 		}
@@ -529,7 +593,7 @@ add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 
 	_read_track_metadata(&track, file)
 
-	append(&lib.track_ids, id)
+	append(&lib.track_path_hashes, id)
 	append(&lib.tracks, track)
 
 	append(&lib.library.tracks, index+1)
