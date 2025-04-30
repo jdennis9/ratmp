@@ -623,33 +623,6 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 	// Check if there are any files queued for processing and begin processing them if
 	// needed
-	/*if intrinsics.atomic_load(&ui.deferred_files.files_loaded) < len(ui.deferred_files.files) {
-		df := &ui.deferred_files
-
-		if !intrinsics.atomic_load(&df.scanning) {
-			// There are tracks ready but they aren't being scanned
-			// @FixMe
-			//_begin_async_scan()
-		}
-
-		// Show the scan progress
-		size := imgui.Vec2{400, 100}
-		center := imgui.Vec2{io.DisplaySize.x / 2.0, io.DisplaySize.y / 2.0}
-		pos := imgui.Vec2{center.x - (size.x / 2.0), center.y - (size.y / 2.0)}
-
-		imgui.SetNextWindowPos(pos)
-		imgui.SetNextWindowSize(size)
-		if imgui.Begin("Metadata Scan Progress", nil, imgui.WindowFlags_NoDecoration) {
-			total_files := len(df.files)
-			files_loaded := intrinsics.atomic_load(&df.files_loaded)
-			progress := cast(f32) files_loaded / cast(f32) total_files
-			imgui.Text("Processing files (%d/%d)", cast(i32) files_loaded, cast(i32) total_files)
-			imgui.ProgressBar(progress, {imgui.GetContentRegionAvail().x, 0})
-		}
-		imgui.End()
-		return
-	}*/
-
 	if len(ui.background_metadata_scan.paths) > 0 && ui.background_metadata_scan_thread == nil {
 		ui.background_metadata_scan.exclude_path_hashes = slice.clone(lib.track_path_hashes[:])
 		ui.background_metadata_scan.input_file_count = 0
@@ -668,11 +641,11 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 			clear(&ui.background_metadata_scan.paths)
 			delete(ui.background_metadata_scan.exclude_path_hashes)
+			library.free_track_data(ui.background_metadata_scan.output)
 		}
 		else {
 			if imgui.Begin("Metadata scan progress") {
 				progress := f32(len(ui.background_metadata_scan.output.metadata)) / f32(ui.background_metadata_scan.input_file_count)
-
 				imgui.Text("Processing files %d/%d",
 					cast(i32) len(ui.background_metadata_scan.output.metadata),
 					cast(i32) ui.background_metadata_scan.input_file_count,
@@ -682,29 +655,6 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 			imgui.End()
 		}
 	}
-
-	/*if this.metadata_save_job != nil {
-		job := this.metadata_save_job;
-
-		if !job.done {
-			size := imgui.Vec2{400, 100};
-			center := imgui.Vec2{io.DisplaySize.x / 2.0, io.DisplaySize.y / 2.0};
-			pos := imgui.Vec2{center.x - (size.x / 2.0), center.y - (size.y / 2.0)};
-	
-			imgui.SetNextWindowPos(pos);
-			imgui.SetNextWindowSize(size);
-			if imgui.Begin("Metadata Save Progress", nil, imgui.WindowFlags_NoDecoration) {
-				progress := cast(f32)job.tracks_completed / cast(f32)job.total_tracks;
-				imgui.Text("Saving files (%d/%d)", cast(i32) job.tracks_completed, cast(i32) job.total_tracks);
-				imgui.ProgressBar(progress, {imgui.GetContentRegionAvail().x, 0});
-			}
-			imgui.End();
-			return;
-		}
-		else {
-			this.metadata_save_job = nil;
-		}
-	}*/
 
 	// -------------------------------------------------------------------------
 	// Drag-drop
