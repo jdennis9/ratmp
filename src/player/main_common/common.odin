@@ -19,6 +19,7 @@ package main_common
 
 import "base:runtime"
 import "core:sync"
+import "core:path/filepath"
 
 import imgui "libs:odin-imgui"
 
@@ -43,6 +44,13 @@ State :: struct {
 	playback: playback.State,
 	audio_stream_info: audio.Stream_Info,
 	prefs: config.Preferences,
+
+	// Paths
+	library_path: string,
+	config_path: string,
+
+	playback_eof: bool,
+	wake_proc: proc(),
 }
 
 // Held by entry point
@@ -54,14 +62,24 @@ audio_callback :: proc(buffer: []f32, data: rawptr) {
 
 	context = state.ctx
 
-	playback.stream(&state.playback, buffer, cast(int) state.audio_stream_info.sample_rate, cast(int) state.audio_stream_info.channels)
+	state.playback_eof = playback.stream(
+		&state.playback, buffer, cast(int) state.audio_stream_info.sample_rate,
+		cast(int) state.audio_stream_info.channels)
+	
+	if state.playback_eof {
+		if state.wake_proc != nil {state.wake_proc()}
+	}
 }
 
-init :: proc(state_ptr: ^State, config_dir: string, data_dir: string) -> bool {
+init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc: proc()) -> bool {
 	state = state_ptr
+	state.config_path = filepath.join({config_dir, "config.ini"})
+	state.library_path = filepath.join({data_dir, "library.json"})
+	state.wake_proc = wake_proc
+
 	system_paths.init()
 	audio.init() or_return
-	state.library = library.load_library(LIBRARY_PATH, "playlists") or_return
+	state.library = library.load_library(state.library_path, "playlists") or_return
 	state.playback = playback.init() or_return
 	state.prefs, _ = config.load("config.ini")
 	theme.init(state.prefs)
@@ -85,17 +103,19 @@ handle_events :: proc() {
 		ui.apply_prefs(&state.ui, &state.prefs)
 		state.prefs.dirty = false
 	}
+
+	if state.playback_eof {
+		playback.play_next_track(&state.playback, state.library)
+	}
 }
 
 frame :: proc() {
 	signal.post(.NewFrame)
-
-
 	ui.show(&state.ui, &state.library, &state.playback, &state.prefs)
 }
 
 shutdown :: proc() {
-	config.save(state.prefs, "config.ini")
+	config.save(state.prefs, state.config_path)
 	ui.destroy(state.ui)
 	playback.destroy(&state.playback)
 	audio.shutdown()

@@ -144,6 +144,14 @@ main :: proc() {
 	run()
 }
 
+wake_proc :: proc() {
+	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
+}
+
+apply_prefs :: proc(prefs: config.Preferences) {
+	this.close_policy = prefs.choices[.ClosePolicy]
+}
+
 run :: proc() -> bool {
 	when ODIN_DEBUG {
 		context.logger = log.create_console_logger()
@@ -203,8 +211,10 @@ run :: proc() -> bool {
 	add_tray_icon()
 	defer remove_tray_icon()
 	
-	com.init(&state, ".", ".") or_return
+	com.init(&state, ".", ".", wake_proc) or_return
 	defer com.shutdown()
+	
+	apply_prefs(state.prefs)
 
 	// Flush signal events
 	{
@@ -243,6 +253,10 @@ run :: proc() -> bool {
 
 		com.handle_events()
 
+		if state.prefs.dirty {
+			apply_prefs(state.prefs)
+		}
+
 		if !minimized && dx11.begin_frame() {
 			com.frame()
 			visible = dx11.present()
@@ -270,7 +284,7 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 					hide_window()
 				}
 				case config.CLOSE_POLICY_CLOSE: {
-					signal.post(.Exit)
+					this.running = false
 				}
 				case: {
 					if util.message_box("Minimize to tray?", .YesNo, 
@@ -278,7 +292,7 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 						hide_window()
 					}
 					else {
-						signal.post(.Exit)
+						this.running = false
 					}
 				}
 			}
@@ -299,16 +313,9 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 		}
 		case win.WM_COMMAND: {
 			if wparam == 1 {
-				signal.post(.Exit)
+				this.running = false
 			}
 			return 0
-		}
-
-		case win.WM_USER: {
-			sig := cast(signal.Signal) wparam
-			if sig != .None && sig <= max(signal.Signal) {
-				signal.broadcast_immediate(sig)
-			}
 		}
 	}
 

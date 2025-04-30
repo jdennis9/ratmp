@@ -77,7 +77,7 @@ State :: struct {
 }
 
 @private
-_fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: int) {
+_fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: int) -> decoder.Decode_Status {
 	if !sync.atomic_load(&state.paused) {
 		status := decoder.fill_buffer(&state.decoder, output, samplerate, channels)
 		
@@ -87,13 +87,16 @@ _fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: in
 		else if status == .NO_FILE {
 			for &f in output {f = 0}
 		}
+
+		return status
 	}
 	else {
 		for &f in output {f = 0}
+		return .NO_FILE
 	}	
 }
 
-stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) {
+stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof: bool) {
 	context = state.ctx
 	frames := len(buffer) / channels
 	
@@ -104,7 +107,7 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) {
 		return
 	}
 
-	_fill_buffer(state, buffer[:], samplerate, channels)
+	eof = _fill_buffer(state, buffer[:], samplerate, channels) == .EOF
 
 	// -------------------------------------------------------------------------
 	// Update output capture buffer
@@ -130,6 +133,8 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) {
 		_deinterlace(buffer, channels, &state.buffer_capture.next)
 		state.buffer_capture.timestamp = time.tick_now()
 	}
+	
+	return
 }
 
 /*@private
