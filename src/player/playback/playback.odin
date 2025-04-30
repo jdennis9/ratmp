@@ -25,11 +25,18 @@ import "core:path/filepath"
 import "core:time"
 
 import "player:signal"
-import lib "player:library"
+import "player:library"
 import "player:audio"
 import "player:decoder"
 import "player:util"
 import "player:prefs"
+
+@private
+Library :: library.Library
+@private
+Track_ID :: library.Track_ID
+@private
+Playlist_ID :: library.Playlist_ID
 
 Audio_Callback :: #type proc(output: []f32, samplerate: int, channels: int, data: rawptr)
 
@@ -46,13 +53,13 @@ Output_Buffer :: struct {
 this: struct {
 	ctx: runtime.Context,
 	decoder: decoder.Decoder,
-	playing_track: lib.Track_ID,
+	playing_track: Track_ID,
 	lock: sync.Mutex,
 	paused: bool,
 
 	queue_position: int,
-	queue: [dynamic]lib.Track_ID,
-	queued_playlist: lib.Playlist_ID,
+	queue: [dynamic]Track_ID,
+	queued_playlist: Playlist_ID,
 	queued_group_id: u32,
 	shuffle: bool,
 
@@ -130,7 +137,7 @@ _stream_callback :: proc(buffer: []f32, _: rawptr) {
 	}
 }
 
-@private
+/*@private
 _signal_handler :: proc(sig: signal.Signal) {
 	if sig == .RequestNext {play_next_track()}
 	else if sig == .RequestPrev {play_prev_track()}
@@ -139,12 +146,12 @@ _signal_handler :: proc(sig: signal.Signal) {
 	else if sig == .ApplyPrefs {
 		this.shuffle = prefs.get_property("playback_shuffle").(bool) or_else false
 	}
-}
+}*/
 
 init :: proc() -> bool {
 	this.ctx = context
 	this.paused = true
-	signal.install_handler(_signal_handler)
+	//signal.install_handler(_signal_handler)
 	audio.init() or_return
 	refresh_audio_devices() or_return
 
@@ -187,7 +194,7 @@ _play_file :: proc(path: string) -> bool {
 	return decoder.open(&this.decoder, path)
 }
 
-get_playing_track :: proc() -> lib.Track_ID {
+get_playing_track :: proc() -> library.Track_ID {
 	return this.playing_track
 }
 
@@ -230,9 +237,9 @@ toggle_shuffle :: proc() {
 
 is_shuffle_enabled :: proc() -> bool {return this.shuffle}
 
-play_track :: proc(track: lib.Track_ID) -> bool {
+play_track :: proc(lib: library.Library, track: library.Track_ID) -> bool {
 	buf: [512]u8
-	path := lib.get_track_path(track, buf[:])
+	path := library.get_track_path(lib, track, buf[:])
 	if (_play_file(path)) {
 		this.playing_track = track
 		set_paused(false)
@@ -349,11 +356,11 @@ get_duration :: proc() -> int {
 // Queue management
 // =============================================================================
 
-get_queue :: proc() -> []lib.Track_ID {
+get_queue :: proc() -> []library.Track_ID {
 	return this.queue[:]
 }
 
-get_queued_playlist :: proc() -> lib.Playlist_ID {
+get_queued_playlist :: proc() -> library.Playlist_ID {
 	return this.queued_playlist
 }
 
@@ -361,7 +368,7 @@ get_queued_group_id :: proc() -> u32 {
 	return this.queued_group_id
 }
 
-play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use_filter := false) {
+play_playlist :: proc(lib: Library, playlist: library.Playlist, first_track: library.Track_ID = 0, use_filter := false) {
 	this.queued_playlist = playlist.id
 	this.queued_group_id = playlist.group_id
 	clear(&this.queue)
@@ -385,10 +392,10 @@ play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use
 		}
 	}
 
-	play_track_at_position(this.queue_position)
+	play_track_at_position(lib, this.queue_position)
 }
 
-append_to_queue :: proc(tracks: []lib.Track_ID) {
+append_to_queue :: proc(tracks: []library.Track_ID) {
 	this.queued_playlist = 0
 	this.queued_group_id = 0
 	for track in tracks {
@@ -396,7 +403,7 @@ append_to_queue :: proc(tracks: []lib.Track_ID) {
 	}
 }
 
-play_track_at_position :: proc(in_pos: int) {
+play_track_at_position :: proc(lib: Library, in_pos: int) {
 	pos := in_pos
 
 	if len(this.queue) == 0 {
@@ -407,13 +414,13 @@ play_track_at_position :: proc(in_pos: int) {
 		pos = 0
 	}
 
-	if !play_track(this.queue[pos]) {
+	if !play_track(lib, this.queue[pos]) {
 		signal.post(.RequestNext)
 	}
 	this.queue_position = pos
 }
 
-play_track_array :: proc(tracks: []lib.Track_ID) {
+play_track_array :: proc(lib: Library, tracks: []Track_ID) {
 	this.queued_playlist = 0
 	clear(&this.queue)
 	for track in tracks {
@@ -424,19 +431,19 @@ play_track_array :: proc(tracks: []lib.Track_ID) {
 		rand.shuffle(this.queue[:])
 	}
 
-	play_track_at_position(0)
+	play_track_at_position(lib, 0)
 }
 
-play_next_track :: proc() {
-	play_track_at_position(this.queue_position + 1)
+play_next_track :: proc(lib: Library) {
+	play_track_at_position(lib, this.queue_position + 1)
 }
 
-play_prev_track :: proc() {
-	play_track_at_position(this.queue_position - 1)
+play_prev_track :: proc(lib: Library) {
+	play_track_at_position(lib, this.queue_position - 1)
 }
 
-sort_queue :: proc(spec: lib.Track_Sort_Spec) {
-	lib.sort_tracks(this.queue[:], spec)
+sort_queue :: proc(lib: library.Library, spec: library.Track_Sort_Spec) {
+	library.sort_tracks(lib, this.queue[:], spec)
 }
 
 // =============================================================================

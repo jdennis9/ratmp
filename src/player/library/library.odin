@@ -141,12 +141,10 @@ Playlist_List :: struct {
 	sort_order: Sort_Order,
 }
 
-@private
-this: struct {
+Library :: struct {
 	paths: path_pool.Pool,
 	track_ids: [dynamic]u32,
 	tracks: [dynamic]Raw_Track_Info,
-	metadata_pool: [dynamic]u8,
 	next_playlist_id: Playlist_ID,
 	playlists: [dynamic]Playlist,
 	albums: Playlist_List,
@@ -157,23 +155,40 @@ this: struct {
 	library: Playlist,
 }
 
-init :: proc() -> bool {	
-	// Load library
-	library_found: bool
+load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
+	lib, _ = _load_library(filename)
+	lib.library.name = "Library"
+	lib.next_playlist_id = 1
 
-	library_path := filepath.join({system_paths.DATA_DIR, "library.json"})
-	defer delete(library_path)
-	_load_library(library_path)
-	this.library.name = "Library"
+	ok = true
+	return
+}
 
-	this.next_playlist_id = 1
-	_scan_playlist_folder()
+scan_for_playlists :: proc(lib: ^Library, path: string) {
+	walk_proc :: proc(fullpath: string, is_folder: bool, data: rawptr) {
+		lib := cast(^Library) data
+		log.debug("Load playlist", fullpath)
 
-	return true
+		playlist, playlist_ok := load_playlist_from_file(lib, fullpath)
+		if !playlist_ok {return}
+
+		file_id := strconv.parse_u64_maybe_prefixed(filepath.base(fullpath)) or_else 0
+		if file_id == 0 {
+			free_playlist(playlist)
+			return
+		}
+
+		playlist.file_id = u32(file_id)
+		append(&lib.playlists, playlist)
+
+		return
+	}
+
+	util.for_each_file_in_folder("playlists", walk_proc, lib)
 }
 
 @private
-_load_library :: proc(filename: string) -> bool {
+_load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 	timer: time.Stopwatch
 	time.stopwatch_start(&timer)
 	defer {
@@ -196,13 +211,12 @@ _load_library :: proc(filename: string) -> bool {
 	}
 
 	// Read file
-	file_data, file_ok := os.read_entire_file_from_filename(filename)
-	if !file_ok {return false}
+	file_data := os.read_entire_file_from_filename(filename) or_return
 	defer delete(file_data)
 
 	// Parse json
 	root_value, parse_error := json.parse(file_data, .JSON5, parse_integers=true)
-	if parse_error != .None {return false}
+	if parse_error != .None {return}
 	defer json.destroy_value(root_value)
 
 	// Iterate tracks
@@ -210,8 +224,8 @@ _load_library :: proc(filename: string) -> bool {
 	tracks_value := root["tracks"] or_return
 	tracks := tracks_value.(json.Array) or_return
 
-	this.library.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
-	this.library.sort_order = cast(Sort_Order) get_int(root, "sort_order")
+	lib.library.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
+	lib.library.sort_order = cast(Sort_Order) get_int(root, "sort_order")
 
 	for track_value in tracks {
 		track := track_value.(json.Object) or_continue
@@ -229,10 +243,10 @@ _load_library :: proc(filename: string) -> bool {
 		defer delete(cleaned_path)
 
 		path_id := xxhash.XXH32(transmute([]u8) cleaned_path)
-		track_id := cast(Track_ID) len(this.tracks) + 1
+		track_id := cast(Track_ID) len(lib.tracks) + 1
 
 		track_data: Raw_Track_Info
-		track_data.path = path_pool.store(&this.paths, path)
+		track_data.path = path_pool.store(&lib.paths, path)
 		util.copy_string_to_buf(track_data.title[:], title)
 		util.copy_string_to_buf(track_data.artist[:], artist)
 		util.copy_string_to_buf(track_data.album[:], album)
@@ -242,21 +256,22 @@ _load_library :: proc(filename: string) -> bool {
 		track_data.duration_seconds = duration
 		track_data.bitrate = bitrate
 
-		append(&this.track_ids, path_id)
-		append(&this.tracks, track_data)
-		append(&this.library.tracks, track_id)
+		append(&lib.track_ids, path_id)
+		append(&lib.tracks, track_data)
+		append(&lib.library.tracks, track_id)
 
-		_add_to_playlist_group(track_id, artist, &this.artists)
-		_add_to_playlist_group(track_id, album, &this.albums)
-		_add_to_playlist_group(track_id, filepath.base(filepath.dir(path)), &this.folders)
-		_add_to_playlist_group(track_id, genre, &this.genres)
+		_add_to_playlist_group(track_id, artist, &lib.artists)
+		_add_to_playlist_group(track_id, album, &lib.albums)
+		_add_to_playlist_group(track_id, filepath.base(filepath.dir(path)), &lib.folders)
+		_add_to_playlist_group(track_id, genre, &lib.genres)
 	}
 
-	return true
+	ok = true
+	return
 }
 
 @private
-_save_library :: proc(filename: string) {
+_save_library :: proc(lib: Library, filename: string) {
 	write_kv_pair :: util.json_write_kv_pair
 
 	file, open_error := util.overwrite_file(filename)
@@ -265,19 +280,19 @@ _save_library :: proc(filename: string) {
 	fmt.fprintln(file, "{")
 	defer fmt.fprintln(file, "}")
 
-	write_kv_pair(file, "sort_order", int(this.library.sort_order))
-	write_kv_pair(file, "sort_metric", int(this.library.sort_metric))
+	write_kv_pair(file, "sort_order", int(lib.library.sort_order))
+	write_kv_pair(file, "sort_metric", int(lib.library.sort_metric))
 
 	fmt.fprintln(file, "\"tracks\": [")
 	defer fmt.fprintln(file, "],")
 
-	for track_id in this.library.tracks {
+	for track_id in lib.library.tracks {
 		fmt.fprintln(file, "{")
 		defer fmt.fprintln(file, "},")
-		track := get_track_info(track_id)
+		track := get_track_info(lib, track_id)
 		if track.marked_for_removal {continue}
 		track_path_buf: [512]u8
-		track_path := get_track_path_cstring(track_id, track_path_buf[:])
+		track_path := get_track_path_cstring(lib, track_id, track_path_buf[:])
 		write_kv_pair(file, "path", track_path)
 		write_kv_pair(file, "title", track.title)
 		write_kv_pair(file, "artist", track.artist)
@@ -290,72 +305,19 @@ _save_library :: proc(filename: string) {
 	}
 }
 
-shutdown :: proc() {
-	_save_library("library.json")
+destroy :: proc(lib: Library) {
+	//_save_library("library.json")
 
-	delete(this.library.tracks)
+	delete(lib.library.tracks)
 
-	for p in this.playlists {
+	for p in lib.playlists {
 		free_playlist(p)
 	}
 
-	delete(this.track_ids)
-	delete(this.tracks)
-	delete(this.playlists)
-	delete(this.metadata_pool)
-	path_pool.destroy(&this.paths)
-}
-
-@private
-_store_string_native :: proc(str: string) -> Pool_String {
-	if len(str) == 0 {return {}}
-
-	ps := Pool_String {
-		offset = len(this.metadata_pool),
-		length = len(str),
-	}
-
-	append(&this.metadata_pool, str[:])
-	append(&this.metadata_pool, 0)
-
-	return ps
-}
-
-@private
-_store_string :: proc(str: cstring) -> Pool_String {
-	if str == nil || len(str) == 0 {return {}}
-
-	md := Pool_String {
-		offset = len(this.metadata_pool),
-		length = len(str),
-	}
-
-	slice := (transmute([^]u8)str)[:md.length]
-
-	for i in 0..<md.length {
-		append(&this.metadata_pool, slice[i])
-	}
-
-	append(&this.metadata_pool, 0)
-
-	return md
-}
-
-@private
-_replace_or_store_string :: proc(orig: Pool_String, str: cstring) -> Pool_String {
-	if str == nil || len(str) == 0 {return {}}
-	if orig == {} {
-		return _store_string(str)
-	}
-
-	length := len(str)
-	if length <= orig.length {
-		this.metadata_pool[orig.offset+length] = 0
-		copy(this.metadata_pool[orig.offset:], (cast([^]u8)str)[:length])
-		return {orig.offset, length}
-	}
-
-	return _store_string(str)
+	delete(lib.track_ids)
+	delete(lib.tracks)
+	delete(lib.playlists)
+	path_pool.destroy(lib.paths)
 }
 
 @private
@@ -436,12 +398,6 @@ _read_track_metadata :: proc(track: ^Raw_Track_Info, path: string) {
 	}
 }
 
-@private
-_get_metadata_cstring :: proc(md: Pool_String) -> cstring {
-	if md.length == 0 {return nil}
-	return cstring(&this.metadata_pool[md.offset])
-}
-
 is_supported_format :: proc(filename: string) -> bool {
 	ext := filepath.ext(filename)
 
@@ -454,22 +410,22 @@ is_supported_format :: proc(filename: string) -> bool {
 		ext == ".opus"
 }
 
-remove_tracks :: proc(tracks: []Track_ID) {
-	playlist_altered := make([]bool, len(this.playlists))
+remove_tracks :: proc(lib: ^Library, tracks: []Track_ID) {
+	playlist_altered := make([]bool, len(lib.playlists))
 	defer delete(playlist_altered)
 
 	for track in tracks {
 		if track == 0 {continue}
 		track_index := track-1
-		this.tracks[track_index].marked_for_removal = true
+		lib.tracks[track_index].marked_for_removal = true
 
-		index_in_library, found_in_library := slice.linear_search(this.library.tracks[:], track)
+		index_in_library, found_in_library := slice.linear_search(lib.library.tracks[:], track)
 		if found_in_library {
-			ordered_remove(&this.library.tracks, index_in_library)
-			playlist_make_dirty(&this.library)
+			ordered_remove(&lib.library.tracks, index_in_library)
+			playlist_make_dirty(&lib.library)
 		}
 
-		for &playlist, playlist_index in this.playlists {
+		for &playlist, playlist_index in lib.playlists {
 			index_in_playlist := slice.linear_search(playlist.tracks[:], track) or_continue
 			ordered_remove(&playlist.tracks, index_in_playlist)
 			playlist_make_dirty(&playlist)
@@ -477,22 +433,22 @@ remove_tracks :: proc(tracks: []Track_ID) {
 		}
 	}
 
-	for playlist, playlist_index in this.playlists {
+	for playlist, playlist_index in lib.playlists {
 		if playlist_altered[playlist_index] {
-			save_playlist(playlist.id)
+			save_playlist(lib, playlist.id)
 		}
 	}
 }
 
 // Use to alter metadata of track
-get_raw_track_info_pointer :: proc(track: Track_ID) -> ^Raw_Track_Info {
+get_raw_track_info_pointer :: proc(lib: Library, track: Track_ID) -> ^Raw_Track_Info {
 	assert(track != 0)
-	return &this.tracks[track-1]
+	return &lib.tracks[track-1]
 }
 
-get_track_info :: proc(track: Track_ID) -> Track_Info {
+get_track_info :: proc(lib: Library, track: Track_ID) -> Track_Info {
 	assert(track != 0)
-	info := &this.tracks[track-1]
+	info := &lib.tracks[track-1]
 	return {
 		id = track,
 		title = cstring(&info.title[0]),
@@ -507,15 +463,14 @@ get_track_info :: proc(track: Track_ID) -> Track_Info {
 	}
 }
 
-refresh_track_metadata :: proc(track_id: Track_ID) {
+refresh_track_metadata :: proc(lib: Library, track_id: Track_ID) {
 	buf: [384]u8
-	path := get_track_path(track_id, buf[:])
-	track := &this.tracks[track_id-1]
+	path := get_track_path(lib, track_id, buf[:])
+	track := &lib.tracks[track_id-1]
 	_read_track_metadata(track, path)
-	info := get_track_info(track_id)
 }
 
-add_directory :: proc(path: string) -> (first: Track_ID, last: Track_ID, ok := true) {
+add_directory :: proc(lib: ^Library, path: string) -> (first: Track_ID, last: Track_ID, ok := true) {
 	handle, error := os.open(path)
 	if error != os.ERROR_NONE {return 0, 0, false}
 	defer os.close(handle)
@@ -526,15 +481,15 @@ add_directory :: proc(path: string) -> (first: Track_ID, last: Track_ID, ok := t
 
 	defer os.file_info_slice_delete(files)
 
-	first = cast(u32) len(this.tracks) + 1
+	first = cast(u32) len(lib.tracks) + 1
 	count: u32 = 0
 
 	for f in files {
 		if f.is_dir {
-			add_directory(f.fullpath)
+			add_directory(lib, f.fullpath)
 		}
 		else {
-			add_file(f.fullpath)
+			add_file(lib, f.fullpath)
 		}
 
 		count += 1
@@ -547,7 +502,7 @@ add_directory :: proc(path: string) -> (first: Track_ID, last: Track_ID, ok := t
 	return
 }
 
-add_file :: proc(file: string) -> Track_ID {
+add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 	cleaned_path, err := filepath.clean(file)
 	if err != .None {return 0}
 	defer delete(cleaned_path)
@@ -560,27 +515,27 @@ add_file :: proc(file: string) -> Track_ID {
 	id := xxhash.XXH32(transmute([]u8) cleaned_path)
 
 	// Check if the track is already in the library
-	for iter_id, index in this.track_ids {
+	for iter_id, index in lib.track_ids {
 		if iter_id == id {
 			return cast(Track_ID) (index+1)
 		}
 	}
 
 	track: Raw_Track_Info
-	index := cast(Track_ID) len(this.tracks)
-	track.path = path_pool.store(&this.paths, file)
+	index := cast(Track_ID) len(lib.tracks)
+	track.path = path_pool.store(&lib.paths, file)
 
 	_read_track_metadata(&track, file)
 
-	append(&this.track_ids, id)
-	append(&this.tracks, track)
+	append(&lib.track_ids, id)
+	append(&lib.tracks, track)
 
-	append(&this.library.tracks, index+1)
+	append(&lib.library.tracks, index+1)
 
-	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &this.artists)
-	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &this.albums)
-	_add_to_playlist_group(index+1, string(cstring(&track.genre[0])), &this.genres, case_insensitive=true)
-	_add_to_playlist_group(index+1, filepath.base(filepath.dir(file)), &this.folders)
+	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &lib.artists)
+	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &lib.albums)
+	_add_to_playlist_group(index+1, string(cstring(&track.genre[0])), &lib.genres, case_insensitive=true)
+	_add_to_playlist_group(index+1, filepath.base(filepath.dir(file)), &lib.folders)
 
 	return index+1
 }
@@ -617,32 +572,32 @@ _add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Pl
 	append(&group.playlists, playlist)
 }
 
-get_albums :: proc() -> ^Playlist_List {
-	return &this.albums
+get_albums :: proc(lib: ^Library) -> ^Playlist_List {
+	return &lib.albums
 }
 
-get_artists :: proc() -> ^Playlist_List {
-	return &this.artists
+get_artists :: proc(lib: ^Library) -> ^Playlist_List {
+	return &lib.artists
 }
 
-get_folders :: proc() -> ^Playlist_List {
-	return &this.folders
+get_folders :: proc(lib: ^Library) -> ^Playlist_List {
+	return &lib.folders
 }
 
-get_genres :: proc() -> ^Playlist_List {
-	return &this.genres
+get_genres :: proc(lib: ^Library) -> ^Playlist_List {
+	return &lib.genres
 }
 
-get_track_path :: proc(track: Track_ID, buf: []u8) -> string {
+get_track_path :: proc(lib: Library, track: Track_ID, buf: []u8) -> string {
 	if track == 0 {return ""}
-	track_info := this.tracks[track-1]
-	return path_pool.retrieve(&this.paths, track_info.path, buf)
+	track_info := lib.tracks[track-1]
+	return path_pool.retrieve(lib.paths, track_info.path, buf)
 }
 
-get_track_path_cstring :: proc(track: Track_ID, buf: []u8) -> cstring {
+get_track_path_cstring :: proc(lib: Library, track: Track_ID, buf: []u8) -> cstring {
 	if track == 0 {return nil}
-	track_info := this.tracks[track-1]
-	return path_pool.retrieve_cstring(&this.paths, track_info.path, buf)
+	track_info := lib.tracks[track-1]
+	return path_pool.retrieve_cstring(lib.paths, track_info.path, buf)
 }
 
 // =============================================================================
@@ -650,101 +605,71 @@ get_track_path_cstring :: proc(track: Track_ID, buf: []u8) -> cstring {
 // =============================================================================
 
 @private
-_playlist_file_id_is_used :: proc(id: u32) -> bool {
-	for p in this.playlists {
+_playlist_file_id_is_used :: proc(lib: Library, id: u32) -> bool {
+	for p in lib.playlists {
 		if p.file_id == id {return true}
 	}
 	return false
 }
 
 @private
-_alloc_playlist_id :: proc() -> Playlist_ID {
-	id := this.next_playlist_id
-	this.next_playlist_id += 1
+_alloc_playlist_id :: proc(lib: ^Library) -> Playlist_ID {
+	id := lib.next_playlist_id
+	lib.next_playlist_id += 1
 	return id
 }
 
-add_playlist :: proc(name: string) -> (Playlist_ID, Add_Playlist_Error) {
+add_playlist :: proc(lib: ^Library, name: string) -> (Playlist_ID, Add_Playlist_Error) {
 	playlist := Playlist {
 		name = strings.clone_to_cstring(name),
 	}
 
-	for p in this.playlists {
+	for p in lib.playlists {
 		if name == string(p.name) {
 			delete(playlist.name)
 			return 0, .NameExists
 		}
 	}
 
-	playlist.id = _alloc_playlist_id()
+	playlist.id = _alloc_playlist_id(lib)
 	playlist.file_id = u32(rand.int31())
-	for _playlist_file_id_is_used(playlist.file_id) {
+	for _playlist_file_id_is_used(lib^, playlist.file_id) {
 		playlist.file_id = u32(rand.int31())
 	}
 
 	log.debug("New playlist", name, "; file ID =", playlist.file_id)
 
-	append(&this.playlists, playlist)
+	append(&lib.playlists, playlist)
 	return playlist.id, .None
 }
 
+//@FixMe
 get_playlist_path :: proc(playlist: Playlist) -> string {
 	name_buf: [16]u8
 	name := fmt.bprint(name_buf[:], playlist.file_id)
 	return filepath.join({system_paths.DATA_DIR, "playlists", name})
 }
 
-save_playlist :: proc(id: Playlist_ID) {
+save_playlist :: proc(lib: ^Library, id: Playlist_ID) {
 	if id == 0 {return}
-	playlist := get_playlist(id)^
+	playlist := get_playlist(lib, id)^
 	fullpath := get_playlist_path(playlist)
 	defer delete(fullpath)
 
-	save_playlist_to_file(playlist, fullpath)
+	save_playlist_to_file(lib^, playlist, fullpath)
 }
 
-delete_playlist :: proc(id: Playlist_ID) {
-	for p, index in this.playlists {
+delete_playlist :: proc(lib: ^Library, id: Playlist_ID) {
+	for p, index in lib.playlists {
 		if p.id == id {
 			free_playlist(p)
 			path := get_playlist_path(p)
 			defer delete(path)
 			os.remove(path)
-			ordered_remove(&this.playlists, index)
+			ordered_remove(&lib.playlists, index)
 			return
 		}
 	}
-}
-
-@private
-_scan_playlist_folder :: proc() {
-	playlists_path := filepath.join({system_paths.DATA_DIR, "playlists"})
-	defer delete(playlists_path)
-
-	if !os.exists(playlists_path) {
-		os.make_directory(playlists_path)
-		return
-	}
-
-	walk_proc :: proc(fullpath: string, is_folder: bool, _: rawptr) {
-		log.debug("Load playlist", fullpath)
-
-		playlist, playlist_ok := load_playlist_from_file(fullpath)
-		if !playlist_ok {return}
-
-		file_id := strconv.parse_u64_maybe_prefixed(filepath.base(fullpath)) or_else 0
-		if file_id == 0 {
-			free_playlist(playlist)
-			return
-		}
-
-		playlist.file_id = u32(file_id)
-		append(&this.playlists, playlist)
-
-		return
-	}
-
-	util.for_each_file_in_folder("playlists", walk_proc, nil)
 }
 
 @private
@@ -777,7 +702,7 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	return false
 }
 
-filter_track_from_runes :: proc(track: Track_Info, runes: []rune) -> bool {
+filter_track_from_runes :: proc(lib: Library, track: Track_Info, runes: []rune) -> bool {
 	if _filter_track_string(string(track.title), runes) {
 		return true
 	}
@@ -795,7 +720,7 @@ filter_track_from_runes :: proc(track: Track_Info, runes: []rune) -> bool {
 	}
 
 	path_buf: [512]u8
-	path := get_track_path(track.id, path_buf[:])
+	path := get_track_path(lib, track.id, path_buf[:])
 
 	if _filter_track_string(path, runes) {
 		return true
@@ -804,36 +729,28 @@ filter_track_from_runes :: proc(track: Track_Info, runes: []rune) -> bool {
 	return false
 }
 
-filter_track_from_string :: proc(track: Track_Info, filter: string) -> bool {
+filter_track_from_string :: proc(lib: Library, track: Track_Info, filter: string) -> bool {
 	filter_rune_buf: [256]rune
 	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter)
-	return filter_track_from_runes(track, filter_runes)
+	return filter_track_from_runes(lib, track, filter_runes)
 }
 
 filter_track :: proc {filter_track_from_string, filter_track_from_runes}
 
 // WARNING: The returned pointer may be invalidated after a call
 // to add_playlist or delete_playlist
-get_playlist :: proc(id: Playlist_ID) -> ^Playlist {
+get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> ^Playlist {
 	if id == 0 {
-		return &this.library
+		return &lib.library
 	}
 
-	for &p in this.playlists {
+	for &p in lib.playlists {
 		if p.id == id {
 			return &p
 		}
 	}
 
 	return nil
-}
-
-get_playlists :: proc() -> []Playlist {
-	return this.playlists[:]
-}
-
-get_default_playlist :: proc() -> ^Playlist {
-	return &this.library
 }
 
 // =============================================================================
@@ -845,9 +762,9 @@ Detailed_Metadata :: struct {
 	comment: cstring,
 }
 
-load_track_thumbnail :: proc(track_id: Track_ID) -> (texture: video.Texture, ok: bool) {
+load_track_thumbnail :: proc(lib: Library, track_id: Track_ID) -> (texture: video.Texture, ok: bool) {
 	path_buf: [512]u8
-	path := get_track_path_cstring(track_id, path_buf[:])
+	path := get_track_path_cstring(lib, track_id, path_buf[:])
 
 	file := taglib.file_new(path)
 	if file == nil {return}
@@ -871,9 +788,9 @@ load_track_thumbnail :: proc(track_id: Track_ID) -> (texture: video.Texture, ok:
 	return
 }
 
-load_track_comment :: proc(track_id: Track_ID) -> cstring {
+load_track_comment :: proc(lib: Library, track_id: Track_ID) -> cstring {
 	path_buf: [512]u8
-	path := get_track_path_cstring(track_id, path_buf[:])
+	path := get_track_path_cstring(lib, track_id, path_buf[:])
 
 	file := taglib.file_new(path)
 	if file == nil {return nil}
@@ -912,9 +829,9 @@ Metadata_Replacement :: struct {
 _changed_tracks: [dynamic]Track_ID
 
 @private
-_save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
+_save_track_metadata_to_file :: proc(lib: Library, track: ^Raw_Track_Info) {
 	path_buf: [512]u8
-	path := path_pool.retrieve_cstring(&this.paths, track.path, path_buf[:])
+	path := path_pool.retrieve_cstring(lib.paths, track.path, path_buf[:])
 
 	file := taglib.wrapped_open(path)
 	if file == nil {return}
@@ -933,15 +850,15 @@ _save_track_metadata_to_file :: proc(track: ^Raw_Track_Info) {
 	//taglib.file_save(file);
 }
 
-save_track_metadata :: proc(track_id: Track_ID) {
+save_track_metadata :: proc(lib: Library, track_id: Track_ID) {
 	if track_id == 0 {
 		return
 	}
-	track := &this.tracks[track_id-1]
-	_save_track_metadata_to_file(track)
+	track := &lib.tracks[track_id-1]
+	_save_track_metadata_to_file(lib, track)
 }
 
-perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track_ID = nil) -> (replacement_count: int) {
+perform_metadata_replacement :: proc(lib: Library, op: Metadata_Replacement, filter: []Track_ID = nil) -> (replacement_count: int) {
 	do_replacement :: proc(dst: []u8, replace: string, with: string) -> bool {
 		str := string(cstring(&dst[0]))
 		if strings.contains(str, replace) {
@@ -956,7 +873,7 @@ perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track_I
 		return false
 	}
 
-	for &track, index in this.tracks {
+	for &track, index in lib.tracks {
 		track_id := cast (Track_ID) (index + 1)
 		changed := false
 		if filter != nil && !slice.contains(filter, track_id) {
@@ -996,7 +913,7 @@ perform_metadata_replacement :: proc(op: Metadata_Replacement, filter: []Track_I
 	return
 }
 
-Metadata_Save_Job :: struct {
+/*Metadata_Save_Job :: struct {
 	tracks_completed: int,
 	total_tracks: int,
 	done: bool,
@@ -1033,3 +950,4 @@ save_metadata_changes_async :: proc() -> ^Metadata_Save_Job {
 	thread.run(save_metadata_thread_proc)
 	return &_metadata_save_job
 }
+*/

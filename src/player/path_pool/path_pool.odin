@@ -80,7 +80,7 @@ store :: proc(pool: ^Pool, path: string) -> (ret: Path) {
 }
 
 // Returns a slice of the buffer or nil if the buffer is too small
-retrieve :: proc(pool: ^Pool, path: Path, buffer: []u8) -> string {
+retrieve :: proc(pool: Pool, path: Path, buffer: []u8) -> string {
 	dir := pool.dirs[path.dir]
 	total_length := dir.length + path.length + 1
 
@@ -95,7 +95,7 @@ retrieve :: proc(pool: ^Pool, path: Path, buffer: []u8) -> string {
 	return string(buffer[:total_length])
 }
 
-retrieve_cstring :: proc(pool: ^Pool, path: Path, buffer: []u8) -> cstring {
+retrieve_cstring :: proc(pool: Pool, path: Path, buffer: []u8) -> cstring {
 	assert(len(buffer) >= 16)
 	str := retrieve(pool, path, buffer[:len(buffer)-2])
 	if str == "" {return nil}
@@ -103,7 +103,7 @@ retrieve_cstring :: proc(pool: ^Pool, path: Path, buffer: []u8) -> cstring {
 	return strings.unsafe_string_to_cstring(str)
 }
 
-destroy :: proc(pool: ^Pool) {
+destroy :: proc(pool: Pool) {
 	for dir in pool.dirs {
 		delete(dir.string_pool)
 	}

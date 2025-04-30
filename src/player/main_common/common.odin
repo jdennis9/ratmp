@@ -28,23 +28,29 @@ import "player:video"
 import "player:playback"
 import "player:signal"
 
-init :: proc() {
+state: struct {
+	library: library.Library
+}
+
+init :: proc() -> bool {
+	state.library = library.load_library("library.json") or_return
 	system_paths.init()
 	prefs.load()
 	theme.init()
-	library.init()
 	playback.init()
 	ui.init()
+
+	return true
 }
 
 frame :: proc() {
 	signal.post(.NewFrame)
-	ui.show()
+	ui.show(&state.library)
 }
 
 shutdown :: proc() {
 	prefs.save()
 	ui.shutdown()
 	playback.shutdown()
-	library.shutdown()
+	library.destroy(state.library)
 }

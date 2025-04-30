@@ -24,7 +24,7 @@ import "core:time"
 
 import imgui "../../libs/odin-imgui"
 
-import lib "player:library"
+import "player:library"
 import "player:playback"
 import "player:util"
 import "player:theme"
@@ -55,12 +55,12 @@ Track_Column :: enum {
 @(private="file")
 Column :: struct {
 	name: cstring,
-	sort_metric: lib.Track_Sort_Metric,
+	sort_metric: library.Track_Sort_Metric,
 	flags: imgui.TableColumnFlags,
 }
 
 @private
-_get_track_column_sort_metric :: proc(index: int) -> lib.Track_Sort_Metric {
+_get_track_column_sort_metric :: proc(index: int) -> library.Track_Sort_Metric {
 	col := cast(Track_Column)index
 
 	switch col {
@@ -74,42 +74,10 @@ _get_track_column_sort_metric :: proc(index: int) -> lib.Track_Sort_Metric {
 	return .None
 }
 
-_show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Track_ID) {
-	if imgui.BeginMenu("Add to playlist") {
-		targets := lib.get_playlists()
-		for &target in targets {
-			if target.id == playlist {continue}
-			if imgui.MenuItem(target.name) {
-				_add_selection_to_playlist(&target)
-				lib.save_playlist(target.id)
-			}
-		}
-		imgui.EndMenu()
-	}
-
-	if imgui.MenuItem("Refresh metadata") {
-		_refresh_metadata_of_selected_tracks()
-	}
-}
-
-_show_track_playlist_context_menu :: proc(track: lib.Track_ID, action: ^Track_Table_Action, flags: Track_Table_Flags) {
+_show_track_playlist_context_menu :: proc(track: library.Track_ID, action: ^Track_Table_Action, flags: Track_Table_Flags) {
 	if (.NoAddToQueue not_in flags) && imgui.MenuItem("Add to queue") {
 		action.add_to_queue |= true
 	}
-}
-
-@(private="file")
-_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> []lib.Track_ID {
-	out: [dynamic]lib.Track_ID
-	defer delete(out)
-	for track in playlist.tracks {
-		if _is_track_selected(track) {
-			append(&out, track)
-		}
-	}
-
-	if len(out) == 0 {return nil}
-	return slice.clone(out[:])
 }
 
 /*@(private="file")
@@ -204,7 +172,7 @@ _show_track_row :: proc(
 }*/
 
 @(private="file")
-_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []lib.Track_ID, track: lib.Track_ID, use_filter: bool) {
+_force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []library.Track_ID, track: library.Track_ID, use_filter: bool) {
 	index, found := slice.linear_search(tracks[:], track)
 
 	if !found {return}
@@ -212,15 +180,15 @@ _force_track_in_list_clipper :: proc(clipper: ^imgui.ListClipper, tracks: []lib.
 }
 
 Playlist_Sort_Spec :: struct {
-	metric: lib.Track_Sort_Metric,
-	order: lib.Sort_Order,
+	metric: library.Track_Sort_Metric,
+	order: library.Sort_Order,
 }
 
 Track_Table_Action :: struct {
 	select_track: Maybe(int),
 	play_track: Maybe(int),
 	sort_spec: Maybe(Playlist_Sort_Spec),
-	drag_drop_payload: []lib.Track_ID,
+	drag_drop_payload: []library.Track_ID,
 	play_selection: bool,
 	select_all: bool,
 	add_selection_to_playlist: bool,
@@ -232,14 +200,14 @@ Track_Table_Action :: struct {
 	filter_hash: u32,
 }
 
-_set_track_drag_drop_payload :: proc(tracks: []lib.Track_ID) {
-	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(lib.Track_ID) * len(tracks))
+_set_track_drag_drop_payload :: proc(tracks: []library.Track_ID) {
+	imgui.SetDragDropPayload("tracks", raw_data(tracks), size_of(library.Track_ID) * len(tracks))
 }
 
 _Track_Table_Iterator :: struct {
-	tracks: []lib.Track_ID,
-	selection: []lib.Track_ID,
-	track: lib.Track_ID,
+	tracks: []library.Track_ID,
+	selection: []library.Track_ID,
+	track: library.Track_ID,
 	track_index: int,
 	// True if the selectable column is visible
 	visible: bool,
@@ -249,7 +217,7 @@ _Track_Table_Iterator :: struct {
 	_min, _max: int,
 }
 
-_begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) -> bool {
+_begin_track_table :: proc(lib: Library, iterator: ^_Track_Table_Iterator, str_id: cstring) -> bool {
 	table_flags := 
 	imgui.TableFlags_Resizable|imgui.TableFlags_Hideable|
 	imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
@@ -276,7 +244,7 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 }
 
 // Call right after _begin_track_table returns true
-_track_table_update_sort_spec :: proc(spec: ^lib.Track_Sort_Spec) -> bool {
+_track_table_update_sort_spec :: proc(spec: ^library.Track_Sort_Spec) -> bool {
 	sort_specs := imgui.TableGetSortSpecs()
 	if sort_specs == nil {return false}
 
@@ -298,7 +266,7 @@ _track_table_update_sort_spec :: proc(spec: ^lib.Track_Sort_Spec) -> bool {
 	return false
 }
 
-_show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
+_show_next_track_table_row :: proc(lib: library.Library, it: ^_Track_Table_Iterator) -> bool {
 	if it._pos >= it._max {
 		if !imgui.ListClipper_Step(&it._list_clipper) {
 			return false
@@ -314,7 +282,7 @@ _show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
 	it.visible = false
 	it.track_index = it._pos
 	it.track = it.tracks[it._pos]
-	track := lib.get_track_info(it.track)
+	track := library.get_track_info(lib, it.track)
 	it._pos += 1
 
 	if imgui.TableSetColumnIndex(auto_cast Track_Column.Album) {imgui.TextUnformatted(track.album)}

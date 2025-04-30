@@ -32,7 +32,7 @@ import "core:path/filepath"
 
 import imgui "libs:odin-imgui"
 
-import lib "player:library"
+import "player:library"
 import "player:signal"
 import "player:util"
 import "player:playback"
@@ -55,6 +55,13 @@ PAUSE_ICON :: ""
 
 @private
 _Layout_Name :: [64]u8
+
+@private
+Track_ID :: library.Track_ID
+@private
+Playlist_ID :: library.Playlist_ID
+@private
+Library :: library.Library
 
 Window :: enum {
 	Library,
@@ -88,7 +95,7 @@ Window_Info :: struct {
 	name: cstring,
 	internal_name: cstring,
 	category: Window_Category,
-	show_proc: proc(),
+	//show_proc: proc(),
 	show: bool,
 	flags: imgui.WindowFlags,
 	bring_to_front: bool,
@@ -98,82 +105,66 @@ window_info := [Window]Window_Info {
 	.Library = {
 		name = "Library", internal_name = "library",
 		category = .Music,
-		show_proc = _show_library_window,
 	},
 	.Navigation = {
 		name = "Navigation", internal_name = "navigation",
 		category = .Music,
-		show_proc = _show_navigation_window,
 	},
 	.Artists = {
 		name = "Artists", internal_name = "artists",
 		category = .Music,
-		show_proc = _show_artists_window,
 	},
 	.Albums = {
 		name = "Albums", internal_name = "albums",
 		category = .Music,
-		show_proc = _show_albums_window,
 	},
 	.Folders = {
 		name = "Folders", internal_name = "folders",
 		category = .Music,
-		show_proc = _show_folders_window,
 	},
 	.Genres = {
 		name = "Genres", internal_name = "genres",
 		category = .Music,
-		show_proc = _show_genres_window,
 	},
 	.Queue = {
 		name = "Queue", internal_name = "queue",
 		category = .Info,
-		show_proc = _show_queue_window,
 	},
 	.Playlist = {
 		name = "Playlist", internal_name = "playlist",
 		category = .Music,
-		show_proc = _show_selected_playlist_window,
 	},
 	.PlaylistTabs = {
 		name = "Playlists (Tabs)", internal_name = "playlist_tabs",
 		category = .Music,
-		show_proc = _show_playlist_tabs_window,
 	},
 	.Metadata = {
 		name = "Metadata", internal_name = "metadata",
 		category = .Info,
-		show_proc = _show_metadata_window,
 	},
 	.ThemeEditor = {
 		name = "Edit Theme", internal_name = "theme_editor",
 		category = .Editing,
-		show_proc = _show_theme_editor_window,
 	},
 	.ReplaceMetadata = {
 		name = "Replace Metadata", internal_name = "replace_metadata",
 		category = .Editing,
-		show_proc = _show_metadata_replacement_window,
 	},
 	.EditMetadata = {
 		name = "Edit Metadata", internal_name = "edit_metadata",
 		category = .Editing,
-		show_proc = _show_metadata_editor,
 	},
 	.PeakMeter = {
 		name = "Peak Meter", internal_name = "peak_meter",
 		category = .Visualizers,
-		show_proc = _show_peak_window,
 	},
 	.Spectrum = {
 		name = "Spectrum", internal_name = "spectrum",
 		category = .Visualizers,
-		show_proc = _show_spectrum_window,
 	},
 	.WavePreview = {
 		name = "Wave Preview", internal_name = "wave_preview",
 		category = .Visualizers,
-		show_proc = _show_wave_preview_window,
 	},
 }
 
@@ -195,13 +186,13 @@ Playlist_Group_Window :: struct {
 
 @private
 _Playlist_Window :: struct {
-	playlist_id: lib.Playlist_ID,
+	playlist_id: library.Playlist_ID,
 
 	filter: [256]u8,
-	filtered_tracks: []lib.Track_ID,
+	filtered_tracks: []library.Track_ID,
 	length_of_playlist_when_filtered: int,
 
-	sort_spec: lib.Track_Sort_Spec,
+	sort_spec: library.Track_Sort_Spec,
 	length_of_playlist_when_sorted: int,
 }
 
@@ -226,9 +217,9 @@ this: struct {
 		comment: cstring,
 	},
 
-	selection: [dynamic]lib.Track_ID,
-	selection_playlist_id: lib.Playlist_ID,
-	selected_playlist: lib.Playlist_ID,
+	selection: [dynamic]library.Track_ID,
+	selection_playlist_id: library.Playlist_ID,
+	selected_playlist: library.Playlist_ID,
 
 	show_help: bool,
 	show_preferences: bool,
@@ -258,7 +249,7 @@ this: struct {
 	//metadata_save_job: ^lib.Metadata_Save_Job,
 
 	library_window: _Playlist_Window,
-	playlist_windows: map[lib.Playlist_ID]_Playlist_Window,
+	playlist_windows: map[library.Playlist_ID]_Playlist_Window,
 }
 
 init :: proc() -> bool {
@@ -434,13 +425,14 @@ _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	}
 }
 
-@private
-_async_scan_thread_proc :: proc(_: ^thread.Thread) {
+/*@private
+_async_scan_thread_proc :: proc(thread_data: ^thread.Thread) {
 	context.logger = log.create_console_logger()
+	lib := cast(^Library) thread_data.data
 	df := &this.deferred_files
 	for f in df.files {
 		file := transmute(string) df.pool[f.offset:][:f.length]
-		lib.add_file(file)
+		library.add_file(lib, file)
 		//intrinsics.atomic_exchange(&df.files_loaded, intrinsics.atomic_add(&df.files_loaded, 1));
 		df.files_loaded += 1
 	}
@@ -461,7 +453,7 @@ _begin_async_scan :: proc() {
 	this.deferred_files.scanning = true
 	tp := thread.create(_async_scan_thread_proc)
 	thread.start(tp)
-}
+}*/
 
 /*@private
 _begin_metadata_save_job :: proc() {
@@ -473,7 +465,20 @@ _begin_metadata_save_job :: proc() {
 	}
 }*/
 
-show :: proc() {
+@private
+_begin_window :: proc(window: Window) -> bool {
+	name: [256]u8
+	info := &window_info[window]
+
+	fmt.bprint(name[:255], info.name, "###", info.internal_name, sep="")
+
+	begin := imgui.Begin(cstring(&name[0]), &window_info[window].show, info.flags)
+	if begin {return true}
+	imgui.End()
+	return false
+}
+
+show :: proc(lib: ^Library) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -507,7 +512,7 @@ show :: proc() {
 	imgui.DockSpaceOverViewport({}, nil, {})
 	imgui.PopStyleColor()
 
-	analysis.update(delta, 1.0/30.0)
+	analysis.update(lib^, delta, 1.0/30.0)
 
 	// Draw background
 	if this.background.id != nil {
@@ -544,7 +549,8 @@ show :: proc() {
 
 		if !intrinsics.atomic_load(&df.scanning) {
 			// There are tracks ready but they aren't being scanned
-			_begin_async_scan()
+			// @FixMe
+			//_begin_async_scan()
 		}
 
 		// Show the scan progress
@@ -749,7 +755,7 @@ show :: proc() {
 		}
 
 		if imgui.MenuItem(PREV_TRACK_ICON) {
-			playback.play_prev_track()
+			playback.play_prev_track(lib^)
 		}
 
 		if playback.is_paused() {
@@ -764,7 +770,7 @@ show :: proc() {
 		}
 
 		if imgui.MenuItem(NEXT_TRACK_ICON) {
-			playback.play_next_track()
+			playback.play_next_track(lib^)
 		}
 		imgui.Separator()
 			
@@ -832,7 +838,7 @@ show :: proc() {
 	// -----------------------------------------------------------------------------
 	// Show windows
 	// -----------------------------------------------------------------------------
-	for &window in window_info {
+	/*for &window in window_info {
 		if window.bring_to_front {
 			window.bring_to_front = false
 			window.show = true
@@ -849,6 +855,107 @@ show :: proc() {
 			window.show_proc()
 		}
 		imgui.End()
+	}*/
+
+	for window_id in Window {
+		switch window_id {
+			case .Library: {
+				if _begin_window(.Library) {
+					_show_library_window(lib)
+					imgui.End()
+				}
+			}
+			case .Metadata: {
+				if _begin_window(.Metadata) {
+					_show_metadata_window(lib^)
+					imgui.End()
+				}
+			}
+			case .Queue: {
+				if _begin_window(.Queue) {
+					_show_queue_window(lib)
+					imgui.End()
+				}
+			}
+			case .Navigation: {
+				if _begin_window(.Navigation) {
+					_show_navigation_window(lib)
+					imgui.End()
+				}
+			}
+			case .Artists: {
+				if _begin_window(.Artists) {
+					_show_playlist_group_window(lib^, lib.artists, &this.artists_window)
+					imgui.End()
+				}
+			}
+			case .Albums: {
+				if _begin_window(.Albums) {
+					_show_playlist_group_window(lib^, lib.albums, &this.albums_window)
+					imgui.End()
+				}
+			}
+			case .Genres: {
+				if _begin_window(.Genres) {
+					_show_playlist_group_window(lib^, lib.genres, &this.genres_window)
+					imgui.End()
+				}
+			}
+			case .Folders: {
+				if _begin_window(.Folders) {
+					_show_playlist_group_window(lib^, lib.folders, &this.folders_window)
+					imgui.End()
+				}
+			}
+			case .Playlist: {		
+				if _begin_window(.Playlist) {
+					_show_selected_playlist_window(lib)
+					imgui.End()
+				}
+			}
+			case .PlaylistTabs: {
+				if _begin_window(.PlaylistTabs) {
+					_show_playlist_tabs_window(lib)
+					imgui.End()
+				}
+			}
+			case .PeakMeter: {
+				if _begin_window(.PeakMeter) {
+					_show_peak_window()
+					imgui.End()
+				}
+			}
+			case .Spectrum: {
+				if _begin_window(.Spectrum) {
+					_show_spectrum_window()
+					imgui.End()
+				}
+			}
+			case .EditMetadata: {
+				if _begin_window(.EditMetadata) {
+					_show_metadata_editor(lib^)
+					imgui.End()
+				}
+			}
+			case .ThemeEditor: {
+				if _begin_window(.ThemeEditor) {
+					_show_theme_editor_window()
+					imgui.End()
+				}
+			}
+			case .WavePreview: {
+				if _begin_window(.WavePreview) {
+					_show_wave_preview_window()
+					imgui.End()
+				}
+			}
+			case .ReplaceMetadata: {
+				if _begin_window(.ReplaceMetadata) {
+					_show_metadata_replacement_window(lib^)
+					imgui.End()
+				}
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -859,7 +966,7 @@ show :: proc() {
 		defer imgui.EndPopup()
 
 		@static input: [128]u8
-		@static error: lib.Add_Playlist_Error
+		@static error: library.Add_Playlist_Error
 		commit := false
 
 		commit |= imgui.InputText("Name your playlist", cstring(raw_data(input[:])), 128, {.EnterReturnsTrue})
@@ -875,7 +982,7 @@ show :: proc() {
 		if commit {
 			cstr := cstring(raw_data(input[:]))
 			name := string(input[:len(cstr)])
-			_, error = lib.add_playlist(name)
+			_, error = library.add_playlist(lib, name)
 
 			if error == .None {
 				imgui.CloseCurrentPopup()
@@ -895,13 +1002,13 @@ show :: proc() {
 }
 
 @private
-_show_library_window :: proc() {
-	playlist := lib.get_default_playlist()
-	_show_playlist_track_table(playlist, &this.library_window)
+_show_library_window :: proc(lib: ^Library) {
+	playlist := &lib.library
+	_show_playlist_track_table(lib, playlist, &this.library_window)
 }
 
 @private
-_handle_select_track :: proc(playlist_id: lib.Playlist_ID, from: []lib.Track_ID, track_id: lib.Track_ID, force_no_clear := false) {
+_handle_select_track :: proc(playlist_id: Playlist_ID, from: []Track_ID, track_id: Track_ID, force_no_clear := false) {
 	if this.selection_playlist_id != playlist_id {
 		clear(&this.selection)
 		this.selection_playlist_id = playlist_id
@@ -940,14 +1047,14 @@ _handle_select_track :: proc(playlist_id: lib.Playlist_ID, from: []lib.Track_ID,
 }
 
 @private
-_show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, track_id: lib.Track_ID, selection: []lib.Track_ID) {
-	track := lib.get_track_info(track_id)
+_show_track_generic_context_menu_items :: proc(lib: ^Library, from_playlist: Playlist_ID, track_id: Track_ID, selection: []Track_ID) {
+	track := library.get_track_info(lib^, track_id)
 	if imgui.BeginMenu("Add to playlist") {
-		for &target_playlist in lib.get_playlists() {
+		for &target_playlist in lib.playlists {
 			if target_playlist.id == from_playlist {continue}
 			if imgui.MenuItem(target_playlist.name) {
-				lib.playlist_add_tracks(&target_playlist, selection)
-				lib.save_playlist(target_playlist.id)
+				library.playlist_add_tracks(&target_playlist, selection)
+				library.save_playlist(lib, target_playlist.id)
 			}
 		}
 		imgui.EndMenu()
@@ -955,17 +1062,17 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Artist") {
-			this.artists_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.artist))
+			this.artists_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.artist))
 			bring_window_to_front(.Artists)
 		}
 
 		if imgui.MenuItem("Album") {
-			this.albums_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.album))
+			this.albums_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.album))
 			bring_window_to_front(.Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
-			this.genres_window.selected_group_id = lib.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
+			this.genres_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
 			bring_window_to_front(.Genres)
 		}
 
@@ -974,7 +1081,7 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 }
 
 @private
-_show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Window, no_remove := false) {
+_show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, state: ^_Playlist_Window, no_remove := false) {
 	want_remove_selection: bool
 	apply_filter: bool
 	use_filter: bool
@@ -991,7 +1098,7 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 
 		if apply_filter && use_filter {
 			filter := string(cstring(&state.filter[0]))
-			state.filtered_tracks = lib.filter_tracks(playlist.tracks[:], filter)
+			state.filtered_tracks = library.filter_tracks(lib^, playlist.tracks[:], filter)
 			state.length_of_playlist_when_filtered = len(playlist.tracks)
 		}
 	}
@@ -1008,12 +1115,12 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 		return
 	}
 
-	if _begin_track_table(&table, "##tracks") {
+	if _begin_track_table(lib^, &table, "##tracks") {
 		if _track_table_update_sort_spec(&state.sort_spec) {
-			lib.sort_tracks(playlist.tracks[:], state.sort_spec)
+			library.sort_tracks(lib^, playlist.tracks[:], state.sort_spec)
 		}
 
-		for _show_next_track_table_row(&table) {
+		for _show_next_track_table_row(lib^, &table) {
 			if !table.visible {continue}
 
 			track := table.track
@@ -1026,19 +1133,19 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 			}
 
 			if middle_clicked {
-				playback.play_playlist(playlist^, table.track)
+				playback.play_playlist(lib^, playlist^, table.track)
 			}
 
 			if imgui.BeginPopupContextItem() {
 				_handle_select_track(playlist.id, table.tracks, table.track, true)
-				_show_track_generic_context_menu_items(playlist.id, track, table.selection)
+				_show_track_generic_context_menu_items(lib, playlist.id, track, table.selection)
 
 				if imgui.MenuItem("Add to queue") {
 					playback.append_to_queue(this.selection[:])
 				}
 
 				if imgui.MenuItem("Play") {
-					playback.play_track_array(this.selection[:])
+					playback.play_track_array(lib^, this.selection[:])
 				}
 
 				if !no_remove {
@@ -1055,29 +1162,29 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Wi
 		_end_track_table(&table)
 
 		if want_remove_selection {
-			lib.playlist_remove_tracks(playlist, table.selection)
-			lib.save_playlist(playlist.id)
+			library.playlist_remove_tracks(playlist, table.selection)
+			library.save_playlist(lib, playlist.id)
 		}
 	}
 }
 
 @private
-_show_queue_window :: proc() {
-	@static sort_spec: lib.Track_Sort_Spec
+_show_queue_window :: proc(lib: ^Library) {
+	@static sort_spec: library.Track_Sort_Spec
 	want_remove_selection: bool
 
-	queue_id := max(lib.Playlist_ID)
+	queue_id := max(Playlist_ID)
 	table := _Track_Table_Iterator {
 		tracks = playback.get_queue(),
 		selection = this.selection_playlist_id == queue_id ? this.selection[:] : nil,
 	}
 
-	if _begin_track_table(&table, "##queue") {
+	if _begin_track_table(lib^, &table, "##queue") {
 		if _track_table_update_sort_spec(&sort_spec) {
-			playback.sort_queue(sort_spec)
+			playback.sort_queue(lib^, sort_spec)
 		}
 
-		for _show_next_track_table_row(&table) {
+		for _show_next_track_table_row(lib^, &table) {
 			if !table.visible {continue}
 			track := table.track
 			left_clicked := imgui.IsItemClicked(.Left)
@@ -1089,11 +1196,11 @@ _show_queue_window :: proc() {
 			}
 
 			if middle_clicked {
-				playback.play_track_at_position(table._pos)
+				playback.play_track_at_position(lib^, table._pos)
 			}
 
 			if imgui.BeginPopupContextItem() {
-				_show_track_generic_context_menu_items(queue_id, track, table.selection)
+				_show_track_generic_context_menu_items(lib, queue_id, track, table.selection)
 				imgui.Separator()
 
 				if imgui.MenuItem("Remove") {
@@ -1109,10 +1216,10 @@ _show_queue_window :: proc() {
 }
 
 @private
-_show_selected_playlist_window :: proc() {
+_show_selected_playlist_window :: proc(lib: ^Library) {
 	@static state: _Playlist_Window
 
-	playlist := lib.get_playlist(this.selected_playlist)
+	playlist := library.get_playlist(lib, this.selected_playlist)
 	if this.selected_playlist == 0 || playlist == nil {
 		imgui.TextDisabled("No playlist selected")
 		return
@@ -1120,14 +1227,14 @@ _show_selected_playlist_window :: proc() {
 			
 	imgui.TextUnformatted(playlist.name)
 	imgui.Separator()
-	_show_playlist_track_table(playlist, &state)
+	_show_playlist_track_table(lib, playlist, &state)
 }
 
 @private
-_show_navigation_window :: proc() {
-	playlists := lib.get_playlists()
+_show_navigation_window :: proc(lib: ^Library) {
+	playlists := lib.playlists[:]
 	queued_playlist_id := playback.get_queued_playlist()
-	delete_playlist_id: lib.Playlist_ID
+	delete_playlist_id: Playlist_ID
 
 	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner
 
@@ -1155,13 +1262,13 @@ _show_navigation_window :: proc() {
 			}
 		}
 		
-		row("Library", .Library, len(lib.get_default_playlist().tracks))
+		row("Library", .Library, len(lib.library.tracks))
 		if imgui.IsItemClicked(.Middle) {
-			playback.play_playlist(lib.get_default_playlist()^)
+			playback.play_playlist(lib^, lib.library)
 		}
-		row("Artists", .Artists, len(lib.get_artists().playlists))
-		row("Albums", .Albums, len(lib.get_albums().playlists))
-		row("Folders", .Folders, len(lib.get_folders().playlists))
+		row("Artists", .Artists, len(lib.artists.playlists))
+		row("Albums", .Albums, len(lib.albums.playlists))
+		row("Folders", .Folders, len(lib.folders.playlists))
 	}
 
 	imgui.SeparatorText("Your Playlists")
@@ -1207,12 +1314,12 @@ _show_navigation_window :: proc() {
 	}
 
 	if delete_playlist_id != 0 {
-		lib.delete_playlist(delete_playlist_id)
+		library.delete_playlist(lib, delete_playlist_id)
 	}
 }
 
 @private
-_show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_Group_Window) {
+_show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, state: ^Playlist_Group_Window) {
 	if !imgui.BeginTable(
 		"##layout_table", 2, 
 		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchSame|imgui.TableFlags_NoHostExtendX
@@ -1230,14 +1337,14 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 			}
 		}
 
-		action := _show_playlist_list(list^, index_of_queued_playlist)
-		lib.update_playlist_list_filter(list, action.filter, action.filter_hash)
+		action := _show_playlist_list(list, index_of_queued_playlist)
+		//lib.update_playlist_list_filter(list, action.filter, action.filter_hash)
 
-		if action.sort_spec != nil {
+		/*if action.sort_spec != nil {
 			list.sort_metric = action.sort_spec.?.metric
 			list.sort_order = action.sort_spec.?.order
 			lib.sort_playlist_list(list)
-		}
+		}*/
 
 		if action.select_playlist != nil {
 			state.selected_group_id = list.playlists[action.select_playlist.?].group_id
@@ -1245,7 +1352,7 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 
 		if action.play_playlist != nil {
 			playlist := list.playlists[action.play_playlist.?]
-			playback.play_playlist(playlist)
+			playback.play_playlist(lib, playlist)
 		}
 	}
 		
@@ -1253,54 +1360,50 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 		@static playlist_state: _Playlist_Window
 
 		window_focused := imgui.IsWindowFocused()
-		playlist: ^lib.Playlist
+		playlist: library.Playlist
+		found_playlist: bool
 		
 		for &p in list.playlists {
 			if p.group_id == state.selected_group_id.? {
-				playlist = &p
+				playlist = p
+				found_playlist = true
 				break
 			}
 		}
 		
-		if playlist == nil {
+		if !found_playlist {
 			state.selected_group_id = nil
 			return
 		}
 		
 		imgui.Separator()
-		_show_playlist_track_table(playlist, &playlist_state, no_remove=true)
+		//_show_playlist_track_table(playlist, &playlist_state, no_remove=true)
+
+		table := _Track_Table_Iterator {
+			tracks = playlist.tracks[:],
+		}
+
+		if _begin_track_table(lib, &table, "##playlist_group_tracks") {
+			for _show_next_track_table_row(lib, &table) {
+				if imgui.IsItemClicked(.Middle) {
+					playback.play_playlist(lib, playlist, table.track)
+				}
+			}
+
+			_end_track_table(&table)
+		}
 	}
 }
 
 @private
-_show_albums_window :: proc() {
-	_show_playlist_group_window(lib.get_albums(), &this.albums_window)
-}
-
-@private
-_show_artists_window :: proc() {
-	_show_playlist_group_window(lib.get_artists(), &this.artists_window)
-}
-
-@private
-_show_folders_window :: proc() {
-	_show_playlist_group_window(lib.get_folders(), &this.folders_window)
-}
-
-@private
-_show_genres_window :: proc() {
-	_show_playlist_group_window(lib.get_genres(), &this.genres_window)
-}
-
-@private
-_show_playlist_tabs_window :: proc() {
-	playlists := lib.get_playlists()
+_show_playlist_tabs_window :: proc(lib: ^Library) {
+	playlists := lib.playlists[:]
 	@static state: _Playlist_Window
 
 	if imgui.BeginTabBar("##playlists") {
 		for &playlist in playlists {
 			if imgui.BeginTabItem(playlist.name) {
-				_show_playlist_track_table(&playlist, &state)
+				_show_playlist_track_table(lib, &playlist, &state)
 				imgui.EndTabItem()
 			}
 		}
@@ -1309,8 +1412,8 @@ _show_playlist_tabs_window :: proc() {
 }
 
 @private
-_show_metadata_window :: proc() {
-	@static loaded_track: lib.Track_ID
+_show_metadata_window :: proc(lib: Library) {
+	@static loaded_track: Track_ID
 	playing_track := playback.get_playing_track()
 
 	if loaded_track != playing_track {
@@ -1327,8 +1430,8 @@ _show_metadata_window :: proc() {
 		}
 
 		if playing_track != 0 {
-			this.metadata.thumbnail, _ = lib.load_track_thumbnail(playing_track)
-			this.metadata.comment = lib.load_track_comment(playing_track)
+			this.metadata.thumbnail, _ = library.load_track_thumbnail(lib, playing_track)
+			this.metadata.comment = library.load_track_comment(lib, playing_track)
 		}
 	}
 
@@ -1343,22 +1446,23 @@ _show_metadata_window :: proc() {
 		defer imgui.PopStyleVar()
 
 		imgui.ImageButton("##thumbnail", this.metadata.thumbnail.id, {avail_size.x, avail_size.x})
-		if imgui.BeginPopupContextItem() {
-			_show_track_base_context_menu(0, playing_track)
+		// @TODO Add right-click context menu
+		/*if imgui.BeginPopupContextItem() {
+			_show_track_base_context_menu(lib, 0, playing_track)
 			imgui.EndPopup()
-		}
+		}*/
 	}
 	else {
 		imgui.InvisibleButton("##thumbnail", {avail_size.x, avail_size.x})
-		if imgui.BeginPopupContextItem() {
+		/*if imgui.BeginPopupContextItem() {
 			_show_track_base_context_menu(0, playing_track)
 			imgui.EndPopup()
-		}
+		}*/
 	}
 
 	imgui.Separator()
 
-	track := lib.get_track_info(playing_track)
+	track := library.get_track_info(lib, playing_track)
 	hours, minutes, seconds := util.split_seconds(cast(i32) track.duration_seconds)
 
 	if imgui.BeginTable("Metadata Table", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
@@ -1403,7 +1507,7 @@ _show_metadata_window :: proc() {
 }
 
 @private
-_show_metadata_replacement_window :: proc() {
+_show_metadata_replacement_window :: proc(lib: Library) {
 	@static replace_with: [128]u8
 	@static to_replace: [128]u8
 
@@ -1432,20 +1536,20 @@ _show_metadata_replacement_window :: proc() {
 	imgui.Checkbox("In selection", &state.in_selection)
 
 	if imgui.Button("Replace metadata") {
-		mask: bit_set[lib.Metadata_Component]
+		mask: bit_set[library.Metadata_Component]
 		if state.replace_title {mask |= {.Title}}
 		if state.replace_artist {mask |= {.Artist}}
 		if state.replace_album {mask |= {.Album}}
 		if state.replace_genre {mask |= {.Genre}}
 
-		filter: []lib.Track_ID = state.in_selection ? this.selection[:] : nil		
-		repl := lib.Metadata_Replacement {
+		filter: []Track_ID = state.in_selection ? this.selection[:] : nil
+		repl := library.Metadata_Replacement {
 			replace = string(cstring(&to_replace[0])),
 			with = string(cstring(&replace_with[0])),
 			replace_mask = {.Artist},
 		}
 
-		replaced_count := lib.perform_metadata_replacement(repl, filter)
+		replaced_count := library.perform_metadata_replacement(lib, repl, filter)
 		if replaced_count > 0 {
 			message_buf: [1024]u8
 			message := fmt.bprint(
@@ -1747,156 +1851,10 @@ _show_help_window :: proc() {
 }
 
 // =============================================================================
-// Selection
-// =============================================================================
-
-@private
-_remove_selection_from_playlist :: proc(playlist: ^lib.Playlist) {
-	for track in this.selection {
-		index, found := slice.linear_search(playlist.tracks[:], track)
-		if !found {continue}
-		ordered_remove(&playlist.tracks, index)
-	}
-
-	lib.playlist_make_dirty(playlist)
-}
-
-@private
-_add_selection_to_playlist :: proc(playlist: ^lib.Playlist) {
-	lib.playlist_add_tracks(playlist, this.selection[:])
-}
-
-@private
-_is_track_selected :: proc(track: lib.Track_ID) -> bool {
-	return slice.contains(this.selection[:], track)
-}
-
-@private
-_add_track_to_selection :: proc(track: lib.Track_ID) {
-	if (!_is_track_selected(track)) {
-		append(&this.selection, track)
-	}
-}
-
-@private
-_clear_selection :: proc() {
-	resize(&this.selection, 0)
-}
-
-@private
-_extend_track_selection_to :: proc(playlist: lib.Playlist, track_index: int, deselect_others: bool) {
-	for t, index in playlist.tracks {
-		if index == track_index {continue}
-
-		if _is_track_selected(t) {
-			if deselect_others {
-				_clear_selection()
-			}
-
-			if index < track_index {
-				for i in index..=track_index {
-					_add_track_to_selection(playlist.tracks[i])
-				}
-				return
-			}
-			else {
-				for i in track_index..=index {
-					_add_track_to_selection(playlist.tracks[i])
-				}
-				return
-			}
-		}
-	}
-
-	if deselect_others {
-		_clear_selection()
-	}
-
-	for i in 0..=track_index {
-		_add_track_to_selection(playlist.tracks[i])
-	}
-}
-
-// Takes a slice of indices of tracks that passed the filter
-@private
-_extend_track_selection_with_filter_to :: proc(
-	playlist: lib.Playlist, track_index_in_playlist: int, deselect_others: bool, filtered_tracks: []int,
-) {
-	index_of_track: int
-
-	for track_index, filter_index in filtered_tracks {
-		if track_index == track_index_in_playlist {
-			index_of_track = filter_index
-			break
-		}
-	}
-
-	for track_index, filter_index in filtered_tracks {
-		if filter_index == index_of_track {continue}
-		t := playlist.tracks[track_index]
-
-		if _is_track_selected(t) {
-			if deselect_others {
-				_clear_selection()
-			}
-
-			if filter_index < index_of_track {
-				for i in filter_index..=index_of_track {
-					_add_track_to_selection(playlist.tracks[filtered_tracks[i]])
-				}
-				return
-			}
-			else {
-				for i in index_of_track..=filter_index {
-					_add_track_to_selection(playlist.tracks[filtered_tracks[i]])
-				}
-				return
-			}
-		}
-	}
-
-	if deselect_others {
-		_clear_selection()
-	}
-
-	for i in 0..=index_of_track {
-		_add_track_to_selection(playlist.tracks[filtered_tracks[i]])
-	}
-}
-
-@private
-_select_whole_playlist :: proc(playlist: lib.Playlist) {
-	resize(&this.selection, len(playlist.tracks))
-	copy(this.selection[:], playlist.tracks[:])
-}
-
-@private
-_play_selection :: proc() {
-	playback.play_track_array(this.selection[:])
-}
-
-@private
-_refresh_metadata_of_selected_tracks :: proc() {
-	for t in this.selection {
-		lib.refresh_track_metadata(t)
-	}
-}
-
-@private
-_add_selection_to_queue :: proc() {
-	playback.append_to_queue(this.selection[:])
-}
-
-@private
-_get_selection_size :: proc() -> int {
-	return len(this.selection)
-}
-
-// =============================================================================
 // Action handling
 // =============================================================================
 
-@private
+/*@private
 _get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dynamic]lib.Track_ID) {
 	for track in playlist.tracks {
 		if _is_track_selected(track) {
@@ -1905,7 +1863,7 @@ _get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dy
 	}
 
 	return tracks
-}
+}*/
 
 // Handles behaviour that is shared across all playlists
 /*@private
@@ -2122,7 +2080,7 @@ _imgui_settings_handler_write_proc :: proc "c" (
 // Metadata editor
 // -----------------------------------------------------------------------------
 @private
-_show_metadata_editor :: proc() {
+_show_metadata_editor :: proc(lib: Library) {
 	if len(this.selection) == 0 {
 		imgui.TextDisabled("No track selected")
 		return
@@ -2169,18 +2127,18 @@ _show_metadata_editor :: proc() {
 
 	if len(this.selection) == 1 {
 		path_buf: [384]u8
-		imgui.TextDisabled("Editing track %s", lib.get_track_path_cstring(this.selection[0], path_buf[:]))
+		imgui.TextDisabled("Editing track %s", library.get_track_path_cstring(lib, this.selection[0], path_buf[:]))
 
 		if imgui.BeginTable("##metadata_editor_table", 2, table_flags) {
 			imgui.TableSetupColumn("Name", {}, 0.3)
 			imgui.TableSetupColumn("Value", {}, 0.7)
 	
-			track := lib.get_track_info(this.selection[0])
+			track := library.get_track_info(lib, this.selection[0])
 
-			string_row(track.title, lib.MAX_TRACK_TITLE_LENGTH+1, "Title")
-			string_row(track.artist, lib.MAX_TRACK_ARTIST_LENGTH+1, "Artist")
-			string_row(track.album, lib.MAX_TRACK_ALBUM_LENGTH+1, "Album")
-			string_row(track.genre, lib.MAX_TRACK_GENRE_LENGTH+1, "Genre")
+			string_row(track.title, library.MAX_TRACK_TITLE_LENGTH+1, "Title")
+			string_row(track.artist, library.MAX_TRACK_ARTIST_LENGTH+1, "Artist")
+			string_row(track.album, library.MAX_TRACK_ALBUM_LENGTH+1, "Album")
+			string_row(track.genre, library.MAX_TRACK_GENRE_LENGTH+1, "Genre")
 			int_row(&track.year, "Year")
 			int_row(&track.track_number, "Track No.")
 	
@@ -2198,10 +2156,10 @@ _show_metadata_editor :: proc() {
 
 		@static
 		changes: struct {
-			title: [lib.MAX_TRACK_TITLE_LENGTH+1]u8,
-			artist: [lib.MAX_TRACK_ARTIST_LENGTH+1]u8,
-			album: [lib.MAX_TRACK_ALBUM_LENGTH+1]u8,
-			genre: [lib.MAX_TRACK_GENRE_LENGTH+1]u8,
+			title: [library.MAX_TRACK_TITLE_LENGTH+1]u8,
+			artist: [library.MAX_TRACK_ARTIST_LENGTH+1]u8,
+			album: [library.MAX_TRACK_ALBUM_LENGTH+1]u8,
+			genre: [library.MAX_TRACK_GENRE_LENGTH+1]u8,
 			year: int,
 			track: int,
 
@@ -2213,10 +2171,10 @@ _show_metadata_editor :: proc() {
 			imgui.TableSetupColumn("Value", {}, 0.6)
 			imgui.TableSetupColumn("Overwrite", {}, 0.1)
 
-			string_row(cstring(&changes.title[0]), lib.MAX_TRACK_TITLE_LENGTH+1, "Title", &changes.enable_title)
-			string_row(cstring(&changes.artist[0]), lib.MAX_TRACK_ARTIST_LENGTH+1, "Artist", &changes.enable_artist)
-			string_row(cstring(&changes.album[0]), lib.MAX_TRACK_ALBUM_LENGTH+1, "Album", &changes.enable_album)
-			string_row(cstring(&changes.genre[0]), lib.MAX_TRACK_GENRE_LENGTH+1, "Genre", &changes.enable_genre)
+			string_row(cstring(&changes.title[0]), library.MAX_TRACK_TITLE_LENGTH+1, "Title", &changes.enable_title)
+			string_row(cstring(&changes.artist[0]), library.MAX_TRACK_ARTIST_LENGTH+1, "Artist", &changes.enable_artist)
+			string_row(cstring(&changes.album[0]), library.MAX_TRACK_ALBUM_LENGTH+1, "Album", &changes.enable_album)
+			string_row(cstring(&changes.genre[0]), library.MAX_TRACK_GENRE_LENGTH+1, "Genre", &changes.enable_genre)
 			int_row(&changes.year, "Year", &changes.enable_year)
 			int_row(&changes.track, "Track No.", &changes.enable_track)
 	
@@ -2226,7 +2184,7 @@ _show_metadata_editor :: proc() {
 		if imgui.Button("Apply") {
 			if util.message_box("Apply Changes?", .YesNo, "Apply these metadata changes to all selected tracks? This cannot be undone.") {
 				for track_id in this.selection {
-					track := lib.get_raw_track_info_pointer(track_id)
+					track := library.get_raw_track_info_pointer(lib, track_id)
 					if changes.enable_title {track.title = changes.title}
 					if changes.enable_artist {track.artist = changes.artist}
 					if changes.enable_album {track.album = changes.album}

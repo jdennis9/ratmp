@@ -170,9 +170,10 @@ load :: proc() {
 		}
 
 		for index in section.numbers {
-			value_string := section_map[NUMBER_INFO[index].name] or_continue
+			info := NUMBER_INFO[index]
+			value_string := section_map[info.name] or_continue
 			parsed := strconv.parse_i64(value_string) or_continue
-			prefs.numbers[index] = int(parsed)
+			prefs.numbers[index] = clamp(int(parsed), info.min, info.max)
 		}
 
 		for index in section.choices {

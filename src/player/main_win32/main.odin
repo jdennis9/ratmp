@@ -98,7 +98,7 @@ signal_post_callback :: proc(sig: signal.Signal) {
 
 @private
 _media_controls_signal_handler :: proc(sig: signal.Signal) {
-	if sig == .PlaybackStopped {
+	/*if sig == .PlaybackStopped {
 		media_controls.set_status(.Stopped)
 	}
 	else if sig == .TrackChanged {
@@ -113,18 +113,18 @@ _media_controls_signal_handler :: proc(sig: signal.Signal) {
 		else {
 			media_controls.set_status(.Playing)
 		}
-	}
+	}*/
 }
 
 signal_handler :: proc(sig: signal.Signal) {
-	if sig == .TrackChanged {
+	/*if sig == .TrackChanged {
 		track_id := playback.get_playing_track()
 		track := library.get_track_info(track_id)
 
 		buf: [256]u8
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
 	}
-	else if sig == .PlaybackStopped {
+	else */if sig == .PlaybackStopped {
 		buf: [256]u8
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION))
 	}
@@ -140,6 +140,10 @@ signal_handler :: proc(sig: signal.Signal) {
 }
 
 main :: proc() {
+	run()
+}
+
+run :: proc() -> bool {
 	when ODIN_DEBUG {
 		context.logger = log.create_console_logger()
 	}
@@ -197,7 +201,7 @@ main :: proc() {
 	add_tray_icon()
 	defer remove_tray_icon()
 	
-	com.init()
+	com.init() or_return
 	defer com.shutdown()
 
 	// Flush signal events
@@ -240,6 +244,8 @@ main :: proc() {
 			visible = dx11.present()
 		}
 	}
+
+	return true
 }
 
 win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM) -> int {

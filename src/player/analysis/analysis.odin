@@ -29,7 +29,7 @@ import kiss "bindings:kissfft"
 
 import "player:playback"
 import "player:decoder"
-import lib "player:library"
+import "player:library"
 
 PEAK_ROUGHNESS :: 15
 SLOW_PEAK_ROUGHNESS :: 2
@@ -55,7 +55,7 @@ Waveform_Preview :: struct {
 	output: [dynamic]f32,
 	out_count: int,
 	want_cancel: bool,
-	track: lib.Track_ID,
+	track: library.Track_ID,
 	thread: ^thread.Thread,
 	lock: sync.Mutex,
 }
@@ -74,7 +74,7 @@ this: struct {
 	fft_cfg_frame_count: int,
 }
 
-update :: proc(delta: f32, window_length: f32) {
+update :: proc(lib: library.Library, delta: f32, window_length: f32) {
 	playback.update_output_copy_buffer(&this.buffer)
 	view := playback.get_output_buffer_view(&this.buffer, int(window_length*f32(this.buffer.samplerate)))
 	
@@ -144,7 +144,7 @@ update :: proc(delta: f32, window_length: f32) {
 			
 			path_buf: [512]u8
 			data.track = track
-			path := lib.get_track_path(track, path_buf[:])
+			path := library.get_track_path(lib, track, path_buf[:])
 
 			if decoder.open(&data.dec, path) {
 				data.thread = thread.create_and_start(_waveform_preview_thread_proc)
