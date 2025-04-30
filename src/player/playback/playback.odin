@@ -29,7 +29,7 @@ import "player:library"
 import "player:audio"
 import "player:decoder"
 import "player:util"
-import "player:prefs"
+import "player:config"
 
 @private
 Library :: library.Library
@@ -228,7 +228,7 @@ stop :: proc(state: ^State) {
 
 toggle_shuffle :: proc(state: ^State) {
 	state.shuffle = !state.shuffle
-	prefs.set_property("playback_shuffle", state.shuffle)
+	config.set_property("playback_shuffle", state.shuffle)
 }
 
 play_track :: proc(state: ^State, lib: library.Library, track: library.Track_ID) -> bool {

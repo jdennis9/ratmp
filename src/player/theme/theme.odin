@@ -29,7 +29,7 @@ import imgui "libs:odin-imgui"
 
 import "player:system_paths"
 import "player:util"
-import "player:prefs"
+import "player:config"
 
 Color :: enum {
 	PlayingHighlight,
@@ -62,7 +62,8 @@ _set_defaults :: proc() {
 	for col in Color {custom_colors[col] = custom_color_info[col].default}
 }
 
-init :: proc() {
+init :: proc(prefs_arg: config.Preferences) {
+	prefs := prefs_arg
 	_set_defaults()
 	theme_folder_path = filepath.join({system_paths.DATA_DIR, "themes"})
 
@@ -72,7 +73,7 @@ init :: proc() {
 
 	refresh_themes()
 
-	load(prefs.get_string(.Theme))
+	load(config.get_string(&prefs, .Theme))
 
 	style := imgui.GetStyle()
 	style.FrameBorderSize = 1

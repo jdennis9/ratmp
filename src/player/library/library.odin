@@ -279,8 +279,7 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 	return
 }
 
-@private
-_save_library :: proc(lib: Library, filename: string) {
+save_to_file :: proc(lib: Library, filename: string) {
 	write_kv_pair :: util.json_write_kv_pair
 
 	file, open_error := util.overwrite_file(filename)

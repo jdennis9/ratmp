@@ -33,12 +33,12 @@ import "core:path/filepath"
 
 import imgui "libs:odin-imgui"
 
+import "player:config"
 import "player:library"
 import "player:signal"
 import "player:util"
 import "player:playback"
 import "player:video"
-import "player:prefs"
 import "player:theme"
 import "player:drag_drop"
 import "player:analysis"
@@ -340,22 +340,22 @@ destroy :: proc(ui: State) {
 }
 
 @private
-_load_fonts :: proc() {
+_load_fonts :: proc(prefs: ^config.Preferences) {
 	@static loaded_font: [512]u8
 	@static loaded_font_size: int
 	@static loaded_icon_size: int
 
 	io := imgui.GetIO()
 
-	font_path := cstring(raw_data(prefs.prefs.strings[.Font][:]))
+	font_path := cstring(raw_data(prefs.strings[.Font][:]))
 	log.debug("Font path:", font_path)
 	when ODIN_OS == .Windows {
 		if font_path == "" || !os.exists(string(font_path)) {
 			font_path = "C:\\Windows\\Fonts\\calibrib.ttf"
 		}
 	}
-	font_size := prefs.prefs.numbers[.FontSize]
-	icon_size := prefs.prefs.numbers[.IconSize]
+	font_size := prefs.numbers[.FontSize]
+	icon_size := prefs.numbers[.IconSize]
 
 	if cstring(&loaded_font[0]) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
 		return
@@ -402,14 +402,14 @@ _load_fonts :: proc() {
 	loaded_icon_size = icon_size
 }
 
-apply_prefs :: proc(ui: ^State) {
+apply_prefs :: proc(ui: ^State, prefs: ^config.Preferences) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
 	
 	// Load background
 	{
 		@static loaded_background: [512]u8
-		path := prefs.get_string(.Background)
+		path := config.get_string(prefs, .Background)
 
 		if string(cstring(&loaded_background[0])) != path {
 			video.impl.destroy_texture(ui.background)
@@ -424,10 +424,10 @@ apply_prefs :: proc(ui: ^State) {
 		}
 	}
 
-	_load_fonts()
+	_load_fonts(prefs)
 
 	// Load default theme
-	theme.load(prefs.get_string(.Theme))
+	theme.load(config.get_string(prefs, .Theme))
 }
 
 /*@private
@@ -557,7 +557,7 @@ _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	return false
 }
 
-show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
+show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preferences) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -675,19 +675,13 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	if imgui.IsKeyPressed(.F1) {
 		ui.show_help = !ui.show_help
 	}
-
-	if imgui.IsKeyChordPressed(cast(i32) (imgui.Key.R | imgui.Key.ImGuiMod_Shift | imgui.Key.ImGuiMod_Ctrl)) {
-		prefs.load()
-		signal.post(.ApplyPrefs)
-	}
-
 	
 	// -----------------------------------------------------------------------------
 	// Preferences
 	// -----------------------------------------------------------------------------
 	if ui.show_preferences {
 		if imgui.Begin("Preferences", &ui.show_preferences) {
-			_show_preferences_window(pb)
+			_show_preferences_window(prefs)
 		}
 		imgui.End()
 	}
@@ -831,15 +825,15 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 		// Mini visualizer
 		// -----------------------------------------------------------------------------
 		{
-			use_spectrum := prefs.get_property("ui_prefer_spectrum").(bool) or_else false
+			use_spectrum := config.get_property("ui_prefer_spectrum").(bool) or_else false
 			if use_spectrum {
 				if _show_spectrum_widget("##spectrum", {100, imgui.GetFrameHeight()}) {
-					prefs.set_property("ui_prefer_spectrum", false)
+					config.set_property("ui_prefer_spectrum", false)
 				}
 			}
 			else {
 				if _show_peak_meter_widget("##peak_meter", {100, 0}) {
-					prefs.set_property("ui_prefer_spectrum", true)
+					config.set_property("ui_prefer_spectrum", true)
 				}
 			}
 			imgui.Separator()
@@ -1692,16 +1686,16 @@ _show_theme_editor_window :: proc(window: ^_Window_State) {
 }
 
 @private
-_show_preferences_window :: proc(pb: ^Playback) {
-	path_input_row :: proc(id: prefs.StringID, str_id: cstring, name: cstring) -> bool {
-		buffer := prefs.prefs.strings[id][:]
+_show_preferences_window :: proc(prefs: ^config.Preferences) {
+	path_input_row :: proc(prefs: ^config.Preferences, id: config.StringID, str_id: cstring, name: cstring) -> bool {
+		buffer := prefs.strings[id][:]
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
 		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		commit := imgui.InputText(str_id, cstring(raw_data(buffer)), len(prefs.String_Buffer))
+		commit := imgui.InputText(str_id, cstring(raw_data(buffer)), len(config.String_Buffer))
 		imgui.TableSetColumnIndex(2)
 		if imgui.Button("Browse") {
 			_, file_picked := util.open_file_dialog(buffer)
@@ -1712,8 +1706,8 @@ _show_preferences_window :: proc(pb: ^Playback) {
 		return commit
 	}
 
-	number_input_row :: proc(id: prefs.NumberID, str_id: cstring, name: cstring) -> (commit: bool) {
-		value := cast(i32) prefs.prefs.numbers[id]
+	number_input_row :: proc(prefs: ^config.Preferences, id: config.NumberID, str_id: cstring, name: cstring) -> (commit: bool) {
+		value := cast(i32) prefs.numbers[id]
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
@@ -1722,16 +1716,16 @@ _show_preferences_window :: proc(pb: ^Playback) {
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 		commit |= imgui.DragInt(
 			str_id, &value, 0.1,
-			auto_cast prefs.NUMBER_INFO[id].min,
-			auto_cast prefs.NUMBER_INFO[id].max
+			auto_cast config.NUMBER_INFO[id].min,
+			auto_cast config.NUMBER_INFO[id].max
 		)
 		imgui.PopID()
-		if commit {prefs.prefs.numbers[id] = cast(int) value}
+		if commit {prefs.numbers[id] = cast(int) value}
 		return
 	}
 
-	string_choice_row :: proc(id: prefs.StringID, choices: []cstring, name: cstring) -> (commit: bool) {
-		value := prefs.prefs.strings[id][:]
+	string_choice_row :: proc(prefs: ^config.Preferences, id: config.StringID, choices: []cstring, name: cstring) -> (commit: bool) {
+		value := prefs.strings[id][:]
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
@@ -1751,9 +1745,9 @@ _show_preferences_window :: proc(pb: ^Playback) {
 		return
 	}
 
-	choice_row :: proc(id: prefs.ChoiceID, name: cstring) -> (commit: bool) {
-		info := prefs.CHOICE_INFO[id]
-		value := prefs.prefs.choices[id]
+	choice_row :: proc(prefs: ^config.Preferences, id: config.ChoiceID, name: cstring) -> (commit: bool) {
+		info := config.CHOICE_INFO[id]
+		value := prefs.choices[id]
 		current_choice_name: cstring
 
 		for choice in info.values {
@@ -1772,7 +1766,7 @@ _show_preferences_window :: proc(pb: ^Playback) {
 		if imgui.BeginCombo("##combo", current_choice_name) {
 			for choice in info.values {
 				if imgui.MenuItem(choice.name) {
-					prefs.prefs.choices[id] = choice.value
+					prefs.choices[id] = choice.value
 					commit = true
 				}
 			}
@@ -1844,32 +1838,26 @@ _show_preferences_window :: proc(pb: ^Playback) {
 
 	changes := false
 
-	/*if begin_table("Audio") {
-		changes |= select_device_row(pb)
-		end_table()
-	}*/
-
 	if begin_table("UI") {
-		changes |= path_input_row(.Background, "##background", "Background")
-		changes |= path_input_row(.Font, "##font", "Font")
-		changes |= number_input_row(.FontSize, "##font_size", "Font size")
-		changes |= number_input_row(.IconSize, "##icon_size", "Icon size")
-		changes |= string_choice_row(.Theme, theme.get_list(), "Theme")
-		changes |= choice_row(.ClosePolicy, "Close policy")
+		changes |= path_input_row(prefs, .Background, "##background", "Background")
+		changes |= path_input_row(prefs, .Font, "##font", "Font")
+		changes |= number_input_row(prefs, .FontSize, "##font_size", "Font size")
+		changes |= number_input_row(prefs, .IconSize, "##icon_size", "Icon size")
+		changes |= string_choice_row(prefs, .Theme, theme.get_list(), "Theme")
+		changes |= choice_row(prefs, .ClosePolicy, "Close policy")
 		end_table()
 	}
 	
 	when ODIN_OS == .Windows {
 		if begin_table("Windows") {
-			changes |= choice_row(.EnableWindowsMediaControls, "Enable Windows media controls")
+			changes |= choice_row(prefs, .EnableWindowsMediaControls, "Enable Windows media controls")
 			imgui.SetItemTooltip("(Requires restart)")
 			end_table()
 		}
 	}
 
 	if changes {
-		prefs.save()
-		signal.post(.ApplyPrefs)
+		prefs.dirty = true
 	}
 }
 

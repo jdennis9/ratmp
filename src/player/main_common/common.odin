@@ -23,7 +23,7 @@ import "core:sync"
 import imgui "libs:odin-imgui"
 
 import "player:system_paths"
-import "player:prefs"
+import "player:config"
 import "player:theme"
 import "player:library"
 import "player:ui"
@@ -32,14 +32,21 @@ import "player:playback"
 import "player:signal"
 import "player:audio"
 
-state: struct {
+LIBRARY_PATH :: "library.json"
+CONFIG_PATH :: "config.ini"
+
+State :: struct {
 	ctx: runtime.Context,
 	library: library.Library,
 	ui: ui.State,
 	playback_decoder_lock: sync.Mutex,
 	playback: playback.State,
 	audio_stream_info: audio.Stream_Info,
+	prefs: config.Preferences,
 }
+
+// Held by entry point
+state: ^State
 
 audio_callback :: proc(buffer: []f32, data: rawptr) {
 	sync.lock(&state.playback_decoder_lock)
@@ -50,13 +57,14 @@ audio_callback :: proc(buffer: []f32, data: rawptr) {
 	playback.stream(&state.playback, buffer, cast(int) state.audio_stream_info.sample_rate, cast(int) state.audio_stream_info.channels)
 }
 
-init :: proc() -> bool {
-	audio.init() or_return
-	state.library = library.load_library("library.json", "playlists") or_return
-	state.playback = playback.init() or_return
+init :: proc(state_ptr: ^State, config_dir: string, data_dir: string) -> bool {
+	state = state_ptr
 	system_paths.init()
-	prefs.load()
-	theme.init()
+	audio.init() or_return
+	state.library = library.load_library(LIBRARY_PATH, "playlists") or_return
+	state.playback = playback.init() or_return
+	state.prefs, _ = config.load("config.ini")
+	theme.init(state.prefs)
 	playback.init()
 	state.ui = ui.init() or_return
 	ui.install_imgui_settings_handler(&state.ui)
@@ -67,20 +75,30 @@ init :: proc() -> bool {
 		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
 	}
 
-	ui.apply_prefs(&state.ui)
+	ui.apply_prefs(&state.ui, &state.prefs)
 
 	return true
 }
 
+handle_events :: proc() {
+	if state.prefs.dirty {
+		ui.apply_prefs(&state.ui, &state.prefs)
+		state.prefs.dirty = false
+	}
+}
+
 frame :: proc() {
 	signal.post(.NewFrame)
-	ui.show(&state.ui, &state.library, &state.playback)
+
+
+	ui.show(&state.ui, &state.library, &state.playback, &state.prefs)
 }
 
 shutdown :: proc() {
-	prefs.save()
+	config.save(state.prefs, "config.ini")
 	ui.destroy(state.ui)
 	playback.destroy(&state.playback)
 	audio.shutdown()
+	library.save_to_file(state.library, LIBRARY_PATH)
 	library.destroy(state.library)
 }

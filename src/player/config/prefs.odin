@@ -52,13 +52,12 @@ ChoiceID :: enum {
 	EnableWindowsMediaControls,
 }
 
-Prefs :: struct {
+Preferences :: struct {
 	strings: [StringID]String_Buffer,
 	numbers: [NumberID]int,
 	choices: [ChoiceID]int,
+	dirty: bool,
 }
-
-prefs: Prefs
 
 NUMBER_INFO := [NumberID]struct{name: string, min, max, def: int} {
 	.FontSize = {"FontSize", 8, 24, 13},
@@ -129,7 +128,7 @@ _sections := []Section {
 }
 
 @private
-_set_defaults :: proc() {
+_set_defaults :: proc(prefs: ^Preferences) {
 	for entry, index in NUMBER_INFO {
 		prefs.numbers[index] = entry.def
 	}
@@ -139,23 +138,20 @@ _set_defaults :: proc() {
 	}
 }
 
-get_string :: proc(str: StringID) -> string {
+get_string :: proc(prefs: ^Preferences, str: StringID) -> string {
 	return string(cstring(raw_data(prefs.strings[str][:])))
 }
 
-get_cstring :: proc(str: StringID) -> cstring {
+get_cstring :: proc(prefs: ^Preferences, str: StringID) -> cstring {
 	return cstring(raw_data(prefs.strings[str][:]))
 }
 
-load :: proc() {
-	prefs_path := filepath.join({system_paths.CONFIG_DIR, "prefs.ini"})
-	defer delete(prefs_path)
-	
-	_set_defaults()
+load :: proc(path: string) -> (prefs: Preferences, ok: bool) {	
+	_set_defaults(&prefs)
 
-	m, map_error, ok := ini.load_map_from_path(prefs_path, context.allocator)
+	m, map_error := ini.load_map_from_path(path, context.allocator) or_return
 	if !ok || map_error != nil {
-		save()
+		save(prefs, path)
 		signal.post(.ApplyPrefs)
 		return
 	}
@@ -194,13 +190,14 @@ load :: proc() {
 	
 	_load_properties()
 	signal.post(.ApplyPrefs)
+	ok = true
+	return
 }
 
-save :: proc() {
-	prefs_path := filepath.join({system_paths.CONFIG_DIR, "prefs.ini"})
-	defer delete(prefs_path)
+save :: proc(prefs_arg: Preferences, path: string) {
+	prefs := prefs_arg
 
-	fd, open_error := util.overwrite_file(prefs_path)
+	fd, open_error := util.overwrite_file(path)
 	if open_error != nil {return}
 	defer os.close(fd)
 

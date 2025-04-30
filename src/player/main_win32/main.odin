@@ -36,7 +36,7 @@ import "player:playback"
 import "player:library"
 import "player:build"
 import "player:drag_drop"
-import "player:prefs"
+import "player:config"
 
 @private
 this: struct {
@@ -48,6 +48,7 @@ this: struct {
 	tray_popup: win.HMENU,
 	running: bool,
 	enable_media_controls: bool,
+	close_policy: int,
 }
 
 @private
@@ -124,7 +125,7 @@ signal_handler :: proc(sig: signal.Signal) {
 		buf: [256]u8
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
 	}
-	else */if sig == .PlaybackStopped {
+	else if sig == .PlaybackStopped {
 		buf: [256]u8
 		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION))
 	}
@@ -136,7 +137,7 @@ signal_handler :: proc(sig: signal.Signal) {
 	}
 	else if sig == .Exit {
 		this.running = false
-	}
+	}*/
 }
 
 main :: proc() {
@@ -153,8 +154,9 @@ run :: proc() -> bool {
 		log.info("======================= Beginning of log =======================" )
 	}
 
+	state: com.State
 	this.ctx = context
-
+	
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
 
@@ -201,7 +203,7 @@ run :: proc() -> bool {
 	add_tray_icon()
 	defer remove_tray_icon()
 	
-	com.init() or_return
+	com.init(&state, ".", ".") or_return
 	defer com.shutdown()
 
 	// Flush signal events
@@ -239,6 +241,8 @@ run :: proc() -> bool {
 			this.resize_height = 0
 		}
 
+		com.handle_events()
+
 		if !minimized && dx11.begin_frame() {
 			com.frame()
 			visible = dx11.present()
@@ -261,11 +265,11 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 			this.resize_height = int(win.HIWORD(lparam))
 		}
 		case win.WM_CLOSE: {
-			switch prefs.prefs.choices[.ClosePolicy] {
-				case prefs.CLOSE_POLICY_MINIMIZE_TO_TRAY: {
+			switch this.close_policy {
+				case config.CLOSE_POLICY_MINIMIZE_TO_TRAY: {
 					hide_window()
 				}
-				case prefs.CLOSE_POLICY_CLOSE: {
+				case config.CLOSE_POLICY_CLOSE: {
 					signal.post(.Exit)
 				}
 				case: {

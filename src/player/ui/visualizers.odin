@@ -26,10 +26,10 @@ import glm "core:math/linalg/glsl"
 
 import imgui "libs:odin-imgui"
 
+import "player:config"
 import "player:analysis"
 import "player:playback"
 import "player:theme"
-import "player:prefs"
 
 _show_spectrum_window :: proc() {
 	spectrum := analysis.get_spectrum()
@@ -87,7 +87,7 @@ _show_spectrum_window :: proc() {
             }
         }
 
-        hide_slow_peaks := prefs.get_property("ui_hide_max_peaks").(bool) or_else false
+        hide_slow_peaks := config.get_property("ui_hide_max_peaks").(bool) or_else false
 
         if !hide_slow_peaks && imgui.TableSetColumnIndex(0) {
             for unclamped_band in spectrum.slow_peaks {
@@ -111,11 +111,11 @@ _show_spectrum_window :: proc() {
     }
 
     if imgui.BeginPopupContextWindow() {
-        hide_slow_peaks := prefs.get_property("ui_hide_max_peaks").(bool) or_else false
+        hide_slow_peaks := config.get_property("ui_hide_max_peaks").(bool) or_else false
         show_slow_peaks := !hide_slow_peaks
 
         if imgui.Checkbox("Show max peaks", &show_slow_peaks) {
-            prefs.set_property("ui_hide_max_peaks", !show_slow_peaks)
+            config.set_property("ui_hide_max_peaks", !show_slow_peaks)
             imgui.CloseCurrentPopup()
         }
 
