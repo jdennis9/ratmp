@@ -369,7 +369,7 @@ play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use
 
 	if use_filter && playlist.filter_hash != 0 {
 		for index in playlist.filter_tracks {
-			lib.playlist_add_tracks(&this.queue, {playlist.tracks[index]}, false)
+			lib.playlist_add_tracks(&this.queue, {playlist.tracks[index]})
 		}	
 	}
 	else {

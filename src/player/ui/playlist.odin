@@ -44,7 +44,7 @@ Playlist_Filter :: struct {
 }
 
 @(private="file")
-Column_Index :: enum {
+Track_Column :: enum {
 	Artist,
 	Album,
 	Title,
@@ -57,6 +57,21 @@ Column :: struct {
 	name: cstring,
 	sort_metric: lib.Track_Sort_Metric,
 	flags: imgui.TableColumnFlags,
+}
+
+@private
+_get_track_column_sort_metric :: proc(index: int) -> lib.Track_Sort_Metric {
+	col := cast(Track_Column)index
+
+	switch col {
+		case .Album: return .Album
+		case .Artist: return .Artist
+		case .Title: return .Title
+		case .Genre: return .Genre
+		case .Duration: return .Duration
+	}
+
+	return .None
 }
 
 _show_track_base_context_menu :: proc(playlist: lib.Playlist_ID, track: lib.Track_ID) {
@@ -241,7 +256,7 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 	imgui.TableFlags_Reorderable|imgui.TableFlags_ScrollY|
 	imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 
-	columns := [Column_Index]Column {
+	columns := [Track_Column]Column {
 		.Artist = {name = "Artist", sort_metric = .Artist},
 		.Album = {name = "Album", sort_metric = .Album},
 		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
@@ -249,7 +264,7 @@ _begin_track_table :: proc(iterator: ^_Track_Table_Iterator, str_id: cstring) ->
 		.Duration = {name = "Duration", sort_metric = .Duration},
 	}
 
-	if imgui.BeginTable(str_id, auto_cast len(Column_Index), table_flags) {
+	if imgui.BeginTable(str_id, auto_cast len(Track_Column), table_flags) {
 		for col in columns {imgui.TableSetupColumn(col.name, col.flags)}
 		imgui.TableSetupScrollFreeze(1, 1)
 		imgui.TableHeadersRow()
@@ -279,17 +294,17 @@ _show_next_track_table_row :: proc(it: ^_Track_Table_Iterator) -> bool {
 	track := lib.get_track_info(it.track)
 	it._pos += 1
 
-	if imgui.TableSetColumnIndex(auto_cast Column_Index.Album) {imgui.TextUnformatted(track.album)}
-	if imgui.TableSetColumnIndex(auto_cast Column_Index.Artist) {imgui.TextUnformatted(track.artist)}
-	if imgui.TableSetColumnIndex(auto_cast Column_Index.Genre) {imgui.TextUnformatted(track.genre)}
+	if imgui.TableSetColumnIndex(auto_cast Track_Column.Album) {imgui.TextUnformatted(track.album)}
+	if imgui.TableSetColumnIndex(auto_cast Track_Column.Artist) {imgui.TextUnformatted(track.artist)}
+	if imgui.TableSetColumnIndex(auto_cast Track_Column.Genre) {imgui.TextUnformatted(track.genre)}
 
-	if imgui.TableSetColumnIndex(auto_cast Column_Index.Duration) {
+	if imgui.TableSetColumnIndex(auto_cast Track_Column.Duration) {
 		buf: [64]u8
 		hours, minutes, seconds := time.clock_from_seconds(auto_cast track.duration_seconds)
 		imgui.Text("%02d:%02d:%02d", i32(hours), i32(minutes), i32(seconds))
 	}
 
-	if imgui.TableSetColumnIndex(auto_cast Column_Index.Title) {
+	if imgui.TableSetColumnIndex(auto_cast Track_Column.Title) {
 		it.visible = true
 
 		if playback.get_playing_track() == it.track {

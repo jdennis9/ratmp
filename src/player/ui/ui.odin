@@ -195,6 +195,8 @@ Playlist_Group_Window :: struct {
 
 @private
 _Playlist_Window :: struct {
+	playlist_id: lib.Playlist_ID,
+
 	filter: [256]u8,
 	filtered_tracks: []lib.Track_ID,
 	length_of_playlist_when_filtered: int,
@@ -895,7 +897,7 @@ show :: proc() {
 @private
 _show_library_window :: proc() {
 	playlist := lib.get_default_playlist()
-	_show_playlist_track_table(playlist)
+	_show_playlist_track_table(playlist, &this.library_window)
 }
 
 @private
@@ -972,11 +974,55 @@ _show_track_generic_context_menu_items :: proc(from_playlist: lib.Playlist_ID, t
 }
 
 @private
-_show_playlist_track_table :: proc(playlist: ^lib.Playlist, no_remove := false) {
+_show_playlist_track_table :: proc(playlist: ^lib.Playlist, state: ^_Playlist_Window, no_remove := false) {
 	want_remove_selection: bool
+	apply_filter: bool
+	use_filter: bool
+
+	// Filter
+	{
+		if imgui.InputTextWithHint("##playlist_filter", "Filter", cstring(raw_data(state.filter[:])), len(state.filter)) {
+			apply_filter = true
+		}
+
+		apply_filter |= playlist.id != state.playlist_id
+		apply_filter |= len(playlist.tracks) != state.length_of_playlist_when_filtered
+		use_filter = state.filter[0] != 0
+
+		if apply_filter && use_filter {
+			filter := string(cstring(&state.filter[0]))
+			state.filtered_tracks = lib.filter_tracks(playlist.tracks[:], filter)
+			state.length_of_playlist_when_filtered = len(playlist.tracks)
+		}
+	}
+
+	// Sort
+	update_sort_spec :: proc(spec: ^lib.Track_Sort_Spec) -> bool {
+		sort_specs := imgui.TableGetSortSpecs()
+		if sort_specs == nil {return false}
+
+		if sort_specs.SpecsDirty {
+			specs := sort_specs.Specs
+			if specs == nil {
+				spec.metric = .None
+				return true
+			}
+			
+			spec.metric = _get_track_column_sort_metric(auto_cast specs.ColumnIndex)
+			if specs.SortDirection == .Ascending {spec.order = .Ascending}
+			else if specs.SortDirection == .Descending {spec.order = .Descending}
+
+			sort_specs.SpecsDirty = false
+			return true
+		}
+
+		return false
+	}
+
+	state.playlist_id = playlist.id
 
 	table := _Track_Table_Iterator {
-		tracks = playlist.tracks[:],
+		tracks = use_filter ? state.filtered_tracks : playlist.tracks[:],
 		selection = this.selection_playlist_id == playlist.id ? this.selection[:] : nil,
 	}
 
@@ -986,6 +1032,10 @@ _show_playlist_track_table :: proc(playlist: ^lib.Playlist, no_remove := false) 
 	}
 
 	if _begin_track_table(&table, "##tracks") {
+		if update_sort_spec(&state.sort_spec) {
+			lib.sort_tracks(playlist.tracks[:], state.sort_spec)
+		}
+
 		for _show_next_track_table_row(&table) {
 			if !table.visible {continue}
 
@@ -1078,6 +1128,8 @@ _show_queue_window :: proc() {
 
 @private
 _show_selected_playlist_window :: proc() {
+	@static state: _Playlist_Window
+
 	playlist := lib.get_playlist(this.selected_playlist)
 	if this.selected_playlist == 0 || playlist == nil {
 		imgui.TextDisabled("No playlist selected")
@@ -1086,7 +1138,7 @@ _show_selected_playlist_window :: proc() {
 			
 	imgui.TextUnformatted(playlist.name)
 	imgui.Separator()
-	_show_playlist_track_table(playlist)
+	_show_playlist_track_table(playlist, &state)
 }
 
 @private
@@ -1216,6 +1268,8 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 	}
 		
 	if state.selected_group_id != nil && imgui.TableSetColumnIndex(1) {
+		@static playlist_state: _Playlist_Window
+
 		window_focused := imgui.IsWindowFocused()
 		playlist: ^lib.Playlist
 		
@@ -1230,10 +1284,9 @@ _show_playlist_group_window :: proc(list: ^lib.Playlist_List, state: ^Playlist_G
 			state.selected_group_id = nil
 			return
 		}
-			
-		imgui.TextUnformatted(playlist.name)
+		
 		imgui.Separator()
-		_show_playlist_track_table(playlist, no_remove=true)
+		_show_playlist_track_table(playlist, &playlist_state, no_remove=true)
 	}
 }
 
@@ -1260,11 +1313,12 @@ _show_genres_window :: proc() {
 @private
 _show_playlist_tabs_window :: proc() {
 	playlists := lib.get_playlists()
+	@static state: _Playlist_Window
 
 	if imgui.BeginTabBar("##playlists") {
 		for &playlist in playlists {
 			if imgui.BeginTabItem(playlist.name) {
-				_show_playlist_track_table(&playlist)
+				_show_playlist_track_table(&playlist, &state)
 				imgui.EndTabItem()
 			}
 		}

@@ -137,7 +137,7 @@ filter_tracks :: proc(tracks: []Track_ID, filter: string) -> []Track_ID {
 	filter_runes: []rune
 	filter_buf: [256]rune
 
-	filter_runes = util.decode_utf8_to_runes(filter_runes, filter)
+	filter_runes = util.decode_utf8_to_runes(filter_buf[:], filter)
 
 	for track in tracks {
 		if filter_track_from_runes(get_track_info(track), filter_runes) {
@@ -239,16 +239,6 @@ sort_tracks :: proc(track_slice: []Track_ID, spec: Track_Sort_Spec) {
 	else {sort.reverse_sort(iface)}
 }
 
-sort_playlist :: proc(playlist: ^Playlist) {
-	spec := Track_Sort_Spec {
-		metric = playlist.sort_metric,
-		order = playlist.sort_order,
-	}
-
-	sort_tracks(playlist.tracks[:], spec)
-	playlist_make_dirty(playlist)
-}
-
 playlist_make_dirty :: proc(playlist: ^Playlist) {
 	playlist.filter_hash = 0
 }
@@ -258,14 +248,13 @@ playlist_clear :: proc(playlist: ^Playlist) {
 	playlist_make_dirty(playlist)
 }
 
-playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID, and_sort := true) {
+playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
 	for track in tracks {
 		if !slice.contains(playlist.tracks[:], track) {
 			append(&playlist.tracks, track)
 		}
 	}
 	playlist_make_dirty(playlist)
-	if and_sort {sort_playlist(playlist)}
 }
 
 playlist_remove_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
