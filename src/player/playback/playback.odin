@@ -51,7 +51,7 @@ this: struct {
 	paused: bool,
 
 	queue_position: int,
-	queue: lib.Playlist,
+	queue: [dynamic]lib.Track_ID,
 	queued_playlist: lib.Playlist_ID,
 	queued_group_id: u32,
 	shuffle: bool,
@@ -144,7 +144,6 @@ _signal_handler :: proc(sig: signal.Signal) {
 init :: proc() -> bool {
 	this.ctx = context
 	this.paused = true
-	this.queue.name = "Queue"
 	signal.install_handler(_signal_handler)
 	audio.init() or_return
 	refresh_audio_devices() or_return
@@ -217,7 +216,7 @@ stop :: proc() {
 	decoder.close(&this.decoder)
 	sync.unlock(&this.lock)
 	
-	clear(&this.queue.tracks)
+	clear(&this.queue)
 	this.playing_track = 0
 	
 	signal.post(.PlaybackStopped)
@@ -350,8 +349,8 @@ get_duration :: proc() -> int {
 // Queue management
 // =============================================================================
 
-get_queue :: proc() -> ^lib.Playlist {
-	return &this.queue
+get_queue :: proc() -> []lib.Track_ID {
+	return this.queue[:]
 }
 
 get_queued_playlist :: proc() -> lib.Playlist_ID {
@@ -365,25 +364,20 @@ get_queued_group_id :: proc() -> u32 {
 play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use_filter := false) {
 	this.queued_playlist = playlist.id
 	this.queued_group_id = playlist.group_id
-	lib.playlist_clear(&this.queue)
+	clear(&this.queue)
 
-	if use_filter && playlist.filter_hash != 0 {
-		for index in playlist.filter_tracks {
-			lib.playlist_add_tracks(&this.queue, {playlist.tracks[index]})
-		}	
-	}
-	else {
-		lib.playlist_add_tracks(&this.queue, playlist.tracks[:])
+	for track in playlist.tracks {
+		append(&this.queue, track)
 	}
 
 	if this.shuffle {
-		rand.shuffle(this.queue.tracks[:])
+		rand.shuffle(this.queue[:])
 	}
 
 	this.queue_position = 0
 
 	if first_track != 0 {
-		for track, index in this.queue.tracks {
+		for track, index in this.queue {
 			if track == first_track {
 				this.queue_position = index
 				break
@@ -397,21 +391,23 @@ play_playlist :: proc(playlist: lib.Playlist, first_track: lib.Track_ID = 0, use
 append_to_queue :: proc(tracks: []lib.Track_ID) {
 	this.queued_playlist = 0
 	this.queued_group_id = 0
-	lib.playlist_add_tracks(&this.queue, tracks)
+	for track in tracks {
+		append(&this.queue, track)
+	}
 }
 
 play_track_at_position :: proc(in_pos: int) {
 	pos := in_pos
 
-	if len(this.queue.tracks) == 0 {
+	if len(this.queue) == 0 {
 		return
 	}
 
-	if pos >= len(this.queue.tracks) || pos < 0 {
+	if pos >= len(this.queue) || pos < 0 {
 		pos = 0
 	}
 
-	if !play_track(this.queue.tracks[pos]) {
+	if !play_track(this.queue[pos]) {
 		signal.post(.RequestNext)
 	}
 	this.queue_position = pos
@@ -419,11 +415,13 @@ play_track_at_position :: proc(in_pos: int) {
 
 play_track_array :: proc(tracks: []lib.Track_ID) {
 	this.queued_playlist = 0
-	lib.playlist_clear(&this.queue)
-	lib.playlist_add_tracks(&this.queue, tracks)
+	clear(&this.queue)
+	for track in tracks {
+		append(&this.queue, track)
+	}
 
 	if this.shuffle {
-		rand.shuffle(this.queue.tracks[:])
+		rand.shuffle(this.queue[:])
 	}
 
 	play_track_at_position(0)

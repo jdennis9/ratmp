@@ -1090,7 +1090,7 @@ _show_queue_window :: proc() {
 
 	queue_id := max(lib.Playlist_ID)
 	table := _Track_Table_Iterator {
-		tracks = playback.get_queue().tracks[:],
+		tracks = playback.get_queue(),
 		selection = this.selection_playlist_id == queue_id ? this.selection[:] : nil,
 	}
 
