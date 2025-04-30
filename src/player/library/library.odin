@@ -155,8 +155,9 @@ Library :: struct {
 	library: Playlist,
 }
 
-load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
+load_library :: proc(filename: string, playlist_folder: string) -> (lib: Library, ok: bool) {
 	lib, _ = _load_library(filename)
+	scan_for_playlists(&lib, playlist_folder)
 	lib.library.name = "Library"
 	lib.next_playlist_id = 1
 
@@ -171,6 +172,7 @@ scan_for_playlists :: proc(lib: ^Library, path: string) {
 
 		playlist, playlist_ok := load_playlist_from_file(lib, fullpath)
 		if !playlist_ok {return}
+		playlist.id = _alloc_playlist_id(lib)
 
 		file_id := strconv.parse_u64_maybe_prefixed(filepath.base(fullpath)) or_else 0
 		if file_id == 0 {

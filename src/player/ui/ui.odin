@@ -204,7 +204,13 @@ Offset_Length :: struct {
 }
 
 @private
-this: struct {
+_Metadata_Window :: struct {
+	track: Track_ID,
+	thumbnail: video.Texture,
+	comment: cstring,
+}
+
+State :: struct {
 	ctx: runtime.Context,
 
 	deferred_files: struct {
@@ -214,10 +220,7 @@ this: struct {
 		scanning: bool,
 	},
 
-	metadata: struct {
-		thumbnail: video.Texture,
-		comment: cstring,
-	},
+	metadata: _Metadata_Window,
 
 	selection: [dynamic]library.Track_ID,
 	selection_playlist_id: library.Playlist_ID,
@@ -254,24 +257,11 @@ this: struct {
 	playlist_windows: map[library.Playlist_ID]_Playlist_Window,
 }
 
-init :: proc() -> bool {
-	this.ctx = context
+init :: proc() -> (ui: State, ok: bool) {
+	ui.ctx = context
 	io := imgui.GetIO()
 	io.ConfigFlags |= {.DockingEnable, .NavEnableKeyboard}
 	
-	// Add settings handler
-	handler := imgui.SettingsHandler {
-		TypeName = build.PROGRAM_NAME,
-		TypeHash = imgui.cImHashStr(build.PROGRAM_NAME),
-		ReadOpenFn = _imgui_settings_handler_open_proc,
-		ReadLineFn = _imgui_settings_handler_read_line_proc,
-		WriteAllFn = _imgui_settings_handler_write_proc,
-	}
-
-	imgui.AddSettingsHandler(&handler)
-	//imgui.SaveIniSettingsToDisk(io.IniFilename);
-	imgui.LoadIniSettingsFromDisk(io.IniFilename)
-
 	// Load settings if needed
 	if !os.exists(cast(string) io.IniFilename) {
 		log.debug("Loading default layout")
@@ -280,13 +270,14 @@ init :: proc() -> bool {
 
 	log.debug("ImGui version: ", imgui.VERSION)
 
-	signal.install_handler(signal_handler)
+	//signal.install_handler(signal_handler)
 
 	// Set window flags
 	window_info[.Metadata].flags |= {.AlwaysVerticalScrollbar}
 
 	// Set up system drag-drop
-	drag_drop.set_interface(
+	// @FixMe
+	/*drag_drop.set_interface(
 		&{
 			begin = _ext_drag_drop_begin,
 			add_file = _ext_drag_drop_add_file,
@@ -294,21 +285,41 @@ init :: proc() -> bool {
 			drop = _ext_drag_drop_drop,
 			mouse_over = _ext_drag_drop_mouse_over,
 		}
-	)
+	)*/
 
-	_scan_layouts()
+	_scan_layouts(&ui)
 
-	return true
+	ok = true
+	return
 }
 
-shutdown :: proc() {
-	if this.deferred_files.pool != nil {
-		delete(this.deferred_files.pool)
+// Holds on to pointer !!!
+install_imgui_settings_handler :: proc(ui: ^State) {
+	io := imgui.GetIO()
+
+	// Add settings handler
+	handler := imgui.SettingsHandler {
+		TypeName = build.PROGRAM_NAME,
+		TypeHash = imgui.cImHashStr(build.PROGRAM_NAME),
+		ReadOpenFn = _imgui_settings_handler_open_proc,
+		ReadLineFn = _imgui_settings_handler_read_line_proc,
+		WriteAllFn = _imgui_settings_handler_write_proc,
+		UserData = ui,
 	}
 
-	video.impl.destroy_texture(this.background)
-	video.impl.destroy_texture(this.metadata.thumbnail)
-	if this.metadata.comment != nil {delete(this.metadata.comment)}
+	imgui.AddSettingsHandler(&handler)
+	//imgui.SaveIniSettingsToDisk(io.IniFilename);
+	imgui.LoadIniSettingsFromDisk(io.IniFilename)
+}
+
+destroy :: proc(ui: State) {
+	if ui.deferred_files.pool != nil {
+		delete(ui.deferred_files.pool)
+	}
+
+	video.impl.destroy_texture(ui.background)
+	video.impl.destroy_texture(ui.metadata.thumbnail)
+	if ui.metadata.comment != nil {delete(ui.metadata.comment)}
 }
 
 @private
@@ -375,7 +386,7 @@ _load_fonts :: proc() {
 }
 
 @private
-_apply_prefs :: proc() {
+_apply_prefs :: proc(ui: ^State) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
 	
@@ -385,13 +396,13 @@ _apply_prefs :: proc() {
 		path := prefs.get_string(.Background)
 
 		if string(cstring(&loaded_background[0])) != path {
-			video.impl.destroy_texture(this.background)
+			video.impl.destroy_texture(ui.background)
 			if path != "" {
-				this.background, this.background_width, this.background_height, _ = 
+				ui.background, ui.background_width, ui.background_height, _ = 
 					video.load_texture(path)
 			}
 			else {
-				this.background = {}
+				ui.background = {}
 			}
 			util.copy_string_to_buf(loaded_background[:], path)
 		}
@@ -403,12 +414,12 @@ _apply_prefs :: proc() {
 	theme.load(prefs.get_string(.Theme))
 }
 
-@private
+/*@private
 signal_handler :: proc(sig: signal.Signal) {
 	if sig == .ApplyPrefs {
 		_apply_prefs()
 	}
-}
+}*/
 
 bring_window_to_front :: proc(win: Window) {
 	window_info[win].bring_to_front = true
@@ -416,14 +427,16 @@ bring_window_to_front :: proc(win: Window) {
 
 @private
 _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
+	ui := cast(^State)data
+	
 	if is_folder {
 		util.for_each_file_in_folder(path, _add_files_iterator, data)
 	}
 	else {
-		offset := len(this.deferred_files.pool)
-		_, err := append_string(&this.deferred_files.pool, path)
+		offset := len(ui.deferred_files.pool)
+		_, err := append_string(&ui.deferred_files.pool, path)
 		if err != .None {return}
-		append(&this.deferred_files.files, Offset_Length{offset = offset, length = len(path)})
+		append(&ui.deferred_files.files, Offset_Length{offset = offset, length = len(path)})
 	}
 }
 
@@ -480,7 +493,7 @@ _begin_window :: proc(window: Window) -> bool {
 	return false
 }
 
-show :: proc(lib: ^Library, pb: ^Playback) {
+show :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -496,19 +509,19 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 
 	// Layouts need to be loaded before NewFrame or else docking settings
 	// aren't respected
-	if this.layout_that_we_want_to_load != nil {
-		imgui.LoadIniSettingsFromMemory(cstring(&this.layout_that_we_want_to_load[0]), len(this.layout_that_we_want_to_load))
-		if this.free_layout_after_load {
-			delete(this.layout_that_we_want_to_load)
+	if ui.layout_that_we_want_to_load != nil {
+		imgui.LoadIniSettingsFromMemory(cstring(&ui.layout_that_we_want_to_load[0]), len(ui.layout_that_we_want_to_load))
+		if ui.free_layout_after_load {
+			delete(ui.layout_that_we_want_to_load)
 		}
-		this.layout_that_we_want_to_load = nil
+		ui.layout_that_we_want_to_load = nil
 	}
 
 	io := imgui.GetIO()
 	style := imgui.GetStyle()
 
 	new_playlist_popup_name := cstring("New Playlist")
-	this.new_playlist_popup_id = imgui.GetID(new_playlist_popup_name)
+	ui.new_playlist_popup_id = imgui.GetID(new_playlist_popup_name)
 
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.DockSpaceOverViewport({}, nil, {})
@@ -517,10 +530,10 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 	analysis.update(lib^, pb^, delta, 1.0/30.0)
 
 	// Draw background
-	if this.background.id != nil {
+	if ui.background.id != nil {
 		drawlist := imgui.GetBackgroundDrawList()
-		w := f32(this.background_width)
-		h := f32(this.background_height)
+		w := f32(ui.background_width)
+		h := f32(ui.background_height)
 		ww := io.DisplaySize.x
 		wh := io.DisplaySize.y
 
@@ -538,7 +551,7 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 
 		imgui.DrawList_AddImage(
 			drawlist,
-			this.background.id,
+			ui.background.id,
 			{0, 0},
 			{w, h},
 		)
@@ -546,8 +559,8 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 
 	// Check if there are any files queued for processing and begin processing them if
 	// needed
-	if intrinsics.atomic_load(&this.deferred_files.files_loaded) < len(this.deferred_files.files) {
-		df := &this.deferred_files
+	if intrinsics.atomic_load(&ui.deferred_files.files_loaded) < len(ui.deferred_files.files) {
+		df := &ui.deferred_files
 
 		if !intrinsics.atomic_load(&df.scanning) {
 			// There are tracks ready but they aren't being scanned
@@ -599,20 +612,21 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 	// -------------------------------------------------------------------------
 	// Drag-drop
 	// -------------------------------------------------------------------------
-	if this.want_to_drop_platform_drag_drop_payload {
-		for file in this.platform_drag_drop_payload {
+	// @FixMe
+	/*if ui.want_to_drop_platform_drag_drop_payload {
+		for file in ui.platform_drag_drop_payload {
 			_add_files_iterator(file, os.is_dir(file), nil)
 		}
 	
-		_ext_drag_drop_clear_payload()
-		this.want_to_drop_platform_drag_drop_payload = false
-	}
+		//_ext_drag_drop_clear_payload()
+		ui.want_to_drop_platform_drag_drop_payload = false
+	}*/
 
 	// -----------------------------------------------------------------------------
 	// Hotkeys
 	// -----------------------------------------------------------------------------
 	if imgui.IsKeyPressed(.F1) {
-		this.show_help = !this.show_help
+		ui.show_help = !ui.show_help
 	}
 
 	if imgui.IsKeyChordPressed(cast(i32) (imgui.Key.R | imgui.Key.ImGuiMod_Shift | imgui.Key.ImGuiMod_Ctrl)) {
@@ -624,9 +638,8 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 	// -----------------------------------------------------------------------------
 	// Preferences
 	// -----------------------------------------------------------------------------
-
-	if this.show_preferences {
-		if imgui.Begin("Preferences", &this.show_preferences) {
+	if ui.show_preferences {
+		if imgui.Begin("Preferences", &ui.show_preferences) {
 			_show_preferences_window(pb)
 		}
 		imgui.End()
@@ -638,7 +651,7 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 	if imgui.BeginMainMenuBar() {
 		if imgui.BeginMenu("File") {
 			if imgui.MenuItem("Preferences") {
-				this.show_preferences = true
+				ui.show_preferences = true
 			}
 			imgui.MenuItem("Minimize to tray")
 			imgui.Separator()
@@ -674,24 +687,24 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 				@static new_layout_name: _Layout_Name
 
 				if imgui.MenuItem("Default") {
-					this.layout_that_we_want_to_load = DEFAULT_LAYOUT_INI
-					this.free_layout_after_load = false
+					ui.layout_that_we_want_to_load = DEFAULT_LAYOUT_INI
+					ui.free_layout_after_load = false
 				}
 
 				imgui.Separator()
 
-				for &layout_name, layout_index in this.layout_names {
+				for &layout_name, layout_index in ui.layout_names {
 					if imgui.MenuItem(cstring(&layout_name[0])) {
-						_load_layout(layout_index)
+						_load_layout(ui, layout_index)
 					}
 				}
 
 				imgui.Separator()
 				imgui.InputTextWithHint("##layout_name", "Layout Name", cstring(&new_layout_name[0]), len(new_layout_name))
 				if imgui.MenuItem("Save current...") {
-					new_layout_index := len(this.layout_names)
+					new_layout_index := len(ui.layout_names)
 					layout_exists := false
-					for &layout_name, layout_index in this.layout_names {
+					for &layout_name, layout_index in ui.layout_names {
 						if cstring(&layout_name[0]) == cstring(&new_layout_name[0]) {
 							new_layout_index = layout_index
 							layout_exists = true
@@ -700,10 +713,10 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 					}
 
 					if !layout_exists {
-						append(&this.layout_names, new_layout_name)
+						append(&ui.layout_names, new_layout_name)
 					}
 
-					_save_layout(new_layout_index)
+					_save_layout(ui^, new_layout_index)
 
 					slice.fill(new_layout_name[:], 0)
 				}
@@ -716,18 +729,18 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 
 		if imgui.BeginMenu("Help") {
 			if imgui.MenuItem("Manual") {
-				this.show_help = true
+				ui.show_help = true
 			}
 			if imgui.MenuItem("About") {
-				this.show_about = true
+				ui.show_about = true
 			}
 			imgui.EndMenu()
 		}
 
 		when ODIN_DEBUG {
 			if imgui.BeginMenu("Debug") {
-				imgui.MenuItemBoolPtr("Show theme editor", nil, &this.enable_imgui_theme_editor)
-				imgui.MenuItemBoolPtr("Show ImGui demo", nil, &this.enable_imgui_demo_window)
+				imgui.MenuItemBoolPtr("Show theme editor", nil, &ui.enable_imgui_theme_editor)
+				imgui.MenuItemBoolPtr("Show ImGui demo", nil, &ui.enable_imgui_demo_window)
 				imgui.EndMenu()
 			}
 		}
@@ -823,15 +836,15 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 	// -------------------------------------------------------------------------
 	// Help
 	// -------------------------------------------------------------------------
-	if this.show_help {
-		if imgui.Begin("Manual", &this.show_help) {
+	if ui.show_help {
+		if imgui.Begin("Manual", &ui.show_help) {
 			_show_help_window()
 		}
 		imgui.End()
 	}
 
-	if this.show_about {
-		if imgui.Begin("About", &this.show_about) {
+	if ui.show_about {
+		if imgui.Begin("About", &ui.show_about) {
 			_show_about_window()
 		}
 		imgui.End()
@@ -863,61 +876,61 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 		switch window_id {
 			case .Library: {
 				if _begin_window(.Library) {
-					_show_library_window(lib, pb)
+					_show_library_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Metadata: {
 				if _begin_window(.Metadata) {
-					_show_metadata_window(lib^, pb^)
+					_show_metadata_window(&ui.metadata, lib^, pb.playing_track)
 					imgui.End()
 				}
 			}
 			case .Queue: {
 				if _begin_window(.Queue) {
-					_show_queue_window(lib, pb)
+					_show_queue_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Navigation: {
 				if _begin_window(.Navigation) {
-					_show_navigation_window(lib, pb)
+					_show_navigation_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .Artists: {
 				if _begin_window(.Artists) {
-					_show_playlist_group_window(lib^, pb, lib.artists, &this.artists_window)
+					_show_playlist_group_window(lib^, pb, lib.artists, &ui.artists_window)
 					imgui.End()
 				}
 			}
 			case .Albums: {
 				if _begin_window(.Albums) {
-					_show_playlist_group_window(lib^, pb, lib.albums, &this.albums_window)
+					_show_playlist_group_window(lib^, pb, lib.albums, &ui.albums_window)
 					imgui.End()
 				}
 			}
 			case .Genres: {
 				if _begin_window(.Genres) {
-					_show_playlist_group_window(lib^, pb, lib.genres, &this.genres_window)
+					_show_playlist_group_window(lib^, pb, lib.genres, &ui.genres_window)
 					imgui.End()
 				}
 			}
 			case .Folders: {
 				if _begin_window(.Folders) {
-					_show_playlist_group_window(lib^, pb, lib.folders, &this.folders_window)
+					_show_playlist_group_window(lib^, pb, lib.folders, &ui.folders_window)
 					imgui.End()
 				}
 			}
 			case .Playlist: {		
 				if _begin_window(.Playlist) {
-					_show_selected_playlist_window(lib, pb)
+					_show_selected_playlist_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
 			case .PlaylistTabs: {
 				if _begin_window(.PlaylistTabs) {
-					_show_playlist_tabs_window(lib, pb)
+					_show_playlist_tabs_window(ui, lib, pb)
 					imgui.End()
 				}
 			}
@@ -935,7 +948,7 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 			}
 			case .EditMetadata: {
 				if _begin_window(.EditMetadata) {
-					_show_metadata_editor(lib^)
+					_show_metadata_editor(lib^, ui.selection[:])
 					imgui.End()
 				}
 			}
@@ -953,7 +966,7 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 			}
 			case .ReplaceMetadata: {
 				if _begin_window(.ReplaceMetadata) {
-					_show_metadata_replacement_window(lib^)
+					_show_metadata_replacement_window(lib^, ui.selection[:])
 					imgui.End()
 				}
 			}
@@ -994,62 +1007,62 @@ show :: proc(lib: ^Library, pb: ^Playback) {
 		}
 	}
 
-	if this.enable_imgui_theme_editor {
+	if ui.enable_imgui_theme_editor {
 		imgui.ShowStyleEditor()
 	}
 
-	if this.enable_imgui_demo_window {
-		imgui.ShowDemoWindow(&this.enable_imgui_demo_window)
+	if ui.enable_imgui_demo_window {
+		imgui.ShowDemoWindow(&ui.enable_imgui_demo_window)
 	}
 }
 
 @private
-_show_library_window :: proc(lib: ^Library, pb: ^Playback) {
+_show_library_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	playlist := &lib.library
-	_show_playlist_track_table(lib, pb, playlist, &this.library_window)
+	_show_playlist_track_table(ui, lib, pb, playlist, &ui.library_window)
 }
 
 @private
-_handle_select_track :: proc(playlist_id: Playlist_ID, from: []Track_ID, track_id: Track_ID, force_no_clear := false) {
-	if this.selection_playlist_id != playlist_id {
-		clear(&this.selection)
-		this.selection_playlist_id = playlist_id
+_handle_select_track :: proc(ui: ^State, playlist_id: Playlist_ID, from: []Track_ID, track_id: Track_ID, force_no_clear := false) {
+	if ui.selection_playlist_id != playlist_id {
+		clear(&ui.selection)
+		ui.selection_playlist_id = playlist_id
 	}
 
-	selected := slice.contains(this.selection[:], track_id)
+	selected := slice.contains(ui.selection[:], track_id)
 
 	if imgui.IsKeyDown(.ImGuiMod_Shift) {
 		if track_index, found := slice.linear_search(from, track_id); found {
 			range_start := 0
 
-			for sel in this.selection {
+			for sel in ui.selection {
 				index := slice.linear_search(from, sel) or_continue
 				if index < track_index {range_start = max(range_start, index)}
 			}
 
 			for sel in from[range_start:track_index] {
-				if !slice.contains(this.selection[:], sel) {
-					append(&this.selection, sel)
+				if !slice.contains(ui.selection[:], sel) {
+					append(&ui.selection, sel)
 				}
 			}
 
-			append(&this.selection, track_id)
+			append(&ui.selection, track_id)
 		}
 	}
 	else {
 		if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
 			if !(force_no_clear && selected) {
-				clear(&this.selection)
-				append(&this.selection, track_id)
+				clear(&ui.selection)
+				append(&ui.selection, track_id)
 			}
-			if !selected {append(&this.selection, track_id)}
+			if !selected {append(&ui.selection, track_id)}
 		}
-		else if !selected {append(&this.selection, track_id)}
+		else if !selected {append(&ui.selection, track_id)}
 	}
 }
 
 @private
-_show_track_generic_context_menu_items :: proc(lib: ^Library, from_playlist: Playlist_ID, track_id: Track_ID, selection: []Track_ID) {
+_show_track_generic_context_menu_items :: proc(ui: ^State, lib: ^Library, from_playlist: Playlist_ID, track_id: Track_ID, selection: []Track_ID) {
 	track := library.get_track_info(lib^, track_id)
 	if imgui.BeginMenu("Add to playlist") {
 		for &target_playlist in lib.playlists {
@@ -1064,17 +1077,17 @@ _show_track_generic_context_menu_items :: proc(lib: ^Library, from_playlist: Pla
 
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Artist") {
-			this.artists_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.artist))
+			ui.artists_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.artist))
 			bring_window_to_front(.Artists)
 		}
 
 		if imgui.MenuItem("Album") {
-			this.albums_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.album))
+			ui.albums_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.album))
 			bring_window_to_front(.Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
-			this.genres_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
+			ui.genres_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
 			bring_window_to_front(.Genres)
 		}
 
@@ -1083,7 +1096,7 @@ _show_track_generic_context_menu_items :: proc(lib: ^Library, from_playlist: Pla
 }
 
 @private
-_show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^library.Playlist, state: ^_Playlist_Window, no_remove := false) {
+_show_playlist_track_table :: proc(ui: ^State, lib: ^Library, pb: ^Playback, playlist: ^library.Playlist, state: ^_Playlist_Window, no_remove := false) {
 	want_remove_selection: bool
 	apply_filter: bool
 	use_filter: bool
@@ -1109,7 +1122,7 @@ _show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^libr
 
 	table := _Track_Table_Iterator {
 		tracks = use_filter ? state.filtered_tracks : playlist.tracks[:],
-		selection = this.selection_playlist_id == playlist.id ? this.selection[:] : nil,
+		selection = ui.selection_playlist_id == playlist.id ? ui.selection[:] : nil,
 	}
 
 	if len(table.tracks) == 0 {
@@ -1131,7 +1144,7 @@ _show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^libr
 			right_clicked := imgui.IsItemClicked(.Right)
 
 			if left_clicked || middle_clicked {
-				_handle_select_track(playlist.id, table.tracks, table.track)
+				_handle_select_track(ui, playlist.id, table.tracks, table.track)
 			}
 
 			if middle_clicked {
@@ -1139,15 +1152,15 @@ _show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^libr
 			}
 
 			if imgui.BeginPopupContextItem() {
-				_handle_select_track(playlist.id, table.tracks, table.track, true)
-				_show_track_generic_context_menu_items(lib, playlist.id, track, table.selection)
+				_handle_select_track(ui, playlist.id, table.tracks, table.track, true)
+				_show_track_generic_context_menu_items(ui, lib, playlist.id, track, table.selection)
 
 				if imgui.MenuItem("Add to queue") {
-					playback.append_to_queue(pb, this.selection[:])
+					playback.append_to_queue(pb, ui.selection[:])
 				}
 
 				if imgui.MenuItem("Play") {
-					playback.play_track_array(pb, lib^, this.selection[:])
+					playback.play_track_array(pb, lib^, ui.selection[:])
 				}
 
 				if !no_remove {
@@ -1171,14 +1184,14 @@ _show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^libr
 }
 
 @private
-_show_queue_window :: proc(lib: ^Library, pb: ^Playback) {
+_show_queue_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	@static sort_spec: library.Track_Sort_Spec
 	want_remove_selection: bool
 
 	queue_id := max(Playlist_ID)
 	table := _Track_Table_Iterator {
 		tracks = pb.queue[:],
-		selection = this.selection_playlist_id == queue_id ? this.selection[:] : nil,
+		selection = ui.selection_playlist_id == queue_id ? ui.selection[:] : nil,
 	}
 
 	if _begin_track_table(lib^, &table, "##queue") {
@@ -1194,7 +1207,7 @@ _show_queue_window :: proc(lib: ^Library, pb: ^Playback) {
 			right_clicked := imgui.IsItemClicked(.Right)
 
 			if left_clicked || middle_clicked || right_clicked {
-				_handle_select_track(queue_id, table.tracks, table.track)
+				_handle_select_track(ui, queue_id, table.tracks, table.track)
 			}
 
 			if middle_clicked {
@@ -1202,7 +1215,7 @@ _show_queue_window :: proc(lib: ^Library, pb: ^Playback) {
 			}
 
 			if imgui.BeginPopupContextItem() {
-				_show_track_generic_context_menu_items(lib, queue_id, track, table.selection)
+				_show_track_generic_context_menu_items(ui, lib, queue_id, track, table.selection)
 				imgui.Separator()
 
 				if imgui.MenuItem("Remove") {
@@ -1218,22 +1231,22 @@ _show_queue_window :: proc(lib: ^Library, pb: ^Playback) {
 }
 
 @private
-_show_selected_playlist_window :: proc(lib: ^Library, pb: ^Playback) {
+_show_selected_playlist_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	@static state: _Playlist_Window
 
-	playlist := library.get_playlist(lib, this.selected_playlist)
-	if this.selected_playlist == 0 || playlist == nil {
+	playlist := library.get_playlist(lib, ui.selected_playlist)
+	if ui.selected_playlist == 0 || playlist == nil {
 		imgui.TextDisabled("No playlist selected")
 		return
 	}
 			
 	imgui.TextUnformatted(playlist.name)
 	imgui.Separator()
-	_show_playlist_track_table(lib, pb, playlist, &state)
+	_show_playlist_track_table(ui, lib, pb, playlist, &state)
 }
 
 @private
-_show_navigation_window :: proc(lib: ^Library, pb: ^Playback) {
+_show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	playlists := lib.playlists[:]
 	queued_playlist_id := pb.queued_playlist
 	delete_playlist_id: Playlist_ID
@@ -1276,7 +1289,7 @@ _show_navigation_window :: proc(lib: ^Library, pb: ^Playback) {
 	imgui.SeparatorText("Your Playlists")
 
 	if imgui.Button("+ New playlist...") {
-		imgui.OpenPopupID(this.new_playlist_popup_id)
+		imgui.OpenPopupID(ui.new_playlist_popup_id)
 	}
 
 	if imgui.BeginTable("playlist_table", 2, table_flags|imgui.TableFlags_ScrollY) {
@@ -1288,9 +1301,9 @@ _show_navigation_window :: proc(lib: ^Library, pb: ^Playback) {
 			imgui.TableNextRow()
 
 			if imgui.TableSetColumnIndex(0) {
-				if imgui.Selectable(p.name, p.id == this.selected_playlist, {.SpanAllColumns}) {
+				if imgui.Selectable(p.name, p.id == ui.selected_playlist, {.SpanAllColumns}) {
 					bring_window_to_front(.Playlist)
-					this.selected_playlist = p.id
+					ui.selected_playlist = p.id
 				}
 
 				if p.id == queued_playlist_id {
@@ -1398,14 +1411,14 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 }
 
 @private
-_show_playlist_tabs_window :: proc(lib: ^Library, pb: ^Playback) {
+_show_playlist_tabs_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	playlists := lib.playlists[:]
 	@static state: _Playlist_Window
 
 	if imgui.BeginTabBar("##playlists") {
 		for &playlist in playlists {
 			if imgui.BeginTabItem(playlist.name) {
-				_show_playlist_track_table(lib, pb, &playlist, &state)
+				_show_playlist_track_table(ui, lib, pb, &playlist, &state)
 				imgui.EndTabItem()
 			}
 		}
@@ -1414,40 +1427,37 @@ _show_playlist_tabs_window :: proc(lib: ^Library, pb: ^Playback) {
 }
 
 @private
-_show_metadata_window :: proc(lib: Library, pb: Playback) {
-	@static loaded_track: Track_ID
-	playing_track := pb.playing_track
+_show_metadata_window :: proc(state: ^_Metadata_Window, lib: Library, display_track: Track_ID) {
+	if state.track != display_track {
+		state.track = display_track
 
-	if loaded_track != playing_track {
-		loaded_track = playing_track
-
-		if this.metadata.thumbnail.id != nil {
-			video.impl.destroy_texture(this.metadata.thumbnail)
-			this.metadata.thumbnail = {}
+		if state.thumbnail.id != nil {
+			video.impl.destroy_texture(state.thumbnail)
+			state.thumbnail = {}
 		}
 
-		if this.metadata.comment != nil {
-			delete(this.metadata.comment)
-			this.metadata.comment = nil
+		if state.comment != nil {
+			delete(state.comment)
+			state.comment = nil
 		}
 
-		if playing_track != 0 {
-			this.metadata.thumbnail, _ = library.load_track_thumbnail(lib, playing_track)
-			this.metadata.comment = library.load_track_comment(lib, playing_track)
+		if display_track != 0 {
+			state.thumbnail, _ = library.load_track_thumbnail(lib, display_track)
+			state.comment = library.load_track_comment(lib, display_track)
 		}
 	}
 
-	if playing_track == 0 {
-		imgui.TextDisabled("No track playing")
+	if display_track == 0 {
+		imgui.TextDisabled("No track")
 		return
 	}
 
 	avail_size := imgui.GetContentRegionAvail()
-	if this.metadata.thumbnail.id != nil {
+	if state.thumbnail.id != nil {
 		imgui.PushStyleVarImVec2(.FramePadding, {0, 0})
 		defer imgui.PopStyleVar()
 
-		imgui.ImageButton("##thumbnail", this.metadata.thumbnail.id, {avail_size.x, avail_size.x})
+		imgui.ImageButton("##thumbnail", state.thumbnail.id, {avail_size.x, avail_size.x})
 		// @TODO Add right-click context menu
 		/*if imgui.BeginPopupContextItem() {
 			_show_track_base_context_menu(lib, 0, playing_track)
@@ -1464,7 +1474,7 @@ _show_metadata_window :: proc(lib: Library, pb: Playback) {
 
 	imgui.Separator()
 
-	track := library.get_track_info(lib, playing_track)
+	track := library.get_track_info(lib, display_track)
 	hours, minutes, seconds := util.split_seconds(cast(i32) track.duration_seconds)
 
 	if imgui.BeginTable("Metadata Table", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
@@ -1502,14 +1512,14 @@ _show_metadata_window :: proc(lib: Library, pb: Playback) {
 	}
 
 	
-	if this.metadata.comment != nil {
+	if state.comment != nil {
 		imgui.Separator()
-		imgui.TextWrapped(this.metadata.comment)
+		imgui.TextWrapped(state.comment)
 	}
 }
 
 @private
-_show_metadata_replacement_window :: proc(lib: Library) {
+_show_metadata_replacement_window :: proc(lib: Library, selection: []Track_ID) {
 	@static replace_with: [128]u8
 	@static to_replace: [128]u8
 
@@ -1544,7 +1554,7 @@ _show_metadata_replacement_window :: proc(lib: Library) {
 		if state.replace_album {mask |= {.Album}}
 		if state.replace_genre {mask |= {.Genre}}
 
-		filter: []Track_ID = state.in_selection ? this.selection[:] : nil
+		filter: []Track_ID = state.in_selection ? selection[:] : nil
 		repl := library.Metadata_Replacement {
 			replace = string(cstring(&to_replace[0])),
 			with = string(cstring(&replace_with[0])),
@@ -1973,7 +1983,7 @@ _handle_queue_playback_action :: proc(action: Track_Table_Action, playlist: lib.
 // Drag-drop
 // =============================================================================
 
-@private
+/*@private
 _ext_drag_drop_clear_payload :: proc() {
 	for s in this.platform_drag_drop_payload {
 		delete(s)
@@ -2030,13 +2040,14 @@ _ext_drag_drop_mouse_over :: proc "c" (x, y: f32) {
 	log.debug(x, y)
 
 	//imgui.IO_AddMousePosEvent(io, x, y);
-}
+}*/
 
 @private
 _imgui_settings_handler_open_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, name: cstring
 ) -> rawptr {
-	context = this.ctx
+	ui := cast(^State) handler.UserData
+	context = ui.ctx
 	name_str := string(name)
 	for window, i in window_info {
 		if string(window.internal_name) == name_str {
@@ -2051,7 +2062,8 @@ _imgui_settings_handler_open_proc :: proc "c" (
 _imgui_settings_handler_read_line_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, entry: rawptr, line: cstring
 ) {
-	context = this.ctx
+	ui := cast(^State) handler.UserData
+	context = ui.ctx
 	if entry == nil {return}
 
 	window: Window = cast(Window) (uintptr(entry) - 1)
@@ -2069,7 +2081,8 @@ _imgui_settings_handler_read_line_proc :: proc "c" (
 _imgui_settings_handler_write_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, out_buf: ^imgui.TextBuffer
 ) {
-	context = this.ctx
+	ui := cast(^State) handler.UserData
+	context = ui.ctx
 
 	for window in window_info {
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
@@ -2081,8 +2094,8 @@ _imgui_settings_handler_write_proc :: proc "c" (
 // Metadata editor
 // -----------------------------------------------------------------------------
 @private
-_show_metadata_editor :: proc(lib: Library) {
-	if len(this.selection) == 0 {
+_show_metadata_editor :: proc(lib: Library, selection: []Track_ID) {
+	if len(selection) == 0 {
 		imgui.TextDisabled("No track selected")
 		return
 	}
@@ -2126,15 +2139,15 @@ _show_metadata_editor :: proc(lib: Library) {
 		imgui.PopID()
 	}
 
-	if len(this.selection) == 1 {
+	if len(selection) == 1 {
 		path_buf: [384]u8
-		imgui.TextDisabled("Editing track %s", library.get_track_path_cstring(lib, this.selection[0], path_buf[:]))
+		imgui.TextDisabled("Editing track %s", library.get_track_path_cstring(lib, selection[0], path_buf[:]))
 
 		if imgui.BeginTable("##metadata_editor_table", 2, table_flags) {
 			imgui.TableSetupColumn("Name", {}, 0.3)
 			imgui.TableSetupColumn("Value", {}, 0.7)
 	
-			track := library.get_track_info(lib, this.selection[0])
+			track := library.get_track_info(lib, selection[0])
 
 			string_row(track.title, library.MAX_TRACK_TITLE_LENGTH+1, "Title")
 			string_row(track.artist, library.MAX_TRACK_ARTIST_LENGTH+1, "Artist")
@@ -2153,7 +2166,7 @@ _show_metadata_editor :: proc(lib: Library) {
 		}*/
 	}
 	else {
-		imgui.TextDisabled("Editing %d tracks", i32(len(this.selection)))
+		imgui.TextDisabled("Editing %d tracks", i32(len(selection)))
 
 		@static
 		changes: struct {
@@ -2184,7 +2197,7 @@ _show_metadata_editor :: proc(lib: Library) {
 
 		if imgui.Button("Apply") {
 			if util.message_box("Apply Changes?", .YesNo, "Apply these metadata changes to all selected tracks? This cannot be undone.") {
-				for track_id in this.selection {
+				for track_id in selection {
 					track := library.get_raw_track_info_pointer(lib, track_id)
 					if changes.enable_title {track.title = changes.title}
 					if changes.enable_artist {track.artist = changes.artist}
@@ -2218,8 +2231,8 @@ _ensure_layout_folder :: proc() {
 }
 
 @private
-_get_layout_path :: proc(index: int) -> string {
-	name := string(cstring(&this.layout_names[index][0]))
+_get_layout_path :: proc(ui: State, index: int) -> string {
+	name := string(cstring(&ui.layout_names[index][0]))
 	return filepath.join({system_paths.CONFIG_DIR, "layouts", name})
 }
 
@@ -2229,28 +2242,29 @@ _set_layout_from_ini :: proc(ini: []u8) {
 }
 
 @private
-_scan_layouts :: proc() {
+_scan_layouts :: proc(ui: ^State) {
 	folder_path := filepath.join({system_paths.CONFIG_DIR, "layouts"})
 	defer delete(folder_path)
 
-	clear(&this.layout_names)
+	clear(&ui.layout_names)
 	
 	iterator :: proc(fullpath: string, is_folder: bool, data: rawptr) {
+		ui := cast(^State) data
 		if is_folder {return}
 		filename := filepath.base(fullpath)
 		name_buf: _Layout_Name
 		util.copy_string_to_buf(name_buf[:], filename)
-		append(&this.layout_names, name_buf)
+		append(&ui.layout_names, name_buf)
 	}
 	
-	if !util.for_each_file_in_folder(folder_path, iterator, nil) {
+	if !util.for_each_file_in_folder(folder_path, iterator, ui) {
 		if !os.exists(folder_path) {os.make_directory(folder_path)}
 	}
 }
 
 @private
-_save_layout :: proc(index: int) {
-	path := _get_layout_path(index)
+_save_layout :: proc(ui: State, index: int) {
+	path := _get_layout_path(ui, index)
 	defer delete(path)
 	path_cstring := strings.clone_to_cstring(path)
 	defer delete(path_cstring)	
@@ -2258,19 +2272,14 @@ _save_layout :: proc(index: int) {
 }
 
 @private
-_load_layout :: proc(index: int) {
-	path := _get_layout_path(index)
+_load_layout :: proc(ui: ^State, index: int) {
+	path := _get_layout_path(ui^, index)
 	defer delete(path)
 	data, ok := os.read_entire_file_from_filename(path)
 	if !ok {return}
 
-	this.layout_that_we_want_to_load = data
-	this.free_layout_after_load = true
-}
-
-@private @fini
-_cleanup_layouts :: proc() {
-	delete(this.layout_names)
+	ui.layout_that_we_want_to_load = data
+	ui.free_layout_after_load = true
 }
 
 // =============================================================================

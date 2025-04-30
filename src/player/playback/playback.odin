@@ -168,9 +168,13 @@ init :: proc() -> (state: State, ok: bool) {
 	return
 }
 
-shutdown :: proc() {
-	audio.stop()
-	audio.shutdown()
+destroy :: proc(state: ^State) {
+	delete(state.queue)
+	for ch in 0..<MAX_CHANNELS {
+		delete(state.buffer_capture.prev[ch])
+		delete(state.buffer_capture.next[ch])
+	}
+	decoder.close(&state.decoder)
 }
 
 @private

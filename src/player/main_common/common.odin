@@ -35,6 +35,7 @@ import "player:audio"
 state: struct {
 	ctx: runtime.Context,
 	library: library.Library,
+	ui: ui.State,
 	playback_decoder_lock: sync.Mutex,
 	playback: playback.State,
 	audio_stream_info: audio.Stream_Info,
@@ -51,13 +52,14 @@ audio_callback :: proc(buffer: []f32, data: rawptr) {
 
 init :: proc() -> bool {
 	audio.init() or_return
-	state.library = library.load_library("library.json") or_return
+	state.library = library.load_library("library.json", "playlists") or_return
 	state.playback = playback.init() or_return
 	system_paths.init()
 	prefs.load()
 	theme.init()
 	playback.init()
-	ui.init()
+	state.ui = ui.init() or_return
+	ui.install_imgui_settings_handler(&state.ui)
 
 	// Start audio stream
 	{
@@ -70,13 +72,13 @@ init :: proc() -> bool {
 
 frame :: proc() {
 	signal.post(.NewFrame)
-	ui.show(&state.library, &state.playback)
+	ui.show(&state.ui, &state.library, &state.playback)
 }
 
 shutdown :: proc() {
 	prefs.save()
-	ui.shutdown()
-	playback.shutdown()
+	ui.destroy(state.ui)
+	playback.destroy(&state.playback)
 	audio.shutdown()
 	library.destroy(state.library)
 }
