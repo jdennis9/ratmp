@@ -35,7 +35,6 @@ import imgui "libs:odin-imgui"
 
 import "player:config"
 import "player:library"
-import "player:signal"
 import "player:util"
 import "player:playback"
 import "player:video"
@@ -557,7 +556,7 @@ _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	return false
 }
 
-show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preferences) {
+show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preferences) -> (keep_running: bool = true) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -701,7 +700,9 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preference
 			}
 			imgui.MenuItem("Minimize to tray")
 			imgui.Separator()
-			if imgui.MenuItem("Exit") {signal.post(.Exit)}
+			if imgui.MenuItem("Exit") {
+				keep_running = false
+			}
 			imgui.EndMenu()
 		}
 
@@ -1046,6 +1047,8 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preference
 	if ui.enable_imgui_demo_window {
 		imgui.ShowDemoWindow(&ui.enable_imgui_demo_window)
 	}
+
+	return
 }
 
 @private

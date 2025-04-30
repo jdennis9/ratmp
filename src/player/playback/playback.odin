@@ -24,7 +24,6 @@ import "core:math/rand"
 import "core:path/filepath"
 import "core:time"
 
-import "player:signal"
 import "player:library"
 import "player:audio"
 import "player:decoder"
@@ -81,10 +80,7 @@ _fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: in
 	if !sync.atomic_load(&state.paused) {
 		status := decoder.fill_buffer(&state.decoder, output, samplerate, channels)
 		
-		if status == .EOF {
-			signal.post(.RequestNext)
-		}
-		else if status == .NO_FILE {
+		if status == .NO_FILE {
 			for &f in output {f = 0}
 		}
 
@@ -209,7 +205,6 @@ set_paused :: proc(state: ^State, paused: bool) {
 		return
 	}
 	sync.atomic_store(&state.paused, paused)
-	signal.post(.PlaybackStateChanged)
 	audio.interrupt()
 }
 
@@ -227,7 +222,6 @@ stop :: proc(state: ^State) {
 	clear(&state.queue)
 	state.playing_track = 0
 	
-	signal.post(.PlaybackStopped)
 	audio.interrupt()
 }
 
@@ -242,7 +236,6 @@ play_track :: proc(state: ^State, lib: library.Library, track: library.Track_ID)
 	if (_play_file(state, path)) {
 		state.playing_track = track
 		set_paused(state, false)
-		signal.post(.TrackChanged)
 		return true
 	}
 
@@ -383,21 +376,20 @@ append_to_queue :: proc(state: ^State, tracks: []library.Track_ID) {
 	}
 }
 
-play_track_at_position :: proc(state: ^State, lib: Library, in_pos: int) {
+play_track_at_position :: proc(state: ^State, lib: Library, in_pos: int) -> bool {
 	pos := in_pos
 
 	if len(state.queue) == 0 {
-		return
+		return false
 	}
 
 	if pos >= len(state.queue) || pos < 0 {
 		pos = 0
 	}
 
-	if !play_track(state, lib, state.queue[pos]) {
-		signal.post(.RequestNext)
-	}
+	play_track(state, lib, state.queue[pos]) or_return
 	state.queue_position = pos
+	return true
 }
 
 play_track_array :: proc(state: ^State, lib: Library, tracks: []Track_ID) {

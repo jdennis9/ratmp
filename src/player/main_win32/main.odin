@@ -30,7 +30,6 @@ import imgui "libs:odin-imgui"
 import "player:util"
 import com "player:main_common"
 import dx11 "player:video/dx11"
-import "player:signal"
 import "player:media_controls"
 import "player:playback"
 import "player:library"
@@ -49,6 +48,15 @@ this: struct {
 	running: bool,
 	enable_media_controls: bool,
 	close_policy: int,
+
+	window_title_track_id: library.Track_ID,
+
+	media_controls: struct {
+		play: bool,
+		prev: bool,
+		next: bool,
+		pause: bool,
+	}
 }
 
 @private
@@ -77,67 +85,44 @@ media_controls_handler :: proc "c" (event: media_controls.Event) {
 
 	switch event {
 		case .Play: {
-			signal.post(.RequestPlay)
+			this.media_controls.play = true
 		}
 		case .Pause: {
-			signal.post(.RequestPause)
+			this.media_controls.pause = true
 		}
 		case .Next: {
-			signal.post(.RequestNext)
+			this.media_controls.next = true
 		}
 		case .Prev: {
-			signal.post(.RequestPrev)
+			this.media_controls.prev = true
 		}
 	}
 
 	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
 }
 
-signal_post_callback :: proc(sig: signal.Signal) {
-	win.PostMessageW(this.hwnd, win.WM_USER, auto_cast sig, 0)
-}
+sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
+	@static displayed_track_id: library.Track_ID
+	@static displayed_status: media_controls.Status
 
-@private
-_media_controls_signal_handler :: proc(sig: signal.Signal) {
-	/*if sig == .PlaybackStopped {
-		media_controls.set_status(.Stopped)
-	}
-	else if sig == .TrackChanged {
-		track_id := playback.get_playing_track()
-		track := library.get_track_info(track_id)
+	if pb.playing_track != 0 && displayed_track_id != pb.playing_track {
+		track := library.get_track_info(lib, pb.playing_track)
 		media_controls.set_metadata(track.album, track.artist, track.title)
 	}
-	else if sig == .PlaybackStateChanged {
-		if playback.is_paused() {
-			media_controls.set_status(.Paused)
-		}
-		else {
-			media_controls.set_status(.Playing)
-		}
-	}*/
-}
 
-signal_handler :: proc(sig: signal.Signal) {
-	/*if sig == .TrackChanged {
-		track_id := playback.get_playing_track()
-		track := library.get_track_info(track_id)
+	status: media_controls.Status
 
-		buf: [256]u8
-		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
+	if pb.playing_track == 0 {
+		status = .Stopped
 	}
-	else if sig == .PlaybackStopped {
-		buf: [256]u8
-		set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION))
+	else {
+		status = pb.paused ? .Paused : .Playing
 	}
-	else if sig == .ApplyPrefs {
-		if prefs.prefs.choices[.EnableWindowsMediaControls] == 1 {
-			media_controls.install_handler(media_controls_handler)
-			signal.install_handler(_media_controls_signal_handler)
-		}
+
+	if status != displayed_status {
+		displayed_status = status
+		media_controls.set_status(status)
 	}
-	else if sig == .Exit {
-		this.running = false
-	}*/
 }
 
 main :: proc() {
@@ -171,9 +156,6 @@ run :: proc() -> bool {
 	ole_initialize()
 	win.CoInitializeEx(nil, .MULTITHREADED)
 	this.hinstance = auto_cast win.GetModuleHandleW(nil)
-	
-	signal.init(signal_post_callback)
-	signal.install_handler(signal_handler)
 	
 	this.icon = win.LoadIconA(this.hinstance, "WindowIcon")
 	
@@ -215,16 +197,12 @@ run :: proc() -> bool {
 	defer com.shutdown()
 	
 	apply_prefs(state.prefs)
-
-	// Flush signal events
-	{
-		msg: win.MSG
-		for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
-			win.TranslateMessage(&msg)
-			win.DispatchMessageW(&msg)
-		}
-	}
 	
+	if state.prefs.choices[.EnableWindowsMediaControls] == 1 {
+		media_controls.install_handler(media_controls_handler)
+		this.enable_media_controls = true
+	}
+
 	visible := true
 	show_window()
 
@@ -257,8 +235,48 @@ run :: proc() -> bool {
 			apply_prefs(state.prefs)
 		}
 
+		// Update window title to show playing track
+		if state.playback.playing_track != this.window_title_track_id {
+			buf: [256]u8
+			this.window_title_track_id = state.playback.playing_track
+
+			if state.playback.playing_track != 0 {
+				track := library.get_track_info(state.library, state.playback.playing_track)
+				set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
+			}
+			else {
+				set_window_title(build.PROGRAM_NAME_AND_VERSION)
+			}
+		}
+
+		// Handle media controls
+		if this.enable_media_controls {
+			if this.media_controls.next {
+				playback.play_next_track(&state.playback, state.library)
+				this.media_controls.next = false
+			}
+
+			if this.media_controls.prev {
+				playback.play_prev_track(&state.playback, state.library)
+				this.media_controls.prev = false
+			}
+
+			if this.media_controls.pause {
+				playback.set_paused(&state.playback, true)
+				this.media_controls.pause = false
+			}
+
+			if this.media_controls.play {
+				playback.set_paused(&state.playback, false)
+				this.media_controls.play = false
+			}
+
+			sync_media_controls_state(state.playback, state.library)
+		}
+		
+		// Update and render frame
 		if !minimized && dx11.begin_frame() {
-			com.frame()
+			this.running = com.frame()
 			visible = dx11.present()
 		}
 	}

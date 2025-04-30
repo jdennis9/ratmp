@@ -24,7 +24,6 @@ import "core:c"
 
 import "player:playback"
 import "player:library"
-import "player:signal"
 
 Event :: enum c.int {
 	Pause,

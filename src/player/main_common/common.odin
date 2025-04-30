@@ -30,7 +30,6 @@ import "player:library"
 import "player:ui"
 import "player:video"
 import "player:playback"
-import "player:signal"
 import "player:audio"
 
 LIBRARY_PATH :: "library.json"
@@ -109,9 +108,8 @@ handle_events :: proc() {
 	}
 }
 
-frame :: proc() {
-	signal.post(.NewFrame)
-	ui.show(&state.ui, &state.library, &state.playback, &state.prefs)
+frame :: proc() -> bool {
+	return ui.show(&state.ui, &state.library, &state.playback, &state.prefs)
 }
 
 shutdown :: proc() {

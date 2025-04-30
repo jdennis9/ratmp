@@ -28,7 +28,6 @@ import "core:log"
 
 import "player:system_paths"
 import "player:util"
-import "player:signal"
 
 FONT_SIZE_MIN :: 8
 FONT_SIZE_MAX :: 24
@@ -152,7 +151,7 @@ load :: proc(path: string) -> (prefs: Preferences, ok: bool) {
 	m, map_error := ini.load_map_from_path(path, context.allocator) or_return
 	if !ok || map_error != nil {
 		save(prefs, path)
-		signal.post(.ApplyPrefs)
+		prefs.dirty = true
 		return
 	}
 	
@@ -189,7 +188,7 @@ load :: proc(path: string) -> (prefs: Preferences, ok: bool) {
 	}
 	
 	_load_properties()
-	signal.post(.ApplyPrefs)
+	prefs.dirty = true
 	ok = true
 	return
 }
