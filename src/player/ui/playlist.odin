@@ -266,7 +266,7 @@ _track_table_update_sort_spec :: proc(spec: ^library.Track_Sort_Spec) -> bool {
 	return false
 }
 
-_show_next_track_table_row :: proc(lib: library.Library, it: ^_Track_Table_Iterator) -> bool {
+_show_next_track_table_row :: proc(lib: library.Library, pb: Playback, it: ^_Track_Table_Iterator) -> bool {
 	if it._pos >= it._max {
 		if !imgui.ListClipper_Step(&it._list_clipper) {
 			return false
@@ -298,7 +298,7 @@ _show_next_track_table_row :: proc(lib: library.Library, it: ^_Track_Table_Itera
 	if imgui.TableSetColumnIndex(auto_cast Track_Column.Title) {
 		it.visible = true
 
-		if playback.get_playing_track() == it.track {
+		if pb.playing_track == it.track {
 			imgui.TableSetBgColor(.RowBg0, theme.get_color_u32(.PlayingHighlight))
 		}
 

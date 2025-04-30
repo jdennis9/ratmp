@@ -75,6 +75,9 @@ _check :: proc(hr: win.HRESULT, loc := #caller_location) -> bool {
 	if !win.SUCCEEDED(hr) {
 		log.error(loc, "HRESULT", hr)
 		log.errorf("%x", transmute(u32)hr)
+		when ODIN_DEBUG {
+			panic("Windows function returned an error code")
+		}
 		return false
 	}
 	return true

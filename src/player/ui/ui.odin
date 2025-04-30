@@ -62,6 +62,8 @@ Track_ID :: library.Track_ID
 Playlist_ID :: library.Playlist_ID
 @private
 Library :: library.Library
+@private
+Playback :: playback.State
 
 Window :: enum {
 	Library,
@@ -478,7 +480,7 @@ _begin_window :: proc(window: Window) -> bool {
 	return false
 }
 
-show :: proc(lib: ^Library) {
+show :: proc(lib: ^Library, pb: ^Playback) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -512,7 +514,7 @@ show :: proc(lib: ^Library) {
 	imgui.DockSpaceOverViewport({}, nil, {})
 	imgui.PopStyleColor()
 
-	analysis.update(lib^, delta, 1.0/30.0)
+	analysis.update(lib^, pb^, delta, 1.0/30.0)
 
 	// Draw background
 	if this.background.id != nil {
@@ -625,7 +627,7 @@ show :: proc(lib: ^Library) {
 
 	if this.show_preferences {
 		if imgui.Begin("Preferences", &this.show_preferences) {
-			_show_preferences_window()
+			_show_preferences_window(pb)
 		}
 		imgui.End()
 	}
@@ -747,30 +749,30 @@ show :: proc(lib: ^Library) {
 		// Playback controls
 		// -----------------------------------------------------------------------------
 		if imgui.MenuItem(STOP_ICON) {
-			playback.stop()
+			playback.stop(pb)
 		}
 
-		if imgui.MenuItem(SHUFFLE_ICON, nil, playback.is_shuffle_enabled()) {
-			playback.toggle_shuffle()
+		if imgui.MenuItem(SHUFFLE_ICON, nil, pb.shuffle) {
+			playback.toggle_shuffle(pb)
 		}
 
 		if imgui.MenuItem(PREV_TRACK_ICON) {
-			playback.play_prev_track(lib^)
+			playback.play_prev_track(pb, lib^)
 		}
 
-		if playback.is_paused() {
+		if playback.is_paused(pb^) {
 			if imgui.MenuItem(PLAY_ICON) {
-				playback.set_paused(false)
+				playback.set_paused(pb, false)
 			}
 		}
 		else {
 			if imgui.MenuItem(PAUSE_ICON) {
-				playback.set_paused(true)
+				playback.set_paused(pb, true)
 			}
 		}
 
 		if imgui.MenuItem(NEXT_TRACK_ICON) {
-			playback.play_next_track(lib^)
+			playback.play_next_track(pb, lib^)
 		}
 		imgui.Separator()
 			
@@ -797,8 +799,8 @@ show :: proc(lib: ^Library) {
 		// ---------------------------------------------------------------------
 		{
 			@static seek_target: f32
-			pos := playback.get_second()
-			duration := playback.get_duration()
+			pos := playback.get_second(pb^)
+			duration := playback.get_duration(pb^)
 
 			ch, cm, cs := util.split_seconds(cast(i32) pos)
 			dh, dm, ds := util.split_seconds(cast(i32) duration)
@@ -811,7 +813,7 @@ show :: proc(lib: ^Library) {
 			}
 
 			if imgui.IsItemDeactivated() {
-				playback.seek(int(seek_target * f32(duration)))
+				playback.seek(pb, int(seek_target * f32(duration)))
 			}
 		}
 
@@ -861,61 +863,61 @@ show :: proc(lib: ^Library) {
 		switch window_id {
 			case .Library: {
 				if _begin_window(.Library) {
-					_show_library_window(lib)
+					_show_library_window(lib, pb)
 					imgui.End()
 				}
 			}
 			case .Metadata: {
 				if _begin_window(.Metadata) {
-					_show_metadata_window(lib^)
+					_show_metadata_window(lib^, pb^)
 					imgui.End()
 				}
 			}
 			case .Queue: {
 				if _begin_window(.Queue) {
-					_show_queue_window(lib)
+					_show_queue_window(lib, pb)
 					imgui.End()
 				}
 			}
 			case .Navigation: {
 				if _begin_window(.Navigation) {
-					_show_navigation_window(lib)
+					_show_navigation_window(lib, pb)
 					imgui.End()
 				}
 			}
 			case .Artists: {
 				if _begin_window(.Artists) {
-					_show_playlist_group_window(lib^, lib.artists, &this.artists_window)
+					_show_playlist_group_window(lib^, pb, lib.artists, &this.artists_window)
 					imgui.End()
 				}
 			}
 			case .Albums: {
 				if _begin_window(.Albums) {
-					_show_playlist_group_window(lib^, lib.albums, &this.albums_window)
+					_show_playlist_group_window(lib^, pb, lib.albums, &this.albums_window)
 					imgui.End()
 				}
 			}
 			case .Genres: {
 				if _begin_window(.Genres) {
-					_show_playlist_group_window(lib^, lib.genres, &this.genres_window)
+					_show_playlist_group_window(lib^, pb, lib.genres, &this.genres_window)
 					imgui.End()
 				}
 			}
 			case .Folders: {
 				if _begin_window(.Folders) {
-					_show_playlist_group_window(lib^, lib.folders, &this.folders_window)
+					_show_playlist_group_window(lib^, pb, lib.folders, &this.folders_window)
 					imgui.End()
 				}
 			}
 			case .Playlist: {		
 				if _begin_window(.Playlist) {
-					_show_selected_playlist_window(lib)
+					_show_selected_playlist_window(lib, pb)
 					imgui.End()
 				}
 			}
 			case .PlaylistTabs: {
 				if _begin_window(.PlaylistTabs) {
-					_show_playlist_tabs_window(lib)
+					_show_playlist_tabs_window(lib, pb)
 					imgui.End()
 				}
 			}
@@ -945,7 +947,7 @@ show :: proc(lib: ^Library) {
 			}
 			case .WavePreview: {
 				if _begin_window(.WavePreview) {
-					_show_wave_preview_window()
+					_show_wave_preview_window(pb)
 					imgui.End()
 				}
 			}
@@ -1002,9 +1004,9 @@ show :: proc(lib: ^Library) {
 }
 
 @private
-_show_library_window :: proc(lib: ^Library) {
+_show_library_window :: proc(lib: ^Library, pb: ^Playback) {
 	playlist := &lib.library
-	_show_playlist_track_table(lib, playlist, &this.library_window)
+	_show_playlist_track_table(lib, pb, playlist, &this.library_window)
 }
 
 @private
@@ -1081,7 +1083,7 @@ _show_track_generic_context_menu_items :: proc(lib: ^Library, from_playlist: Pla
 }
 
 @private
-_show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, state: ^_Playlist_Window, no_remove := false) {
+_show_playlist_track_table :: proc(lib: ^Library, pb: ^Playback, playlist: ^library.Playlist, state: ^_Playlist_Window, no_remove := false) {
 	want_remove_selection: bool
 	apply_filter: bool
 	use_filter: bool
@@ -1120,7 +1122,7 @@ _show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, s
 			library.sort_tracks(lib^, playlist.tracks[:], state.sort_spec)
 		}
 
-		for _show_next_track_table_row(lib^, &table) {
+		for _show_next_track_table_row(lib^, pb^, &table) {
 			if !table.visible {continue}
 
 			track := table.track
@@ -1133,7 +1135,7 @@ _show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, s
 			}
 
 			if middle_clicked {
-				playback.play_playlist(lib^, playlist^, table.track)
+				playback.play_playlist(pb, lib^, playlist^, table.track)
 			}
 
 			if imgui.BeginPopupContextItem() {
@@ -1141,11 +1143,11 @@ _show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, s
 				_show_track_generic_context_menu_items(lib, playlist.id, track, table.selection)
 
 				if imgui.MenuItem("Add to queue") {
-					playback.append_to_queue(this.selection[:])
+					playback.append_to_queue(pb, this.selection[:])
 				}
 
 				if imgui.MenuItem("Play") {
-					playback.play_track_array(lib^, this.selection[:])
+					playback.play_track_array(pb, lib^, this.selection[:])
 				}
 
 				if !no_remove {
@@ -1169,22 +1171,22 @@ _show_playlist_track_table :: proc(lib: ^Library, playlist: ^library.Playlist, s
 }
 
 @private
-_show_queue_window :: proc(lib: ^Library) {
+_show_queue_window :: proc(lib: ^Library, pb: ^Playback) {
 	@static sort_spec: library.Track_Sort_Spec
 	want_remove_selection: bool
 
 	queue_id := max(Playlist_ID)
 	table := _Track_Table_Iterator {
-		tracks = playback.get_queue(),
+		tracks = pb.queue[:],
 		selection = this.selection_playlist_id == queue_id ? this.selection[:] : nil,
 	}
 
 	if _begin_track_table(lib^, &table, "##queue") {
 		if _track_table_update_sort_spec(&sort_spec) {
-			playback.sort_queue(lib^, sort_spec)
+			playback.sort_queue(pb^, lib^, sort_spec)
 		}
 
-		for _show_next_track_table_row(lib^, &table) {
+		for _show_next_track_table_row(lib^, pb^, &table) {
 			if !table.visible {continue}
 			track := table.track
 			left_clicked := imgui.IsItemClicked(.Left)
@@ -1196,7 +1198,7 @@ _show_queue_window :: proc(lib: ^Library) {
 			}
 
 			if middle_clicked {
-				playback.play_track_at_position(lib^, table._pos)
+				playback.play_track_at_position(pb, lib^, table._pos)
 			}
 
 			if imgui.BeginPopupContextItem() {
@@ -1216,7 +1218,7 @@ _show_queue_window :: proc(lib: ^Library) {
 }
 
 @private
-_show_selected_playlist_window :: proc(lib: ^Library) {
+_show_selected_playlist_window :: proc(lib: ^Library, pb: ^Playback) {
 	@static state: _Playlist_Window
 
 	playlist := library.get_playlist(lib, this.selected_playlist)
@@ -1227,13 +1229,13 @@ _show_selected_playlist_window :: proc(lib: ^Library) {
 			
 	imgui.TextUnformatted(playlist.name)
 	imgui.Separator()
-	_show_playlist_track_table(lib, playlist, &state)
+	_show_playlist_track_table(lib, pb, playlist, &state)
 }
 
 @private
-_show_navigation_window :: proc(lib: ^Library) {
+_show_navigation_window :: proc(lib: ^Library, pb: ^Playback) {
 	playlists := lib.playlists[:]
-	queued_playlist_id := playback.get_queued_playlist()
+	queued_playlist_id := pb.queued_playlist
 	delete_playlist_id: Playlist_ID
 
 	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner
@@ -1264,7 +1266,7 @@ _show_navigation_window :: proc(lib: ^Library) {
 		
 		row("Library", .Library, len(lib.library.tracks))
 		if imgui.IsItemClicked(.Middle) {
-			playback.play_playlist(lib^, lib.library)
+			playback.play_playlist(pb, lib^, lib.library)
 		}
 		row("Artists", .Artists, len(lib.artists.playlists))
 		row("Albums", .Albums, len(lib.albums.playlists))
@@ -1319,7 +1321,7 @@ _show_navigation_window :: proc(lib: ^Library) {
 }
 
 @private
-_show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, state: ^Playlist_Group_Window) {
+_show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.Playlist_List, state: ^Playlist_Group_Window) {
 	if !imgui.BeginTable(
 		"##layout_table", 2, 
 		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchSame|imgui.TableFlags_NoHostExtendX
@@ -1329,7 +1331,7 @@ _show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, s
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) {
 		index_of_queued_playlist := -1
-		queued_group_id := playback.get_queued_group_id()
+		queued_group_id := pb.queued_group_id
 		for p, index in list.playlists {
 			if p.group_id == queued_group_id {
 				index_of_queued_playlist = index
@@ -1352,7 +1354,7 @@ _show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, s
 
 		if action.play_playlist != nil {
 			playlist := list.playlists[action.play_playlist.?]
-			playback.play_playlist(lib, playlist)
+			playback.play_playlist(pb, lib, playlist)
 		}
 	}
 		
@@ -1384,9 +1386,9 @@ _show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, s
 		}
 
 		if _begin_track_table(lib, &table, "##playlist_group_tracks") {
-			for _show_next_track_table_row(lib, &table) {
+			for _show_next_track_table_row(lib, pb^, &table) {
 				if imgui.IsItemClicked(.Middle) {
-					playback.play_playlist(lib, playlist, table.track)
+					playback.play_playlist(pb, lib, playlist, table.track)
 				}
 			}
 
@@ -1396,14 +1398,14 @@ _show_playlist_group_window :: proc(lib: Library, list: library.Playlist_List, s
 }
 
 @private
-_show_playlist_tabs_window :: proc(lib: ^Library) {
+_show_playlist_tabs_window :: proc(lib: ^Library, pb: ^Playback) {
 	playlists := lib.playlists[:]
 	@static state: _Playlist_Window
 
 	if imgui.BeginTabBar("##playlists") {
 		for &playlist in playlists {
 			if imgui.BeginTabItem(playlist.name) {
-				_show_playlist_track_table(lib, &playlist, &state)
+				_show_playlist_track_table(lib, pb, &playlist, &state)
 				imgui.EndTabItem()
 			}
 		}
@@ -1412,9 +1414,9 @@ _show_playlist_tabs_window :: proc(lib: ^Library) {
 }
 
 @private
-_show_metadata_window :: proc(lib: Library) {
+_show_metadata_window :: proc(lib: Library, pb: Playback) {
 	@static loaded_track: Track_ID
-	playing_track := playback.get_playing_track()
+	playing_track := pb.playing_track
 
 	if loaded_track != playing_track {
 		loaded_track = playing_track
@@ -1642,7 +1644,7 @@ _show_theme_editor_window :: proc() {
 }
 
 @private
-_show_preferences_window :: proc() {
+_show_preferences_window :: proc(pb: ^Playback) {
 	path_input_row :: proc(id: prefs.StringID, str_id: cstring, name: cstring) -> bool {
 		buffer := prefs.prefs.strings[id][:]
 		imgui.PushID(name)
@@ -1733,7 +1735,8 @@ _show_preferences_window :: proc() {
 		return
 	}
 
-	select_device_row :: proc() -> (changes: bool) {
+	// @FixMe
+	/*select_device_row :: proc(pb: ^Playback) -> (changes: bool) {
 		imgui.PushID("##audio_device")
 		imgui.TableNextRow()
 		
@@ -1742,13 +1745,11 @@ _show_preferences_window :: proc() {
 		
 		imgui.TableSetColumnIndex(1)
 		pref_value := string(cstring(&prefs.prefs.strings[.PlaybackDevice][0]))
-		current_device := playback.get_audio_device()
+		current_device := pb.current_device
 		combo_preview := pref_value != "" ? cstring(&current_device.name[0]) : "(Default)"
 
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 		if imgui.BeginCombo("##device_combo", combo_preview) {
-			devices := playback.get_audio_devices()
-
 			imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))
 			if imgui.MenuItem("Use default") {
 				slice.fill(prefs.prefs.strings[.PlaybackDevice][:], 0)
@@ -1758,9 +1759,9 @@ _show_preferences_window :: proc() {
 
 			imgui.Separator()
 
-			for &device, index in devices {
+			for &device, index in pb.devices {
 				if imgui.MenuItem(cstring(&device.name[0])) {
-					playback.set_audio_device_index(index)
+					playback.set_audio_device_index(pb, index)
 					util.copy_cstring(prefs.prefs.strings[.PlaybackDevice][:], cstring(&device.id[0]))
 					changes = true
 				}
@@ -1771,13 +1772,13 @@ _show_preferences_window :: proc() {
 
 		imgui.TableSetColumnIndex(2)
 		if imgui.Button("Refresh") {
-			playback.refresh_audio_devices()
+			playback.refresh_audio_devices(pb)
 		}
 
 		imgui.PopID()
 
 		return
-	}
+	}*/
 
 	begin_table :: proc(name: cstring) -> bool {
 		imgui.SeparatorText(name)
@@ -1795,10 +1796,10 @@ _show_preferences_window :: proc() {
 
 	changes := false
 
-	if begin_table("Audio") {
-		changes |= select_device_row()
+	/*if begin_table("Audio") {
+		changes |= select_device_row(pb)
 		end_table()
-	}
+	}*/
 
 	if begin_table("UI") {
 		changes |= path_input_row(.Background, "##background", "Background")

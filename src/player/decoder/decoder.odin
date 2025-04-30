@@ -117,12 +117,12 @@ seek :: proc(dec: ^Decoder, second: int) {
 	dec.frame = int(frame)
 }
 
-get_second :: proc(dec: ^Decoder) -> int {
+get_second :: proc(dec: Decoder) -> int {
 	if dec.stream == nil {return 0}
 	return dec.frame / int(dec.info.samplerate)
 }
 
-get_duration :: proc(dec: ^Decoder) -> int {
+get_duration :: proc(dec: Decoder) -> int {
 	if dec.stream == nil {return 0}
 	return int(dec.info.frames) / int(dec.info.samplerate)
 }

@@ -74,8 +74,8 @@ this: struct {
 	fft_cfg_frame_count: int,
 }
 
-update :: proc(lib: library.Library, delta: f32, window_length: f32) {
-	playback.update_output_copy_buffer(&this.buffer)
+update :: proc(lib: library.Library, pb: playback.State, delta: f32, window_length: f32) {
+	playback.update_output_copy_buffer(pb, &this.buffer)
 	view := playback.get_output_buffer_view(&this.buffer, int(window_length*f32(this.buffer.samplerate)))
 	
 	if len(view.data[0]) == 0 {
@@ -131,7 +131,7 @@ update :: proc(lib: library.Library, delta: f32, window_length: f32) {
 	if this.recalc_wave_preview {
 		this.recalc_wave_preview = false
 		data := &this.waveform_preview
-		track := playback.get_playing_track()
+		track := pb.playing_track
 		if track != 0 && track != data.track {
 			if data.thread != nil {
 				data.want_cancel = true

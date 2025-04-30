@@ -17,7 +17,10 @@
 */
 package main_common
 
-import imgui "../../libs/odin-imgui"
+import "base:runtime"
+import "core:sync"
+
+import imgui "libs:odin-imgui"
 
 import "player:system_paths"
 import "player:prefs"
@@ -27,30 +30,53 @@ import "player:ui"
 import "player:video"
 import "player:playback"
 import "player:signal"
+import "player:audio"
 
 state: struct {
-	library: library.Library
+	ctx: runtime.Context,
+	library: library.Library,
+	playback_decoder_lock: sync.Mutex,
+	playback: playback.State,
+	audio_stream_info: audio.Stream_Info,
+}
+
+audio_callback :: proc(buffer: []f32, data: rawptr) {
+	sync.lock(&state.playback_decoder_lock)
+	defer sync.unlock(&state.playback_decoder_lock)
+
+	context = state.ctx
+
+	playback.stream(&state.playback, buffer, cast(int) state.audio_stream_info.sample_rate, cast(int) state.audio_stream_info.channels)
 }
 
 init :: proc() -> bool {
+	audio.init() or_return
 	state.library = library.load_library("library.json") or_return
+	state.playback = playback.init() or_return
 	system_paths.init()
 	prefs.load()
 	theme.init()
 	playback.init()
 	ui.init()
 
+	// Start audio stream
+	{
+		device_id := audio.get_default_device_id() or_return
+		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
+	}
+
 	return true
 }
 
 frame :: proc() {
 	signal.post(.NewFrame)
-	ui.show(&state.library)
+	ui.show(&state.library, &state.playback)
 }
 
 shutdown :: proc() {
 	prefs.save()
 	ui.shutdown()
 	playback.shutdown()
+	audio.shutdown()
 	library.destroy(state.library)
 }

@@ -386,7 +386,7 @@ _read_track_metadata :: proc(track: ^Raw_Track_Info, path: string) {
 		log.debug("Guessing duration of", filepath.base(path))
 		dec: decoder.Decoder
 		if decoder.open(&dec, path) {
-			track.duration_seconds = decoder.get_duration(&dec)
+			track.duration_seconds = decoder.get_duration(dec)
 			if track.duration_seconds == 0 {
 				log.error("Failed to guess duration of", filepath.base(path))
 			}

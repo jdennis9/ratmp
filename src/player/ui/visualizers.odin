@@ -142,10 +142,10 @@ _show_peak_window :: proc() {
     _show_bars_widget("##peaks", peaks, 0, 1)
 }
 
-_show_wave_preview_window :: proc() {
+_show_wave_preview_window :: proc(pb: ^Playback) {
     samples := analysis.get_waveform_preview()
-    playback_pos := f32(playback.get_second())
-    playback_duration := f32(playback.get_duration())
+    playback_pos := f32(playback.get_second(pb^))
+    playback_duration := f32(playback.get_duration(pb^))
 
     if len(samples) > 0 {
         drawlist := imgui.GetWindowDrawList()
@@ -183,7 +183,7 @@ _show_wave_preview_window :: proc() {
             click_pos := io.MousePos.x - cursor.x
             ratio := clamp(click_pos / size.x, 0, 1)
             seek_second := playback_duration * ratio
-            playback.seek(int(seek_second))
+            playback.seek(pb, int(seek_second))
         }
     }
 }
