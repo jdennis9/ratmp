@@ -46,22 +46,6 @@ filter_playlist :: proc(playlist: Playlist, filter_string: string) -> bool {
 	return filter_playlist_from_runes(playlist, filter_runes)
 }
 
-/*filter_playlist_list :: proc(input: []Playlist, filter_string: string) -> (output: []Playlist_ID) {
-	filtered: [dynamic]Playlist_ID
-	defer delete(filtered)
-
-	filter_rune_buf: [256]rune
-	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter_string)
-
-	for playlist in input {
-		if _filter_track_string(string(playlist.name), filter_runes) {
-			append(&filtered, playlist.id)
-		}
-	}
-
-	return slice.clone(filtered[:])
-}*/
-
 sort_playlist_list :: proc(playlists_arg: Playlist_List, spec: Playlist_Sort_Spec) {
 	playlists := playlists_arg
 	if spec.metric == .None {return}

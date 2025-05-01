@@ -264,9 +264,6 @@ State :: struct {
 	enable_imgui_theme_editor: bool,
 	enable_imgui_demo_window: bool,
 
-	platform_drag_drop_payload: [dynamic]string,
-	want_to_drop_platform_drag_drop_payload: bool,
-
 	layout_that_we_want_to_load: []u8,
 	free_layout_after_load: bool,
 
@@ -460,46 +457,6 @@ _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	}
 }
 
-/*@private
-_async_scan_thread_proc :: proc(thread_data: ^thread.Thread) {
-	context.logger = log.create_console_logger()
-	lib := cast(^Library) thread_data.data
-	df := &this.deferred_files
-	for f in df.files {
-		file := transmute(string) df.pool[f.offset:][:f.length]
-		library.add_file(lib, file)
-		//intrinsics.atomic_exchange(&df.files_loaded, intrinsics.atomic_add(&df.files_loaded, 1));
-		df.files_loaded += 1
-	}
-
-	delete(df.files)
-	df.files = nil
-	delete(df.pool)
-	df.pool = nil
-	intrinsics.atomic_store(&df.scanning, false)
-	intrinsics.atomic_store(&df.files_loaded, 0)
-
-	log.debug("Async file scan done")
-}
-
-@private
-_begin_async_scan :: proc() {
-	log.debug("Begin async file scan")
-	this.deferred_files.scanning = true
-	tp := thread.create(_async_scan_thread_proc)
-	thread.start(tp)
-}*/
-
-/*@private
-_begin_metadata_save_job :: proc() {
-	if util.message_box(
-		"Save Metadata Changes", .OkCancel,
-		"Save all metadata changes to your music files? This cannot be undone."
-	) {
-		this.metadata_save_job = lib.save_metadata_changes_async();
-	}
-}*/
-
 @private
 _metadata_scan_proc :: proc(thread_info: ^thread.Thread) {
 	data := cast(^_Background_Metadata_Scan) thread_info.data
@@ -658,19 +615,6 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preference
 			imgui.End()
 		}
 	}
-
-	// -------------------------------------------------------------------------
-	// Drag-drop
-	// -------------------------------------------------------------------------
-	// @FixMe
-	/*if ui.want_to_drop_platform_drag_drop_payload {
-		for file in ui.platform_drag_drop_payload {
-			_add_files_iterator(file, os.is_dir(file), nil)
-		}
-	
-		//_ext_drag_drop_clear_payload()
-		ui.want_to_drop_platform_drag_drop_payload = false
-	}*/
 
 	// -----------------------------------------------------------------------------
 	// Hotkeys
@@ -1922,187 +1866,6 @@ _show_help_window :: proc() {
 		imgui.EndTable()
 	}
 }
-
-// =============================================================================
-// Action handling
-// =============================================================================
-
-/*@private
-_get_selected_tracks_in_playlist :: proc(playlist: lib.Playlist) -> (tracks: [dynamic]lib.Track_ID) {
-	for track in playlist.tracks {
-		if _is_track_selected(track) {
-			append(&tracks, track)
-		}
-	}
-
-	return tracks
-}*/
-
-// Handles behaviour that is shared across all playlists
-/*@private
-_handle_base_track_table_action :: proc(action: Track_Table_Action, playlist: ^lib.Playlist) {
-	ctrl_is_down := imgui.IsKeyDown(.ImGuiMod_Ctrl)
-	altered := false
-
-	if action.select_all {
-		_clear_selection()
-		
-		if playlist.filter_hash != 0 {
-			for track_index in playlist.filter_tracks {
-				append(&this.selection, playlist.tracks[track_index])
-			}
-		}
-		else {
-			for track in playlist.tracks {
-				append(&this.selection, track)
-			}
-		}
-	}
-
-	if action.select_track != nil {
-		track_id := playlist.tracks[action.select_track.?]
-		already_selected := _is_track_selected(track_id)
-
-		if imgui.IsKeyDown(.ImGuiMod_Shift) {
-			if playlist.filter_hash != 0 {
-				_extend_track_selection_with_filter_to(playlist^, action.select_track.?, 
-					!ctrl_is_down, playlist.filter_tracks[:])
-			}
-			else {
-				_extend_track_selection_to(playlist^, action.select_track.?, !ctrl_is_down)
-			}
-		}
-		else {
-			if !ctrl_is_down {_clear_selection()}
-			append(&this.selection, playlist.tracks[action.select_track.?])
-		}
-	}
-
-	selected_tracks := _get_selected_tracks_in_playlist(playlist^)
-	defer delete(selected_tracks)
-
-	if action.add_to_queue {
-		playback.append_to_queue(selected_tracks[:])
-	}
-
-	if action.play_selection {
-		playback.play_track_array(selected_tracks[:])
-	}
-	
-	if action.remove {
-		_remove_selection_from_playlist(playlist)
-		altered = true
-	}
-
-	
-	if action.add_selection_to_playlist {
-		altered = true
-		_add_selection_to_playlist(playlist)
-	}
-	
-	if action.drag_drop_payload != nil {
-		altered = true
-		lib.playlist_add_tracks(playlist, action.drag_drop_payload)
-		delete(action.drag_drop_payload)
-	}
-	
-	if altered && playlist.id != 0 {
-		lib.save_playlist(playlist.id)
-	}
-	
-	if action.sort_spec != nil {
-		spec := action.sort_spec.?
-		playlist.sort_metric = spec.metric
-		playlist.sort_order = spec.order
-		lib.sort_playlist(playlist)
-	}
-
-	lib.update_playlist_filter(playlist, action.filter, action.filter_hash)
-}*/
-
-/*@private
-_handle_playlist_playback_action :: proc(action: Track_Table_Action, playlist: lib.Playlist) {
-	ctrl_is_down := imgui.IsKeyDown(.ImGuiMod_Ctrl)
-	if action.play_track != nil {
-		track := playlist.tracks[action.play_track.?]
-		if !_is_track_selected(track) {
-			if !ctrl_is_down {_clear_selection()}
-			append(&this.selection, track)
-		}
-		
-		playback.play_playlist(playlist, track, true)
-	}
-}*/
-
-/*@private
-_handle_queue_playback_action :: proc(action: Track_Table_Action, playlist: lib.Playlist) {
-	if action.play_track != nil {
-		playback.play_track_at_position(action.play_track.?)
-	}
-}*/
-
-// =============================================================================
-// Drag-drop
-// =============================================================================
-
-/*@private
-_ext_drag_drop_clear_payload :: proc() {
-	for s in this.platform_drag_drop_payload {
-		delete(s)
-	}
-
-	delete(this.platform_drag_drop_payload)
-	this.platform_drag_drop_payload = nil
-}
-
-@private
-_ext_drag_drop_add_file :: proc "c" (path: cstring) {
-	context = this.ctx
-	log.debug(path)
-	append(&this.platform_drag_drop_payload, strings.clone_from_cstring(path))
-}
-
-@private
-_ext_drag_drop_cancel :: proc "c" () {
-	context = this.ctx
-	log.debug()
-
-	_ext_drag_drop_clear_payload()
-}
-
-@private
-_ext_drag_drop_drop :: proc "c" () {
-	context = this.ctx
-	io := imgui.GetIO()
-	log.debug()
-	
-	// Does this need to be done on Linux too?
-	// Windows eats the mouse release event when you finish dragging
-	/*when ODIN_OS == .Windows {
-		imgui.IO_AddMouseButtonEvent(io, auto_cast imgui.MouseButton.Left, false);
-	}*/
-
-	this.want_to_drop_platform_drag_drop_payload = true
-}
-
-@private
-_ext_drag_drop_begin :: proc "c" () {
-	context = this.ctx
-	io := imgui.GetIO()
-	log.debug()
-	
-	// Need to tell ImGui that left mouse is down so drag-drop can work
-	//imgui.IO_AddMouseButtonEvent(io, auto_cast imgui.MouseButton.Left, true);
-}
-
-@private
-_ext_drag_drop_mouse_over :: proc "c" (x, y: f32) {
-	context = this.ctx
-	io := imgui.GetIO()
-	log.debug(x, y)
-
-	//imgui.IO_AddMousePosEvent(io, x, y);
-}*/
 
 @private
 _imgui_settings_handler_open_proc :: proc "c" (
