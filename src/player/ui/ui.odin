@@ -1516,11 +1516,14 @@ _show_metadata_window :: proc(state: ^_Metadata_Window, lib: Library, display_tr
 	}
 
 	avail_size := imgui.GetContentRegionAvail()
+	thumbnail_size := [2]f32{min(avail_size.x, 500), min(avail_size.x, 500)}
+
 	if state.thumbnail.id != nil {
 		imgui.PushStyleVarImVec2(.FramePadding, {0, 0})
 		defer imgui.PopStyleVar()
 
-		imgui.ImageButton("##thumbnail", state.thumbnail.id, {avail_size.x, avail_size.x})
+
+		imgui.ImageButton("##thumbnail", state.thumbnail.id, thumbnail_size)
 		// @TODO Add right-click context menu
 		/*if imgui.BeginPopupContextItem() {
 			_show_track_base_context_menu(lib, 0, playing_track)
@@ -1528,7 +1531,7 @@ _show_metadata_window :: proc(state: ^_Metadata_Window, lib: Library, display_tr
 		}*/
 	}
 	else {
-		imgui.InvisibleButton("##thumbnail", {avail_size.x, avail_size.x})
+		imgui.InvisibleButton("##thumbnail", thumbnail_size)
 		/*if imgui.BeginPopupContextItem() {
 			_show_track_base_context_menu(0, playing_track)
 			imgui.EndPopup()
