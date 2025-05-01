@@ -23,146 +23,85 @@ import "core:log"
 
 import imgui "libs:odin-imgui"
 
-import lib "player:library"
+import "player:library"
 import "player:theme"
 
-_Playlist_List_Sort_Spec :: struct {
-	metric: lib.Playlist_List_Sort_Metric,
-	order: lib.Sort_Order,
-}
+@(private="file")
+_Column_Index :: enum {Name, Length}
 
-Playlist_List_Action :: struct {
-	play_playlist: Maybe(int),
-	select_playlist: Maybe(int),
-	sort_spec: Maybe(_Playlist_List_Sort_Spec),
-	filter: string,
-	filter_hash: u32,
-}
-
-_Playlist_List_Column_Index :: enum {Name, Length}
-_Playlist_List_Column :: struct {
+@(private="file")
+_Column :: struct {
 	name: cstring,
-	width: f32,
-	sort_metric: lib.Playlist_List_Sort_Metric,
+	weight: f32,
+	sort_metric: library.Playlist_Sort_Metric,
+	flags: imgui.TableColumnFlags,
 }
 
-_show_playlist_row :: proc(list: lib.Playlist_List, playlist_index: int, playing_index: int, action: ^Playlist_List_Action) {
-	playlist := list.playlists[playlist_index]
-	imgui.TableNextRow()
-
-	imgui.PushIDInt(auto_cast playlist_index)
-	defer imgui.PopID()
-
-	name := len(playlist.name) > 0 ? playlist.name : "<none>"
-
-	if imgui.TableSetColumnIndex(auto_cast _Playlist_List_Column_Index.Name) {
-		if playlist_index == playing_index {
-			imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
-		}
-
-		if imgui.Selectable(name, false, {.SpanAllColumns}) {
-			action.select_playlist = playlist_index
-		}
-		
-		// Drag-drop
-		if imgui.BeginDragDropSource() {
-			_set_track_drag_drop_payload(playlist.tracks[:])
-			imgui.SetTooltip("%d tracks", cast(i32) len(playlist.tracks))
-			imgui.EndDragDropSource()
-		}
-
-		if imgui.IsItemClicked(.Middle) {
-			action.play_playlist = playlist_index
-		}
-	}
-
-	if imgui.TableSetColumnIndex(auto_cast _Playlist_List_Column_Index.Length) {
-		imgui.TextDisabled("%d", i32(len(playlist.tracks)))
-	}
+@(private="file")
+_COLUMNS := [_Column_Index]_Column {
+	.Name = {name = "Name", weight = 0.9, sort_metric = .Name, flags = {.NoHide}},
+	.Length = {name = "No. Tracks", weight = 0.1, sort_metric = .Length},
 }
 
-_show_playlist_list :: proc(list: lib.Playlist_List, playing_index: int) -> (action: Playlist_List_Action) {
+_begin_playlist_table :: proc(str_id: cstring) -> bool {
 	table_flags := imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
-		imgui.TableFlags_Reorderable|imgui.TableFlags_Resizable|imgui.TableFlags_SizingFixedFit|
+		imgui.TableFlags_Reorderable|imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp|
 		imgui.TableFlags_ScrollY|imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 
-	columns := [_Playlist_List_Column_Index]_Playlist_List_Column {
-		.Length = {"No. Tracks", 0.1, .Length},
-		.Name = {"Name", 0.9, .Name},
-	}
-
-	// -------------------------------------------------------------------------
-	// Sort specs helper
-	// -------------------------------------------------------------------------
-	update_sort_specs :: proc(
-		columns: [_Playlist_List_Column_Index]_Playlist_List_Column,
-		action: ^Playlist_List_Action,
-	) -> bool {
-		sort_specs := imgui.TableGetSortSpecs()
-		if sort_specs == nil {return false}
-
-		if sort_specs.SpecsDirty {
-			specs := sort_specs.Specs
-			if specs == nil {
-				action.sort_spec = _Playlist_List_Sort_Spec{
-					metric = .None,
-				}
-				return true
-			}
-			
-			out_spec := _Playlist_List_Sort_Spec{}
-			out_spec.metric = columns[auto_cast specs.ColumnIndex].sort_metric
-			if specs.SortDirection == .Ascending {out_spec.order = .Ascending}
-			else if specs.SortDirection == .Descending {out_spec.order = .Descending}
-
-			action.sort_spec = out_spec
-
-			sort_specs.SpecsDirty = false
-			return true
-		}
-
-		return false
-	}
-
-	// -------------------------------------------------------------------------
-	// Filter
-	// -------------------------------------------------------------------------
-	@static filter: [128]u8
-	@static filter_hash: u32
-
-	if imgui.InputTextWithHint("##filter", "Filter", cstring(&filter[0]), len(filter)) {
-		filter_hash = xxhash.XXH32(transmute([]u8) string(cstring(&filter[0])))
-	}
-
-	action.filter = string(cstring(&filter[0]))
-	action.filter_hash = len(action.filter) > 0 ? filter_hash : 0
-
-	// -------------------------------------------------------------------------
-	// Playlist table
-	// -------------------------------------------------------------------------
-	if imgui.BeginTable("##playlist_list", 2, table_flags) {
-		for col in columns {
-			imgui.TableSetupColumn(col.name, {.WidthStretch}, col.width)
+	if imgui.BeginTable(str_id, 2, table_flags) {
+		for col in _COLUMNS {
+			imgui.TableSetupColumn(col.name, col.flags, col.weight)
 		}
 
 		imgui.TableSetupScrollFreeze(1, 1)
 		imgui.TableHeadersRow()
 
-		update_sort_specs(columns, &action)
+		return true
+	}
 
-		if list.filter_hash == 0 {
-			for _, playlist_index in list.playlists {
-				_show_playlist_row(list, playlist_index, playing_index, &action)
-			}
-		}
-		else {
-			for playlist_index in list.filter_indices {
-				_show_playlist_row(list, int(playlist_index), playing_index, &action)
-			}
-		}
+	return false
+}
 
-		imgui.EndTable()
+_playlist_table_update_sort_spec :: proc(spec: ^library.Playlist_Sort_Spec) -> bool {
+	table_specs := imgui.TableGetSortSpecs()
+	if table_specs == nil {return false}
+
+	if table_specs.SpecsDirty {
+		specs := table_specs.Specs
+		if specs == nil {
+			spec.metric = .None
+			return true
+		}
+		
+		spec.metric = _COLUMNS[auto_cast specs.ColumnIndex].sort_metric
+		if specs.SortDirection == .Ascending {spec.order = .Ascending}
+		else if specs.SortDirection == .Descending {spec.order = .Descending}
+
+		table_specs.SpecsDirty = false
+		return true
+	}
+
+	return false
+}
+
+_playlist_table_row :: proc(playlist: library.Playlist, selected, playing: bool) -> (clicked: bool) {
+	imgui.TableNextRow()
+
+	if playing {
+		imgui.TableSetBgColor(.RowBg0, theme.get_color_u32(.PlayingHighlight))
+	}
+
+	if imgui.TableSetColumnIndex(auto_cast _Column_Index.Length) {
+		imgui.Text("%u", cast(u32) len(playlist.tracks))
+	}
+
+	if imgui.TableSetColumnIndex(auto_cast _Column_Index.Name) {
+		clicked = imgui.Selectable(playlist.name, selected, {.SpanAllColumns})
 	}
 
 	return
+}
+
+_end_playlist_table :: proc() {
+	imgui.EndTable()
 }

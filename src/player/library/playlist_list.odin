@@ -20,8 +20,20 @@ package library
 import "core:sort"
 import "core:strings"
 import "core:log"
+import "core:slice"
 
 import "player:util"
+
+Playlist_Sort_Metric :: enum {
+	None,
+	Name,
+	Length,
+}
+
+Playlist_Sort_Spec :: struct {
+	metric: Playlist_Sort_Metric,
+	order: Sort_Order,
+}
 
 filter_playlist :: proc(playlist: Playlist, filter_string: string) -> bool {
 	filter_rune_buf: [128]rune
@@ -30,25 +42,25 @@ filter_playlist :: proc(playlist: Playlist, filter_string: string) -> bool {
 	return _filter_track_string(string(playlist.name), filter_runes)
 }
 
-update_playlist_list_filter :: proc(list: ^Playlist_List, filter: string, filter_hash: u32) {
-	if list.filter_hash != filter_hash {
-		list.filter_hash = filter_hash
-		clear(&list.filter_indices)
-		list.min_filter_index = max(i32)
-		list.max_filter_index = 0
+/*filter_playlist_list :: proc(input: []Playlist, filter_string: string) -> (output: []Playlist_ID) {
+	filtered: [dynamic]Playlist_ID
+	defer delete(filtered)
 
-		for playlist, playlist_index in list.playlists {
-			if filter_playlist(playlist, filter) {
-				append(&list.filter_indices, auto_cast playlist_index)
-				list.min_filter_index = min(list.min_filter_index, cast(i32) playlist_index)
-				list.max_filter_index = max(list.max_filter_index, cast(i32) playlist_index)
-			}
+	filter_rune_buf: [256]rune
+	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter_string)
+
+	for playlist in input {
+		if _filter_track_string(string(playlist.name), filter_runes) {
+			append(&filtered, playlist.id)
 		}
 	}
-}
 
-sort_playlist_list :: proc(list: ^Playlist_List) {
-	if list.sort_metric == .None {return}
+	return slice.clone(filtered[:])
+}*/
+
+sort_playlist_list :: proc(playlists_arg: Playlist_List, spec: Playlist_Sort_Spec) {
+	playlists := playlists_arg
+	if spec.metric == .None {return}
 
 	compare_name_proc :: proc(iface: sort.Interface, i, j: int) -> bool {
 		list := cast(^Playlist_List)iface.collection
@@ -77,20 +89,16 @@ sort_playlist_list :: proc(list: ^Playlist_List) {
 	}
 
 	iface := sort.Interface {
-		collection = list,
+		collection = &playlists,
 		len = len_proc,
 		swap = swap_proc,
 	}
-	switch list.sort_metric {
+	switch spec.metric {
 		case .None:
 		case .Length: {iface.less = compare_length_proc}
 		case .Name: {iface.less = compare_name_proc}
 	}
 
-	if list.sort_order == .Ascending {sort.sort(iface)}
+	if spec.order == .Ascending {sort.sort(iface)}
 	else {sort.reverse_sort(iface)}
-}
-
-make_playlist_list_dirty :: proc(list: ^Playlist_List) {
-	list.filter_hash = 0
 }

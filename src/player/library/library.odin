@@ -116,30 +116,12 @@ Playlist :: struct {
 	group_id: u32,
 	name: cstring,
 	tracks: [dynamic]u32,
-	filter_tracks: [dynamic]int,
-	filter_hash: u32,
-	min_filter_index: int,
-	max_filter_index: int,
-	sort_metric: Track_Sort_Metric,
-	sort_order: Sort_Order,
-}
-
-Playlist_List_Sort_Metric :: enum {
-	None,
-	Name,
-	Length,
 }
 
 Playlist_List :: struct {
 	// Hashes of the group strings
 	hashes: [dynamic]u32,
 	playlists: [dynamic]Playlist,
-	filter_indices: [dynamic]i32,
-	filter_hash: u32,
-	min_filter_index: i32,
-	max_filter_index: i32,
-	sort_metric: Playlist_List_Sort_Metric,
-	sort_order: Sort_Order,
 }
 
 Track_Data :: struct {
@@ -232,9 +214,6 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 	tracks_value := root["tracks"] or_return
 	tracks := tracks_value.(json.Array) or_return
 
-	lib.library.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
-	lib.library.sort_order = cast(Sort_Order) get_int(root, "sort_order")
-
 	for track_value in tracks {
 		track := track_value.(json.Object) or_continue
 		path := get_string(track, "path")
@@ -287,9 +266,6 @@ save_to_file :: proc(lib: Library, filename: string) {
 	
 	fmt.fprintln(file, "{")
 	defer fmt.fprintln(file, "}")
-
-	write_kv_pair(file, "sort_order", int(lib.library.sort_order))
-	write_kv_pair(file, "sort_metric", int(lib.library.sort_metric))
 
 	fmt.fprintln(file, "\"tracks\": [")
 	defer fmt.fprintln(file, "],")
@@ -487,13 +463,11 @@ remove_tracks :: proc(lib: ^Library, tracks: []Track_ID) {
 		index_in_library, found_in_library := slice.linear_search(lib.library.tracks[:], track)
 		if found_in_library {
 			ordered_remove(&lib.library.tracks, index_in_library)
-			playlist_make_dirty(&lib.library)
 		}
 
 		for &playlist, playlist_index in lib.playlists {
 			index_in_playlist := slice.linear_search(playlist.tracks[:], track) or_continue
 			ordered_remove(&playlist.tracks, index_in_playlist)
-			playlist_make_dirty(&playlist)
 			playlist_altered[playlist_index] = true
 		}
 	}

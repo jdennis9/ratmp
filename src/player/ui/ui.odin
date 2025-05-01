@@ -180,6 +180,7 @@ DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 @private
 Playlist_Group_Window :: struct {
 	selected_group_id: Maybe(u32),
+	sort_spec: library.Playlist_Sort_Spec,
 }
 
 @private
@@ -1387,28 +1388,27 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 			}
 		}
 
-		action := _show_playlist_list(list, index_of_queued_playlist)
-		//lib.update_playlist_list_filter(list, action.filter, action.filter_hash)
+		if _begin_playlist_table("##playlist_table") {
+			if _playlist_table_update_sort_spec(&state.sort_spec) {
+				library.sort_playlist_list(list, state.sort_spec)
+			}
 
-		/*if action.sort_spec != nil {
-			list.sort_metric = action.sort_spec.?.metric
-			list.sort_order = action.sort_spec.?.order
-			lib.sort_playlist_list(list)
-		}*/
+			for playlist in list.playlists {
+				if _playlist_table_row(playlist, false, pb.queued_group_id == playlist.group_id) {
+					state.selected_group_id = playlist.group_id
+				}
 
-		if action.select_playlist != nil {
-			state.selected_group_id = list.playlists[action.select_playlist.?].group_id
-		}
+				if imgui.IsItemClicked(.Middle) || (imgui.IsMouseClicked(.Left) && imgui.IsMouseDoubleClicked(.Left)) {
+					playback.play_playlist(pb, lib, playlist)
+					state.selected_group_id = playlist.group_id
+				}
+			}
 
-		if action.play_playlist != nil {
-			playlist := list.playlists[action.play_playlist.?]
-			playback.play_playlist(pb, lib, playlist)
+			_end_playlist_table()
 		}
 	}
 		
 	if state.selected_group_id != nil && imgui.TableSetColumnIndex(1) {
-		@static playlist_state: _Playlist_Window
-
 		window_focused := imgui.IsWindowFocused()
 		playlist: library.Playlist
 		found_playlist: bool
@@ -1427,7 +1427,6 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 		}
 		
 		imgui.Separator()
-		//_show_playlist_track_table(playlist, &playlist_state, no_remove=true)
 
 		table := _Track_Table_Iterator {
 			tracks = playlist.tracks[:],

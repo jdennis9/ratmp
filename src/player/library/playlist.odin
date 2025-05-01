@@ -37,8 +37,6 @@ save_playlist_to_file :: proc(lib: Library, playlist: Playlist, filename: string
 
 	fmt.fprintln(file, "{")
 	write_kv_pair(file, "name", playlist.name)
-	write_kv_pair(file, "sort_metric", int(playlist.sort_metric))
-	write_kv_pair(file, "sort_order", int(playlist.sort_order))
 	fmt.fprintln(file, "\"tracks\":[")
 	for track_id in playlist.tracks {
 		buf: [384]u8
@@ -84,8 +82,6 @@ load_playlist_from_file :: proc(lib: ^Library, filename: string) -> (playlist: P
 	tracks := tracks_value.(json.Array) or_return
 
 	playlist.name = strings.clone_to_cstring(name)
-	playlist.sort_metric = cast(Track_Sort_Metric) get_int(root, "sort_metric")
-	playlist.sort_order = cast(Sort_Order) get_int(root, "sort_order")
 	playlist.id = _alloc_playlist_id(lib)
 
 	for track_value in tracks {
@@ -249,13 +245,8 @@ sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_Spec) {
 	else {sort.reverse_sort(iface)}
 }
 
-playlist_make_dirty :: proc(playlist: ^Playlist) {
-	playlist.filter_hash = 0
-}
-
 playlist_clear :: proc(playlist: ^Playlist) {
 	clear(&playlist.tracks)
-	playlist_make_dirty(playlist)
 }
 
 playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
@@ -264,7 +255,6 @@ playlist_add_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
 			append(&playlist.tracks, track)
 		}
 	}
-	playlist_make_dirty(playlist)
 }
 
 playlist_remove_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
@@ -272,6 +262,4 @@ playlist_remove_tracks :: proc(playlist: ^Playlist, tracks: []Track_ID) {
 		index := slice.linear_search(playlist.tracks[:], track) or_continue
 		ordered_remove(&playlist.tracks, index)
 	}
-
-	playlist_make_dirty(playlist)
 }
