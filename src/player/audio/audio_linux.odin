@@ -15,13 +15,13 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package audio;
+package audio
 
-import "base:runtime";
-import "core:log";
-import C "core:c";
+import "base:runtime"
+import "core:log"
+import C "core:c"
 
-import pa "../../bindings/portaudio";
+import pa "../../bindings/portaudio"
 
 // @NOTES:
 // PortAudio doesn't have any way of discarding the current buffer that I know of, so the solution is to use a short
@@ -36,7 +36,7 @@ _audio: struct {
 	callback_data: rawptr,
 	devices: []Device_Props,
 	info: Stream_Info,
-};
+}
 
 @private
 _check :: proc(error: pa.ErrorCode, loc := #caller_location, expr := #caller_expression) -> bool {

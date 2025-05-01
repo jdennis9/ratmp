@@ -1,3 +1,3 @@
-package drag_drop;
+package drag_drop
 
 set_interface :: proc(iface: ^Interface) {}

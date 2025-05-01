@@ -1,8 +1,8 @@
-package portaudio;
+package portaudio
 
-import "core:c";
+import "core:c"
 
-foreign import lib "system:portaudio";
+foreign import lib "system:portaudio"
 
 ErrorCode :: enum c.int {
 	NoError = 0,
@@ -37,12 +37,12 @@ ErrorCode :: enum c.int {
     paBadBufferPtr
 }
 
-DeviceIndex :: c.int;
-NoDevice :: cast(DeviceIndex)-1;
-Time :: f64;
-SampleFormat :: c.ulong;
-StreamFlags :: c.ulong;
-StreamCallbackFlags :: c.ulong;
+DeviceIndex :: c.int
+NoDevice :: cast(DeviceIndex)-1
+Time :: f64
+SampleFormat :: c.ulong
+StreamFlags :: c.ulong
+StreamCallbackFlags :: c.ulong
 
 SampleFormat_Float32 :: 0x00000001
 
@@ -50,13 +50,13 @@ StreamCallbackTimeInfo :: struct {
     inputBufferAdcTime: Time,
     currentTime: Time,
     outputBufferDacTime: Time,
-};
+}
 
 StreamCallbackResult :: enum c.int {
     Continue,
     Complete,
     Abort,
-};
+}
 
 StreamCallback :: #type proc "c" (
     input, output: rawptr,
@@ -64,7 +64,7 @@ StreamCallback :: #type proc "c" (
     timeInfo: ^StreamCallbackTimeInfo,
     statusFlags: StreamCallbackFlags,
     userData: rawptr,
-) -> StreamCallbackResult;
+) -> StreamCallbackResult
 
 DeviceInfo :: struct {
     structVersion: c.int,
@@ -77,18 +77,18 @@ DeviceInfo :: struct {
     defaultHighInputLatency: Time,
     defaultHighOutputLatency: Time,
     defaultSampleRate: f64,
-};
+}
 
-Stream :: distinct rawptr;
+Stream :: distinct rawptr
 
 @(link_prefix="Pa_")
 foreign lib {
-	GetErrorText :: proc(code: ErrorCode) -> cstring ---;
-    Initialize :: proc() -> ErrorCode ---;
-    Terminate :: proc() -> ErrorCode ---;
-    GetDeviceCount :: proc() -> DeviceIndex ---;
-    GetDefaultOutputDevice :: proc() -> DeviceIndex ---;
-    GetDeviceInfo :: proc(device: DeviceIndex) -> ^DeviceInfo ---;
+	GetErrorText :: proc(code: ErrorCode) -> cstring ---
+    Initialize :: proc() -> ErrorCode ---
+    Terminate :: proc() -> ErrorCode ---
+    GetDeviceCount :: proc() -> DeviceIndex ---
+    GetDefaultOutputDevice :: proc() -> DeviceIndex ---
+    GetDeviceInfo :: proc(device: DeviceIndex) -> ^DeviceInfo ---
     OpenDefaultStream :: proc(
         stream: ^Stream,
         numInputChannels: c.int,
@@ -98,11 +98,11 @@ foreign lib {
         framesPerBuffer: c.ulong,
         callback: StreamCallback,
         userData: rawptr,
-    ) -> ErrorCode ---;
-    CloseStream :: proc(stream: Stream) -> ErrorCode ---;
-    StartStream :: proc(stream: Stream) -> ErrorCode ---;
-    StopStream :: proc(stream: Stream) -> ErrorCode ---;
-    AbortStream :: proc(stream: Stream) -> ErrorCode ---;
+    ) -> ErrorCode ---
+    CloseStream :: proc(stream: Stream) -> ErrorCode ---
+    StartStream :: proc(stream: Stream) -> ErrorCode ---
+    StopStream :: proc(stream: Stream) -> ErrorCode ---
+    AbortStream :: proc(stream: Stream) -> ErrorCode ---
 }
 
 

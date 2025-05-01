@@ -15,88 +15,88 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package video_opengl;
+package video_opengl
 
-import "vendor:glfw";
-import gl "vendor:OpenGL";
+import "vendor:glfw"
+import gl "vendor:OpenGL"
 
-import imgui "../../../libs/odin-imgui";
-import imgui_gl "../../../libs/odin-imgui/imgui_impl_opengl3";
-import imgui_glfw "../../../libs/odin-imgui/imgui_impl_glfw";
+import imgui "../../../libs/odin-imgui"
+import imgui_gl "../../../libs/odin-imgui/imgui_impl_opengl3"
+import imgui_glfw "../../../libs/odin-imgui/imgui_impl_glfw"
 
-import com "..";
+import com ".."
 
 @private
 this: struct {
 	window: glfw.WindowHandle,
-};
+}
 
 init_for_linux :: proc(window: glfw.WindowHandle) -> bool {
-	glfw.MakeContextCurrent(window);
-	gl.load_up_to(3, 0, glfw.gl_set_proc_address);
-	this.window = window;
-	com.impl.create_texture = create_texture;
-	com.impl.destroy_texture = destroy_texture;
-	com.impl.invalidate_imgui_objects = invalidate_imgui_objects;
-	com.impl.create_imgui_objects = create_imgui_objects;
+	glfw.MakeContextCurrent(window)
+	gl.load_up_to(3, 0, glfw.gl_set_proc_address)
+	this.window = window
+	com.impl.create_texture = create_texture
+	com.impl.destroy_texture = destroy_texture
+	com.impl.invalidate_imgui_objects = invalidate_imgui_objects
+	com.impl.create_imgui_objects = create_imgui_objects
 	imgui_glfw.InitForOpenGL(window, true) or_return
 	imgui_gl.Init() or_return
 	return true
 }
 
 shutdown :: proc() {
-	imgui_gl.Shutdown();
-	imgui_glfw.Shutdown();
+	imgui_gl.Shutdown()
+	imgui_glfw.Shutdown()
 }
 
 begin_frame :: proc() -> bool {
-	imgui_glfw.NewFrame();
-	imgui_gl.NewFrame();
-	imgui.NewFrame();
+	imgui_glfw.NewFrame()
+	imgui_gl.NewFrame()
+	imgui.NewFrame()
 
-	gl.ClearColor(0, 0, 0, 0.5);
-	gl.Clear(gl.COLOR_BUFFER_BIT);
+	gl.ClearColor(0, 0, 0, 0.5)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
 
-	return true;
+	return true
 }
 
 end_frame :: proc() {
-	imgui.Render();
-	draw_data := imgui.GetDrawData();
+	imgui.Render()
+	draw_data := imgui.GetDrawData()
 	if draw_data != nil {
-		imgui_gl.RenderDrawData(draw_data);
+		imgui_gl.RenderDrawData(draw_data)
 	}
 
-	glfw.SwapBuffers(this.window);
+	glfw.SwapBuffers(this.window)
 }
 
 invalidate_imgui_objects :: proc() {
-	imgui_gl.DestroyDeviceObjects();
+	imgui_gl.DestroyDeviceObjects()
 }
 
 create_imgui_objects :: proc() {
-	imgui_gl.CreateDeviceObjects();
+	imgui_gl.CreateDeviceObjects()
 }
 
 create_texture :: proc(width, height: int, data: rawptr) -> (out: com.Texture, ok: bool) {
-	handle: u32;
+	handle: u32
 
-	gl.GenTextures(1, &handle);
+	gl.GenTextures(1, &handle)
 	if handle == 0 {return}
-	gl.BindTexture(gl.TEXTURE_2D, handle);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, i32(width), i32(height), 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-	gl.BindTexture(gl.TEXTURE_2D, 0);
+	gl.BindTexture(gl.TEXTURE_2D, handle)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, i32(width), i32(height), 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+	gl.BindTexture(gl.TEXTURE_2D, 0)
 
-	out.id = cast(imgui.TextureID) cast(uintptr) handle;
-	ok = true;
-	return;
+	out.id = cast(imgui.TextureID) cast(uintptr) handle
+	ok = true
+	return
 }
 
 destroy_texture :: proc(tex: com.Texture) {
-	handle := cast(u32) cast(uintptr) tex.id;
-	gl.DeleteTextures(1, &handle);
+	handle := cast(u32) cast(uintptr) tex.id
+	gl.DeleteTextures(1, &handle)
 }

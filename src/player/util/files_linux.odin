@@ -15,70 +15,70 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package util;
+package util
 
-import "core:os";
-import "core:strings";
-import "core:sys/posix";
-import "core:c/libc";
-import "core:fmt";
-import "core:slice";
-import "core:log";
+import "core:os"
+import "core:strings"
+import "core:sys/posix"
+import "core:c/libc"
+import "core:fmt"
+import "core:slice"
+import "core:log"
 
 for_each_file_in_dialog :: proc(title: cstring, iterator: File_Iterator, 
 	iterator_data: rawptr, select_folders := false
 ) -> int {
-	buf: [512]u8;
-	fp: ^posix.FILE;
+	buf: [512]u8
+	fp: ^posix.FILE
 	if select_folders {
-		fp = posix.popen("zenity --file-selection --directory --multiple --separator=\"\n\"", "r");
+		fp = posix.popen("zenity --file-selection --directory --multiple --separator=\"\n\"", "r")
 	}
 	else {
-		fp = posix.popen("zenity --file-selection --multiple --separator=\"\n\"", "r");
+		fp = posix.popen("zenity --file-selection --multiple --separator=\"\n\"", "r")
 	}
 
 	if fp == nil {
-		return 0;
+		return 0
 	}
-	defer posix.pclose(fp);
+	defer posix.pclose(fp)
 	
 	for libc.fgets(raw_data(buf[:511]), 512, fp) != nil {
-		cstr := cstring(raw_data(buf[:]));
-		log.debug(cstr);
-		length := len(cstr);
+		cstr := cstring(raw_data(buf[:]))
+		log.debug(cstr)
+		length := len(cstr)
 		if length == 0 {continue}
 		// Remove \n from end of string
-		buf[length-1] = 0;
+		buf[length-1] = 0
 
-		str := strings.clone_from_cstring(cstr);
-		defer delete(str);
+		str := strings.clone_from_cstring(cstr)
+		defer delete(str)
 
-		iterator(str, select_folders, iterator_data);
+		iterator(str, select_folders, iterator_data)
 
-		slice.fill(buf[:], 0);
+		slice.fill(buf[:], 0)
 	}
 
-	return 0;
+	return 0
 }
 
 open_file_dialog :: proc(out: []u8) -> (file: string, ok: bool) {
-	buf: [512]u8;
-	fp := posix.popen("zenity --file-selection", "r");
+	buf: [512]u8
+	fp := posix.popen("zenity --file-selection", "r")
 	if fp == nil {return}
-	defer posix.pclose(fp);
+	defer posix.pclose(fp)
 
 	if libc.fgets(&buf[0], auto_cast(len(buf)-1), fp) == nil {
-		return;
+		return
 	}
 	else if buf[0] == '\n' {
-		return;
+		return
 	}
 	else {
-		n := len(cstring(&buf[0]));
-		buf[n-1] = 0;
+		n := len(cstring(&buf[0]))
+		buf[n-1] = 0
 	}
 
-	copy_cstring(out, cstring(&buf[0]));
-	ok = true;
-	return;
+	copy_cstring(out, cstring(&buf[0]))
+	ok = true
+	return
 }

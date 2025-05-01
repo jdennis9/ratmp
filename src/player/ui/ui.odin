@@ -438,13 +438,6 @@ apply_prefs :: proc(ui: ^State, prefs: ^config.Preferences) {
 	theme.load(config.get_string(prefs, .Theme))
 }
 
-/*@private
-signal_handler :: proc(sig: signal.Signal) {
-	if sig == .ApplyPrefs {
-		_apply_prefs()
-	}
-}*/
-
 bring_window_to_front :: proc(ui: ^State, win: Window) {
 	ui.windows[win].bring_to_front = true
 }

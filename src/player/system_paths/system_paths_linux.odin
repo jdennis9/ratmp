@@ -15,49 +15,49 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package system_paths;
+package system_paths
 
-import "core:os";
-import "core:path/filepath";
+import "core:os"
+import "core:path/filepath"
 
-DATA_DIR: string;
-CONFIG_DIR: string;
+DATA_DIR: string
+CONFIG_DIR: string
 
 init_os_specific :: proc() {
 	when ODIN_DEBUG {
-		DATA_DIR = ".";
-		CONFIG_DIR = ".";
+		DATA_DIR = "."
+		CONFIG_DIR = "."
 	}
 	else {
-		config_home, config_home_found := os.lookup_env("XDG_CONFIG_HOME");
+		config_home, config_home_found := os.lookup_env("XDG_CONFIG_HOME")
 		defer if config_home_found {delete(config_home)}
 
-		data_dir, data_dir_found := os.lookup_env("XDG_DATA_DIR");
+		data_dir, data_dir_found := os.lookup_env("XDG_DATA_DIR")
 		defer if data_dir_found {delete(data_dir)}
 
-		home := os.get_env("HOME");
-		defer delete(home);
+		home := os.get_env("HOME")
+		defer delete(home)
 
 		if data_dir_found {
-			DATA_DIR = filepath.join({data_dir, "zno"});
+			DATA_DIR = filepath.join({data_dir, "zno"})
 		}
 		else {
-			DATA_DIR = filepath.join({home, ".local", "share", "zno"});
+			DATA_DIR = filepath.join({home, ".local", "share", "zno"})
 		}
 
 		if config_home_found {
-			CONFIG_DIR = filepath.join({config_home, "zno"});
+			CONFIG_DIR = filepath.join({config_home, "zno"})
 		}
 		else {
-			CONFIG_DIR = filepath.join({home, ".config", "zno"});
+			CONFIG_DIR = filepath.join({home, ".config", "zno"})
 		}
 
 		if !os.exists(DATA_DIR) {
-			os.make_directory(DATA_DIR);
+			os.make_directory(DATA_DIR)
 		}
 
 		if !os.exists(CONFIG_DIR) {
-			os.make_directory(CONFIG_DIR);
+			os.make_directory(CONFIG_DIR)
 		}
 	}
 }
