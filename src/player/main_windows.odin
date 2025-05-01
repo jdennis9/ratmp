@@ -63,9 +63,9 @@ this: struct {
 _WNDCLASS_NAME := intrinsics.constant_utf16_cstring("RATMP_WINDOW_CLASS")
 
 @private
-ICON_DATA := #load("../resources/32x32.ico")
+ICON_DATA := #load("resources/32x32.ico")
 
-foreign import cpp_lib "../../cpp/cpp.lib"
+foreign import cpp_lib "../cpp/cpp.lib"
 
 foreign cpp_lib {
 	ole_initialize :: proc() -> win.HRESULT ---
