@@ -179,7 +179,7 @@ DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 
 @private
 Playlist_Group_Window :: struct {
-	selected_group_id: Maybe(u32),
+	selected_playlist_id: Maybe(Playlist_ID),
 	sort_spec: library.Playlist_Sort_Spec,
 }
 
@@ -1113,17 +1113,17 @@ _show_track_generic_context_menu_items :: proc(ui: ^State, lib: ^Library, from_p
 
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Artist") {
-			ui.artists_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.artist))
+			ui.artists_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.artist))
 			bring_window_to_front(ui, .Artists)
 		}
 
 		if imgui.MenuItem("Album") {
-			ui.albums_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.album))
+			ui.albums_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.album))
 			bring_window_to_front(ui, .Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
-			ui.genres_window.selected_group_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
+			ui.genres_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
 			bring_window_to_front(ui, .Genres)
 		}
 
@@ -1224,7 +1224,7 @@ _show_queue_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	@static sort_spec: library.Track_Sort_Spec
 	want_remove_selection: bool
 
-	queue_id := max(Playlist_ID)
+	queue_id := Playlist_ID{user = max(u32)}
 	table := _Track_Table_Iterator {
 		tracks = pb.queue[:],
 		selection = ui.selection_playlist_id == queue_id ? ui.selection[:] : nil,
@@ -1271,7 +1271,7 @@ _show_selected_playlist_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback)
 	@static state: _Playlist_Window
 
 	playlist := library.get_playlist(lib, ui.selected_playlist)
-	if ui.selected_playlist == 0 || playlist == nil {
+	if ui.selected_playlist.user == 0 || playlist == nil {
 		imgui.TextDisabled("No playlist selected")
 		return
 	}
@@ -1364,7 +1364,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 		}
 	}
 
-	if delete_playlist_id != 0 {
+	if delete_playlist_id.user != 0 {
 		library.delete_playlist(lib, delete_playlist_id)
 	}
 }
@@ -1380,9 +1380,9 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) {
 		index_of_queued_playlist := -1
-		queued_group_id := pb.queued_group_id
+		queued_playlist_id := pb.queued_playlist
 		for p, index in list.playlists {
-			if p.group_id == queued_group_id {
+			if p.id == queued_playlist_id {
 				index_of_queued_playlist = index
 				break
 			}
@@ -1394,13 +1394,13 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 			}
 
 			for playlist in list.playlists {
-				if _playlist_table_row(playlist, false, pb.queued_group_id == playlist.group_id) {
-					state.selected_group_id = playlist.group_id
+				if _playlist_table_row(playlist, false, queued_playlist_id == playlist.id) {
+					state.selected_playlist_id = playlist.id
 				}
 
 				if imgui.IsItemClicked(.Middle) || (imgui.IsMouseClicked(.Left) && imgui.IsMouseDoubleClicked(.Left)) {
 					playback.play_playlist(pb, lib, playlist)
-					state.selected_group_id = playlist.group_id
+					state.selected_playlist_id = playlist.id
 				}
 			}
 
@@ -1408,13 +1408,13 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 		}
 	}
 		
-	if state.selected_group_id != nil && imgui.TableSetColumnIndex(1) {
+	if state.selected_playlist_id != nil && imgui.TableSetColumnIndex(1) {
 		window_focused := imgui.IsWindowFocused()
 		playlist: library.Playlist
 		found_playlist: bool
 		
 		for &p in list.playlists {
-			if p.group_id == state.selected_group_id.? {
+			if p.id == state.selected_playlist_id.? {
 				playlist = p
 				found_playlist = true
 				break
@@ -1422,7 +1422,7 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 		}
 		
 		if !found_playlist {
-			state.selected_group_id = nil
+			state.selected_playlist_id = nil
 			return
 		}
 		

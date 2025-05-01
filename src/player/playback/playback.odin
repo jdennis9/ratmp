@@ -58,7 +58,6 @@ State :: struct {
 	queue_position: int,
 	queue: [dynamic]Track_ID,
 	queued_playlist: Playlist_ID,
-	queued_group_id: u32,
 	shuffle: bool,
 
 	//stream: audio.Stream_Info,
@@ -343,7 +342,6 @@ get_duration :: proc(state: State) -> int {
 
 play_playlist :: proc(state: ^State, lib: Library, playlist: library.Playlist, first_track: library.Track_ID = 0, use_filter := false) {
 	state.queued_playlist = playlist.id
-	state.queued_group_id = playlist.group_id
 	clear(&state.queue)
 
 	for track in playlist.tracks {
@@ -369,8 +367,7 @@ play_playlist :: proc(state: ^State, lib: Library, playlist: library.Playlist, f
 }
 
 append_to_queue :: proc(state: ^State, tracks: []library.Track_ID) {
-	state.queued_playlist = 0
-	state.queued_group_id = 0
+	state.queued_playlist = {user = 0}
 	for track in tracks {
 		append(&state.queue, track)
 	}
@@ -393,7 +390,7 @@ play_track_at_position :: proc(state: ^State, lib: Library, in_pos: int) -> bool
 }
 
 play_track_array :: proc(state: ^State, lib: Library, tracks: []Track_ID) {
-	state.queued_playlist = 0
+	state.queued_playlist = {user = 0}
 	clear(&state.queue)
 	for track in tracks {
 		append(&state.queue, track)

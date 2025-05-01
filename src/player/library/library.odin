@@ -43,7 +43,11 @@ import "player:video"
 import "player:decoder"
 
 Track_ID :: u32
-Playlist_ID :: u32
+
+Playlist_ID :: struct {
+	user: u32, // ID of playlist created by user
+	group: u32, // ID of group playlist belongs to
+}
 
 Add_Playlist_Error :: enum {
 	None,
@@ -111,9 +115,6 @@ Track_Sort_Spec :: struct {
 Playlist :: struct {
 	id: Playlist_ID,
 	file_id: u32,
-	// If this playlist contains a track group, this
-	// is the hash of the grouping string
-	group_id: u32,
 	name: cstring,
 	tracks: [dynamic]u32,
 }
@@ -134,7 +135,7 @@ Library :: struct {
 	paths: path_pool.Pool,
 	track_path_hashes: [dynamic]u32,
 	tracks: [dynamic]Raw_Track_Info,
-	next_playlist_id: Playlist_ID,
+	next_playlist_id: u32,
 	playlists: [dynamic]Playlist,
 	albums: Playlist_List,
 	artists: Playlist_List,
@@ -579,20 +580,20 @@ add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 	return index+1
 }
 
-get_playlist_group_id_from_name :: proc(group_string: string, case_insensitive := false) -> u32 {
+get_playlist_group_id_from_name :: proc(group_string: string, case_insensitive := false) -> Playlist_ID {
 	if case_insensitive {
 		lower := strings.to_lower(group_string)
 		defer delete(lower)
-		return xxhash.XXH32(transmute([]u8)lower)
+		return {user = 0, group = xxhash.XXH32(transmute([]u8)lower)}
 	}
 	else {
-		return xxhash.XXH32(transmute([]u8)group_string)
+		return {user = 0, group = xxhash.XXH32(transmute([]u8)group_string)}
 	}
 }
 
 @private
 _add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Playlist_List, case_insensitive := false) {
-	hash := get_playlist_group_id_from_name(group_string, case_insensitive)
+	hash := get_playlist_group_id_from_name(group_string, case_insensitive).group
 
 	for h, index in group.hashes {
 		if h == hash {
@@ -603,7 +604,7 @@ _add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Pl
 
 	playlist := Playlist {
 		name = strings.clone_to_cstring(group_string),
-		group_id = hash,
+		id = {group = hash},
 	}
 
 	append(&playlist.tracks, track)
@@ -652,8 +653,8 @@ _playlist_file_id_is_used :: proc(lib: Library, id: u32) -> bool {
 }
 
 @private
-_alloc_playlist_id :: proc(lib: ^Library) -> Playlist_ID {
-	id := lib.next_playlist_id
+_alloc_playlist_id :: proc(lib: ^Library) -> (id: Playlist_ID) {
+	id.user = lib.next_playlist_id
 	lib.next_playlist_id += 1
 	return id
 }
@@ -666,7 +667,7 @@ add_playlist :: proc(lib: ^Library, name: string) -> (Playlist_ID, Add_Playlist_
 	for p in lib.playlists {
 		if name == string(p.name) {
 			delete(playlist.name)
-			return 0, .NameExists
+			return {}, .NameExists
 		}
 	}
 
@@ -690,7 +691,7 @@ get_playlist_path :: proc(playlist: Playlist) -> string {
 }
 
 save_playlist :: proc(lib: ^Library, id: Playlist_ID) {
-	if id == 0 {return}
+	if id.user == 0 {return}
 	playlist := get_playlist(lib, id)^
 	fullpath := get_playlist_path(playlist)
 	defer delete(fullpath)
@@ -779,7 +780,7 @@ filter_track :: proc {filter_track_from_string, filter_track_from_runes}
 // WARNING: The returned pointer may be invalidated after a call
 // to add_playlist or delete_playlist
 get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> ^Playlist {
-	if id == 0 {
+	if id.user == 0 {
 		return &lib.library
 	}
 
