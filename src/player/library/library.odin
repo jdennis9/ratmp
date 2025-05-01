@@ -475,7 +475,7 @@ remove_tracks :: proc(lib: ^Library, tracks: []Track_ID) {
 
 	for playlist, playlist_index in lib.playlists {
 		if playlist_altered[playlist_index] {
-			save_playlist(lib, playlist.id)
+			save_playlist(lib^, playlist.id)
 		}
 	}
 }
@@ -690,13 +690,17 @@ get_playlist_path :: proc(playlist: Playlist) -> string {
 	return filepath.join({system_paths.DATA_DIR, "playlists", name})
 }
 
-save_playlist :: proc(lib: ^Library, id: Playlist_ID) {
+save_playlist :: proc(lib: Library, id: Playlist_ID) {
 	if id.user == 0 {return}
-	playlist := get_playlist(lib, id)^
-	fullpath := get_playlist_path(playlist)
-	defer delete(fullpath)
 
-	save_playlist_to_file(lib^, playlist, fullpath)
+	for playlist in lib.playlists {
+		if playlist.id == id {
+			fullpath := get_playlist_path(playlist)
+			defer delete(fullpath)
+
+			save_playlist_to_file(lib, playlist, fullpath)
+		}
+	}
 }
 
 delete_playlist :: proc(lib: ^Library, id: Playlist_ID) {
