@@ -47,7 +47,7 @@ this: struct {
 	tray_popup: win.HMENU,
 	running: bool,
 	enable_media_controls: bool,
-	close_policy: int,
+	close_policy: config.Close_Policy,
 
 	window_title_track_id: library.Track_ID,
 
@@ -125,16 +125,16 @@ sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
 	}
 }
 
+apply_prefs :: proc(prefs: config.Preferences) {
+	this.close_policy = prefs.close_policy
+}
+
 main :: proc() {
 	run()
 }
 
 wake_proc :: proc() {
 	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
-}
-
-apply_prefs :: proc(prefs: config.Preferences) {
-	this.close_policy = prefs.choices[.ClosePolicy]
 }
 
 run :: proc() -> bool {
@@ -196,9 +196,9 @@ run :: proc() -> bool {
 	com.init(&state, ".", ".", wake_proc) or_return
 	defer com.shutdown()
 	
-	apply_prefs(state.prefs)
+	apply_prefs(state.prefs.data)
 	
-	if state.prefs.choices[.EnableWindowsMediaControls] == 1 {
+	if state.prefs.data.enable_media_controls {
 		media_controls.install_handler(media_controls_handler)
 		this.enable_media_controls = true
 	}
@@ -232,7 +232,7 @@ run :: proc() -> bool {
 		com.handle_events()
 
 		if state.prefs.dirty {
-			apply_prefs(state.prefs)
+			apply_prefs(state.prefs.data)
 		}
 
 		// Update window title to show playing track
@@ -298,13 +298,13 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 		}
 		case win.WM_CLOSE: {
 			switch this.close_policy {
-				case config.CLOSE_POLICY_MINIMIZE_TO_TRAY: {
+				case .MinimizeToTray: {
 					hide_window()
 				}
-				case config.CLOSE_POLICY_CLOSE: {
+				case .Exit: {
 					this.running = false
 				}
-				case: {
+				case .AlwaysAsk: {
 					if util.message_box("Minimize to tray?", .YesNo, 
 					"Would you like me to keep running in the background? The default behaviour of this can be changed in your preferences.") {
 						hide_window()

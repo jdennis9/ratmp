@@ -24,7 +24,6 @@ import "core:strings"
 
 import imgui "libs:odin-imgui"
 
-import "player:system_paths"
 import "player:config"
 import "player:theme"
 import "player:library"
@@ -33,9 +32,6 @@ import "player:video"
 import "player:playback"
 import "player:audio"
 
-LIBRARY_PATH :: "library.json"
-CONFIG_PATH :: "config.ini"
-
 State :: struct {
 	ctx: runtime.Context,
 	library: library.Library,
@@ -43,11 +39,13 @@ State :: struct {
 	playback_decoder_lock: sync.Mutex,
 	playback: playback.State,
 	audio_stream_info: audio.Stream_Info,
-	prefs: config.Preferences,
+	prefs: config.Preference_Manager,
+	saved_state: config.Saved_State,
 
 	// Paths
 	library_path: string,
 	config_path: string,
+	saved_state_path: string,
 
 	playback_eof: bool,
 	wake_proc: proc(),
@@ -73,34 +71,42 @@ audio_callback :: proc(buffer: []f32, data: rawptr) {
 
 init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc: proc()) -> bool {
 	state = state_ptr
-	state.config_path = strings.clone(filepath.join({config_dir, "prefs.ini"}))
-	state.library_path = strings.clone(filepath.join({data_dir, "library.json"}))
+	state.config_path = filepath.join({config_dir, "preferences.json"})
+	state.library_path = filepath.join({data_dir, "library.json"})
+	state.saved_state_path = filepath.join({data_dir, "state.json"})
 	state.wake_proc = wake_proc
 
-	system_paths.init()
-	audio.init() or_return
+	// Config
+	state.prefs = config.init_preferences()
+	config.load_preferences(&state.prefs, state.config_path)
+	state.saved_state, _ = config.load_state(state.saved_state_path)
+
+	// Library
 	state.library = library.load_library(state.library_path, "playlists") or_return
 	state.playback = playback.init() or_return
-	state.prefs, _ = config.load(state.config_path)
-	theme.init(state.prefs)
-	playback.init()
-	state.ui = ui.init() or_return
-	ui.install_imgui_settings_handler(&state.ui)
 
+	playback.set_shuffle_enabled(&state.playback, state.saved_state.shuffle_enabled)
+
+	// UI
+	theme.init(state.prefs.data, filepath.join({config_dir, "themes"}, context.temp_allocator))
+	state.ui = ui.init(data_dir) or_return
+	ui.install_imgui_settings_handler(&state.ui)
+	
 	// Start audio stream
 	{
+		audio.init() or_return
 		device_id := audio.get_default_device_id() or_return
 		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
 	}
 
-	ui.apply_prefs(&state.ui, &state.prefs)
+	ui.apply_prefs(&state.ui, state.prefs.data)
 
 	return true
 }
 
 handle_events :: proc() {
 	if state.prefs.dirty {
-		ui.apply_prefs(&state.ui, &state.prefs)
+		ui.apply_prefs(&state.ui, state.prefs.data)
 		state.prefs.dirty = false
 	}
 
@@ -110,14 +116,27 @@ handle_events :: proc() {
 }
 
 frame :: proc() -> bool {
-	return ui.show(&state.ui, &state.library, &state.playback, &state.prefs)
+	saved_state_before := state.saved_state
+
+	ui.show(&state.ui, &state.library, &state.playback, &state.prefs) or_return
+
+	// Update saved state
+	state.saved_state.prefer_peak_meter_in_menu_bar = state.ui.prefer_peak_meter_in_menu_bar
+	state.saved_state.shuffle_enabled = state.playback.shuffle
+
+	if state.saved_state != saved_state_before {
+		config.save_state(state.saved_state, state.saved_state_path)
+	}
+
+	return true
 }
 
 shutdown :: proc() {
-	config.save(state.prefs, state.config_path)
+	config.save_preferences(state.prefs, state.config_path)
+	config.save_state(state.saved_state, state.saved_state_path)
 	ui.destroy(state.ui)
 	playback.destroy(&state.playback)
 	audio.shutdown()
-	library.save_to_file(state.library, LIBRARY_PATH)
+	library.save_to_file(state.library, state.library_path)
 	library.destroy(state.library)
 }

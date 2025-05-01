@@ -42,7 +42,6 @@ import "player:theme"
 import "player:drag_drop"
 import "player:analysis"
 import "player:build"
-import "player:system_paths"
 
 ICON_FONT := #load("FontAwesome.otf")
 
@@ -264,6 +263,8 @@ State :: struct {
 	enable_imgui_theme_editor: bool,
 	enable_imgui_demo_window: bool,
 
+	prefer_peak_meter_in_menu_bar: bool,
+
 	layout_that_we_want_to_load: []u8,
 	free_layout_after_load: bool,
 
@@ -277,13 +278,17 @@ State :: struct {
 
 	background_metadata_scan: _Background_Metadata_Scan,
 	background_metadata_scan_thread: ^thread.Thread,
+
+	data_dir: string,
 }
 
-init :: proc() -> (ui: State, ok: bool) {
+init :: proc(data_dir: string) -> (ui: State, ok: bool) {
 	ui.ctx = context
 	io := imgui.GetIO()
 	io.ConfigFlags |= {.DockingEnable, .NavEnableKeyboard}
 	
+	ui.data_dir = strings.clone(data_dir)
+
 	// Load settings if needed
 	if !os.exists(cast(string) io.IniFilename) {
 		log.debug("Loading default layout")
@@ -308,6 +313,7 @@ init :: proc() -> (ui: State, ok: bool) {
 			mouse_over = _ext_drag_drop_mouse_over,
 		}
 	)*/
+
 
 	_scan_layouts(&ui)
 
@@ -345,24 +351,24 @@ destroy :: proc(ui: State) {
 }
 
 @private
-_load_fonts :: proc(prefs: ^config.Preferences) {
+_load_fonts :: proc(prefs: config.Preferences) {
 	@static loaded_font: [512]u8
 	@static loaded_font_size: int
 	@static loaded_icon_size: int
 
 	io := imgui.GetIO()
 
-	font_path := cstring(raw_data(prefs.strings[.Font][:]))
+	font_path := prefs.font_path
 	log.debug("Font path:", font_path)
 	when ODIN_OS == .Windows {
 		if font_path == "" || !os.exists(string(font_path)) {
 			font_path = "C:\\Windows\\Fonts\\calibrib.ttf"
 		}
 	}
-	font_size := prefs.numbers[.FontSize]
-	icon_size := prefs.numbers[.IconSize]
+	font_size := clamp(prefs.font_size, 8, 24)
+	icon_size := clamp(prefs.icon_size, 8, 24)
 
-	if cstring(&loaded_font[0]) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
+	if string(cstring(&loaded_font[0])) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
 		return
 	}
 
@@ -384,7 +390,7 @@ _load_fonts :: proc(prefs: ^config.Preferences) {
 	imgui.FontAtlas_Clear(fonts)
 
 	if font_path != "" && os.exists(string(font_path)) {
-		if imgui.FontAtlas_AddFontFromFileTTF(fonts, font_path, auto_cast font_size) == nil {
+		if imgui.FontAtlas_AddFontFromFileTTF(fonts, strings.clone_to_cstring(font_path, context.temp_allocator), auto_cast font_size) == nil {
 			imgui.FontAtlas_AddFontDefault(fonts)
 		}
 	}
@@ -402,19 +408,19 @@ _load_fonts :: proc(prefs: ^config.Preferences) {
 	imgui.FontAtlas_AddFontFromMemoryTTF(fonts, raw_data(ICON_FONT), 
 		cast(i32) len(ICON_FONT), auto_cast icon_size, &cfg, raw_data(icon_ranges))
 
-	util.copy_cstring(loaded_font[:], font_path)
+	util.copy_string_to_buf(loaded_font[:], font_path)
 	loaded_font_size = font_size
 	loaded_icon_size = icon_size
 }
 
-apply_prefs :: proc(ui: ^State, prefs: ^config.Preferences) {
+apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
 	
 	// Load background
 	{
 		@static loaded_background: [512]u8
-		path := config.get_string(prefs, .Background)
+		path := prefs.background_path
 
 		if string(cstring(&loaded_background[0])) != path {
 			video.impl.destroy_texture(ui.background)
@@ -432,7 +438,7 @@ apply_prefs :: proc(ui: ^State, prefs: ^config.Preferences) {
 	_load_fonts(prefs)
 
 	// Load default theme
-	theme.load(config.get_string(prefs, .Theme))
+	//theme.load(config.get_string(prefs, .Theme))
 }
 
 bring_window_to_front :: proc(ui: ^State, win: Window) {
@@ -517,7 +523,12 @@ _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	return false
 }
 
-show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preferences) -> (keep_running: bool = true) {
+show :: proc(
+	ui: ^State,
+	lib: ^Library,
+	pb: ^Playback,
+	prefs: ^config.Preference_Manager,
+) -> (keep_running: bool = true) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -774,15 +785,17 @@ show :: proc(ui: ^State, lib: ^Library, pb: ^Playback, prefs: ^config.Preference
 		// Mini visualizer
 		// -----------------------------------------------------------------------------
 		{
-			use_spectrum := config.get_property("ui_prefer_spectrum").(bool) or_else false
+			use_spectrum := !ui.prefer_peak_meter_in_menu_bar
 			if use_spectrum {
 				if _show_spectrum_widget("##spectrum", {100, imgui.GetFrameHeight()}) {
-					config.set_property("ui_prefer_spectrum", false)
+					ui.prefer_peak_meter_in_menu_bar = true
+					use_spectrum = false
 				}
 			}
 			else {
 				if _show_peak_meter_widget("##peak_meter", {100, 0}) {
-					config.set_property("ui_prefer_spectrum", true)
+					ui.prefer_peak_meter_in_menu_bar = false
+					use_spectrum = true
 				}
 			}
 			imgui.Separator()
@@ -1666,8 +1679,8 @@ _show_theme_editor_window :: proc(window: ^_Window_State) {
 }
 
 @private
-_show_preferences_window :: proc(prefs: ^config.Preferences) {
-	path_input_row :: proc(prefs: ^config.Preferences, id: config.StringID, str_id: cstring, name: cstring) -> bool {
+_show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
+	/*path_input_row :: proc(prefs: ^config.Preferences, id: config.StringID, str_id: cstring, name: cstring) -> bool {
 		buffer := prefs.strings[id][:]
 		imgui.PushID(name)
 		imgui.TableNextRow()
@@ -1838,7 +1851,7 @@ _show_preferences_window :: proc(prefs: ^config.Preferences) {
 
 	if changes {
 		prefs.dirty = true
-	}
+	}*/
 }
 
 @private
@@ -2049,16 +2062,16 @@ _show_metadata_editor :: proc(lib: Library, selection: []Track_ID) {
 // Layouts
 // =============================================================================
 @private
-_ensure_layout_folder :: proc() {
-	layouts_folder_path := filepath.join({system_paths.CONFIG_DIR, "layouts"})
+_ensure_layout_folder :: proc(ui: State) {
+	layouts_folder_path := filepath.join({ui.data_dir, "layouts"})
 	defer delete(layouts_folder_path)
 	if !os.exists(layouts_folder_path) {os.make_directory(layouts_folder_path)}
 }
 
 @private
-_get_layout_path :: proc(ui: State, index: int) -> string {
+_get_layout_path :: proc(ui: State, index: int, allocator := context.allocator) -> string {
 	name := string(cstring(&ui.layout_names[index][0]))
-	return filepath.join({system_paths.CONFIG_DIR, "layouts", name})
+	return filepath.join({ui.data_dir, "layouts", name}, allocator)
 }
 
 @private
@@ -2068,7 +2081,7 @@ _set_layout_from_ini :: proc(ini: []u8) {
 
 @private
 _scan_layouts :: proc(ui: ^State) {
-	folder_path := filepath.join({system_paths.CONFIG_DIR, "layouts"})
+	folder_path := filepath.join({ui.data_dir, "layouts"})
 	defer delete(folder_path)
 
 	clear(&ui.layout_names)

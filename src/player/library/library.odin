@@ -38,7 +38,6 @@ import stbi "vendor:stb/image"
 import "bindings:taglib"
 import "player:path_pool"
 import "player:util"
-import "player:system_paths"
 import "player:video"
 import "player:decoder"
 
@@ -142,11 +141,13 @@ Library :: struct {
 	folders: Playlist_List,
 	genres: Playlist_List,
 	library: Playlist,
+	playlist_dir: string,
 }
 
 load_library :: proc(filename: string, playlist_folder: string) -> (lib: Library, ok: bool) {
 	lib, _ = _load_library(filename)
 	scan_for_playlists(&lib, playlist_folder)
+	lib.playlist_dir = strings.clone(playlist_folder)
 	lib.library.name = "Library"
 	lib.next_playlist_id = 1
 
@@ -684,10 +685,10 @@ add_playlist :: proc(lib: ^Library, name: string) -> (Playlist_ID, Add_Playlist_
 }
 
 //@FixMe
-get_playlist_path :: proc(playlist: Playlist) -> string {
+get_playlist_path :: proc(lib: Library, playlist: Playlist) -> string {
 	name_buf: [16]u8
 	name := fmt.bprint(name_buf[:], playlist.file_id)
-	return filepath.join({system_paths.DATA_DIR, "playlists", name})
+	return filepath.join({lib.playlist_dir, "playlists", name})
 }
 
 save_playlist :: proc(lib: Library, id: Playlist_ID) {
@@ -695,7 +696,7 @@ save_playlist :: proc(lib: Library, id: Playlist_ID) {
 
 	for playlist in lib.playlists {
 		if playlist.id == id {
-			fullpath := get_playlist_path(playlist)
+			fullpath := get_playlist_path(lib, playlist)
 			defer delete(fullpath)
 
 			save_playlist_to_file(lib, playlist, fullpath)
@@ -707,7 +708,7 @@ delete_playlist :: proc(lib: ^Library, id: Playlist_ID) {
 	for p, index in lib.playlists {
 		if p.id == id {
 			free_playlist(p)
-			path := get_playlist_path(p)
+			path := get_playlist_path(lib^, p)
 			defer delete(path)
 			os.remove(path)
 			ordered_remove(&lib.playlists, index)

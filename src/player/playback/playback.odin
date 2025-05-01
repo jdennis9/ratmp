@@ -132,38 +132,9 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof:
 	return
 }
 
-/*@private
-_signal_handler :: proc(sig: signal.Signal) {
-	if sig == .RequestNext {play_next_track()}
-	else if sig == .RequestPrev {play_prev_track()}
-	else if sig == .RequestPause {set_paused(true)}
-	else if sig == .RequestPlay {set_paused(false)}
-	else if sig == .ApplyPrefs {
-		this.shuffle = prefs.get_property("playback_shuffle").(bool) or_else false
-	}
-}*/
-
 init :: proc() -> (state: State, ok: bool) {
 	state.ctx = context
 	state.paused = true
-	//signal.install_handler(_signal_handler)
-	audio.init() or_return
-	/*refresh_audio_devices(&state) or_return
-
-	if prefs.prefs.strings[.PlaybackDevice][0] != 0 {
-		want_device_id := cstring(&prefs.prefs.strings[.PlaybackDevice][0])
-
-		for &device, device_index in state.devices {
-			if cstring(&device.id[0]) == want_device_id {
-				set_audio_device_index(&state, device_index) or_return
-				break
-			}
-		}
-	}
-	else {
-		set_audio_device_index(&state, state.default_device_index) or_return
-	}*/
-
 	ok = true
 	return
 }
@@ -225,8 +196,11 @@ stop :: proc(state: ^State) {
 }
 
 toggle_shuffle :: proc(state: ^State) {
-	state.shuffle = !state.shuffle
-	config.set_property("playback_shuffle", state.shuffle)
+	set_shuffle_enabled(state, !state.shuffle)
+}
+
+set_shuffle_enabled :: proc(state: ^State, enabled: bool) {
+	state.shuffle = enabled
 }
 
 play_track :: proc(state: ^State, lib: library.Library, track: library.Track_ID) -> bool {

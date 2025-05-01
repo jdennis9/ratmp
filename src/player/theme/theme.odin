@@ -27,7 +27,6 @@ import "core:slice"
 
 import imgui "libs:odin-imgui"
 
-import "player:system_paths"
 import "player:util"
 import "player:config"
 
@@ -62,10 +61,11 @@ _set_defaults :: proc() {
 	for col in Color {custom_colors[col] = custom_color_info[col].default}
 }
 
-init :: proc(prefs_arg: config.Preferences) {
+init :: proc(prefs_arg: config.Preferences, theme_folder: string) {
 	prefs := prefs_arg
 	_set_defaults()
-	theme_folder_path = filepath.join({system_paths.DATA_DIR, "themes"})
+
+	theme_folder_path = strings.clone(theme_folder)
 
 	if !os.exists(theme_folder_path) {
 		os.make_directory(theme_folder_path)
@@ -73,7 +73,7 @@ init :: proc(prefs_arg: config.Preferences) {
 
 	refresh_themes()
 
-	load(config.get_string(&prefs, .Theme))
+	load(prefs.theme_name)
 
 	style := imgui.GetStyle()
 	style.FrameBorderSize = 1

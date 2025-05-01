@@ -15,211 +15,100 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package prefs
+package config
 
-import "core:encoding/ini"
+import "base:runtime"
+import "core:encoding/json"
 import "core:path/filepath"
 import "core:os"
 import "core:strings"
-import "core:strconv"
 import "core:fmt"
 import "core:bytes"
 import "core:log"
+import "core:mem"
 
-import "player:system_paths"
 import "player:util"
 
-FONT_SIZE_MIN :: 8
-FONT_SIZE_MAX :: 24
-
-String_Buffer :: [384]u8
-
-StringID :: enum {
-	Font,
-	Background,
-	Theme,
-	PlaybackDevice,
-}
-
-NumberID :: enum {
-	FontSize,
-	IconSize,
-}
-
-ChoiceID :: enum {
-	ClosePolicy,
-	EnableWindowsMediaControls,
+Close_Policy :: enum {
+	AlwaysAsk,
+	MinimizeToTray,
+	Exit,
 }
 
 Preferences :: struct {
-	strings: [StringID]String_Buffer,
-	numbers: [NumberID]int,
-	choices: [ChoiceID]int,
+	background_path: string,
+	theme_name: string,
+	font_path: string,
+	font_size: int,
+	icon_size: int,
+	close_policy: Close_Policy,
+	enable_media_controls: bool,
+}
+
+Preference_Manager :: struct {
+	arena_data: []byte,
+	arena: mem.Arena,
+	data: Preferences,
 	dirty: bool,
 }
 
-NUMBER_INFO := [NumberID]struct{name: string, min, max, def: int} {
-	.FontSize = {"FontSize", 8, 24, 13},
-	.IconSize = {"IconSize", 8, 24, 12},
-}
+init_preferences :: proc() -> (prefs: Preference_Manager) {
+	prefs.arena_data = make([]byte, 4096)
+	mem.arena_init(&prefs.arena, prefs.arena_data)
 
-STRING_INFO := [StringID]struct{name: string} {
-	.Background = {"Background"},
-	.Font = {"Font"},
-	.Theme = {"Theme"},
-	.PlaybackDevice = {"PlaybackDevice"},
-}
-
-Choice_Value :: struct {
-	name: cstring,
-	ini_name: cstring,
-	value: int,
-}
-
-CLOSE_POLICY_ALWAYS_ASK :: 0
-CLOSE_POLICY_MINIMIZE_TO_TRAY :: 1
-CLOSE_POLICY_CLOSE :: 2
-
-CHOICE_INFO := [ChoiceID]struct{name: string, def: int, values: []Choice_Value} {
-	.ClosePolicy = {
-		name = "ClosePolicy",
-		def = CLOSE_POLICY_ALWAYS_ASK,
-		values = {
-			{"Always ask", "AlwaysAsk", CLOSE_POLICY_ALWAYS_ASK},
-			{"Minimize to tray", "MinimizeToTray", CLOSE_POLICY_MINIMIZE_TO_TRAY},
-			{"Close", "Close", CLOSE_POLICY_CLOSE},
-		},
-	},
-	.EnableWindowsMediaControls = {
-		name = "EnableWindowsMediaControls",
-		def = 1,
-		values = {
-			{"No", "No", 0},
-			{"Yes", "Yes", 1},
-		},
-	},
-}
-
-@private
-Section :: struct {
-	name: string,
-	strings: []StringID,
-	numbers: []NumberID,
-	choices: []ChoiceID,
-}
-
-@private
-_sections := []Section {
-	{
-		name = "ui",
-		strings = {.Font, .Background, .Theme},
-		numbers = {.FontSize, .IconSize},
-		choices = {.ClosePolicy},
-	},
-	{
-		name = "playback",
-		strings = {.PlaybackDevice},
-	},
-	{
-		name = "windows",
-		choices = {.EnableWindowsMediaControls},
-	}
-}
-
-@private
-_set_defaults :: proc(prefs: ^Preferences) {
-	for entry, index in NUMBER_INFO {
-		prefs.numbers[index] = entry.def
+	prefs.data = Preferences {
+		font_size = 13,
+		icon_size = 11,
+		close_policy = .AlwaysAsk,
+		enable_media_controls = true,
 	}
 
-	for entry, index in CHOICE_INFO {
-		prefs.choices[index] = entry.def
-	}
-}
-
-get_string :: proc(prefs: ^Preferences, str: StringID) -> string {
-	return string(cstring(raw_data(prefs.strings[str][:])))
-}
-
-get_cstring :: proc(prefs: ^Preferences, str: StringID) -> cstring {
-	return cstring(raw_data(prefs.strings[str][:]))
-}
-
-load :: proc(path: string) -> (prefs: Preferences, ok: bool) {
-	_set_defaults(&prefs)
-
-	m, map_error := ini.load_map_from_path(path, context.allocator) or_return
-	if map_error != .None {
-		save(prefs, path)
-		prefs.dirty = true
-		return
-	}
-	
-	for section in _sections {
-		section_map := m[section.name] or_continue
-		log.debug(section.name)
-
-		for index in section.strings {
-			value := section_map[STRING_INFO[index].name] or_continue
-			copy(prefs.strings[index][:len(String_Buffer)-1], value)
-		}
-
-		for index in section.numbers {
-			info := NUMBER_INFO[index]
-			value_string := section_map[info.name] or_continue
-			parsed := strconv.parse_i64(value_string) or_continue
-			prefs.numbers[index] = clamp(int(parsed), info.min, info.max)
-		}
-
-		for index in section.choices {
-			value_string := section_map[CHOICE_INFO[index].name] or_continue
-			info := CHOICE_INFO[index]
-			choice := info.def
-
-			for value in info.values {
-				if value_string == string(value.ini_name) {
-					choice = value.value
-					break
-				}
-			}
-
-			prefs.choices[index] = choice
-		}
-	}
-	
-	_load_properties()
-	prefs.dirty = true
-	ok = true
 	return
 }
 
-save :: proc(prefs_arg: Preferences, path: string) {
-	prefs := prefs_arg
+load_preferences :: proc(prefs: ^Preference_Manager, path: string) -> (loaded: bool) {
+	log.debug("Loading preferences from", path)
 
-	fd, open_error := util.overwrite_file(path)
-	if open_error != nil {return}
-	defer os.close(fd)
+	data := os.read_entire_file_from_filename(path) or_return
+	mem.arena_free_all(&prefs.arena)
+	unmarshal_error := json.unmarshal(data, &prefs.data, allocator = mem.arena_allocator(&prefs.arena))
 
-	for section in _sections {
-		fmt.fprintln(fd, "[", section.name, "]", sep = "")
-		for str in section.strings {
-			fmt.fprintln(fd, STRING_INFO[str].name, "=", cstring(raw_data(prefs.strings[str][:])), sep = "")
-		}
-
-		for number in section.numbers {
-			fmt.fprintln(fd, NUMBER_INFO[number].name, "=", prefs.numbers[number], sep = "")
-		}
-
-		for choice in section.choices {
-			info := CHOICE_INFO[choice]
-			for value in info.values {
-				if prefs.choices[choice] == value.value {
-					fmt.fprintln(fd, CHOICE_INFO[choice].name, "=", value.ini_name, sep = "")
-					break
-				}
-			}
-		}
+	if unmarshal_error != nil {
+		log.error("Error when loading preferences:", unmarshal_error)
+		return
 	}
 
-	_save_properties()
+	prefs.dirty = true
+	loaded = true
+	return
+}
+
+save_preferences :: proc(prefs: Preference_Manager, path: string) {
+	log.debug("Saving preferences to", path)
+
+	opt := json.Marshal_Options {
+		use_enum_names = true,
+		pretty = true,
+	}
+
+	data, marshal_error := json.marshal(prefs.data, opt)
+	if marshal_error != nil {
+		log.error("Error when saving preferences:", marshal_error)
+		return
+	}
+
+	defer delete(data)
+
+	file, file_error := util.overwrite_file(path)
+	if file_error != nil {
+		log.error("Error when saving preferences:", file_error)
+		return
+	}
+	defer os.close(file)
+
+	os.write(file, data)
+}
+
+free_preferences :: proc(prefs: Preference_Manager) {
+	delete(prefs.arena_data)
 }
