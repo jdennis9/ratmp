@@ -179,6 +179,7 @@ DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 
 @private
 Playlist_Group_Window :: struct {
+	filter: [256]u8,
 	selected_playlist_id: Maybe(Playlist_ID),
 	sort_spec: library.Playlist_Sort_Spec,
 }
@@ -1386,6 +1387,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 	defer imgui.EndTable()
 	
 	imgui.TableNextRow()
+
 	if imgui.TableSetColumnIndex(0) {
 		index_of_queued_playlist := -1
 		queued_playlist_id := pb.queued_playlist
@@ -1396,12 +1398,21 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 			}
 		}
 
+		imgui.InputTextWithHint("##playlist_filter", "Filter", cstring(&state.filter[0]), size_of(state.filter))
+
 		if _begin_playlist_table("##playlist_table") {
+			filter_runes_buf: [len(state.filter)]rune
+			filter_runes := util.decode_utf8_to_runes(filter_runes_buf[:], string(cstring(&state.filter[0])))
+
 			if _playlist_table_update_sort_spec(&state.sort_spec) {
 				library.sort_playlist_list(list, state.sort_spec)
 			}
 
 			for playlist in list.playlists {
+				if state.filter[0] != 0 && !library.filter_playlist_from_runes(playlist, filter_runes) {
+					continue
+				}
+
 				if _playlist_table_row(playlist, false, queued_playlist_id == playlist.id) {
 					state.selected_playlist_id = playlist.id
 				}
@@ -1417,7 +1428,6 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 	}
 		
 	if state.selected_playlist_id != nil && imgui.TableSetColumnIndex(1) {
-		window_focused := imgui.IsWindowFocused()
 		playlist: library.Playlist
 		found_playlist: bool
 		

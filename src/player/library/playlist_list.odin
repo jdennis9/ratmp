@@ -35,11 +35,15 @@ Playlist_Sort_Spec :: struct {
 	order: Sort_Order,
 }
 
+filter_playlist_from_runes :: proc(playlist: Playlist, filter_runes: []rune) -> bool {
+	return _filter_track_string(string(playlist.name), filter_runes)
+}
+
 filter_playlist :: proc(playlist: Playlist, filter_string: string) -> bool {
 	filter_rune_buf: [128]rune
 	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter_string)
 
-	return _filter_track_string(string(playlist.name), filter_runes)
+	return filter_playlist_from_runes(playlist, filter_runes)
 }
 
 /*filter_playlist_list :: proc(input: []Playlist, filter_string: string) -> (output: []Playlist_ID) {
