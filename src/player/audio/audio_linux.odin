@@ -34,62 +34,66 @@ _audio: struct {
 	stream: pa.Stream,
 	callback: Callback,
 	callback_data: rawptr,
-	device_names: []Device_Name,
+	devices: []Device_Props,
 	info: Stream_Info,
 };
 
 @private
 _check :: proc(error: pa.ErrorCode, loc := #caller_location, expr := #caller_expression) -> bool {
 	if error != .NoError {
-		log.error(loc, pa.GetErrorText(error));
-		return false;
+		log.error(loc, pa.GetErrorText(error))
+		return false
 	}
 
-	return true;
+	return true
 }
 
 init :: proc() -> (ok: bool) {
-	_audio.ctx = context;
-	_check(pa.Initialize()) or_return;
+	_audio.ctx = context
+	_check(pa.Initialize()) or_return
 	defer if !ok {shutdown()}
-	ok = true;
-	return;
+	ok = true
+	return
 }
 
 shutdown :: proc() {
-	pa.Terminate();
+	pa.Terminate()
 }
 
-get_default_device_index :: proc() -> int {
-	return int(pa.GetDefaultOutputDevice());
+get_default_device_id :: proc() -> (Device_ID, bool) {
+	return {}, true
 }
 
-start :: proc(device_index: int, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
-	_audio.callback = callback;
-	_audio.callback_data = callback_data;
-	_audio.info.channels = 2;
-	_audio.info.sample_rate = 44100;
+start :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
+	_audio.callback = callback
+	_audio.callback_data = callback_data
+	_audio.info.channels = 2
+	_audio.info.sample_rate = 48000
 
-	_check(pa.OpenDefaultStream(&_audio.stream, 0, 2, pa.SampleFormat_Float32, 44100, 44100/8, _callback_wrapper, nil)) or_return;
-	_check(pa.StartStream(_audio.stream)) or_return;
+	_check(pa.OpenDefaultStream(&_audio.stream, 0, 2, pa.SampleFormat_Float32, 48000, 48000/8, _callback_wrapper, nil)) or_return
+	_check(pa.StartStream(_audio.stream)) or_return
 
-	info = _audio.info;
-	ok = true;
-	return;
+	info = _audio.info
+	ok = true
+	return
 }
 
 stop :: proc() {
-	pa.StopStream(_audio.stream);
-	pa.CloseStream(_audio.stream);
-	_audio.stream = nil;
+	pa.StopStream(_audio.stream)
+	pa.CloseStream(_audio.stream)
+	_audio.stream = nil
 }
 
 interrupt :: proc() {
-	//pa.AbortStream(_audio.stream);
-	//pa.StartStream(_audio.stream);
+	//pa.AbortStream(_audio.stream)
+	//pa.StartStream(_audio.stream)
 }
 set_volume :: proc(volume: f32) {}
 get_volume :: proc() -> f32 {return 1}
+
+enumerate_devices :: proc() -> (devices: []Device_Props, ok: bool) {
+	return {}, true
+}
 
 @private
 _callback_wrapper :: proc "c" (
@@ -99,7 +103,7 @@ _callback_wrapper :: proc "c" (
 	statusFlags: pa.StreamFlags,
 	userData: rawptr,
 ) -> pa.StreamCallbackResult {
-	context = _audio.ctx;
-	_audio.callback((cast([^]f32)output)[:frameCount * auto_cast _audio.info.channels], nil);
-	return .Continue;
+	context = _audio.ctx
+	_audio.callback((cast([^]f32)output)[:frameCount * auto_cast _audio.info.channels], nil)
+	return .Continue
 }

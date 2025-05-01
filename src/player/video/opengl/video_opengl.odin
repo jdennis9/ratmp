@@ -39,7 +39,9 @@ init_for_linux :: proc(window: glfw.WindowHandle) -> bool {
 	com.impl.destroy_texture = destroy_texture;
 	com.impl.invalidate_imgui_objects = invalidate_imgui_objects;
 	com.impl.create_imgui_objects = create_imgui_objects;
-	return imgui_gl.Init();
+	imgui_glfw.InitForOpenGL(window, true) or_return
+	imgui_gl.Init() or_return
+	return true
 }
 
 shutdown :: proc() {
