@@ -545,6 +545,8 @@ _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	info := &window_info[window]
 	state := &ui.windows[window]
 
+	if !state.show {return false}
+
 	fmt.bprint(name[:255], info.name, "###", info.internal_name, sep="")
 
 	if state.bring_to_front {
