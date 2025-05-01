@@ -1182,7 +1182,7 @@ _show_playlist_track_table :: proc(ui: ^State, lib: ^Library, pb: ^Playback, pla
 				_handle_select_track(ui, playlist.id, table.tracks, table.track)
 			}
 
-			if middle_clicked {
+			if middle_clicked || (left_clicked && imgui.IsMouseDoubleClicked(.Left)) {
 				playback.play_playlist(pb, lib^, playlist^, table.track)
 			}
 
@@ -1245,7 +1245,7 @@ _show_queue_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 				_handle_select_track(ui, queue_id, table.tracks, table.track)
 			}
 
-			if middle_clicked {
+			if middle_clicked || (left_clicked && imgui.IsMouseDoubleClicked(.Left)) {
 				playback.play_track_at_position(pb, lib^, table._pos-1)
 			}
 
@@ -1435,7 +1435,7 @@ _show_playlist_group_window :: proc(lib: Library, pb: ^Playback, list: library.P
 
 		if _begin_track_table(lib, &table, "##playlist_group_tracks") {
 			for _show_next_track_table_row(lib, pb^, &table) {
-				if imgui.IsItemClicked(.Middle) {
+				if imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left)) {
 					playback.play_playlist(pb, lib, playlist, table.track)
 				}
 			}
