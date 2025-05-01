@@ -64,13 +64,15 @@ for_each_file_in_dialog :: proc(title: cstring, iterator: File_Iterator,
 open_file_dialog :: proc(out: []u8) -> (file: string, ok: bool) {
 	buf: [512]u8
 	fp := posix.popen("zenity --file-selection", "r")
-	if fp == nil {return}
+	if fp == nil {log.error("popen failed"); return}
 	defer posix.pclose(fp)
 
 	if libc.fgets(&buf[0], auto_cast(len(buf)-1), fp) == nil {
+		log.error("fgets failed")
 		return
 	}
 	else if buf[0] == '\n' {
+		log.error("No file")
 		return
 	}
 	else {

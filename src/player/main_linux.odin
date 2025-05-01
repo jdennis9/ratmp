@@ -68,6 +68,8 @@ run :: proc() -> bool {
 	for this.running {
 		glfw.PollEvents()
 
+		com.handle_events()
+
 		// Update window title
 		if this.window_title_track_id != state.playback.playing_track {
 			title_buf: [256]u8
