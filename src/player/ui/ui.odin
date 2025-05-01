@@ -1402,15 +1402,17 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 			}
 
 			for playlist in list.playlists {
+				clicked, visible: bool
+
 				if state.filter[0] != 0 && !library.filter_playlist_from_runes(playlist, filter_runes) {
 					continue
 				}
 
-				if _playlist_table_row(playlist, false, queued_playlist_id == playlist.id) {
+				if clicked, visible = _playlist_table_row(playlist, false, queued_playlist_id == playlist.id); clicked {
 					state.selected_playlist_id = playlist.id
 				}
 
-				if imgui.IsItemClicked(.Middle) || (imgui.IsMouseClicked(.Left) && imgui.IsMouseDoubleClicked(.Left)) {
+				if visible && (imgui.IsItemClicked(.Middle) || (imgui.IsMouseClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))) {
 					playback.play_playlist(pb, lib, playlist)
 					state.selected_playlist_id = playlist.id
 				}
@@ -1446,6 +1448,8 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 
 		if _begin_track_table(lib, &table, "##playlist_group_tracks") {
 			for _show_next_track_table_row(lib, pb^, &table) {
+				if !table.visible {continue}
+
 				left_clicked := imgui.IsItemClicked(.Left)
 				middle_clicked := imgui.IsItemClicked(.Middle)
 				right_clicked := imgui.IsItemClicked(.Right)

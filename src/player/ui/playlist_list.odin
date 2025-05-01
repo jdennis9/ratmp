@@ -84,7 +84,7 @@ _playlist_table_update_sort_spec :: proc(spec: ^library.Playlist_Sort_Spec) -> b
 	return false
 }
 
-_playlist_table_row :: proc(playlist: library.Playlist, selected, playing: bool) -> (clicked: bool) {
+_playlist_table_row :: proc(playlist: library.Playlist, selected, playing: bool) -> (clicked: bool, visible: bool) {
 	imgui.TableNextRow()
 
 	if playing {
@@ -97,6 +97,7 @@ _playlist_table_row :: proc(playlist: library.Playlist, selected, playing: bool)
 
 	if imgui.TableSetColumnIndex(auto_cast _Column_Index.Name) {
 		clicked = imgui.Selectable(playlist.name, selected, {.SpanAllColumns})
+		visible = true
 	}
 
 	return
