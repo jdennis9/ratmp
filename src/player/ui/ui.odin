@@ -1705,18 +1705,19 @@ _show_theme_editor_window :: proc(window: ^_Window_State) {
 
 @private
 _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Preference_Manager) {
-	path_input_row :: proc(buf: []u8, str_id: cstring, name: cstring) -> bool {
+	path_input_row :: proc(buf: []u8, str_id: cstring, name: cstring) -> (commit: bool) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
-		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted(name)
-		imgui.TableSetColumnIndex(1)
-		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		commit := imgui.InputText(str_id, cstring(raw_data(buf)), len(buf))
-		imgui.TableSetColumnIndex(2)
-		if imgui.Button("Browse") {
-			_, file_picked := util.open_file_dialog(buf)
-			commit |= file_picked
+		if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+			commit = imgui.InputText(str_id, cstring(raw_data(buf)), len(buf))
+		}
+		if imgui.TableSetColumnIndex(2) {
+			if imgui.Button("Browse") {
+				_, file_picked := util.open_file_dialog(buf)
+				commit |= file_picked
+			}
 		}
 		imgui.PopID()
 
@@ -1726,11 +1727,11 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 	number_input_row :: proc(value: ^i32, v_min, v_max: i32, str_id: cstring, name: cstring) -> (commit: bool) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
-		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted(name)
-		imgui.TableSetColumnIndex(1)
-		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		commit |= imgui.DragInt(str_id, value, 0.1, v_min, v_max)
+		if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+			commit |= imgui.DragInt(str_id, value, 0.1, v_min, v_max)
+		}
 		imgui.PopID()
 		return
 	}
@@ -1739,18 +1740,18 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 		value := cstring(raw_data(buf))
 		imgui.PushID(name)
 		imgui.TableNextRow()
-		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted(name)
-		imgui.TableSetColumnIndex(1)
-		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##combo", value) {
-			for choice in choices {
-				if imgui.MenuItem(choice) {
-					util.copy_cstring(buf, choice)
-					commit = true
+		if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+			if imgui.BeginCombo("##combo", value) {
+				for choice in choices {
+					if imgui.MenuItem(choice) {
+						util.copy_cstring(buf, choice)
+						commit = true
+					}
 				}
+				imgui.EndCombo()
 			}
-			imgui.EndCombo()
 		}
 		imgui.PopID()
 		return
@@ -1760,18 +1761,18 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 	) -> (commit: bool) where intrinsics.type_is_enum(T) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
-		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted(name)
-		imgui.TableSetColumnIndex(1)
-		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##combo", value_names[value^]) {
-			for choice_name, choice_value in value_names {
-				if imgui.MenuItem(choice_name) {
-					value^ = choice_value
-					commit = true
+		if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+			if imgui.BeginCombo("##combo", value_names[value^]) {
+				for choice_name, choice_value in value_names {
+					if imgui.MenuItem(choice_name) {
+						value^ = choice_value
+						commit = true
+					}
 				}
+				imgui.EndCombo()
 			}
-			imgui.EndCombo()
 		}
 		imgui.PopID()
 
@@ -1781,10 +1782,10 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 	bool_choice_row :: proc(value: ^bool, name: cstring) -> (commit: bool) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
-		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted(name)
-		imgui.TableSetColumnIndex(1)
-		commit |= imgui.Checkbox("##checkbox", value)
+		if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			commit |= imgui.Checkbox("##checkbox", value)
+		}
 		imgui.PopID()
 		return
 	}
