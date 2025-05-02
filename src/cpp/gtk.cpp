@@ -1,3 +1,4 @@
+#ifdef __linux__
 #include <gtk/gtk.h>
 #include <stdio.h>
 
@@ -60,3 +61,4 @@ extern "C" bool show_message_box_gtk(
 
 	return true;
 }
+#endif

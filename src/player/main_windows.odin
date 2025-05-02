@@ -23,6 +23,7 @@ import "core:log"
 import win "core:sys/windows"
 import "core:unicode/utf16"
 import "core:fmt"
+import "core:os"
 
 import imgui_win32 "libs:odin-imgui/imgui_impl_win32"
 import imgui "libs:odin-imgui"
@@ -67,6 +68,7 @@ foreign import cpp_lib "../cpp/cpp.lib"
 foreign cpp_lib {
 	ole_initialize :: proc() -> win.HRESULT ---
 	dwm_set_dark_title_bar :: proc(hwnd: rawptr, on: bool) ---
+	is_system_light_theme :: proc() -> bool ---
 }
 
 set_window_title :: proc(title: string) {
@@ -145,6 +147,7 @@ run :: proc() -> bool {
 	}
 
 	state: com.State
+	use_light_theme := is_system_light_theme()
 	this.ctx = context
 	
 	imgui.CreateContext()
@@ -154,7 +157,7 @@ run :: proc() -> bool {
 	win.CoInitializeEx(nil, .MULTITHREADED)
 	this.hinstance = auto_cast win.GetModuleHandleW(nil)
 	
-	this.icon = win.LoadIconA(this.hinstance, "WindowIconDarkTheme")
+	this.icon = win.LoadIconA(this.hinstance, use_light_theme ? "WindowIconLightTheme" : "WindowIconDarkTheme")
 	
 	{
 		wndclass := win.RegisterClassExW(&win.WNDCLASSEXW{
@@ -179,7 +182,9 @@ run :: proc() -> bool {
 		)
 	}
 	
-	dwm_set_dark_title_bar(this.hwnd, true)
+	if (os.is_windows_10() || os.is_windows_11()) && !use_light_theme {
+		dwm_set_dark_title_bar(this.hwnd, true)
+	}
 	win.UpdateWindow(this.hwnd)
 	win.ShowWindow(this.hwnd, win.SW_HIDE)
 	
