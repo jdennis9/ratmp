@@ -241,17 +241,8 @@ _Preference_Editor :: struct {
 State :: struct {
 	ctx: runtime.Context,
 
-	deferred_files: struct {
-		pool: [dynamic]u8,
-		files: [dynamic]Offset_Length,
-		files_loaded: int,
-		scanning: bool,
-	},
-
 	metadata: _Metadata_Window,
 
-	/*selection: [dynamic]library.Track_ID,
-	selection_playlist_id: library.Playlist_ID,*/
 	selected_playlist: library.Playlist_ID,
 
 	selection: Selection,
@@ -354,10 +345,9 @@ install_imgui_settings_handler :: proc(ui: ^State) {
 }
 
 destroy :: proc(ui: State) {
-	if ui.deferred_files.pool != nil {
-		delete(ui.deferred_files.pool)
+	if ui.background_metadata_scan_thread != nil {
+		thread.join(ui.background_metadata_scan_thread)
 	}
-
 	video.impl.destroy_texture(ui.background)
 	video.impl.destroy_texture(ui.metadata.thumbnail)
 	if ui.metadata.comment != nil {delete(ui.metadata.comment)}
@@ -466,7 +456,8 @@ apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 	//theme.load(config.get_string(prefs, .Theme))
 }
 
-bring_window_to_front :: proc(ui: ^State, win: Window) {
+@private
+_bring_window_to_front :: proc(ui: ^State, win: Window) {
 	ui.windows[win].bring_to_front = true
 }
 
@@ -474,18 +465,9 @@ bring_window_to_front :: proc(ui: ^State, win: Window) {
 _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	ui := cast(^State)data
 	
-	if is_folder {
-		//util.for_each_file_in_folder(path, _add_files_iterator, data)
-		path_buf: [512]u8
-		util.copy_string_to_buf(path_buf[:], path)
-		append(&ui.background_metadata_scan.paths, path_buf)
-	}
-	else {
-		offset := len(ui.deferred_files.pool)
-		_, err := append_string(&ui.deferred_files.pool, path)
-		if err != .None {return}
-		append(&ui.deferred_files.files, Offset_Length{offset = offset, length = len(path)})
-	}
+	path_buf: [512]u8
+	util.copy_string_to_buf(path_buf[:], path)
+	append(&ui.background_metadata_scan.paths, path_buf)
 }
 
 @private
@@ -638,6 +620,7 @@ show :: proc(
 			clear(&ui.background_metadata_scan.paths)
 			delete(ui.background_metadata_scan.exclude_path_hashes)
 			library.free_track_data(ui.background_metadata_scan.output)
+			ui.background_metadata_scan.output = {}
 		}
 		else {
 			if imgui.Begin("Metadata scan progress") {
@@ -1037,6 +1020,10 @@ show :: proc(
 	return
 }
 
+queue_file_for_scanning :: proc(ui: ^State, path: string) {
+	_add_files_iterator(path, os.is_dir(path), ui)
+}
+
 @private
 _show_library_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	playlist := &lib.library
@@ -1131,17 +1118,17 @@ _show_track_generic_context_menu_items :: proc(ui: ^State, lib: Library, from_pl
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Artist") {
 			ui.artists_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.artist))
-			bring_window_to_front(ui, .Artists)
+			_bring_window_to_front(ui, .Artists)
 		}
 
 		if imgui.MenuItem("Album") {
 			ui.albums_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.album))
-			bring_window_to_front(ui, .Albums)
+			_bring_window_to_front(ui, .Albums)
 		}
 
 		if imgui.MenuItem("Genre") {
 			ui.genres_window.selected_playlist_id = library.get_playlist_group_id_from_name(string(track.genre), case_insensitive=true)
-			bring_window_to_front(ui, .Genres)
+			_bring_window_to_front(ui, .Genres)
 		}
 
 		imgui.EndMenu()
@@ -1325,7 +1312,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Selectable(name, false, {.SpanAllColumns}) {
-					bring_window_to_front(ui, window)
+					_bring_window_to_front(ui, window)
 				}
 			}
 		}
@@ -1355,7 +1342,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Selectable(p.name, p.id == ui.selected_playlist, {.SpanAllColumns}) {
-					bring_window_to_front(ui, .Playlist)
+					_bring_window_to_front(ui, .Playlist)
 					ui.selected_playlist = p.id
 				}
 

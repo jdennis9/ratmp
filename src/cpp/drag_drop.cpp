@@ -6,19 +6,7 @@
 typedef uint32_t u32;
 #define PATH_LENGTH 384
 
-enum {
-	SIGNAL_,
-};
-
-struct Interface {
-	void (*add_file)(const char *path);
-	void (*begin)();
-	void (*mouse_over)(float x, float y);
-	void (*cancel)();
-	void (*drop)();
-};
-
-static Interface iface;
+static void (*drop_callback)(const char *path);
 static HWND window;
 
 struct Drop_Target : IDropTarget {
@@ -41,7 +29,7 @@ struct Drop_Target : IDropTarget {
 
         drop = (HDROP)medium.hGlobal;
 
-        u32 file_count = DragQueryFile(drop, UINT32_MAX, NULL, 0);
+        u32 file_count = DragQueryFileW(drop, UINT32_MAX, NULL, 0);
         u32 tracks_added_count = 0;
 
         for (u32 i = 0; i < file_count; ++i) {
@@ -49,40 +37,23 @@ struct Drop_Target : IDropTarget {
             char path_u8[PATH_LENGTH] = {};
             DragQueryFileW(drop, i, path, PATH_LENGTH);
 			WideCharToMultiByte(CP_UTF8, 0, path, wcslen(path), path_u8, PATH_LENGTH, NULL, NULL);
-            iface.add_file(path_u8);
+            drop_callback(path_u8);
         }
 
-
-        // Tell ImGui we released left mouse because Windows eats the event when dropping
-        // files into the window
-        //ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
-
-        //tell_main_weve_dropped_the_drag_drop_payload();
-		iface.drop();
+        drop_callback(NULL);
 
         return 0;
     }
 
     HRESULT DragEnter(IDataObject *data, DWORD key_state, POINTL point, DWORD *effect) override {
-        iface.begin();
-        *effect |= DROPEFFECT_COPY;
         return S_OK;
     }
 
     HRESULT DragLeave() override {
-        ReleaseStgMedium(&medium);
-        //clear_file_drag_drop_payload();
-		iface.cancel();
         return S_OK;
     }
 
     HRESULT DragOver(DWORD key_state, POINTL point_l, DWORD *effect) override {
-        POINT point;
-        point.x = point_l.x;
-        point.y = point_l.y;
-		ScreenToClient(window, &point);
-		iface.mouse_over((float)point.x, (float)point.y);
-        *effect |= DROPEFFECT_COPY;
         return S_OK;
     }
 
@@ -100,21 +71,14 @@ struct Drop_Target : IDropTarget {
 
 };
 
-extern "C" void drag_drop_init_for_windows(HWND hWnd) {
+extern "C" void drag_drop_init(HWND hWnd, void (*callback)(const char *files)) {
     static Drop_Target g_drag_drop_target;
     HRESULT hr;
 
-    printf("Registering drag drop interface\n");
+    drop_callback = callback;
 
-    hr = RegisterDragDrop((HWND)hWnd, &g_drag_drop_target);
-    if (!SUCCEEDED(hr)) {
-        printf("****** Failed to register drag drop: 0x%x\n", hr);
-    }
+    RegisterDragDrop((HWND)hWnd, &g_drag_drop_target);
     window = hWnd;
-}
-
-extern "C" void drag_drop_set_interface(Interface *iface_) {
-	iface = *iface_;
 }
 
 #endif

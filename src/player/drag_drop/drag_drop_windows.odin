@@ -24,6 +24,5 @@ import imgui "libs:odin-imgui"
 
 @(link_prefix="drag_drop_")
 foreign lib {
-	init_for_windows :: proc(hwnd: win.HWND) ---
-	set_interface :: proc(iface: ^Interface) ---
+	init :: proc(hwnd: win.HWND, callback: proc(path: cstring)) ---
 }

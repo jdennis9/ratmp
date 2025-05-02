@@ -37,6 +37,7 @@ import "player:library"
 import "player:build"
 import "player:drag_drop"
 import "player:config"
+import "player:ui"
 
 @private
 this: struct {
@@ -49,9 +50,9 @@ this: struct {
 	running: bool,
 	enable_media_controls: bool,
 	close_policy: config.Close_Policy,
-
+	
 	window_title_track_id: library.Track_ID,
-
+	
 	media_controls: struct {
 		play: bool,
 		prev: bool,
@@ -59,6 +60,7 @@ this: struct {
 		pause: bool,
 	}
 }
+state: com.State
 
 @private
 _WNDCLASS_NAME := intrinsics.constant_utf16_cstring("RATMP_WINDOW_CLASS")
@@ -71,58 +73,6 @@ foreign cpp_lib {
 	is_system_light_theme :: proc() -> bool ---
 }
 
-set_window_title :: proc(title: string) {
-	buf: [256]u16
-	length: int
-
-	utf16.encode_string(buf[:254], title)
-	win.SetWindowTextW(this.hwnd, raw_data(buf[:]))
-}
-
-media_controls_handler :: proc "c" (event: media_controls.Event) {
-	context = this.ctx
-
-	switch event {
-		case .Play: {
-			this.media_controls.play = true
-		}
-		case .Pause: {
-			this.media_controls.pause = true
-		}
-		case .Next: {
-			this.media_controls.next = true
-		}
-		case .Prev: {
-			this.media_controls.prev = true
-		}
-	}
-
-	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
-}
-
-sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
-	@static displayed_track_id: library.Track_ID
-	@static displayed_status: media_controls.Status
-
-	if pb.playing_track != 0 && displayed_track_id != pb.playing_track {
-		track := library.get_track_info(lib, pb.playing_track)
-		media_controls.set_metadata(track.album, track.artist, track.title)
-	}
-
-	status: media_controls.Status
-
-	if pb.playing_track == 0 {
-		status = .Stopped
-	}
-	else {
-		status = pb.paused ? .Paused : .Playing
-	}
-
-	if status != displayed_status {
-		displayed_status = status
-		media_controls.set_status(status)
-	}
-}
 
 apply_prefs :: proc(prefs: config.Preferences) {
 	this.close_policy = prefs.close_policy
@@ -146,7 +96,6 @@ run :: proc() -> bool {
 		log.info("======================= Beginning of log =======================" )
 	}
 
-	state: com.State
 	use_light_theme := is_system_light_theme()
 	this.ctx = context
 	
@@ -188,10 +137,14 @@ run :: proc() -> bool {
 	win.UpdateWindow(this.hwnd)
 	win.ShowWindow(this.hwnd, win.SW_HIDE)
 	
+	// Renderer
 	dx11.init_for_windows(this.hwnd)
 	defer dx11.shutdown_for_windows()
 	
-	drag_drop.init_for_windows(this.hwnd)
+	// Drag-drop
+	drag_drop.init(this.hwnd, drag_drop_callback)
+
+	// System tray
 	add_tray_icon()
 	defer remove_tray_icon()
 	
@@ -385,4 +338,63 @@ remove_tray_icon :: proc() {
 	if this.tray_popup != nil {
 		win.DestroyMenu(this.tray_popup)
 	}
+}
+
+
+set_window_title :: proc(title: string) {
+	buf: [256]u16
+	length: int
+
+	utf16.encode_string(buf[:254], title)
+	win.SetWindowTextW(this.hwnd, raw_data(buf[:]))
+}
+
+media_controls_handler :: proc "c" (event: media_controls.Event) {
+	context = this.ctx
+
+	switch event {
+		case .Play: {
+			this.media_controls.play = true
+		}
+		case .Pause: {
+			this.media_controls.pause = true
+		}
+		case .Next: {
+			this.media_controls.next = true
+		}
+		case .Prev: {
+			this.media_controls.prev = true
+		}
+	}
+
+	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
+}
+
+sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
+	@static displayed_track_id: library.Track_ID
+	@static displayed_status: media_controls.Status
+
+	if pb.playing_track != 0 && displayed_track_id != pb.playing_track {
+		track := library.get_track_info(lib, pb.playing_track)
+		media_controls.set_metadata(track.album, track.artist, track.title)
+	}
+
+	status: media_controls.Status
+
+	if pb.playing_track == 0 {
+		status = .Stopped
+	}
+	else {
+		status = pb.paused ? .Paused : .Playing
+	}
+
+	if status != displayed_status {
+		displayed_status = status
+		media_controls.set_status(status)
+	}
+}
+
+drag_drop_callback :: proc "c" (path: cstring) {
+	context = this.ctx
+	ui.queue_file_for_scanning(&state.ui, string(path))
 }
