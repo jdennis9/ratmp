@@ -1055,16 +1055,47 @@ _handle_select_track :: proc(selection: ^Selection, playlist_id: Playlist_ID, fr
 
 	if imgui.IsKeyDown(.ImGuiMod_Shift) {
 		if track_index, found := slice.linear_search(from, track_id); found {
-			range_start := 0
+			have_track_before, have_track_after: bool
+			sel_track_before, sel_track_after: int
+			sel_track_after = max(int)
+
 
 			for sel in selection.tracks {
 				index := slice.linear_search(from, sel) or_continue
-				if index < track_index {range_start = max(range_start, index)}
+				if index < track_index {
+					sel_track_before = max(sel_track_before, index)
+					have_track_before = true
+				}
+				if index > track_index {
+					sel_track_after = min(index, sel_track_after)
+					have_track_after = true
+				}
 			}
 
-			for sel in from[range_start:track_index] {
-				if !slice.contains(selection.tracks[:], sel) {
-					append(&selection.tracks, sel)
+			select_forward: bool
+
+			if !have_track_after && !have_track_before {
+				select_forward = true
+				sel_track_before = 0
+			}
+			else if have_track_before && have_track_after {
+				select_forward = (sel_track_after - track_index) > (track_index - sel_track_before)
+			}
+			else if have_track_before {select_forward = true}
+			else if have_track_after {select_forward = false}
+
+			if select_forward {
+				for sel in from[sel_track_before:track_index] {
+					if !slice.contains(selection.tracks[:], sel) {
+						append(&selection.tracks, sel)
+					}
+				}
+			}
+			else {
+				for sel in from[track_index+1:sel_track_after+1] {
+					if !slice.contains(selection.tracks[:], sel) {
+						append(&selection.tracks, sel)
+					}
 				}
 			}
 
