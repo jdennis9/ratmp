@@ -32,6 +32,7 @@ Decoder :: struct {
 	resampler: src.State,
 	frame: int,
 	in_to_out_sample_ratio: f32,
+	resample_quality: src.Converter_Type,
 }
 
 Decode_Status :: enum {
@@ -40,8 +41,9 @@ Decode_Status :: enum {
 	Eof,
 }
 
-open :: proc(dec: ^Decoder, file: string) -> bool {
+open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type.SINC_MEDIUM_QUALITY) -> bool {
 	close(dec)
+	dec.resample_quality = resample_quality
 	when ODIN_OS == .Windows {
 		path: [512]u16
 		utf16.encode_string(path[:511], file)
@@ -61,6 +63,7 @@ close :: proc(dec: ^Decoder) {
 }
 
 destroy :: proc(dec: Decoder) {
+	if dec.stream != nil {sf.close(dec.stream)}
 	src.delete(dec.resampler)
 }
 
@@ -89,7 +92,7 @@ fill_buffer :: proc(dec: ^Decoder, output_slice: []f32, samplerate: int, channel
 
 	if dec.resampler == nil {
 		error: i32
-		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error)
+		dec.resampler = src.new(dec.resample_quality, 2, &error)
 		dec.in_to_out_sample_ratio = in_to_out_sample_ratio
 	}
 

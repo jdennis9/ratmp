@@ -139,14 +139,14 @@ update :: proc(lib: library.Library, pb: playback.State, delta: f32, window_leng
 				thread.destroy(data.thread)
 				data.thread = nil
 				data.want_cancel = false
-				decoder.close(&data.dec)
+				decoder.destroy(data.dec)
 			}
 			
 			path_buf: [512]u8
 			data.track = track
 			path := library.get_track_path(lib, track, path_buf[:])
 
-			if decoder.open(&data.dec, path) {
+			if decoder.open(&data.dec, path, .LINEAR) {
 				data.thread = thread.create_and_start(_waveform_preview_thread_proc)
 				if data.thread == nil {
 					decoder.close(&data.dec)
