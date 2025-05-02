@@ -238,6 +238,17 @@ _Preference_Editor :: struct {
 	enable_media_controls: bool,
 }
 
+// Copy these preferences to the editor preference state
+_copy_preferences_to_editor :: proc(ed: ^_Preference_Editor, prefs: config.Preferences) {
+	util.copy_string_to_buf(ed.background_path[:], prefs.background_path)
+	util.copy_string_to_buf(ed.font_path[:], prefs.font_path)
+	util.copy_string_to_buf(ed.theme_name[:], prefs.theme_name)
+	ed.close_policy = prefs.close_policy
+	ed.font_size = auto_cast prefs.font_size
+	ed.icon_size = auto_cast prefs.icon_size
+	ed.enable_media_controls = prefs.enable_media_controls
+}
+
 State :: struct {
 	ctx: runtime.Context,
 
@@ -269,8 +280,8 @@ State :: struct {
 
 	layout_that_we_want_to_load: []u8,
 	free_layout_after_load: bool,
-
 	layout_names: [dynamic]_Layout_Name,
+
 	//metadata_save_job: ^lib.Metadata_Save_Job,
 
 	library_window: _Playlist_Window,
@@ -284,6 +295,16 @@ State :: struct {
 	data_dir: string,
 
 	preference_editor: _Preference_Editor,
+
+	loaded_background: [512]u8,
+	loaded_font: [512]u8,
+	loaded_font_size: int,
+	loaded_icon_size: int,
+
+	seek_target: f32,
+
+	new_playlist_name: [128]u8,
+	new_playlist_error: library.Add_Playlist_Error,
 }
 
 init :: proc(data_dir: string) -> (ui: State, ok: bool) {
@@ -301,23 +322,8 @@ init :: proc(data_dir: string) -> (ui: State, ok: bool) {
 
 	log.debug("ImGui version: ", imgui.VERSION)
 
-	//signal.install_handler(signal_handler)
-
 	// Set window flags
 	ui.windows[.Metadata].flags |= {.AlwaysVerticalScrollbar}
-
-	// Set up system drag-drop
-	// @FixMe
-	/*drag_drop.set_interface(
-		&{
-			begin = _ext_drag_drop_begin,
-			add_file = _ext_drag_drop_add_file,
-			cancel = _ext_drag_drop_cancel,
-			drop = _ext_drag_drop_drop,
-			mouse_over = _ext_drag_drop_mouse_over,
-		}
-	)*/
-
 
 	_scan_layouts(&ui)
 
@@ -340,7 +346,6 @@ install_imgui_settings_handler :: proc(ui: ^State) {
 	}
 
 	imgui.AddSettingsHandler(&handler)
-	//imgui.SaveIniSettingsToDisk(io.IniFilename);
 	imgui.LoadIniSettingsFromDisk(io.IniFilename)
 }
 
@@ -419,25 +424,14 @@ _load_fonts :: proc(prefs: config.Preferences) {
 apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
-	
-	// Copy these preferences to the editor preference state
-	{
-		ed := &ui.preference_editor
-		util.copy_string_to_buf(ed.background_path[:], prefs.background_path)
-		util.copy_string_to_buf(ed.font_path[:], prefs.font_path)
-		util.copy_string_to_buf(ed.theme_name[:], prefs.theme_name)
-		ed.close_policy = prefs.close_policy
-		ed.font_size = auto_cast prefs.font_size
-		ed.icon_size = auto_cast prefs.icon_size
-		ed.enable_media_controls = prefs.enable_media_controls
-	}
+
+	_copy_preferences_to_editor(&ui.preference_editor, prefs)
 
 	// Load background
 	{
-		@static loaded_background: [512]u8
 		path := prefs.background_path
 
-		if string(cstring(&loaded_background[0])) != path {
+		if string(cstring(&ui.loaded_background[0])) != path {
 			video.impl.destroy_texture(ui.background)
 			if path != "" {
 				ui.background, ui.background_width, ui.background_height, _ = 
@@ -446,14 +440,13 @@ apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 			else {
 				ui.background = {}
 			}
-			util.copy_string_to_buf(loaded_background[:], path)
+			util.copy_string_to_buf(ui.loaded_background[:], path)
 		}
 	}
 
 	_load_fonts(prefs)
 
-	// Load default theme
-	//theme.load(config.get_string(prefs, .Theme))
+	theme.load(prefs.theme_name)
 }
 
 @private
@@ -813,7 +806,6 @@ show :: proc(
 		// Seek bar
 		// ---------------------------------------------------------------------
 		{
-			@static seek_target: f32
 			pos := playback.get_second(pb^)
 			duration := playback.get_duration(pb^)
 
@@ -824,11 +816,11 @@ show :: proc(
 			
 			frac := f32(pos) / f32(duration)
 			if _show_scrubber_widget("##position", &frac, 0, 1) {
-				seek_target = frac
+				ui.seek_target = frac
 			}
 
 			if imgui.IsItemDeactivated() {
-				playback.seek(pb, int(seek_target * f32(duration)))
+				playback.seek(pb, int(ui.seek_target * f32(duration)))
 			}
 		}
 
@@ -855,25 +847,6 @@ show :: proc(
 	// -----------------------------------------------------------------------------
 	// Show windows
 	// -----------------------------------------------------------------------------
-	/*for &window in window_info {
-		if window.bring_to_front {
-			window.bring_to_front = false
-			window.show = true
-			log.debug("Bring to front", window.name)
-			imgui.SetNextWindowFocus()
-		}
-
-		if !window.show || window.show_proc == nil {continue}
-
-		name_buf: [128]u8
-		fmt.bprint(name_buf[:127], window.name, "###", window.internal_name, sep="")
-
-		if imgui.Begin(cstring(&name_buf[0]), &window.show, window.flags) {
-			window.show_proc()
-		}
-		imgui.End()
-	}*/
-
 	for window_id in Window {
 		switch window_id {
 			case .Library: {
@@ -982,29 +955,26 @@ show :: proc(
 	if imgui.BeginPopupModal(new_playlist_popup_name, nil, {.NoResize}) {
 		defer imgui.EndPopup()
 
-		@static input: [128]u8
-		@static error: library.Add_Playlist_Error
 		commit := false
 
-		commit |= imgui.InputText("Name your playlist", cstring(raw_data(input[:])), 128, {.EnterReturnsTrue})
+		commit |= imgui.InputText("Name your playlist", cstring(&ui.new_playlist_name[0]), 128, {.EnterReturnsTrue})
 		commit |= imgui.Button("Create")
 		imgui.SameLine()
 		if imgui.Button("Cancel") {imgui.CloseCurrentPopup()}
 
-		if error != .None {
-			error_str: cstring = error == .NameExists ? "Already a playlist with that name" : "Name is reserved"
+		if ui.new_playlist_error != .None {
+			error_str: cstring = ui.new_playlist_error == .NameExists ? "Already a playlist with that name" : "Name is reserved"
 			imgui.Text(error_str)
 		}
 
 		if commit {
-			cstr := cstring(raw_data(input[:]))
-			name := string(input[:len(cstr)])
-			_, error = library.add_playlist(lib, name)
+			name := string(cstring(&ui.new_playlist_name[0]))
+			_, ui.new_playlist_error = library.add_playlist(lib, name)
 
-			if error == .None {
+			if ui.new_playlist_error == .None {
 				imgui.CloseCurrentPopup()
-				error = .None
-				for &b in input {b = 0}
+				ui.new_playlist_error = .None
+				for &b in ui.new_playlist_name {b = 0}
 			}
 		}
 	}
