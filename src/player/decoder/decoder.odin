@@ -20,6 +20,7 @@ package decoder
 import "core:unicode/utf16"
 import "core:math"
 import "core:log"
+import "core:fmt"
 
 import sf "bindings:sndfile"
 import src "bindings:samplerate"
@@ -30,6 +31,7 @@ Decoder :: struct {
 	info: sf.Info,
 	resampler: src.State,
 	frame: int,
+	in_to_out_sample_ratio: f32,
 }
 
 Decode_Status :: enum {
@@ -55,15 +57,19 @@ open :: proc(dec: ^Decoder, file: string) -> bool {
 
 close :: proc(dec: ^Decoder) {
 	if dec.stream != nil {sf.close(dec.stream); dec.stream = nil}
-	if dec.resampler != nil {src.delete(dec.resampler); dec.resampler = nil}
 	dec.frame = 0
 }
 
-fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
+destroy :: proc(dec: Decoder) {
+	src.delete(dec.resampler)
+}
+
+fill_buffer :: proc(dec: ^Decoder, output_slice: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
 	if dec.stream == nil {
 		return .NoFile
 	}
 
+	output := output_slice
 	status = .Complete
 
 	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
@@ -76,15 +82,21 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 		return .Complete
 	}
 
-	if dec.resampler == nil {
-		error: i32
-		dec.resampler = src.new(.LINEAR, 2, &error)
-	}
-
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
 	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio)
 	raw_buffer: []f32 = make([]f32, input_frames * dec.info.channels)
 	defer delete(raw_buffer)
+
+	if dec.resampler == nil {
+		error: i32
+		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error)
+		dec.in_to_out_sample_ratio = in_to_out_sample_ratio
+	}
+
+	if in_to_out_sample_ratio != dec.in_to_out_sample_ratio {
+		dec.in_to_out_sample_ratio = in_to_out_sample_ratio
+		src.set_ratio(dec.resampler, auto_cast in_to_out_sample_ratio)
+	}
 
 	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
 
@@ -100,7 +112,11 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 		src_ratio = f64(in_to_out_sample_ratio),
 	}
 
-	src.process(dec.resampler, &rs)
+	converted := src.process(dec.resampler, &rs)
+
+	if rs.output_frames_gen != auto_cast output_frames {
+		fmt.println("Wanted", output_frames, "frames, got", rs.output_frames_gen)
+	}
 
 	dec.frame += cast(int) frames_read
 

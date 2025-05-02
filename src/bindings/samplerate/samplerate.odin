@@ -34,5 +34,6 @@ foreign samplerate {
 	delete :: proc(state: State) -> State ---
 	process :: proc(state: State, data: ^Data) -> c.int ---
 	reset :: proc(state: State) -> c.int ---
+	set_ratio :: proc(state: State, ratio: f64) -> c.int ---
 }
 
