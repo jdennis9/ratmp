@@ -79,7 +79,7 @@ _fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: in
 	if !sync.atomic_load(&state.paused) {
 		status := decoder.fill_buffer(&state.decoder, output, samplerate, channels)
 		
-		if status == .NO_FILE {
+		if status == .NoFile {
 			for &f in output {f = 0}
 		}
 
@@ -87,7 +87,7 @@ _fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: in
 	}
 	else {
 		for &f in output {f = 0}
-		return .NO_FILE
+		return .NoFile
 	}	
 }
 
@@ -102,7 +102,7 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof:
 		return
 	}
 
-	eof = _fill_buffer(state, buffer[:], samplerate, channels) == .EOF
+	eof = _fill_buffer(state, buffer[:], samplerate, channels) == .Eof
 
 	// -------------------------------------------------------------------------
 	// Update output capture buffer

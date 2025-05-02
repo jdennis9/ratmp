@@ -275,7 +275,7 @@ _waveform_preview_thread_proc :: proc() {
 
 	slice.fill(data.output[:], 0)
 
-	for decoder.fill_buffer(dec, buffer, int(samplerate), int(channels)) == .COMPLETE {
+	for decoder.fill_buffer(dec, buffer, int(samplerate), int(channels)) == .Complete {
 		peak := f32(0)
 
 		for v in buffer {

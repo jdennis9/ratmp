@@ -33,9 +33,9 @@ Decoder :: struct {
 }
 
 Decode_Status :: enum {
-	NO_FILE,
-	COMPLETE,
-	EOF,
+	NoFile,
+	Complete,
+	Eof,
 }
 
 open :: proc(dec: ^Decoder, file: string) -> bool {
@@ -61,24 +61,24 @@ close :: proc(dec: ^Decoder) {
 
 fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
 	if dec.stream == nil {
-		return .NO_FILE
+		return .NoFile
 	}
 
-	status = .COMPLETE
+	status = .Complete
 
 	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
 	output_frames := len(output) / channels
 
 	if !needs_resampling {
 		frames_read := sf.readf_float(dec.stream, raw_data(output), sf.count_t(output_frames))
-		if (frames_read < i64(output_frames)) {return .EOF}
+		if (frames_read < i64(output_frames)) {return .Eof}
 		dec.frame += int(frames_read)
-		return .COMPLETE
+		return .Complete
 	}
 
 	if dec.resampler == nil {
 		error: i32
-		dec.resampler = src.new(.SINC_MEDIUM_QUALITY, 2, &error)
+		dec.resampler = src.new(.LINEAR, 2, &error)
 	}
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
@@ -89,7 +89,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
 
 	if (frames_read < sf.count_t(input_frames)) {
-		status = .EOF
+		status = .Eof
 	}
 
 	rs := src.Data {
