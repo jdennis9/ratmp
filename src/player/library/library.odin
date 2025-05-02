@@ -50,6 +50,7 @@ Playlist_ID :: struct {
 
 Add_Playlist_Error :: enum {
 	None,
+	EmptyName,
 	NameExists,
 	NameReserved,
 }
@@ -317,15 +318,20 @@ scan_folder :: proc(exclude_path_hashes: []u32, path: string, output: ^Track_Dat
 		track: Raw_Track_Info
 
 		path_id := xxhash.XXH32(transmute([]u8) file.fullpath)
-		
-		if slice.contains(exclude_path_hashes, path_id) {continue}
-		if !is_supported_format(file.fullpath) {continue}
 
-		_read_track_metadata(&track, file.fullpath)
-		track.path = path_pool.store(&output.paths, file.fullpath)
+		if file.type == .Directory {
+			scan_folder(exclude_path_hashes, file.fullpath, output)
+		}
+		else if file.type == .Regular {
+			if slice.contains(exclude_path_hashes, path_id) {continue}
+			if !is_supported_format(file.fullpath) {continue}
 
-		append(&output.path_ids, path_id)
-		append(&output.metadata, track)
+			_read_track_metadata(&track, file.fullpath)
+			track.path = path_pool.store(&output.paths, file.fullpath)
+
+			append(&output.path_ids, path_id)
+			append(&output.metadata, track)
+		}
 	}
 }
 
@@ -664,6 +670,8 @@ add_playlist :: proc(lib: ^Library, name: string) -> (Playlist_ID, Add_Playlist_
 	playlist := Playlist {
 		name = strings.clone_to_cstring(name),
 	}
+
+	if name == "" {return {}, .EmptyName}
 
 	for p in lib.playlists {
 		if name == string(p.name) {

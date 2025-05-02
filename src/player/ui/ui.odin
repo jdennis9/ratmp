@@ -292,6 +292,10 @@ State :: struct {
 	background_metadata_scan: _Background_Metadata_Scan,
 	background_metadata_scan_thread: ^thread.Thread,
 
+	// Once the current background metadata scan is done,
+	// these files start getting scanned
+	file_scan_queue: [dynamic][512]u8,
+
 	data_dir: string,
 
 	preference_editor: _Preference_Editor,
@@ -460,7 +464,7 @@ _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	
 	path_buf: [512]u8
 	util.copy_string_to_buf(path_buf[:], path)
-	append(&ui.background_metadata_scan.paths, path_buf)
+	append(&ui.file_scan_queue, path_buf)
 }
 
 @private
@@ -594,11 +598,21 @@ show :: proc(
 
 	// Check if there are any files queued for processing and begin processing them if
 	// needed
-	if len(ui.background_metadata_scan.paths) > 0 && ui.background_metadata_scan_thread == nil {
-		ui.background_metadata_scan.exclude_path_hashes = slice.clone(lib.track_path_hashes[:])
-		ui.background_metadata_scan.input_file_count = 0
+	if len(ui.file_scan_queue) > 0 && ui.background_metadata_scan_thread == nil {
+		scan := &ui.background_metadata_scan
+		scan.exclude_path_hashes = slice.clone(lib.track_path_hashes[:])
+		scan.input_file_count = 0
 		ui.background_metadata_scan_thread = thread.create(_metadata_scan_proc)
 		ui.background_metadata_scan_thread.data = &ui.background_metadata_scan
+
+		// Copy files from queue to metadata scan job data
+		for file in ui.file_scan_queue {
+			append(&scan.paths, file)
+		}
+
+		// Clear queue
+		clear(&ui.file_scan_queue)
+
 		log.debug("Starting metadata scan")
 		thread.start(ui.background_metadata_scan_thread)
 	}
@@ -955,6 +969,13 @@ show :: proc(
 	if imgui.BeginPopupModal(new_playlist_popup_name, nil, {.NoResize}) {
 		defer imgui.EndPopup()
 
+		error_names := [library.Add_Playlist_Error]cstring {
+			.NameExists = "Already a playlist with that name",
+			.NameReserved = "Name is reserved",
+			.EmptyName = "Name cannot be empty",
+			.None = "",
+		}
+
 		commit := false
 
 		commit |= imgui.InputText("Name your playlist", cstring(&ui.new_playlist_name[0]), 128, {.EnterReturnsTrue})
@@ -963,7 +984,7 @@ show :: proc(
 		if imgui.Button("Cancel") {imgui.CloseCurrentPopup()}
 
 		if ui.new_playlist_error != .None {
-			error_str: cstring = ui.new_playlist_error == .NameExists ? "Already a playlist with that name" : "Name is reserved"
+			error_str := error_names[ui.new_playlist_error]
 			imgui.Text(error_str)
 		}
 
