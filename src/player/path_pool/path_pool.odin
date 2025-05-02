@@ -23,7 +23,7 @@ import "core:strings"
 
 Dir :: struct {
 	id: u32,
-	length: int,
+	name_length: int,
 	string_pool: [dynamic]u8,
 }
 
@@ -63,7 +63,7 @@ store :: proc(pool: ^Pool, path: string) -> (ret: Path) {
 	// Directory not found, add it to the pool
 	dir := Dir {
 		id = dir_id,
-		length = auto_cast len(dir_name),
+		name_length = auto_cast len(dir_name),
 	}
 
 	// Append directory name to the start of the string pool
@@ -79,18 +79,22 @@ store :: proc(pool: ^Pool, path: string) -> (ret: Path) {
 	return
 }
 
+get_dir_path :: proc(dir: Dir) -> string {
+	return string(dir.string_pool[:dir.name_length])
+}
+
 // Returns a slice of the buffer or nil if the buffer is too small
 retrieve :: proc(pool: Pool, path: Path, buffer: []u8) -> string {
 	dir := pool.dirs[path.dir]
-	total_length := dir.length + path.length + 1
+	total_length := dir.name_length + path.length + 1
 
 	if total_length >= len(buffer) {
 		return ""
 	}
 
-	copy(buffer, dir.string_pool[:dir.length])
-	buffer[dir.length] = filepath.SEPARATOR
-	copy(buffer[dir.length+1:], dir.string_pool[path.offset:][:path.length])
+	copy(buffer, dir.string_pool[:dir.name_length])
+	buffer[dir.name_length] = filepath.SEPARATOR
+	copy(buffer[dir.name_length+1:], dir.string_pool[path.offset:][:path.length])
 
 	return string(buffer[:total_length])
 }

@@ -246,14 +246,6 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 		track_data.duration_seconds = duration
 		track_data.bitrate = bitrate
 
-		/*append(&lib.track_path_hashes, path_id)
-		append(&lib.tracks, track_data)
-		append(&lib.library.tracks, track_id)
-
-		_add_to_playlist_group(track_id, artist, &lib.artists)
-		_add_to_playlist_group(track_id, album, &lib.albums)
-		_add_to_playlist_group(track_id, filepath.base(filepath.dir(path)), &lib.folders)
-		_add_to_playlist_group(track_id, genre, &lib.genres)*/
 		_add_track(&lib, cleaned_path, track_data)
 	}
 
@@ -347,6 +339,8 @@ add_tracks_from_track_data :: proc(lib: ^Library, track_data: Track_Data) {
 		track := track_data.metadata[track_index]
 		path := path_pool.retrieve(track_data.paths, track.path, path_buf[:])
 		_add_track(lib, path, track_data.metadata[track_index])
+
+		log.debug("Add track:", cstring(&track.artist[0]), "-", cstring(&track.title[0]))
 	}
 }
 

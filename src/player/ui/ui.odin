@@ -42,6 +42,7 @@ import "player:theme"
 import "player:drag_drop"
 import "player:analysis"
 import "player:build"
+import "player:path_pool"
 
 ICON_FONT := #load("FontAwesome.otf")
 
@@ -668,6 +669,14 @@ show :: proc(
 				util.for_each_file_in_dialog(nil, _add_files_iterator, ui, select_folders=true)
 			}
 
+			if imgui.MenuItem("Scan for new music") {
+				for dir in lib.paths.dirs {
+					path := path_pool.get_dir_path(dir)
+					queue_file_for_scanning(ui, path)
+				}
+			}
+			imgui.SetItemTooltip("Scan folders used in your library for new music")
+
 			imgui.Separator()
 			if imgui.MenuItem("Preferences") {
 				ui.show_preferences = true
@@ -1012,6 +1021,7 @@ show :: proc(
 }
 
 queue_file_for_scanning :: proc(ui: ^State, path: string) {
+	log.debug("Queued for scanning:", path)
 	_add_files_iterator(path, os.is_dir(path), ui)
 }
 
