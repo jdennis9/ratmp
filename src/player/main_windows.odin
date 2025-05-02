@@ -196,9 +196,9 @@ run :: proc() -> bool {
 	com.init(&state, ".", ".", wake_proc) or_return
 	defer com.shutdown()
 	
-	apply_prefs(state.prefs.data)
+	apply_prefs(state.prefs.values)
 	
-	if state.prefs.data.enable_media_controls {
+	if state.prefs.values.enable_media_controls {
 		media_controls.install_handler(media_controls_handler)
 		this.enable_media_controls = true
 	}
@@ -232,7 +232,7 @@ run :: proc() -> bool {
 		com.handle_events()
 
 		if state.prefs.dirty {
-			apply_prefs(state.prefs.data)
+			apply_prefs(state.prefs.values)
 		}
 
 		// Update window title to show playing track

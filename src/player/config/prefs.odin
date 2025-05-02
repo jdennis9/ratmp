@@ -48,7 +48,7 @@ Preferences :: struct {
 Preference_Manager :: struct {
 	arena_data: []byte,
 	arena: mem.Arena,
-	data: Preferences,
+	values: Preferences,
 	dirty: bool,
 }
 
@@ -56,7 +56,7 @@ init_preferences :: proc() -> (prefs: Preference_Manager) {
 	prefs.arena_data = make([]byte, 4096)
 	mem.arena_init(&prefs.arena, prefs.arena_data)
 
-	prefs.data = Preferences {
+	prefs.values = Preferences {
 		font_size = 13,
 		icon_size = 11,
 		close_policy = .AlwaysAsk,
@@ -71,7 +71,7 @@ load_preferences :: proc(prefs: ^Preference_Manager, path: string) -> (loaded: b
 
 	data := os.read_entire_file_from_filename(path) or_return
 	mem.arena_free_all(&prefs.arena)
-	unmarshal_error := json.unmarshal(data, &prefs.data, allocator = mem.arena_allocator(&prefs.arena))
+	unmarshal_error := json.unmarshal(data, &prefs.values, allocator = mem.arena_allocator(&prefs.arena))
 
 	if unmarshal_error != nil {
 		log.error("Error when loading preferences:", unmarshal_error)
@@ -91,7 +91,7 @@ save_preferences :: proc(prefs: Preference_Manager, path: string) {
 		pretty = true,
 	}
 
-	data, marshal_error := json.marshal(prefs.data, opt)
+	data, marshal_error := json.marshal(prefs.values, opt)
 	if marshal_error != nil {
 		log.error("Error when saving preferences:", marshal_error)
 		return
@@ -107,6 +107,27 @@ save_preferences :: proc(prefs: Preference_Manager, path: string) {
 	defer os.close(file)
 
 	os.write(file, data)
+}
+
+copy_preferences :: proc(dst: ^Preference_Manager, src: Preferences) -> mem.Allocator_Error {
+	if dst.arena_data == nil {
+		dst^ = init_preferences()
+	}
+
+	mem.arena_free_all(&dst.arena)
+
+	allocator := mem.arena_allocator(&dst.arena)
+
+	dst.values.font_size = src.font_size
+	dst.values.icon_size = src.icon_size
+	dst.values.close_policy = src.close_policy
+	dst.values.enable_media_controls = src.enable_media_controls
+	dst.values.background_path = strings.clone(src.background_path, allocator) or_return
+	dst.values.font_path = strings.clone(src.font_path, allocator) or_return
+	dst.values.theme_name = strings.clone(src.theme_name, allocator) or_return
+	dst.dirty = true
+
+	return nil
 }
 
 free_preferences :: proc(prefs: Preference_Manager) {

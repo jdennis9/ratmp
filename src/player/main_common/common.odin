@@ -88,7 +88,7 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 	playback.set_shuffle_enabled(&state.playback, state.saved_state.shuffle_enabled)
 
 	// UI
-	theme.init(state.prefs.data, filepath.join({config_dir, "themes"}, context.temp_allocator))
+	theme.init(state.prefs.values, filepath.join({config_dir, "themes"}, context.temp_allocator))
 	state.ui = ui.init(data_dir) or_return
 	ui.install_imgui_settings_handler(&state.ui)
 	
@@ -99,14 +99,14 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
 	}
 
-	ui.apply_prefs(&state.ui, state.prefs.data)
+	ui.apply_prefs(&state.ui, state.prefs.values)
 
 	return true
 }
 
 handle_events :: proc() {
 	if state.prefs.dirty {
-		ui.apply_prefs(&state.ui, state.prefs.data)
+		ui.apply_prefs(&state.ui, state.prefs.values)
 		state.prefs.dirty = false
 	}
 

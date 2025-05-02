@@ -227,6 +227,17 @@ Selection :: struct {
 	tracks: [dynamic]Track_ID,
 }
 
+@private
+_Preference_Editor :: struct {
+	background_path: [512]u8,
+	font_path: [512]u8,
+	theme_name: [64]u8,
+	font_size: i32,
+	icon_size: i32,
+	close_policy: config.Close_Policy,
+	enable_media_controls: bool,
+}
+
 State :: struct {
 	ctx: runtime.Context,
 
@@ -280,6 +291,8 @@ State :: struct {
 	background_metadata_scan_thread: ^thread.Thread,
 
 	data_dir: string,
+
+	preference_editor: _Preference_Editor,
 }
 
 init :: proc(data_dir: string) -> (ui: State, ok: bool) {
@@ -417,6 +430,18 @@ apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 	log.debug("Applying preferences...")
 	io := imgui.GetIO()
 	
+	// Copy these preferences to the editor preference state
+	{
+		ed := &ui.preference_editor
+		util.copy_string_to_buf(ed.background_path[:], prefs.background_path)
+		util.copy_string_to_buf(ed.font_path[:], prefs.font_path)
+		util.copy_string_to_buf(ed.theme_name[:], prefs.theme_name)
+		ed.close_policy = prefs.close_policy
+		ed.font_size = auto_cast prefs.font_size
+		ed.icon_size = auto_cast prefs.icon_size
+		ed.enable_media_controls = prefs.enable_media_controls
+	}
+
 	// Load background
 	{
 		@static loaded_background: [512]u8
@@ -639,7 +664,7 @@ show :: proc(
 	// -----------------------------------------------------------------------------
 	if ui.show_preferences {
 		if imgui.Begin("Preferences", &ui.show_preferences) {
-			_show_preferences_window(prefs)
+			_show_preferences_window(&ui.preference_editor, prefs)
 		}
 		imgui.End()
 	}
@@ -1679,19 +1704,18 @@ _show_theme_editor_window :: proc(window: ^_Window_State) {
 }
 
 @private
-_show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
-	/*path_input_row :: proc(prefs: ^config.Preferences, id: config.StringID, str_id: cstring, name: cstring) -> bool {
-		buffer := prefs.strings[id][:]
+_show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Preference_Manager) {
+	path_input_row :: proc(buf: []u8, str_id: cstring, name: cstring) -> bool {
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
 		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		commit := imgui.InputText(str_id, cstring(raw_data(buffer)), len(config.String_Buffer))
+		commit := imgui.InputText(str_id, cstring(raw_data(buf)), len(buf))
 		imgui.TableSetColumnIndex(2)
 		if imgui.Button("Browse") {
-			_, file_picked := util.open_file_dialog(buffer)
+			_, file_picked := util.open_file_dialog(buf)
 			commit |= file_picked
 		}
 		imgui.PopID()
@@ -1699,36 +1723,30 @@ _show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
 		return commit
 	}
 
-	number_input_row :: proc(prefs: ^config.Preferences, id: config.NumberID, str_id: cstring, name: cstring) -> (commit: bool) {
-		value := cast(i32) prefs.numbers[id]
+	number_input_row :: proc(value: ^i32, v_min, v_max: i32, str_id: cstring, name: cstring) -> (commit: bool) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
 		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		commit |= imgui.DragInt(
-			str_id, &value, 0.1,
-			auto_cast config.NUMBER_INFO[id].min,
-			auto_cast config.NUMBER_INFO[id].max
-		)
+		commit |= imgui.DragInt(str_id, value, 0.1, v_min, v_max)
 		imgui.PopID()
-		if commit {prefs.numbers[id] = cast(int) value}
 		return
 	}
 
-	string_choice_row :: proc(prefs: ^config.Preferences, id: config.StringID, choices: []cstring, name: cstring) -> (commit: bool) {
-		value := prefs.strings[id][:]
+	string_choice_row :: proc(buf: []u8, choices: []cstring, name: cstring) -> (commit: bool) {
+		value := cstring(raw_data(buf))
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
 		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##combo", cstring(raw_data(value))) {
+		if imgui.BeginCombo("##combo", value) {
 			for choice in choices {
 				if imgui.MenuItem(choice) {
-					util.copy_cstring(value, choice)
+					util.copy_cstring(buf, choice)
 					commit = true
 				}
 			}
@@ -1738,28 +1756,18 @@ _show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
 		return
 	}
 
-	choice_row :: proc(prefs: ^config.Preferences, id: config.ChoiceID, name: cstring) -> (commit: bool) {
-		info := config.CHOICE_INFO[id]
-		value := prefs.choices[id]
-		current_choice_name: cstring
-
-		for choice in info.values {
-			if choice.value == value {
-				current_choice_name = choice.name
-				break
-			}
-		}
-
+	enum_choice_row :: proc(value: ^$T, value_names: [T]cstring, name: cstring
+	) -> (commit: bool) where intrinsics.type_is_enum(T) {
 		imgui.PushID(name)
 		imgui.TableNextRow()
 		imgui.TableSetColumnIndex(0)
 		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##combo", current_choice_name) {
-			for choice in info.values {
-				if imgui.MenuItem(choice.name) {
-					prefs.choices[id] = choice.value
+		if imgui.BeginCombo("##combo", value_names[value^]) {
+			for choice_name, choice_value in value_names {
+				if imgui.MenuItem(choice_name) {
+					value^ = choice_value
 					commit = true
 				}
 			}
@@ -1770,50 +1778,16 @@ _show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
 		return
 	}
 
-	// @FixMe
-	/*select_device_row :: proc(pb: ^Playback) -> (changes: bool) {
-		imgui.PushID("##audio_device")
+	bool_choice_row :: proc(value: ^bool, name: cstring) -> (commit: bool) {
+		imgui.PushID(name)
 		imgui.TableNextRow()
-		
 		imgui.TableSetColumnIndex(0)
-		imgui.TextUnformatted("Device")
-		
+		imgui.TextUnformatted(name)
 		imgui.TableSetColumnIndex(1)
-		pref_value := string(cstring(&prefs.prefs.strings[.PlaybackDevice][0]))
-		current_device := pb.current_device
-		combo_preview := pref_value != "" ? cstring(&current_device.name[0]) : "(Default)"
-
-		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##device_combo", combo_preview) {
-			imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))
-			if imgui.MenuItem("Use default") {
-				slice.fill(prefs.prefs.strings[.PlaybackDevice][:], 0)
-				changes = true
-			}
-			imgui.PopStyleColor()
-
-			imgui.Separator()
-
-			for &device, index in pb.devices {
-				if imgui.MenuItem(cstring(&device.name[0])) {
-					playback.set_audio_device_index(pb, index)
-					util.copy_cstring(prefs.prefs.strings[.PlaybackDevice][:], cstring(&device.id[0]))
-					changes = true
-				}
-			}
-	
-			imgui.EndCombo()
-		}
-
-		imgui.TableSetColumnIndex(2)
-		if imgui.Button("Refresh") {
-			playback.refresh_audio_devices(pb)
-		}
-
+		commit |= imgui.Checkbox("##checkbox", value)
 		imgui.PopID()
-
 		return
-	}*/
+	}
 
 	begin_table :: proc(name: cstring) -> bool {
 		imgui.SeparatorText(name)
@@ -1832,26 +1806,32 @@ _show_preferences_window :: proc(prefs: ^config.Preference_Manager) {
 	changes := false
 
 	if begin_table("UI") {
-		changes |= path_input_row(prefs, .Background, "##background", "Background")
-		changes |= path_input_row(prefs, .Font, "##font", "Font")
-		changes |= number_input_row(prefs, .FontSize, "##font_size", "Font size")
-		changes |= number_input_row(prefs, .IconSize, "##icon_size", "Icon size")
-		changes |= string_choice_row(prefs, .Theme, theme.get_list(), "Theme")
-		changes |= choice_row(prefs, .ClosePolicy, "Close policy")
+		changes |= path_input_row(state.background_path[:], "##background", "Background")
+		changes |= path_input_row(state.font_path[:], "##font", "Font")
+		changes |= number_input_row(&state.font_size, 8, 24, "##font_size", "Font size")
+		changes |= number_input_row(&state.icon_size, 8, 24, "##icon_size", "Icon size")
+		changes |= string_choice_row(state.theme_name[:], theme.get_list(), "Theme")
+		changes |= enum_choice_row(&state.close_policy, [config.Close_Policy]cstring {
+			.AlwaysAsk = "Always ask",
+			.Exit = "Exit",
+			.MinimizeToTray = "Minimize to tray",
+		}, "Close policy")
+		changes |= bool_choice_row(&state.enable_media_controls, "Enable media controls")
 		end_table()
-	}
-	
-	when ODIN_OS == .Windows {
-		if begin_table("Windows") {
-			changes |= choice_row(prefs, .EnableWindowsMediaControls, "Enable Windows media controls")
-			imgui.SetItemTooltip("(Requires restart)")
-			end_table()
-		}
 	}
 
 	if changes {
-		prefs.dirty = true
-	}*/
+		//prefs.dirty = true
+		config.copy_preferences(prefs, config.Preferences{
+			background_path = string(cstring(&state.background_path[0])),
+			font_path = string(cstring(&state.font_path[0])),
+			theme_name = string(cstring(&state.theme_name[0])),
+			close_policy = state.close_policy,
+			font_size = auto_cast state.font_size,
+			icon_size = auto_cast state.icon_size,
+			enable_media_controls = state.enable_media_controls,
+		})
+	}
 }
 
 @private
