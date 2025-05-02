@@ -40,7 +40,7 @@ import "player:config"
 import "player:ui"
 
 @private
-this: struct {
+_windows: struct {
 	hwnd: win.HWND,
 	hinstance: win.HINSTANCE,
 	ctx: runtime.Context,
@@ -75,7 +75,7 @@ foreign cpp_lib {
 
 
 apply_prefs :: proc(prefs: config.Preferences) {
-	this.close_policy = prefs.close_policy
+	_windows.close_policy = prefs.close_policy
 }
 
 main :: proc() {
@@ -83,7 +83,7 @@ main :: proc() {
 }
 
 wake_proc :: proc() {
-	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
+	win.PostMessageW(_windows.hwnd, win.WM_USER, 0, 0)
 }
 
 run :: proc() -> bool {
@@ -97,52 +97,52 @@ run :: proc() -> bool {
 	}
 
 	use_light_theme := is_system_light_theme()
-	this.ctx = context
+	_windows.ctx = context
 	
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
 
 	ole_initialize()
 	win.CoInitializeEx(nil, .MULTITHREADED)
-	this.hinstance = auto_cast win.GetModuleHandleW(nil)
+	_windows.hinstance = auto_cast win.GetModuleHandleW(nil)
 	
-	this.icon = win.LoadIconA(this.hinstance, use_light_theme ? "WindowIconLightTheme" : "WindowIconDarkTheme")
+	_windows.icon = win.LoadIconA(_windows.hinstance, use_light_theme ? "WindowIconLightTheme" : "WindowIconDarkTheme")
 	
 	{
 		wndclass := win.RegisterClassExW(&win.WNDCLASSEXW{
-			hInstance = this.hinstance,
+			hInstance = _windows.hinstance,
 			style = win.CS_OWNDC,
 			lpszClassName = _WNDCLASS_NAME,
 			lpfnWndProc = win_proc,
 			cbSize = size_of(win.WNDCLASSEXW),
-			hIcon = this.icon,
+			hIcon = _windows.icon,
 		})
 		
 		assert(wndclass != 0)
 		
-		this.hwnd = win.CreateWindowExW(
+		_windows.hwnd = win.CreateWindowExW(
 			win.WS_EX_ACCEPTFILES,
 			//0,
 			_WNDCLASS_NAME, 
 			intrinsics.constant_utf16_cstring(build.PROGRAM_NAME_AND_VERSION),
 			win.WS_OVERLAPPEDWINDOW,
 			100, 100, win.CW_USEDEFAULT, win.CW_USEDEFAULT, 
-			nil, nil, this.hinstance, nil
+			nil, nil, _windows.hinstance, nil
 		)
 	}
 	
 	if (os.is_windows_10() || os.is_windows_11()) && !use_light_theme {
-		dwm_set_dark_title_bar(this.hwnd, true)
+		dwm_set_dark_title_bar(_windows.hwnd, true)
 	}
-	win.UpdateWindow(this.hwnd)
-	win.ShowWindow(this.hwnd, win.SW_HIDE)
+	win.UpdateWindow(_windows.hwnd)
+	win.ShowWindow(_windows.hwnd, win.SW_HIDE)
 	
 	// Renderer
-	dx11.init_for_windows(this.hwnd)
+	dx11.init_for_windows(_windows.hwnd)
 	defer dx11.shutdown_for_windows()
 	
 	// Drag-drop
-	drag_drop.init(this.hwnd, drag_drop_callback)
+	drag_drop.init(_windows.hwnd, drag_drop_callback)
 
 	// System tray
 	add_tray_icon()
@@ -155,16 +155,16 @@ run :: proc() -> bool {
 	
 	if state.prefs.values.enable_media_controls {
 		media_controls.install_handler(media_controls_handler)
-		this.enable_media_controls = true
+		_windows.enable_media_controls = true
 	}
 
 	visible := true
 	show_window()
 
-	this.running = true
-	for this.running {
+	_windows.running = true
+	for _windows.running {
 		msg: win.MSG
-		minimized := !win.IsWindowVisible(this.hwnd)
+		minimized := !win.IsWindowVisible(_windows.hwnd)
 
 		if visible && !minimized {
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
@@ -177,23 +177,25 @@ run :: proc() -> bool {
 			win.TranslateMessage(&msg)
 			win.DispatchMessageW(&msg)
 		}
-	
-		if this.resize_width != 0 {
-			dx11.resize_window(this.resize_width, this.resize_height)
-			this.resize_width = 0
-			this.resize_height = 0
-		}
 
-		com.handle_events()
+		if !_windows.running {break}
+	
+		if _windows.resize_width != 0 {
+			dx11.resize_window(_windows.resize_width, _windows.resize_height)
+			_windows.resize_width = 0
+			_windows.resize_height = 0
+		}
 
 		if state.prefs.dirty {
 			apply_prefs(state.prefs.values)
 		}
 
+		com.handle_events()
+
 		// Update window title to show playing track
-		if state.playback.playing_track != this.window_title_track_id {
+		if state.playback.playing_track != _windows.window_title_track_id {
 			buf: [256]u8
-			this.window_title_track_id = state.playback.playing_track
+			_windows.window_title_track_id = state.playback.playing_track
 
 			if state.playback.playing_track != 0 {
 				track := library.get_track_info(state.library, state.playback.playing_track)
@@ -205,25 +207,25 @@ run :: proc() -> bool {
 		}
 
 		// Handle media controls
-		if this.enable_media_controls {
-			if this.media_controls.next {
+		if _windows.enable_media_controls {
+			if _windows.media_controls.next {
 				playback.play_next_track(&state.playback, state.library)
-				this.media_controls.next = false
+				_windows.media_controls.next = false
 			}
 
-			if this.media_controls.prev {
+			if _windows.media_controls.prev {
 				playback.play_prev_track(&state.playback, state.library)
-				this.media_controls.prev = false
+				_windows.media_controls.prev = false
 			}
 
-			if this.media_controls.pause {
+			if _windows.media_controls.pause {
 				playback.set_paused(&state.playback, true)
-				this.media_controls.pause = false
+				_windows.media_controls.pause = false
 			}
 
-			if this.media_controls.play {
+			if _windows.media_controls.play {
 				playback.set_paused(&state.playback, false)
-				this.media_controls.play = false
+				_windows.media_controls.play = false
 			}
 
 			sync_media_controls_state(state.playback, state.library)
@@ -231,7 +233,7 @@ run :: proc() -> bool {
 		
 		// Update and render frame
 		if !minimized && dx11.begin_frame() {
-			this.running = com.frame()
+			_windows.running = com.frame()
 			visible = dx11.present()
 		}
 	}
@@ -240,7 +242,7 @@ run :: proc() -> bool {
 }
 
 win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM) -> int {
-	context = this.ctx
+	context = _windows.ctx
 
 	if (imgui_win32.WndProcHandler(hwnd, msg, wparam, lparam) != 0) {
 		return 1
@@ -248,16 +250,16 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 
 	switch msg {
 		case win.WM_SIZE: {
-			this.resize_width = int(win.LOWORD(lparam))
-			this.resize_height = int(win.HIWORD(lparam))
+			_windows.resize_width = int(win.LOWORD(lparam))
+			_windows.resize_height = int(win.HIWORD(lparam))
 		}
 		case win.WM_CLOSE: {
-			switch this.close_policy {
+			switch _windows.close_policy {
 				case .MinimizeToTray: {
 					hide_window()
 				}
 				case .Exit: {
-					this.running = false
+					_windows.running = false
 				}
 				case .AlwaysAsk: {
 					if util.message_box("Minimize to tray?", .YesNo, 
@@ -265,7 +267,7 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 						hide_window()
 					}
 					else {
-						this.running = false
+						_windows.running = false
 					}
 				}
 			}
@@ -279,14 +281,14 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 			else if (win.LOWORD(lparam) == win.WM_RBUTTONDOWN) {
 				mouse: win.POINT
 				win.GetCursorPos(&mouse)
-				win.TrackPopupMenu(this.tray_popup, win.TPM_LEFTBUTTON, mouse.x, mouse.y, 0, this.hwnd, nil)
-				win.PostMessageW(this.hwnd, win.WM_NULL, 0, 0)
+				win.TrackPopupMenu(_windows.tray_popup, win.TPM_LEFTBUTTON, mouse.x, mouse.y, 0, _windows.hwnd, nil)
+				win.PostMessageW(_windows.hwnd, win.WM_NULL, 0, 0)
 			}
 			return 0
 		}
 		case win.WM_COMMAND: {
 			if wparam == 1 {
-				this.running = false
+				_windows.running = false
 			}
 			return 0
 		}
@@ -296,23 +298,23 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 }
 
 hide_window :: proc() {
-	win.ShowWindow(this.hwnd, win.SW_HIDE)
+	win.ShowWindow(_windows.hwnd, win.SW_HIDE)
 }
 
 show_window :: proc() {
-	win.ShowWindow(this.hwnd, win.SW_SHOWDEFAULT)
-	win.SetForegroundWindow(this.hwnd)
+	win.ShowWindow(_windows.hwnd, win.SW_SHOWDEFAULT)
+	win.SetForegroundWindow(_windows.hwnd)
 }
 
 add_tray_icon :: proc() {
 	data := win.NOTIFYICONDATAW {
 		cbSize = size_of(win.NOTIFYICONDATAW),
-		hWnd = this.hwnd,
+		hWnd = _windows.hwnd,
 		uID = 1,
 		uFlags = win.NIF_TIP|win.NIF_MESSAGE|win.NIF_ICON,
 		uCallbackMessage = win.WM_APP + 1,
 		uVersion = 4,
-		hIcon = this.icon,
+		hIcon = _windows.icon,
 	}
 
 	tip :: build.PROGRAM_NAME
@@ -320,23 +322,23 @@ add_tray_icon :: proc() {
 
 	win.Shell_NotifyIconW(win.NIM_ADD, &data)
 
-	this.tray_popup = win.CreatePopupMenu()
-	if this.tray_popup != nil {
-		win.AppendMenuW(this.tray_popup, win.MF_STRING, 1, intrinsics.constant_utf16_cstring("Exit"))
+	_windows.tray_popup = win.CreatePopupMenu()
+	if _windows.tray_popup != nil {
+		win.AppendMenuW(_windows.tray_popup, win.MF_STRING, 1, intrinsics.constant_utf16_cstring("Exit"))
 	}
 }
 
 remove_tray_icon :: proc() {
 	data := win.NOTIFYICONDATAW {
 		cbSize = size_of(win.NOTIFYICONDATAW),
-		hWnd = this.hwnd,
+		hWnd = _windows.hwnd,
 		uID = 1,
 	}
 
 	win.Shell_NotifyIconW(win.NIM_DELETE, &data)
 
-	if this.tray_popup != nil {
-		win.DestroyMenu(this.tray_popup)
+	if _windows.tray_popup != nil {
+		win.DestroyMenu(_windows.tray_popup)
 	}
 }
 
@@ -346,28 +348,28 @@ set_window_title :: proc(title: string) {
 	length: int
 
 	utf16.encode_string(buf[:254], title)
-	win.SetWindowTextW(this.hwnd, raw_data(buf[:]))
+	win.SetWindowTextW(_windows.hwnd, raw_data(buf[:]))
 }
 
 media_controls_handler :: proc "c" (event: media_controls.Event) {
-	context = this.ctx
+	context = _windows.ctx
 
 	switch event {
 		case .Play: {
-			this.media_controls.play = true
+			_windows.media_controls.play = true
 		}
 		case .Pause: {
-			this.media_controls.pause = true
+			_windows.media_controls.pause = true
 		}
 		case .Next: {
-			this.media_controls.next = true
+			_windows.media_controls.next = true
 		}
 		case .Prev: {
-			this.media_controls.prev = true
+			_windows.media_controls.prev = true
 		}
 	}
 
-	win.PostMessageW(this.hwnd, win.WM_USER, 0, 0)
+	win.PostMessageW(_windows.hwnd, win.WM_USER, 0, 0)
 }
 
 sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
@@ -395,6 +397,6 @@ sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
 }
 
 drag_drop_callback :: proc "c" (path: cstring) {
-	context = this.ctx
+	context = _windows.ctx
 	ui.queue_file_for_scanning(&state.ui, string(path))
 }
