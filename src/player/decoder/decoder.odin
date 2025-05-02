@@ -59,12 +59,15 @@ open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type
 
 close :: proc(dec: ^Decoder) {
 	if dec.stream != nil {sf.close(dec.stream); dec.stream = nil}
+	if dec.resampler != nil {src.delete(dec.resampler); dec.resampler = nil}
+	clear(&dec.overflow)
 	dec.frame = 0
 }
 
 destroy :: proc(dec: Decoder) {
 	if dec.stream != nil {sf.close(dec.stream)}
 	src.delete(dec.resampler)
+	delete(dec.overflow)
 }
 
 @private
@@ -84,7 +87,7 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 
 	if dec.resampler == nil {
 		error: i32
-		dec.resampler = src.new(dec.resample_quality, 2, &error)
+		dec.resampler = src.new(dec.resample_quality, auto_cast channels, &error)
 		dec.in_to_out_sample_ratio = in_to_out_sample_ratio
 	}
 

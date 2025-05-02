@@ -139,7 +139,7 @@ update :: proc(lib: library.Library, pb: playback.State, delta: f32, window_leng
 				thread.destroy(data.thread)
 				data.thread = nil
 				data.want_cancel = false
-				decoder.destroy(data.dec)
+				decoder.close(&data.dec)
 			}
 			
 			path_buf: [512]u8
