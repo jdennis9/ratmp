@@ -25,7 +25,6 @@ import "core:fmt"
 import sf "bindings:sndfile"
 import src "bindings:samplerate"
 
-
 Decoder :: struct {
 	stream: sf.Stream,
 	info: sf.Info,
@@ -33,6 +32,7 @@ Decoder :: struct {
 	frame: int,
 	in_to_out_sample_ratio: f32,
 	resample_quality: src.Converter_Type,
+	overflow: [dynamic]f32,
 }
 
 Decode_Status :: enum {
@@ -67,22 +67,14 @@ destroy :: proc(dec: Decoder) {
 	src.delete(dec.resampler)
 }
 
-fill_buffer :: proc(dec: ^Decoder, output_slice: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
-	if dec.stream == nil {
-		return .NoFile
-	}
-
-	output := output_slice
-	status = .Complete
-
+@private
+_decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) -> int {
 	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
 	output_frames := len(output) / channels
 
 	if !needs_resampling {
 		frames_read := sf.readf_float(dec.stream, raw_data(output), sf.count_t(output_frames))
-		if (frames_read < i64(output_frames)) {return .Eof}
-		dec.frame += int(frames_read)
-		return .Complete
+		return auto_cast frames_read
 	}
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
@@ -103,10 +95,6 @@ fill_buffer :: proc(dec: ^Decoder, output_slice: []f32, samplerate: int, channel
 
 	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
 
-	if (frames_read < sf.count_t(input_frames)) {
-		status = .Eof
-	}
-
 	rs := src.Data {
 		data_in = raw_data(raw_buffer),
 		data_out = raw_data(output),
@@ -121,7 +109,58 @@ fill_buffer :: proc(dec: ^Decoder, output_slice: []f32, samplerate: int, channel
 		fmt.println("Wanted", output_frames, "frames, got", rs.output_frames_gen)
 	}
 
-	dec.frame += cast(int) frames_read
+	return auto_cast rs.output_frames_gen
+}
+
+fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int) -> (status: Decode_Status) {
+	if dec.stream == nil {
+		return .NoFile
+	}
+
+	packet: [4800]f32
+	frames_wanted := len(output) / channels
+	frames_decoded := 0
+	status = .Complete
+
+	if len(dec.overflow) > 0 {
+		overflow_samples := min(len(dec.overflow), len(output))
+		overflow_frames := overflow_samples / channels
+
+		copy(output, dec.overflow[:overflow_samples])
+
+		if overflow_samples < len(dec.overflow) {
+			remove_range(&dec.overflow, 0, overflow_samples)
+		}
+		else {
+			clear(&dec.overflow)
+		}
+
+		frames_decoded += overflow_frames
+	}
+
+	for (frames_decoded < frames_wanted) && (status != .Eof) {
+		packet_frames := _decode_packet(dec, packet[:], samplerate, channels)
+
+		if packet_frames == 0 {
+			status = .Eof
+			break
+		}
+
+		overflow_frames := frames_decoded + packet_frames - frames_wanted
+
+		if overflow_frames > 0 {
+			copy(output[frames_decoded*channels:], packet[:(packet_frames-overflow_frames)*channels])
+			resize(&dec.overflow, overflow_frames * channels)
+			copy(dec.overflow[:], packet[(packet_frames-overflow_frames)*channels : packet_frames*channels])
+		}
+		else {
+			copy(output[frames_decoded*channels:], packet[:])
+		}
+
+		frames_decoded += packet_frames
+	}
+
+	dec.frame += frames_decoded
 
 	return
 }
