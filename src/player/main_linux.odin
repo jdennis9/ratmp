@@ -17,6 +17,8 @@
 */
 package main
 
+import "base:runtime"
+import "core:c"
 import "core:fmt"
 import "core:log"
 import "core:strings"
@@ -30,13 +32,59 @@ import com "player:main_common"
 import "player:build"
 import video "player:video/opengl"
 import "player:library"
+import "player:config"
+import "player:util"
+
+foreign import cpp "../cpp/cpp.a"
+
+foreign cpp {
+	init_gtk :: proc() ---
+}
 
 state: com.State
 
 this: struct {
+	ctx: runtime.Context,
 	window: glfw.WindowHandle,
 	running: bool,
 	window_title_track_id: library.Track_ID,
+	close_policy: config.Close_Policy,
+}
+
+handle_tray_icon_message :: proc "c" (message: c.int) {
+	TRAY_SIGNAL_CLICK :: 0
+	TRAY_SIGNAL_EXIT :: 1
+
+	if message == TRAY_SIGNAL_CLICK {
+		glfw.ShowWindow(this.window)
+	}
+	else {
+		this.running = false
+	}
+}
+
+handle_window_close :: proc "c" (window: glfw.WindowHandle) {
+	context = this.ctx
+
+	switch this.close_policy {
+		case .Exit: {
+			this.running = false
+			log.debug("Exiting from window close...")
+		}
+		case .AlwaysAsk: {
+			if util.message_box("", .YesNo, "Keep running in background?") {
+				glfw.IconifyWindow(window)
+				glfw.HideWindow(window)
+			}
+			else {
+				this.running = false
+			}
+		}
+		case .MinimizeToTray: {
+			// @TODO: Add to system tray
+			glfw.IconifyWindow(window)
+		}
+	}
 }
 
 wake_proc :: proc() {
@@ -44,15 +92,17 @@ wake_proc :: proc() {
 }
 
 run :: proc() -> bool {
-	when ODIN_DEBUG {
-		context.logger = log.create_console_logger()
-	}
+	context.logger = log.create_console_logger()
+	this.ctx = context
 
+	init_gtk()
 	glfw.Init() or_return
 
 	this.window = glfw.CreateWindow(800, 800, build.PROGRAM_NAME_AND_VERSION, nil, nil)
 	if this.window == nil {return false}
 	defer glfw.DestroyWindow(this.window)
+
+	glfw.SetWindowCloseCallback(this.window, handle_window_close)
 
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
@@ -67,6 +117,13 @@ run :: proc() -> bool {
 
 	for this.running {
 		glfw.PollEvents()
+
+		if this.running == false {break}
+
+		// Apply preferences
+		if state.prefs.dirty {
+			this.close_policy = state.prefs.values.close_policy
+		}
 
 		com.handle_events()
 
