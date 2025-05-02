@@ -43,6 +43,7 @@ Preferences :: struct {
 	icon_size: int,
 	close_policy: Close_Policy,
 	enable_media_controls: bool,
+	audio_device_id: string,
 }
 
 Preference_Manager :: struct {
@@ -125,6 +126,7 @@ copy_preferences :: proc(dst: ^Preference_Manager, src: Preferences) -> mem.Allo
 	dst.values.background_path = strings.clone(src.background_path, allocator) or_return
 	dst.values.font_path = strings.clone(src.font_path, allocator) or_return
 	dst.values.theme_name = strings.clone(src.theme_name, allocator) or_return
+	dst.values.audio_device_id = strings.clone(src.audio_device_id, allocator) or_return
 	dst.dirty = true
 
 	return nil

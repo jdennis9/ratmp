@@ -31,6 +31,7 @@ import "player:ui"
 import "player:video"
 import "player:playback"
 import "player:audio"
+import "player:util"
 
 State :: struct {
 	ctx: runtime.Context,
@@ -48,6 +49,8 @@ State :: struct {
 
 	playback_eof: bool,
 	wake_proc: proc(),
+
+	current_audio_device_id: audio.Device_ID,
 }
 
 // Held by entry point
@@ -94,7 +97,8 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 	// Start audio stream
 	{
 		audio.init() or_return
-		device_id := audio.get_default_device_id() or_return
+		device_id := _get_preferred_audio_device_id()
+		state.current_audio_device_id = device_id
 		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
 	}
 
@@ -105,7 +109,23 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 
 handle_events :: proc() {
 	if state.prefs.dirty {
-		ui.apply_prefs(&state.ui, state.prefs.values)
+		prefs := state.prefs.values
+		ui.apply_prefs(&state.ui, prefs)
+
+		if prefs.audio_device_id != "" && prefs.audio_device_id != string(cstring(&state.current_audio_device_id[0])) {
+			stream_ok: bool
+			device_id := _get_preferred_audio_device_id()
+			audio.stop()
+			state.audio_stream_info, stream_ok = audio.start(&device_id, audio_callback, nil)
+
+			if !stream_ok {
+				default_device_id, have_default := audio.get_default_device_id()
+				if have_default {
+					state.audio_stream_info, _ = audio.start(&default_device_id, audio_callback, nil)
+				}
+			}
+		}
+
 		state.prefs.dirty = false
 	}
 
@@ -138,4 +158,12 @@ shutdown :: proc() {
 	audio.shutdown()
 	library.save_to_file(state.library, state.library_path)
 	library.destroy(state.library)
+}
+
+@private
+_get_preferred_audio_device_id :: proc() -> audio.Device_ID {
+	prefs_id: audio.Device_ID
+	default_id := audio.get_default_device_id() or_else audio.Device_ID{}
+	util.copy_string_to_buf(prefs_id[:], state.prefs.values.audio_device_id)
+	return prefs_id[0] != 0 ? prefs_id : default_id
 }

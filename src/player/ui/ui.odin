@@ -43,6 +43,7 @@ import "player:drag_drop"
 import "player:analysis"
 import "player:build"
 import "player:path_pool"
+import "player:audio"
 
 ICON_FONT := #load("FontAwesome.otf")
 
@@ -233,10 +234,13 @@ _Preference_Editor :: struct {
 	background_path: [512]u8,
 	font_path: [512]u8,
 	theme_name: [64]u8,
+	audio_device_id: audio.Device_ID,
 	font_size: i32,
 	icon_size: i32,
 	close_policy: config.Close_Policy,
 	enable_media_controls: bool,
+
+	audio_devices: []audio.Device_Props,
 }
 
 // Copy these preferences to the editor preference state
@@ -244,6 +248,7 @@ _copy_preferences_to_editor :: proc(ed: ^_Preference_Editor, prefs: config.Prefe
 	util.copy_string_to_buf(ed.background_path[:], prefs.background_path)
 	util.copy_string_to_buf(ed.font_path[:], prefs.font_path)
 	util.copy_string_to_buf(ed.theme_name[:], prefs.theme_name)
+	util.copy_string_to_buf(ed.audio_device_id[:], prefs.audio_device_id)
 	ed.close_policy = prefs.close_policy
 	ed.font_size = auto_cast prefs.font_size
 	ed.icon_size = auto_cast prefs.icon_size
@@ -1809,6 +1814,63 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 		return
 	}
 
+	when ODIN_OS == .Windows {
+		audio_device_row :: proc(state: ^_Preference_Editor) -> (commit: bool) {
+			if state.audio_devices == nil {
+				state.audio_devices = audio.enumerate_devices() or_return
+			}
+
+			imgui.TableNextRow()
+
+			imgui.PushID("audio_device")
+			defer imgui.PopID()
+
+			if imgui.TableSetColumnIndex(0) {imgui.TextUnformatted("Audio device")}
+
+			if imgui.TableSetColumnIndex(1) {
+				selected_device_index := -1
+				preview_value: cstring = "(Default)"
+
+				if state.audio_device_id[0] != 0 {
+					for &device, index in state.audio_devices {
+						if cstring(&device.id[0]) == cstring(&state.audio_device_id[0]) {
+							preview_value = cstring(&device.name[0])
+							selected_device_index = index
+							break
+						}
+					}
+				}
+
+				imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+				if imgui.BeginCombo("##select_device", preview_value) {
+					if imgui.MenuItem("Use default") {
+						state.audio_device_id[0] = 0
+						commit = true
+					}
+
+					imgui.Separator()
+
+					for &device, index in state.audio_devices {
+						if index == selected_device_index {continue}
+						if imgui.MenuItem(cstring(&device.name[0])) {
+							state.audio_device_id = device.id
+							commit = true
+						}
+					}
+					imgui.EndCombo()
+				}
+			}
+
+			if imgui.TableSetColumnIndex(2) {
+				if imgui.Button("Refresh") {
+					state.audio_devices = audio.enumerate_devices() or_return
+				}
+			}
+
+			return
+		}
+	}
+
 	begin_table :: proc(name: cstring) -> bool {
 		imgui.SeparatorText(name)
 		if imgui.BeginTable(name, 3, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
@@ -1826,6 +1888,9 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 	changes := false
 
 	if begin_table("UI") {
+		when ODIN_OS == .Windows {
+			changes |= audio_device_row(state)
+		}
 		changes |= path_input_row(state.background_path[:], "##background", "Background")
 		changes |= path_input_row(state.font_path[:], "##font", "Font")
 		changes |= number_input_row(&state.font_size, 8, 24, "##font_size", "Font size")
@@ -1841,11 +1906,11 @@ _show_preferences_window :: proc(state: ^_Preference_Editor, prefs: ^config.Pref
 	}
 
 	if changes {
-		//prefs.dirty = true
 		config.copy_preferences(prefs, config.Preferences{
 			background_path = string(cstring(&state.background_path[0])),
 			font_path = string(cstring(&state.font_path[0])),
 			theme_name = string(cstring(&state.theme_name[0])),
+			audio_device_id = string(cstring(&state.audio_device_id[0])),
 			close_policy = state.close_policy,
 			font_size = auto_cast state.font_size,
 			icon_size = auto_cast state.icon_size,
