@@ -62,9 +62,6 @@ this: struct {
 @private
 _WNDCLASS_NAME := intrinsics.constant_utf16_cstring("RATMP_WINDOW_CLASS")
 
-@private
-ICON_DATA := #load("resources/32x32.ico")
-
 foreign import cpp_lib "../cpp/cpp.lib"
 
 foreign cpp_lib {
@@ -157,7 +154,7 @@ run :: proc() -> bool {
 	win.CoInitializeEx(nil, .MULTITHREADED)
 	this.hinstance = auto_cast win.GetModuleHandleW(nil)
 	
-	this.icon = win.LoadIconA(this.hinstance, "WindowIcon")
+	this.icon = win.LoadIconA(this.hinstance, "WindowIconDarkTheme")
 	
 	{
 		wndclass := win.RegisterClassExW(&win.WNDCLASSEXW{

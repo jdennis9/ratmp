@@ -15,4 +15,5 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-WindowIcon ICON resources/32x32.ico
+WindowIconDarkTheme ICON resources/32x32_dark.ico
+WindowIconLightTheme ICON resources/32x32_light.ico
