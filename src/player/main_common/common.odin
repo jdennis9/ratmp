@@ -36,7 +36,6 @@ State :: struct {
 	ctx: runtime.Context,
 	library: library.Library,
 	ui: ui.State,
-	playback_decoder_lock: sync.Mutex,
 	playback: playback.State,
 	audio_stream_info: audio.Stream_Info,
 	prefs: config.Preference_Manager,
@@ -55,8 +54,8 @@ State :: struct {
 state: ^State
 
 audio_callback :: proc(buffer: []f32, data: rawptr) {
-	sync.lock(&state.playback_decoder_lock)
-	defer sync.unlock(&state.playback_decoder_lock)
+	sync.lock(&state.playback.lock)
+	defer sync.unlock(&state.playback.lock)
 
 	context = state.ctx
 
