@@ -1273,14 +1273,14 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	queued_playlist_id := pb.queued_playlist
 	delete_playlist_id: Playlist_ID
 
-	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner
+	table_flags := imgui.TableFlags_RowBg|imgui.TableFlags_BordersInnerH
 
 	setup_columns :: proc() {		
 		imgui.TableSetupColumn("Name", {.WidthStretch}, 0.8)
 		imgui.TableSetupColumn("No. Tracks", {.WidthStretch}, 0.2)
 	}
 
-	if imgui.BeginTable("nav_table", 2, imgui.TableFlags_BordersInner) {
+	if imgui.BeginTable("nav_table", 2, table_flags) {
 		defer imgui.EndTable()
 
 		setup_columns()
