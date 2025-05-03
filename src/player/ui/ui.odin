@@ -1312,7 +1312,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 					state.selected_playlist_id = playlist.id
 				}
 
-				if visible && (imgui.IsItemClicked(.Middle) || (imgui.IsMouseClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))) {
+				if visible && (imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))) {
 					playback.play_playlist(pb, lib, playlist)
 					state.selected_playlist_id = playlist.id
 				}
