@@ -178,6 +178,12 @@ seek :: proc(dec: ^Decoder, second: int) {
 	frame := sf.count_t(dec.info.samplerate) * sf.count_t(second)
 	sf.seek(dec.stream, frame, .SEEK_SET)
 	dec.frame = int(frame)
+	
+	clear(&dec.overflow)
+
+	if dec.resampler != nil {
+		src.reset(dec.resampler)
+	}
 }
 
 get_second :: proc(dec: Decoder) -> int {
