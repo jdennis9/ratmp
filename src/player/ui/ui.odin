@@ -58,7 +58,9 @@ DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 Playlist_Group_Window :: struct {
 	filter: [256]u8,
 	selected_playlist_id: Playlist_ID,
-	sort_spec: library.Playlist_Sort_Spec,
+	playlist_sort_spec: library.Playlist_Sort_Spec,
+	track_sort_spec: library.Track_Sort_Spec,
+	sorted_playlist_id: Playlist_ID,
 }
 
 @private
@@ -1294,8 +1296,8 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 			filter_runes_buf: [len(state.filter)]rune
 			filter_runes := util.decode_utf8_to_runes(filter_runes_buf[:], string(cstring(&state.filter[0])))
 
-			if _playlist_table_update_sort_spec(&state.sort_spec) {
-				library.sort_playlist_list(list, state.sort_spec)
+			if _playlist_table_update_sort_spec(&state.playlist_sort_spec) {
+				library.sort_playlist_list(list, state.playlist_sort_spec)
 			}
 
 			for playlist in list.playlists {
@@ -1340,6 +1342,11 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 		imgui.Separator()
 
 		if table, begin := _begin_track_table(lib, "##playlist_group_tracks", playlist.tracks[:], playlist.id, &ui.selection); begin {
+
+			if _track_table_update_sort_spec(&state.track_sort_spec) || state.sorted_playlist_id != playlist.id {
+				library.sort_tracks(lib, playlist.tracks[:], state.track_sort_spec)
+			}
+
 			for _show_next_track_table_row(lib, pb^, &table) {
 				if !table.visible {continue}
 
