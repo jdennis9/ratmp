@@ -416,6 +416,22 @@ _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	return false
 }
 
+@private
+_is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
+	return imgui.IsKeyChordPressed(auto_cast(mods | key))
+}
+
+@private
+_handle_hotkeys :: proc(ui: ^State, pb: ^Playback, lib: Library) {
+	if _is_key_chord_pressed(.ImGuiMod_Ctrl, .P) {
+		playback.play_track_array(pb, lib, ui.selection.tracks[:])
+	}
+
+	if imgui.IsKeyPressed(.F1) {
+		ui.show_help = !ui.show_help
+	}
+}
+
 show :: proc(
 	ui: ^State,
 	lib: ^Library,
@@ -434,6 +450,8 @@ show :: proc(
 		delta = cast(f32) time.duration_seconds(time.tick_since(tick_last_frame))
 	}
 	tick_last_frame = time.tick_now()
+
+	_handle_hotkeys(ui, pb, lib^)
 
 	// Layouts need to be loaded before NewFrame or else docking settings
 	// aren't respected
@@ -500,7 +518,8 @@ show :: proc(
 		}
 
 		// Clear queue
-		clear(&ui.file_scan_queue)
+		delete(ui.file_scan_queue)
+		ui.file_scan_queue = nil
 
 		log.debug("Starting metadata scan")
 		thread.start(ui.background_metadata_scan_thread)
@@ -531,13 +550,6 @@ show :: proc(
 		}
 	}
 
-
-	// -----------------------------------------------------------------------------
-	// Hotkeys
-	// -----------------------------------------------------------------------------
-	if imgui.IsKeyPressed(.F1) {
-		ui.show_help = !ui.show_help
-	}
 	
 	// -----------------------------------------------------------------------------
 	// Preferences
@@ -1051,18 +1063,14 @@ _show_playlist_track_table :: proc(ui: ^State, lib: Library, pb: ^Playback, play
 	}
 
 	state.playlist_id = playlist.id
+	tracks := use_filter ? state.filtered_tracks : playlist.tracks[:]
 
-	table := _Track_Table_Iterator {
-		tracks = use_filter ? state.filtered_tracks : playlist.tracks[:],
-		selection = ui.selection.playlist_id == playlist.id ? ui.selection.tracks[:] : nil,
-	}
-
-	if len(table.tracks) == 0 {
+	if len(tracks) == 0 {
 		imgui.TextDisabled("Playlist is empty")
 		return
 	}
 
-	if _begin_track_table(lib, &table, "##tracks") {
+	if table, begin := _begin_track_table(lib, "##tracks", tracks, playlist.id, &ui.selection); begin {
 		if _track_table_update_sort_spec(&state.sort_spec) {
 			library.sort_tracks(lib, playlist.tracks[:], state.sort_spec)
 		}
@@ -1120,12 +1128,8 @@ _show_queue_window :: proc(ui: ^State, lib: Library, pb: ^Playback) {
 	want_remove_selection: bool
 
 	queue_id := Playlist_ID{user = max(u32)}
-	table := _Track_Table_Iterator {
-		tracks = pb.queue[:],
-		selection = ui.selection.playlist_id == queue_id ? ui.selection.tracks[:] : nil,
-	}
 
-	if _begin_track_table(lib, &table, "##queue") {
+	if table, begin := _begin_track_table(lib, "##queue", pb.queue[:], queue_id, &ui.selection); begin {
 		if _track_table_update_sort_spec(&sort_spec) {
 			playback.sort_queue(pb^, lib, sort_spec)
 		}
@@ -1318,7 +1322,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 	if state.selected_playlist_id != nil && imgui.TableSetColumnIndex(1) {
 		playlist: library.Playlist
 		found_playlist: bool
-		
+
 		for &p in list.playlists {
 			if p.id == state.selected_playlist_id.? {
 				playlist = p
@@ -1334,12 +1338,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 		
 		imgui.Separator()
 
-		table := _Track_Table_Iterator {
-			tracks = playlist.tracks[:],
-			selection = ui.selection.playlist_id == playlist.id ? ui.selection.tracks[:] : nil,
-		}
-
-		if _begin_track_table(lib, &table, "##playlist_group_tracks") {
+		if table, begin := _begin_track_table(lib, "##playlist_group_tracks", playlist.tracks[:], playlist.id, &ui.selection); begin {
 			for _show_next_track_table_row(lib, pb^, &table) {
 				if !table.visible {continue}
 
@@ -1820,9 +1819,8 @@ _show_help_window :: proc() {
 		}
 
 		row("Toggle this window", "F1")
-		row("Refresh preferences", "Ctrl + Shift + R")
 		row("Select whole playlist", "Ctrl + A")
-		row("Play selection", "Ctrl + Q")
+		row("Play selection", "Ctrl + P")
 		row("Jump to playing track", "Ctrl + Space")
 
 		imgui.EndTable()

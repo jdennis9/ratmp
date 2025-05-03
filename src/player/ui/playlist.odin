@@ -209,12 +209,14 @@ _Track_Table_Iterator :: struct {
 	// True if the selectable column is visible
 	visible: bool,
 
-	_list_clipper: imgui.ListClipper,
+	_list_clipper: ^imgui.ListClipper,
 	_pos: int,
 	_min, _max: int,
 }
 
-_begin_track_table :: proc(lib: Library, iterator: ^_Track_Table_Iterator, str_id: cstring) -> bool {
+_begin_track_table :: proc(
+	lib: Library, str_id: cstring, tracks: []Track_ID, playlist_id: Playlist_ID, selection: ^_Selection
+) -> (iterator: _Track_Table_Iterator, begin: bool) {
 	table_flags := 
 	imgui.TableFlags_Resizable|imgui.TableFlags_Hideable|
 	imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
@@ -229,15 +231,27 @@ _begin_track_table :: proc(lib: Library, iterator: ^_Track_Table_Iterator, str_i
 		.Duration = {name = "Duration", sort_metric = .Duration},
 	}
 
+	
+	if imgui.IsWindowFocused({.ChildWindows}) && _is_key_chord_pressed(.ImGuiMod_Ctrl, imgui.Key.A) {
+		selection.playlist_id = playlist_id
+		resize(&selection.tracks, len(tracks[:]))
+		copy(selection.tracks[:], tracks[:])
+	}
+	
+	iterator.tracks = tracks
+	iterator.selection = selection.playlist_id == playlist_id ? selection.tracks[:] : nil
+	iterator._list_clipper = new(imgui.ListClipper)
+
 	if imgui.BeginTable(str_id, auto_cast len(Track_Column), table_flags) {
 		for col in columns {imgui.TableSetupColumn(col.name, col.flags)}
 		imgui.TableSetupScrollFreeze(1, 1)
 		imgui.TableHeadersRow()
-		imgui.ListClipper_Begin(&iterator._list_clipper, auto_cast len(iterator.tracks), imgui.GetTextLineHeightWithSpacing())
-		return true
+		imgui.ListClipper_Begin(iterator._list_clipper, auto_cast len(iterator.tracks), imgui.GetTextLineHeightWithSpacing())
+		begin = true
+		return
 	}
 
-	return false
+	return
 }
 
 // Call right after _begin_track_table returns true
@@ -265,7 +279,7 @@ _track_table_update_sort_spec :: proc(spec: ^library.Track_Sort_Spec) -> bool {
 
 _show_next_track_table_row :: proc(lib: library.Library, pb: Playback, it: ^_Track_Table_Iterator) -> bool {
 	if it._pos >= it._max {
-		if !imgui.ListClipper_Step(&it._list_clipper) {
+		if !imgui.ListClipper_Step(it._list_clipper) {
 			return false
 		}
 
@@ -305,6 +319,7 @@ _show_next_track_table_row :: proc(lib: library.Library, pb: Playback, it: ^_Tra
 }
 
 _end_track_table :: proc(iterator: ^_Track_Table_Iterator) {
-	imgui.ListClipper_End(&iterator._list_clipper)
+	imgui.ListClipper_End(iterator._list_clipper)
 	imgui.EndTable()
+	free(iterator._list_clipper)
 }
