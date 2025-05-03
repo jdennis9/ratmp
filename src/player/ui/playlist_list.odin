@@ -93,7 +93,12 @@ _playlist_table_row :: proc(playlist: library.Playlist, selected, playing: bool)
 	}
 
 	if imgui.TableSetColumnIndex(auto_cast _Column_Index.Name) {
-		clicked = imgui.Selectable(playlist.name, selected, {.SpanAllColumns})
+		playlist_has_name := playlist.name != ""
+		name := playlist_has_name ? playlist.name : "None"
+
+		if !playlist_has_name {imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))}
+		defer if !playlist_has_name {imgui.PopStyleColor()}
+		clicked = imgui.Selectable(name, selected, {.SpanAllColumns})
 		visible = true
 	}
 

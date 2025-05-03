@@ -57,7 +57,7 @@ DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 @private
 Playlist_Group_Window :: struct {
 	filter: [256]u8,
-	selected_playlist_id: Maybe(Playlist_ID),
+	selected_playlist_id: Playlist_ID,
 	sort_spec: library.Playlist_Sort_Spec,
 }
 
@@ -1300,12 +1300,13 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 
 			for playlist in list.playlists {
 				clicked, visible: bool
+				selected := state.selected_playlist_id == playlist.id
 
 				if state.filter[0] != 0 && !library.filter_playlist_from_runes(playlist, filter_runes) {
 					continue
 				}
 
-				if clicked, visible = _playlist_table_row(playlist, false, queued_playlist_id == playlist.id); clicked {
+				if clicked, visible = _playlist_table_row(playlist, selected, queued_playlist_id == playlist.id); clicked {
 					state.selected_playlist_id = playlist.id
 				}
 
@@ -1319,12 +1320,12 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 		}
 	}
 		
-	if state.selected_playlist_id != nil && imgui.TableSetColumnIndex(1) {
+	if imgui.TableSetColumnIndex(1) {
 		playlist: library.Playlist
 		found_playlist: bool
 
 		for &p in list.playlists {
-			if p.id == state.selected_playlist_id.? {
+			if p.id == state.selected_playlist_id {
 				playlist = p
 				found_playlist = true
 				break
@@ -1332,10 +1333,10 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 		}
 		
 		if !found_playlist {
-			state.selected_playlist_id = nil
 			return
 		}
 		
+		imgui.TextUnformatted(playlist.name)
 		imgui.Separator()
 
 		if table, begin := _begin_track_table(lib, "##playlist_group_tracks", playlist.tracks[:], playlist.id, &ui.selection); begin {
