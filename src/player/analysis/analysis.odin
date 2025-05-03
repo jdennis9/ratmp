@@ -145,7 +145,7 @@ update :: proc(lib: library.Library, pb: playback.State, delta: f32, window_leng
 			path := library.get_track_path(lib, track, path_buf[:])
 
 			if decoder.open(&data.dec, path, .LINEAR) {
-				data.thread = thread.create_and_start(_waveform_preview_thread_proc)
+				data.thread = thread.create_and_start(_waveform_preview_thread_proc, context)
 				if data.thread == nil {
 					decoder.close(&data.dec)
 				}
@@ -261,19 +261,20 @@ _waveform_preview_thread_proc :: proc() {
 	
 	samplerate := dec.info.samplerate
 	channels := dec.info.channels
-	segment_size := i32(dec.info.frames / 1024)
+	segment_size := i32(dec.info.frames / 1080)
 	buffer := make([]f32, segment_size * channels)
 	defer delete(buffer)
 	
 	sync.lock(&this.waveform_preview.lock)
-	resize(&data.output, i32(dec.info.frames) / segment_size)
+	resize(&data.output, (i32(dec.info.frames) / segment_size))
 	sync.unlock(&this.waveform_preview.lock)
 
 	if data.want_cancel {return}
 
 	slice.fill(data.output[:], 0)
 
-	for decoder.fill_buffer(dec, buffer, int(samplerate), int(channels)) == .Complete {
+	for {
+		status := decoder.fill_buffer(dec, buffer, int(samplerate), int(channels))
 		peak := f32(0)
 
 		for v in buffer {
@@ -283,6 +284,6 @@ _waveform_preview_thread_proc :: proc() {
 		data.output[data.out_count] = clamp(peak, 0, 1)
 		data.out_count += 1
 
-		if data.want_cancel {return}
+		if data.want_cancel || status == .Eof || data.out_count >= len(data.output) {return}
 	}
 }

@@ -71,8 +71,13 @@ destroy :: proc(dec: Decoder) {
 }
 
 @private
-_convert_channels :: proc(dst: []f32, dst_channels: int, src: []f32, src_channels: int) {
+_convert_channels :: proc(dst: []f32, dst_channels: int, src_channels: int) {
 	out_samples := len(dst)
+	out_frames := out_samples / dst_channels
+
+	src := make([]f32, out_frames * min(src_channels, dst_channels))
+	defer delete(src)
+	copy(src[:], dst[:])
 
 	assert(dst_channels != src_channels)
 
@@ -108,17 +113,20 @@ _convert_channels :: proc(dst: []f32, dst_channels: int, src: []f32, src_channel
 
 @private
 _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) -> int {
-	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
+	needs_resampling := dec.info.samplerate != cast(i32) samplerate
 	output_frames := len(output) / channels
 
 	if !needs_resampling {
 		frames_read := sf.readf_float(dec.stream, raw_data(output), sf.count_t(output_frames))
+		if channels != int(dec.info.channels) {
+			_convert_channels(output, channels, int(dec.info.channels))
+		}
 		return auto_cast frames_read
 	}
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
 	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio)
-	raw_buffer: []f32 = make([]f32, input_frames * auto_cast channels)
+	raw_buffer: []f32 = make([]f32, input_frames * max(cast(i32) channels, dec.info.channels))
 	defer delete(raw_buffer)
 
 	channel_conv_buffer: []f32
@@ -140,7 +148,7 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 	if int(dec.info.channels) != channels {
 		channel_conv_buffer = make([]f32, input_frames * auto_cast dec.info.channels)
 		copy(channel_conv_buffer[:], raw_buffer[:])
-		_convert_channels(raw_buffer[:], channels, channel_conv_buffer[:], auto_cast dec.info.channels)
+		_convert_channels(raw_buffer[:], channels, auto_cast dec.info.channels)
 	}
 
 	rs := src.Data {
@@ -171,6 +179,8 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 	frames_wanted := len(output) / channels
 	frames_decoded := 0
 	status = .Complete
+	total_input_frames := int(dec.info.frames)
+	out_to_in_sample_ratio := f64(dec.info.samplerate) / f64(samplerate)
 
 	if len(dec.overflow) > 0 {
 		overflow_samples := min(len(dec.overflow), len(output))
@@ -191,7 +201,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 	for (frames_decoded < frames_wanted) && (status != .Eof) {
 		packet_frames := _decode_packet(dec, packet[:], samplerate, channels)
 
-		if packet_frames == 0 || (dec.frame + frames_decoded > auto_cast dec.info.frames) {
+		if packet_frames == 0 {
 			status = .Eof
 			break
 		}
@@ -208,9 +218,14 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 		}
 
 		frames_decoded += packet_frames
-	}
 
-	dec.frame += frames_decoded
+		dec.frame += int(f64(packet_frames) * out_to_in_sample_ratio)
+
+		if dec.frame >= total_input_frames {
+			status = .Eof
+			break
+		}
+	}
 
 	return
 }

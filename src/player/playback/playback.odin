@@ -58,10 +58,6 @@ State :: struct {
 	queued_playlist: Playlist_ID,
 	shuffle: bool,
 
-	devices: []audio.Device_Props,
-	current_device: audio.Device_Props,
-	default_device_index: int,
-
 	buffer_capture: struct {
 		timestamp: time.Tick,
 		channels, samplerate: int,
