@@ -80,7 +80,8 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 	state.saved_state, _ = config.load_state(state.saved_state_path)
 
 	// Library
-	state.library = library.load_library(state.library_path, "playlists") or_return
+	state.library = library.init(filepath.join({data_dir, "playlists"}, context.temp_allocator))
+	library.load(&state.library, state.library_path)
 	state.playback = playback.init() or_return
 
 	playback.set_shuffle_enabled(&state.playback, state.saved_state.shuffle_enabled)

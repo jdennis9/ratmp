@@ -142,15 +142,16 @@ Library :: struct {
 	playlist_dir: string,
 }
 
-load_library :: proc(filename: string, playlist_folder: string) -> (lib: Library, ok: bool) {
-	lib, _ = _load_library(filename)
+init :: proc(playlist_folder: string) -> (lib: Library) {
 	scan_for_playlists(&lib, playlist_folder)
 	lib.playlist_dir = strings.clone(playlist_folder)
 	lib.library.name = "Library"
 	lib.next_playlist_id = 1
-
-	ok = true
 	return
+}
+
+load :: proc(lib: ^Library, filename: string,) -> (ok: bool) {
+	return _load_library(lib, filename)
 }
 
 scan_for_playlists :: proc(lib: ^Library, path: string) {
@@ -178,7 +179,7 @@ scan_for_playlists :: proc(lib: ^Library, path: string) {
 }
 
 @private
-_load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
+_load_library :: proc(lib: ^Library, filename: string) -> (ok: bool) {
 	timer: time.Stopwatch
 	time.stopwatch_start(&timer)
 	defer {
@@ -240,7 +241,7 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 		track_data.duration_seconds = duration
 		track_data.bitrate = bitrate
 
-		_add_track(&lib, cleaned_path, track_data)
+		_add_track(lib, cleaned_path, track_data)
 	}
 
 	ok = true
@@ -290,6 +291,10 @@ destroy :: proc(lib: Library) {
 	delete(lib.track_path_hashes)
 	delete(lib.tracks)
 	delete(lib.playlists)
+	delete_playlist_list(lib.albums)
+	delete_playlist_list(lib.genres)
+	delete_playlist_list(lib.artists)
+	delete_playlist_list(lib.folders)
 	path_pool.destroy(lib.paths)
 }
 
@@ -345,15 +350,18 @@ _add_track :: proc(lib: ^Library, path: string, metadata: Raw_Track_Info) {
 
 	track := metadata
 	track.path = path_pool.store(&lib.paths, path)
-
+	dir_name := filepath.dir(path)
+	defer delete(dir_name)
+	
 	id := cast(Track_ID) len(lib.tracks)+1
 
 	append(&lib.track_path_hashes, path_hash)
 	append(&lib.tracks, track)
 	append(&lib.library.tracks, id)
+
 	_add_to_playlist_group(id, string(cstring(&track.artist[0])), &lib.artists)
 	_add_to_playlist_group(id, string(cstring(&track.album[0])), &lib.albums)
-	_add_to_playlist_group(id, filepath.base(filepath.dir(path)), &lib.folders)
+	_add_to_playlist_group(id, dir_name, &lib.folders)
 	_add_to_playlist_group(id, string(cstring(&track.genre[0])), &lib.genres)
 }
 
@@ -567,10 +575,13 @@ add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 
 	append(&lib.library.tracks, index+1)
 
+	dir_name := filepath.dir(file)
+	defer delete(dir_name)
+
 	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &lib.artists)
 	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &lib.albums)
 	_add_to_playlist_group(index+1, string(cstring(&track.genre[0])), &lib.genres, case_insensitive=true)
-	_add_to_playlist_group(index+1, filepath.base(filepath.dir(file)), &lib.folders)
+	_add_to_playlist_group(index+1, dir_name, &lib.folders)
 
 	return index+1
 }
@@ -655,17 +666,16 @@ _alloc_playlist_id :: proc(lib: ^Library) -> (id: Playlist_ID) {
 }
 
 add_playlist :: proc(lib: ^Library, name: string) -> (Playlist_ID, Add_Playlist_Error) {
-	playlist := Playlist {
-		name = strings.clone_to_cstring(name),
-	}
-
 	if name == "" {return {}, .EmptyName}
 
 	for p in lib.playlists {
 		if name == string(p.name) {
-			delete(playlist.name)
 			return {}, .NameExists
 		}
+	}
+
+	playlist := Playlist {
+		name = strings.clone_to_cstring(name),
 	}
 
 	playlist.id = _alloc_playlist_id(lib)

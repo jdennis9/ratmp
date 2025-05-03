@@ -88,3 +88,11 @@ sort_playlist_list :: proc(playlists_arg: Playlist_List, spec: Playlist_Sort_Spe
 	if spec.order == .Ascending {sort.sort(iface)}
 	else {sort.reverse_sort(iface)}
 }
+
+delete_playlist_list :: proc(list: Playlist_List) {
+	delete(list.hashes)
+	for playlist in list.playlists {
+		free_playlist(playlist)
+	}
+	delete(list.playlists)
+}

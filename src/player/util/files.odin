@@ -25,14 +25,14 @@ File_Iterator :: #type proc(path: string, is_folder: bool, data: rawptr)
 for_each_file_in_folder :: proc(path: string, iterator: File_Iterator, iterator_data: rawptr) -> bool {
 	dir, open_err := os.open(path)
 	if open_err != os.ERROR_NONE {
-		log.error(os.error_string(open_err), "Failed to open directory", path)
+		log.warn(os.error_string(open_err), "Failed to open directory", path)
 		return false
 	}
 	defer os.close(dir)
 
 	files, read_err := os.read_dir(dir, 0)
 	if read_err != os.ERROR_NONE {
-		log.error(os.error_string(read_err), "Failed to read from directory", path)
+		log.warn(os.error_string(read_err), "Failed to read from directory", path)
 		return false
 	}
 	defer os.file_info_slice_delete(files)

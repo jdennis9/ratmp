@@ -91,7 +91,6 @@ load_playlist_from_file :: proc(lib: ^Library, filename: string) -> (playlist: P
 	return playlist, true
 }
 
-@private
 free_playlist :: proc(p: Playlist) {
 	delete(p.tracks)
 	delete(p.name)
