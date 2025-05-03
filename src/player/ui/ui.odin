@@ -52,128 +52,6 @@ NEXT_TRACK_ICON :: ""
 PLAY_ICON :: ""
 PAUSE_ICON :: ""
 
-@private
-_Layout_Name :: [64]u8
-
-@private
-Track_ID :: library.Track_ID
-@private
-Playlist_ID :: library.Playlist_ID
-@private
-Library :: library.Library
-@private
-Playback :: playback.State
-
-Window :: enum {
-	Library,
-	Navigation,
-	Artists,
-	Albums,
-	Folders,
-	Genres,
-	Queue,
-	PlaylistTabs,
-	Playlist,
-	Metadata,
-	ThemeEditor,
-	ReplaceMetadata,
-	EditMetadata,
-	PeakMeter,
-	Spectrum,
-	WavePreview,
-}
-
-Window_Category :: enum {
-	Music,
-	Info,
-	Editing,
-	Visualizers,
-}
-
-WINDOW_FIRST_VISUALIZER :: Window.PeakMeter
-
-Window_Info :: struct {
-	name: cstring,
-	internal_name: cstring,
-	category: Window_Category,
-}
-
-window_info := [Window]Window_Info {
-	.Library = {
-		name = "Library", internal_name = "library",
-		category = .Music,
-	},
-	.Navigation = {
-		name = "Navigation", internal_name = "navigation",
-		category = .Music,
-	},
-	.Artists = {
-		name = "Artists", internal_name = "artists",
-		category = .Music,
-	},
-	.Albums = {
-		name = "Albums", internal_name = "albums",
-		category = .Music,
-	},
-	.Folders = {
-		name = "Folders", internal_name = "folders",
-		category = .Music,
-	},
-	.Genres = {
-		name = "Genres", internal_name = "genres",
-		category = .Music,
-	},
-	.Queue = {
-		name = "Queue", internal_name = "queue",
-		category = .Info,
-	},
-	.Playlist = {
-		name = "Playlist", internal_name = "playlist",
-		category = .Music,
-	},
-	.PlaylistTabs = {
-		name = "Playlists (Tabs)", internal_name = "playlist_tabs",
-		category = .Music,
-	},
-	.Metadata = {
-		name = "Metadata", internal_name = "metadata",
-		category = .Info,
-	},
-	.ThemeEditor = {
-		name = "Edit Theme", internal_name = "theme_editor",
-		category = .Editing,
-	},
-	.ReplaceMetadata = {
-		name = "Replace Metadata", internal_name = "replace_metadata",
-		category = .Editing,
-	},
-	.EditMetadata = {
-		name = "Edit Metadata", internal_name = "edit_metadata",
-		category = .Editing,
-	},
-	.PeakMeter = {
-		name = "Peak Meter", internal_name = "peak_meter",
-		category = .Visualizers,
-	},
-	.Spectrum = {
-		name = "Spectrum", internal_name = "spectrum",
-		category = .Visualizers,
-	},
-	.WavePreview = {
-		name = "Wave Preview", internal_name = "wave_preview",
-		category = .Visualizers,
-	},
-}
-
-window_category_info := [Window_Category]struct {
-	name: cstring,	
-} {
-	.Editing = {"Editing"},
-	.Info = {"Info"},
-	.Music = {"Music"},
-	.Visualizers = {"Visualizers"},
-}
-
 DEFAULT_LAYOUT_INI := #load("default_layout.ini")
 
 @private
@@ -225,7 +103,8 @@ _Background_Metadata_Scan :: struct {
 @private
 _Path :: [384]u8
 
-Selection :: struct {
+@private
+_Selection :: struct {
 	playlist_id: Playlist_ID,
 	tracks: [dynamic]Track_ID,
 }
@@ -263,7 +142,7 @@ State :: struct {
 
 	selected_playlist: library.Playlist_ID,
 
-	selection: Selection,
+	selection: _Selection,
 
 	show_help: bool,
 	show_preferences: bool,
@@ -519,7 +398,7 @@ _metadata_scan_proc :: proc(thread_info: ^thread.Thread) {
 @private
 _begin_window :: proc(ui: ^State, window: Window) -> bool {
 	name: [256]u8
-	info := &window_info[window]
+	info := _WINDOW_INFO[window]
 	state := &ui.windows[window]
 
 	if !state.show {return false}
@@ -700,8 +579,8 @@ show :: proc(
 		}
 
 		if imgui.BeginMenu("View") {
-			for &window, window_id in window_info {
-				if imgui.BeginMenu(window_category_info[window.category].name) {
+			for &window, window_id in _WINDOW_INFO {
+				if imgui.BeginMenu(_WINDOW_CATEGORY_INFO[window.category].name) {
 					imgui.MenuItemBoolPtr(window.name, nil, &ui.windows[window_id].show)
 					imgui.EndMenu()
 				}
@@ -1044,7 +923,7 @@ _show_library_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 }
 
 @private
-_handle_select_track :: proc(selection: ^Selection, playlist_id: Playlist_ID, from: []Track_ID, track_id: Track_ID, force_no_clear := false) {
+_handle_select_track :: proc(selection: ^_Selection, playlist_id: Playlist_ID, from: []Track_ID, track_id: Track_ID, force_no_clear := false) {
 	if selection.playlist_id != playlist_id {
 		clear(&selection.tracks)
 		selection.playlist_id = playlist_id
@@ -1957,7 +1836,7 @@ _imgui_settings_handler_open_proc :: proc "c" (
 	ui := cast(^State) handler.UserData
 	context = ui.ctx
 	name_str := string(name)
-	for window, i in window_info {
+	for window, i in _WINDOW_INFO {
 		if string(window.internal_name) == name_str {
 			return cast(rawptr) (cast(uintptr) i + 1)
 		}
@@ -1992,7 +1871,7 @@ _imgui_settings_handler_write_proc :: proc "c" (
 	ui := cast(^State) handler.UserData
 	context = ui.ctx
 
-	for window, window_id in window_info {
+	for window, window_id in _WINDOW_INFO {
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
 		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)ui.windows[window_id].show)
 	}
