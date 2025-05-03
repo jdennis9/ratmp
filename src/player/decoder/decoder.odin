@@ -71,6 +71,42 @@ destroy :: proc(dec: Decoder) {
 }
 
 @private
+_convert_channels :: proc(dst: []f32, dst_channels: int, src: []f32, src_channels: int) {
+	out_samples := len(dst)
+
+	assert(dst_channels != src_channels)
+
+	if src_channels == 1 {
+		dst_i: int
+		for f in src {
+			for ch in 0..<dst_channels {
+				dst[dst_i+ch] = f
+			}
+			dst_i += dst_channels
+		}
+	}
+	else if dst_channels == 1 {
+		src_i: int
+		for i in 0..<out_samples {
+			max_sample: f32
+			abs_max: f32
+			for ch in 0..<src_channels {
+				if abs(src[src_i+ch]) > abs_max {
+					max_sample = src[src_i+ch]
+					abs_max = abs(max_sample)
+				}
+			}
+
+			dst[i] = max_sample
+			src_i += 2
+		}
+	}
+	else {
+		panic("Unsupported channel conversion")
+	}
+}
+
+@private
 _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) -> int {
 	needs_resampling := dec.info.samplerate != cast(i32) samplerate || dec.info.channels != cast(i32) channels
 	output_frames := len(output) / channels
@@ -82,8 +118,11 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 
 	in_to_out_sample_ratio := f32(samplerate) / f32(dec.info.samplerate)
 	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio)
-	raw_buffer: []f32 = make([]f32, input_frames * dec.info.channels)
+	raw_buffer: []f32 = make([]f32, input_frames * auto_cast channels)
 	defer delete(raw_buffer)
+
+	channel_conv_buffer: []f32
+	defer delete(channel_conv_buffer)
 
 	if dec.resampler == nil {
 		error: i32
@@ -97,6 +136,12 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 	}
 
 	sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
+
+	if int(dec.info.channels) != channels {
+		channel_conv_buffer = make([]f32, input_frames * auto_cast dec.info.channels)
+		copy(channel_conv_buffer[:], raw_buffer[:])
+		_convert_channels(raw_buffer[:], channels, channel_conv_buffer[:], auto_cast dec.info.channels)
+	}
 
 	rs := src.Data {
 		data_in = raw_data(raw_buffer),

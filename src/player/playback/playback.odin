@@ -141,6 +141,7 @@ destroy :: proc(state: ^State) {
 		delete(state.buffer_capture.next[ch])
 	}
 	decoder.close(&state.decoder)
+	decoder.destroy(state.decoder)
 }
 
 @private
@@ -165,7 +166,7 @@ is_paused :: proc(state: State) -> bool {
 }
 
 set_paused :: proc(state: ^State, paused: bool) {
-	if !paused && state.playing_track == 0 {
+	if !paused && state.playing_track == 0 && state.decoder.stream == nil {
 		sync.atomic_store(&state.paused, true)
 		return
 	}

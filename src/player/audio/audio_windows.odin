@@ -103,11 +103,11 @@ init :: proc() -> (ok: bool) {
 }
 
 shutdown :: proc() {
+	stop()
 	_safe_release(&_audio.device_enumerator)
 	win.CloseHandle(_audio.thread_done_event)
 	win.CloseHandle(_audio.thread_ready_event)
 }
-
 
 start :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
 	_audio.callback = callback
@@ -129,6 +129,7 @@ stop :: proc() {
 	win.ResetEvent(_audio.thread_ready_event)
 	win.ResetEvent(_audio.thread_done_event)
 	win.ResetEvent(_audio.thread_interrupt_event)
+	thread.destroy(_audio.thread)
 	_audio.thread = nil
 	_audio.want_stop_thread = false
 }
