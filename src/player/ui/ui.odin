@@ -217,10 +217,13 @@ _Window_State :: struct {
 @private
 _Background_Metadata_Scan :: struct {
 	exclude_path_hashes: []u32,
-	paths: [dynamic][512]u8,
+	paths: [dynamic]_Path,
 	input_file_count: int,
 	output: library.Track_Data,
 }
+
+@private
+_Path :: [384]u8
 
 Selection :: struct {
 	playlist_id: Playlist_ID,
@@ -296,9 +299,11 @@ State :: struct {
 	background_metadata_scan: _Background_Metadata_Scan,
 	background_metadata_scan_thread: ^thread.Thread,
 
+	file_dialog: _File_Dialog_State,
+
 	// Once the current background metadata scan is done,
 	// these files start getting scanned
-	file_scan_queue: [dynamic][512]u8,
+	file_scan_queue: [dynamic]_Path,
 
 	data_dir: string,
 
@@ -467,7 +472,7 @@ _bring_window_to_front :: proc(ui: ^State, win: Window) {
 _add_files_iterator :: proc(path: string, is_folder: bool, data: rawptr) {
 	ui := cast(^State)data
 	
-	path_buf: [512]u8
+	path_buf: _Path
 	util.copy_string_to_buf(path_buf[:], path)
 	append(&ui.file_scan_queue, path_buf)
 }
@@ -571,7 +576,8 @@ show :: proc(
 	imgui.PopStyleColor()
 
 	analysis.update(lib^, pb^, delta, 1.0/30.0)
-
+	_async_file_dialog_get_results(&ui.file_dialog, &ui.file_scan_queue)
+	
 	// Draw background
 	if ui.background.id != nil {
 		drawlist := imgui.GetBackgroundDrawList()
@@ -579,19 +585,19 @@ show :: proc(
 		h := f32(ui.background_height)
 		ww := io.DisplaySize.x
 		wh := io.DisplaySize.y
-
+		
 		if h != wh {
 			ratio := wh / h
 			w = math.ceil(w * ratio)
 			h = math.ceil(h * ratio)
 		}
-
+		
 		if w < ww {
 			ratio := ww / w
 			w = math.ceil(w * ratio)
 			h = math.ceil(h * ratio)
 		}
-
+		
 		imgui.DrawList_AddImage(
 			drawlist,
 			ui.background.id,
@@ -646,6 +652,7 @@ show :: proc(
 		}
 	}
 
+
 	// -----------------------------------------------------------------------------
 	// Hotkeys
 	// -----------------------------------------------------------------------------
@@ -668,8 +675,8 @@ show :: proc(
 	// -------------------------------------------------------------------------
 	if imgui.BeginMainMenuBar() {
 		if imgui.BeginMenu("File") {
-			if imgui.MenuItem("Add folders", nil, false, ui.background_metadata_scan_thread == nil) {
-				util.for_each_file_in_dialog(nil, _add_files_iterator, ui, select_folders=true)
+			if imgui.MenuItem("Add folders", nil, false, !_async_file_dialog_is_running(ui.file_dialog)) {
+				_open_async_file_dialog(&ui.file_dialog)
 			}
 
 			if imgui.MenuItem("Scan for new music") {
