@@ -146,7 +146,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, samplerate: int, channels: int
 	for (frames_decoded < frames_wanted) && (status != .Eof) {
 		packet_frames := _decode_packet(dec, packet[:], samplerate, channels)
 
-		if packet_frames == 0 {
+		if packet_frames == 0 || (dec.frame + frames_decoded > auto_cast dec.info.frames) {
 			status = .Eof
 			break
 		}
