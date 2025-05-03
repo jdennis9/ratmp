@@ -20,13 +20,6 @@ package util
 import "core:os"
 import "core:fmt"
 
-split_seconds :: proc(total: i32) -> (hours: i32, minutes: i32, seconds: i32) {
-	hours = total / 3600
-	minutes = (total / 60) - (hours * 60)
-	seconds = total - (hours * 3600) - (minutes * 60)
-	return
-}
-
 copy_cstring :: proc(dest: []u8, src: cstring) {
 	length := min(len(src), len(dest)-1)
 	copy(dest, (cast([^]u8)src)[:length])

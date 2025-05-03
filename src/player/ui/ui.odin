@@ -833,8 +833,10 @@ show :: proc(
 			pos := playback.get_second(pb^)
 			duration := playback.get_duration(pb^)
 
-			ch, cm, cs := util.split_seconds(cast(i32) pos)
-			dh, dm, ds := util.split_seconds(cast(i32) duration)
+			pos = max(pos, 0)
+
+			ch, cm, cs := time.clock_from_seconds(auto_cast pos)
+			dh, dm, ds := time.clock_from_seconds(auto_cast duration)
 
 			imgui.Text("%02d:%02d:%02d/%02d:%02d:%02d", ch, cm, cs, dh, dm, ds)
 			
