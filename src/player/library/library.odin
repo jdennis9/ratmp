@@ -344,9 +344,9 @@ add_tracks_from_track_data :: proc(lib: ^Library, track_data: Track_Data) {
 }
 
 @private
-_add_track :: proc(lib: ^Library, path: string, metadata: Raw_Track_Info) {
+_add_track :: proc(lib: ^Library, path: string, metadata: Raw_Track_Info) -> Track_ID {
 	path_hash := xxhash.XXH32(transmute([]u8)path)
-	if slice.contains(lib.track_path_hashes[:], path_hash) {return}
+	if slice.contains(lib.track_path_hashes[:], path_hash) {return 0}
 
 	track := metadata
 	track.path = path_pool.store(&lib.paths, path)
@@ -361,8 +361,10 @@ _add_track :: proc(lib: ^Library, path: string, metadata: Raw_Track_Info) {
 
 	_add_to_playlist_group(id, string(cstring(&track.artist[0])), &lib.artists)
 	_add_to_playlist_group(id, string(cstring(&track.album[0])), &lib.albums)
-	_add_to_playlist_group(id, dir_name, &lib.folders)
+	_add_to_playlist_group(id, filepath.base(dir_name), &lib.folders)
 	_add_to_playlist_group(id, string(cstring(&track.genre[0])), &lib.genres)
+
+	return id
 }
 
 @private
@@ -513,38 +515,6 @@ refresh_track_metadata :: proc(lib: Library, track_id: Track_ID) {
 	_read_track_metadata(track, path)
 }
 
-add_directory :: proc(lib: ^Library, path: string) -> (first: Track_ID, last: Track_ID, ok := true) {
-	handle, error := os.open(path)
-	if error != os.ERROR_NONE {return 0, 0, false}
-	defer os.close(handle)
-
-	files, read_dir_error := os.read_dir(handle, 0)
-
-	if read_dir_error != os.ERROR_NONE {return 0, 0, false}
-
-	defer os.file_info_slice_delete(files)
-
-	first = cast(u32) len(lib.tracks) + 1
-	count: u32 = 0
-
-	for f in files {
-		if f.is_dir {
-			add_directory(lib, f.fullpath)
-		}
-		else {
-			add_file(lib, f.fullpath)
-		}
-
-		count += 1
-	}
-
-	if count == 0 {return 0, 0, false}
-
-	last = first + count - 1
-
-	return
-}
-
 add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 	cleaned_path, err := filepath.clean(file)
 	if err != .None {return 0}
@@ -565,25 +535,10 @@ add_file :: proc(lib: ^Library, file: string) -> Track_ID {
 	}
 
 	track: Raw_Track_Info
-	index := cast(Track_ID) len(lib.tracks)
-	track.path = path_pool.store(&lib.paths, file)
 
 	_read_track_metadata(&track, file)
 
-	append(&lib.track_path_hashes, id)
-	append(&lib.tracks, track)
-
-	append(&lib.library.tracks, index+1)
-
-	dir_name := filepath.dir(file)
-	defer delete(dir_name)
-
-	_add_to_playlist_group(index+1, string(cstring(&track.artist[0])), &lib.artists)
-	_add_to_playlist_group(index+1, string(cstring(&track.album[0])), &lib.albums)
-	_add_to_playlist_group(index+1, string(cstring(&track.genre[0])), &lib.genres, case_insensitive=true)
-	_add_to_playlist_group(index+1, dir_name, &lib.folders)
-
-	return index+1
+	return _add_track(lib, file, track)
 }
 
 get_playlist_group_id_from_name :: proc(group_string: string, case_insensitive := false) -> Playlist_ID {
@@ -616,22 +571,6 @@ _add_to_playlist_group :: proc(track: Track_ID, group_string: string, group: ^Pl
 	append(&playlist.tracks, track)
 	append(&group.hashes, hash)
 	append(&group.playlists, playlist)
-}
-
-get_albums :: proc(lib: ^Library) -> ^Playlist_List {
-	return &lib.albums
-}
-
-get_artists :: proc(lib: ^Library) -> ^Playlist_List {
-	return &lib.artists
-}
-
-get_folders :: proc(lib: ^Library) -> ^Playlist_List {
-	return &lib.folders
-}
-
-get_genres :: proc(lib: ^Library) -> ^Playlist_List {
-	return &lib.genres
 }
 
 get_track_path :: proc(lib: Library, track: Track_ID, buf: []u8) -> string {
