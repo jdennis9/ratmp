@@ -2083,6 +2083,12 @@ _show_about_window :: proc() {
 	imgui.Text("OS: %s", cstring(ODIN_OS_STRING))
 	imgui.Text("Optimization: %s", strings.unsafe_string_to_cstring(fmt.bprint(buf, ODIN_OPTIMIZATION_MODE)))
 
+	{
+		build_time := time.from_nanoseconds(ODIN_COMPILE_TIMESTAMP)
+		year, month, day := time.date(build_time)
+		imgui.Text("Build date (Y/M/D): %d/%d/%d", cast(i32) year, cast(i32) month, cast(i32) day)
+	}
+
 	imgui.SeparatorText("libsndfile")
     imgui.TextUnformatted("Copyright (C) 1999-2016 Erik de Castro Lopo <erikd@mega-nerd.com>\nAll rights reserved.")
     imgui.TextLinkOpenURL("https://libsndfile.github.io/libsndfile/")
