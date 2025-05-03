@@ -58,8 +58,6 @@ State :: struct {
 	queued_playlist: Playlist_ID,
 	shuffle: bool,
 
-	//stream: audio.Stream_Info,
-
 	devices: []audio.Device_Props,
 	current_device: audio.Device_Props,
 	default_device_index: int,
@@ -397,31 +395,3 @@ set_volume :: proc(vol: f32) {
 get_volume :: proc() -> f32 {
 	return audio.get_volume()
 }
-
-// =============================================================================
-// Audio
-// =============================================================================
-/*refresh_audio_devices :: proc(state: ^State) -> bool {
-	delete(state.devices)
-	state.devices = audio.enumerate_devices() or_return
-	default_id := audio.get_default_device_id() or_return
-
-	for &device, index in state.devices {
-		if cstring(&device.id[0]) == cstring(&default_id[0]) {
-			state.default_device_index = index
-		}
-	}
-
-	return true
-}
-
-get_audio_devices :: proc(state: State) -> []audio.Device_Props {
-	return state.devices
-}
-
-set_audio_device_index :: proc(state: ^State, index: int) -> bool {
-	audio.stop()
-	state.stream = audio.start(&state.devices[index].id, _stream_callback, nil) or_return
-	state.current_device = state.devices[index]
-	return true
-}*/
