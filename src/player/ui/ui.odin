@@ -206,12 +206,6 @@ init :: proc(data_dir: string, saved_state: config.Saved_State) -> (ui: State, o
 	
 	ui.data_dir = strings.clone(data_dir)
 
-	// Load settings if needed
-	if !os.exists(cast(string) io.IniFilename) {
-		log.debug("Loading default layout")
-		imgui.LoadIniSettingsFromMemory(cstring(&DEFAULT_LAYOUT_INI[0]), len(DEFAULT_LAYOUT_INI))
-	}
-
 	log.debug("ImGui version: ", imgui.VERSION)
 
 	// Set window flags
@@ -241,6 +235,12 @@ install_imgui_settings_handler :: proc(ui: ^State) {
 
 	imgui.AddSettingsHandler(&handler)
 	imgui.LoadIniSettingsFromDisk(io.IniFilename)
+
+	// Load settings if needed
+	if !os.exists(cast(string) io.IniFilename) {
+		log.debug("Loading default layout")
+		imgui.LoadIniSettingsFromMemory(cstring(&DEFAULT_LAYOUT_INI[0]), len(DEFAULT_LAYOUT_INI))
+	}
 }
 
 destroy :: proc(ui: State) {
