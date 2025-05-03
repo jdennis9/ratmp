@@ -315,7 +315,7 @@ State :: struct {
 	new_playlist_error: library.Add_Playlist_Error,
 }
 
-init :: proc(data_dir: string) -> (ui: State, ok: bool) {
+init :: proc(data_dir: string, saved_state: config.Saved_State) -> (ui: State, ok: bool) {
 	ui.ctx = context
 	io := imgui.GetIO()
 	io.ConfigFlags |= {.DockingEnable, .NavEnableKeyboard}
@@ -334,6 +334,8 @@ init :: proc(data_dir: string) -> (ui: State, ok: bool) {
 	ui.windows[.Metadata].flags |= {.AlwaysVerticalScrollbar}
 
 	_scan_layouts(&ui)
+
+	ui.prefer_peak_meter_in_menu_bar = saved_state.prefer_peak_meter_in_menu_bar
 
 	ok = true
 	return

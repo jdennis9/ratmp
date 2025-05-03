@@ -87,7 +87,7 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 
 	// UI
 	theme.init(state.prefs.values, filepath.join({config_dir, "themes"}, context.temp_allocator))
-	state.ui = ui.init(data_dir) or_return
+	state.ui = ui.init(data_dir, state.saved_state) or_return
 	ui.install_imgui_settings_handler(&state.ui)
 	
 	// Start audio stream
