@@ -345,7 +345,6 @@ remove_tray_icon :: proc() {
 
 set_window_title :: proc(title: string) {
 	buf: [256]u16
-	length: int
 
 	utf16.encode_string(buf[:254], title)
 	win.SetWindowTextW(_windows.hwnd, raw_data(buf[:]))

@@ -19,7 +19,6 @@ package util
 
 import "core:os"
 import "core:fmt"
-import "core:log"
 
 split_seconds :: proc(total: i32) -> (hours: i32, minutes: i32, seconds: i32) {
 	hours = total / 3600

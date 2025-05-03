@@ -22,9 +22,6 @@ foreign import lib "../../cpp/cpp.lib"
 import "base:runtime"
 import "core:c"
 
-import "player:playback"
-import "player:library"
-
 Event :: enum c.int {
 	Pause,
 	Play,

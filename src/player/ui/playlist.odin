@@ -19,14 +19,11 @@
 package ui
 
 import "core:slice"
-import "core:hash/xxhash"
 import "core:time"
 
 import imgui "../../libs/odin-imgui"
 
 import "player:library"
-import "player:playback"
-import "player:util"
 import "player:theme"
 
 Track_Table_Flag :: enum {
@@ -290,7 +287,6 @@ _show_next_track_table_row :: proc(lib: library.Library, pb: Playback, it: ^_Tra
 	if imgui.TableSetColumnIndex(auto_cast Track_Column.Genre) {imgui.TextUnformatted(track.genre)}
 
 	if imgui.TableSetColumnIndex(auto_cast Track_Column.Duration) {
-		buf: [64]u8
 		hours, minutes, seconds := time.clock_from_seconds(auto_cast track.duration_seconds)
 		imgui.Text("%02d:%02d:%02d", i32(hours), i32(minutes), i32(seconds))
 	}

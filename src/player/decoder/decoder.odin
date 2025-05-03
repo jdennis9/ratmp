@@ -96,7 +96,7 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 		src.set_ratio(dec.resampler, auto_cast in_to_out_sample_ratio)
 	}
 
-	frames_read := sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
+	sf.readf_float(dec.stream, raw_data(raw_buffer), sf.count_t(input_frames))
 
 	rs := src.Data {
 		data_in = raw_data(raw_buffer),
@@ -106,7 +106,9 @@ _decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) 
 		src_ratio = f64(in_to_out_sample_ratio),
 	}
 
-	converted := src.process(dec.resampler, &rs)
+	if process_error := src.process(dec.resampler, &rs); process_error != 0 {
+		log.warn("src.process returned", process_error)
+	}
 
 	if rs.output_frames_gen != auto_cast output_frames {
 		fmt.println("Wanted", output_frames, "frames, got", rs.output_frames_gen)

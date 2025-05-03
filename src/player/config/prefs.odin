@@ -17,13 +17,9 @@
 */
 package config
 
-import "base:runtime"
 import "core:encoding/json"
-import "core:path/filepath"
 import "core:os"
 import "core:strings"
-import "core:fmt"
-import "core:bytes"
 import "core:log"
 import "core:mem"
 

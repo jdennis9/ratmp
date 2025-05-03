@@ -21,12 +21,10 @@ package ui
 import "core:fmt"
 import "core:strings"
 import "core:math"
-import "core:log"
 import glm "core:math/linalg/glsl"
 
 import imgui "libs:odin-imgui"
 
-import "player:config"
 import "player:analysis"
 import "player:playback"
 import "player:theme"
@@ -67,9 +65,8 @@ _show_spectrum_window :: proc() {
         imgui.TableAngledHeadersRow()
         
         imgui.TableNextRow()
-        for unclamped_band, index in spectrum.peaks {
+        for unclamped_band in spectrum.peaks {
             band := clamp(unclamped_band, 0, 1)
-            freq := analysis.SPECTRUM_BAND_OFFSETS[index+1]
 
             if imgui.TableNextColumn() {
                 size := imgui.GetContentRegionAvail()
@@ -153,7 +150,6 @@ _show_wave_preview_window :: proc(pb: ^Playback) {
         drawlist := imgui.GetWindowDrawList()
         size := imgui.GetContentRegionAvail()
         cursor := imgui.GetCursorScreenPos()
-        style := imgui.GetStyle()
 
         if size.x == 0 || size.y == 0 {return}
 

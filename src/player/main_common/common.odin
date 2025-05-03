@@ -20,15 +20,11 @@ package main_common
 import "base:runtime"
 import "core:sync"
 import "core:path/filepath"
-import "core:strings"
-
-import imgui "libs:odin-imgui"
 
 import "player:config"
 import "player:theme"
 import "player:library"
 import "player:ui"
-import "player:video"
 import "player:playback"
 import "player:audio"
 import "player:util"

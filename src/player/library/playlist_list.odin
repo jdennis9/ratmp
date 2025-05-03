@@ -19,8 +19,6 @@ package library
 
 import "core:sort"
 import "core:strings"
-import "core:log"
-import "core:slice"
 
 import "player:util"
 

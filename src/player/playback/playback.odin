@@ -27,8 +27,6 @@ import "core:time"
 import "player:library"
 import "player:audio"
 import "player:decoder"
-import "player:util"
-import "player:config"
 
 @private
 Library :: library.Library
@@ -107,7 +105,6 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof:
 	// -------------------------------------------------------------------------
 	// Update output capture buffer
 	// -------------------------------------------------------------------------
-	channels := int(channels)
 	capture := &state.buffer_capture
 	capture.channels = channels
 	capture.samplerate = samplerate
@@ -281,11 +278,11 @@ get_output_buffer_view :: proc(buffer: ^Output_Buffer, frame_count: int) -> (vie
 	delta := cast(f32) time.duration_seconds(time.tick_diff(buffer.timestamp, time.tick_now()))
 	first_frame := int(delta * f32(buffer.samplerate))
 	first_frame = max(first_frame, 0)
-	frame_count := min(frame_count, len(buffer.data[0]) - first_frame)
-	if frame_count < 0 {return}
+	used_frame_count := min(frame_count, len(buffer.data[0]) - first_frame)
+	if used_frame_count < 0 {return}
 
 	for ch in 0..<view.channels {
-		view.data[ch] = buffer.data[ch][first_frame:][:frame_count]
+		view.data[ch] = buffer.data[ch][first_frame:][:used_frame_count]
 	}
 
 	return

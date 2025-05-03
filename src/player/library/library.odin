@@ -29,9 +29,6 @@ import "core:fmt"
 import "core:strconv"
 import "core:encoding/json"
 import "core:time"
-import "core:mem"
-import "core:sync"
-import "core:thread"
 import "core:slice"
 import stbi "vendor:stb/image"
 
@@ -231,9 +228,6 @@ _load_library :: proc(filename: string) -> (lib: Library, ok: bool) {
 
 		cleaned_path := filepath.clean(path) or_continue
 		defer delete(cleaned_path)
-
-		path_id := xxhash.XXH32(transmute([]u8) cleaned_path)
-		track_id := cast(Track_ID) len(lib.tracks) + 1
 
 		track_data: Raw_Track_Info
 		track_data.path = path_pool.store(&lib.paths, path)
@@ -727,8 +721,6 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	str := util.decode_utf8_to_runes(str_rune_buf[:], utf8_str)
 	filter_len := len(filter)
 	
-	i, j: int
-
 	for s in 0..<len(str) {
 		fail := false
 

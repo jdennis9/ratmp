@@ -18,12 +18,10 @@
 package analysis
 
 import glm "core:math/linalg/glsl"
-import "core:log"
 import "core:math"
 import "core:thread"
 import "core:slice"
 import "core:sync"
-import "core:time"
 
 import kiss "bindings:kissfft"
 
@@ -234,7 +232,7 @@ _calc_spectrum :: proc(view: playback.Output_Buffer) -> (spectrum: Spectrum) {
 		freq := i * freq_step
 		band := 0
 
-		for j in 0..<SPECTRUM_BANDS-1 {
+		for _ in 0..<SPECTRUM_BANDS-1 {
 			if freq >= SPECTRUM_BAND_OFFSETS[band] && freq <= SPECTRUM_BAND_OFFSETS[band+1] {
 				break
 			}

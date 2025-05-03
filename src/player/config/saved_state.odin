@@ -1,8 +1,6 @@
 package config
 
-import "base:runtime"
 import "core:encoding/json"
-import "core:strings"
 import "core:log"
 import "core:os/os2"
 
@@ -15,6 +13,10 @@ save_state :: proc(state: Saved_State, path: string) {
 	opt: json.Marshal_Options
 
 	data, marshal_error := json.marshal(state, opt)
+	if marshal_error != nil {
+		log.error("Error when marshalling saved state struct:", marshal_error)
+		return
+	}
 	
 	file, file_error := os2.create(path)	
 	if file_error != nil {

@@ -17,7 +17,6 @@
 */
 package util
 
-import "core:fmt"
 import win "core:sys/windows"
 import "core:unicode/utf16"
 

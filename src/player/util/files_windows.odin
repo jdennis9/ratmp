@@ -18,10 +18,6 @@
 package util
 
 import win "core:sys/windows"
-import "core:strings"
-import "core:log"
-import "core:os"
-import "core:unicode/utf16"
 
 @(private="file")
 wstring_length :: proc(str: [^]u16) -> int {

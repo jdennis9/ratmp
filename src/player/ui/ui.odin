@@ -25,7 +25,6 @@ import "core:thread"
 import "core:slice"
 import "core:math"
 import "core:os"
-import "core:os/os2"
 import "core:fmt"
 import "core:strconv"
 import "core:time"
@@ -39,7 +38,6 @@ import "player:util"
 import "player:playback"
 import "player:video"
 import "player:theme"
-import "player:drag_drop"
 import "player:analysis"
 import "player:build"
 import "player:path_pool"
@@ -433,7 +431,6 @@ _load_fonts :: proc(prefs: config.Preferences) {
 
 apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 	log.debug("Applying preferences...")
-	io := imgui.GetIO()
 
 	_copy_preferences_to_editor(&ui.preference_editor, prefs)
 
@@ -563,7 +560,6 @@ show :: proc(
 	}
 
 	io := imgui.GetIO()
-	style := imgui.GetStyle()
 
 	new_playlist_popup_name := cstring("New Playlist")
 	ui.new_playlist_popup_id = imgui.GetID(new_playlist_popup_name)
@@ -1187,7 +1183,6 @@ _show_playlist_track_table :: proc(ui: ^State, lib: Library, pb: ^Playback, play
 			track := table.track
 			left_clicked := imgui.IsItemClicked(.Left)
 			middle_clicked := imgui.IsItemClicked(.Middle)
-			right_clicked := imgui.IsItemClicked(.Right)
 
 			if left_clicked || middle_clicked {
 				_handle_select_track(&ui.selection, playlist.id, table.tracks, table.track)
@@ -1343,7 +1338,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 
 		setup_columns()
 
-		for &p, index in playlists {
+		for &p in playlists {
 			imgui.TableNextRow()
 
 			if imgui.TableSetColumnIndex(0) {
@@ -1549,7 +1544,6 @@ _show_metadata_window :: proc(state: ^_Metadata_Window, lib: Library, display_tr
 	imgui.Separator()
 
 	track := library.get_track_info(lib, display_track)
-	hours, minutes, seconds := util.split_seconds(cast(i32) track.duration_seconds)
 
 	if imgui.BeginTable("Metadata Table", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		imgui.TableSetupColumn("Type", {.WidthStretch}, 0.2)

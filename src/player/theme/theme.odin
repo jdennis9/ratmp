@@ -24,6 +24,7 @@ import "core:strings"
 import "core:encoding/ini"
 import "core:strconv"
 import "core:slice"
+import "core:log"
 
 import imgui "libs:odin-imgui"
 
@@ -162,6 +163,9 @@ load :: proc(name: string) -> bool {
 	defer delete(path)
 	
 	m, map_error := ini.load_map_from_path(path, context.allocator) or_return
+	if map_error != nil {
+		log.error("Error parsing theme:", map_error)
+	}
 	defer ini.delete_map(m)
 
 	load_style :: proc(m: ini.Map, style: ^imgui.Style) -> bool {

@@ -18,9 +18,6 @@
 #+private
 package ui
 
-import "core:hash/xxhash"
-import "core:log"
-
 import imgui "libs:odin-imgui"
 
 import "player:library"
