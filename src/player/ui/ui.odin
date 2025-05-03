@@ -1033,7 +1033,7 @@ queue_file_for_scanning :: proc(ui: ^State, path: string) {
 @private
 _show_library_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 	playlist := &lib.library
-	_show_playlist_track_table(ui, lib^, pb, playlist, &ui.library_window)
+	_show_playlist_track_table(ui, lib^, pb, playlist, &ui.library_window, no_remove = true)
 }
 
 @private
