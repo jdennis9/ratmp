@@ -439,6 +439,7 @@ show :: proc(
 	lib: ^Library,
 	pb: ^Playback,
 	prefs: ^config.Preference_Manager,
+	audio_stream: ^audio.Stream,
 ) -> (keep_running: bool = true) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
@@ -667,11 +668,11 @@ show :: proc(
 		// -----------------------------------------------------------------------------
 		// Volume
 		// -----------------------------------------------------------------------------
-		{
-			volume := playback.get_volume() * 100
+		if audio_stream != nil {
+			volume := audio.stream_get_volume(audio_stream) * 100
 			imgui.SetNextItemWidth(100)
 			if imgui.SliderFloat("##volume", &volume, 0, 100, "%.0f%%") {
-				playback.set_volume(volume / 100)
+				audio.stream_set_volume(audio_stream, volume / 100)
 			}
 		}
 

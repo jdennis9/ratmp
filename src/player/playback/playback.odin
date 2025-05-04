@@ -25,7 +25,6 @@ import "core:path/filepath"
 import "core:time"
 
 import "player:library"
-//import "player:audio"
 import "player:decoder"
 
 @private
@@ -379,17 +378,4 @@ play_prev_track :: proc(state: ^State, lib: Library) {
 
 sort_queue :: proc(state: State, lib: library.Library, spec: library.Track_Sort_Spec) {
 	library.sort_tracks(lib, state.queue[:], spec)
-}
-
-// =============================================================================
-// Volume
-// =============================================================================
-
-set_volume :: proc(vol: f32) {
-	//audio.set_volume(vol)
-}
-
-get_volume :: proc() -> f32 {
-	//return audio.get_volume()
-	return 1
 }

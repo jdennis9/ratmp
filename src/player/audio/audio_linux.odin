@@ -72,7 +72,7 @@ open_stream :: proc(device_id: ^Device_ID, callback: Callback, callback_data: ra
 	stream.samplerate = 48000
 	stream._pa.volume = 1
 
-	_check(pa.OpenDefaultStream(&stream._pa.stream, 0, 2, pa.SampleFormat_Float32, 48000, 24000/4, _callback_wrapper, stream))
+	_check(pa.OpenDefaultStream(&stream._pa.stream, 0, 2, pa.SampleFormat_Float32, 48000, 24000/8, _callback_wrapper, stream))
 	_check(pa.StartStream(stream._pa.stream))
 
 	ok = true
@@ -110,6 +110,12 @@ _callback_wrapper :: proc "c" (
 ) -> pa.StreamCallbackResult {
 	context = _audio.ctx
 	stream := cast(^Stream) userData
-	stream._callback(stream._callback_data, (cast([^]f32)output)[:frameCount * auto_cast stream.channels])
+	sample_count := int(frameCount) * stream.channels
+	buffer := (cast([^]f32) output)[:sample_count]
+
+	stream._callback(stream._callback_data, buffer)
+
+	for &f in buffer {f *= stream._pa.volume}
+
 	return .Continue
 }

@@ -135,7 +135,7 @@ handle_events :: proc() {
 frame :: proc() -> bool {
 	saved_state_before := state.saved_state
 
-	ui.show(&state.ui, &state.library, &state.playback, &state.prefs) or_return
+	ui.show(&state.ui, &state.library, &state.playback, &state.prefs, state.stream) or_return
 
 	// Update saved state
 	state.saved_state.prefer_peak_meter_in_menu_bar = state.ui.prefer_peak_meter_in_menu_bar
