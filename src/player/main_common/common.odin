@@ -18,7 +18,6 @@
 package main_common
 
 import "base:runtime"
-import "core:sync"
 import "core:path/filepath"
 
 import "player:config"
@@ -53,9 +52,6 @@ State :: struct {
 state: ^State
 
 audio_callback :: proc(_: rawptr, buffer: []f32) {
-	sync.lock(&state.playback.lock)
-	defer sync.unlock(&state.playback.lock)
-
 	context = state.ctx
 
 	state.playback_eof = playback.stream(
@@ -70,6 +66,7 @@ audio_callback :: proc(_: rawptr, buffer: []f32) {
 
 init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc: proc()) -> bool {
 	state = state_ptr
+	state.ctx = context
 	state.config_path = filepath.join({config_dir, "preferences.json"})
 	state.library_path = filepath.join({data_dir, "library.json"})
 	state.saved_state_path = filepath.join({data_dir, "state.json"})
@@ -128,6 +125,7 @@ handle_events :: proc() {
 	}
 
 	if state.playback_eof {
+		state.playback_eof = false
 		playback.play_next_track(&state.playback, state.library)
 	}
 }

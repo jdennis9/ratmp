@@ -83,7 +83,8 @@ _fill_buffer :: proc(state: ^State, output: []f32, samplerate: int, channels: in
 }
 
 stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof: bool) {
-	context = state.ctx
+	sync.lock(&state.lock)
+	defer sync.unlock(&state.lock)
 	frames := len(buffer) / channels
 	
 	if state.paused || !decoder.is_open(&state.decoder) {
@@ -290,7 +291,6 @@ seek :: proc(state: ^State, second: int) {
 	sync.lock(&state.lock)
 	decoder.seek(&state.decoder, second)
 	sync.unlock(&state.lock)
-	//audio.interrupt()
 }
 
 get_second :: proc(state: State) -> int {
