@@ -31,14 +31,11 @@ test_audio_playback :: proc(t: ^testing.T) {
 	testing.expect(t, ok)
 	defer destroy(&state)
 
-	device_id, have_device := audio.get_default_device_id()
-	testing.expect(t, have_device)
-
 	callback_state := Callback_State {
 		state = &state,
 	}
 
-	callback_state.stream, ok = audio.open_stream(&device_id, callback, &callback_state)
+	callback_state.stream, ok = audio.open_stream(nil, callback, &callback_state)
 	testing.expect(t, ok)
 	defer audio.close_stream(callback_state.stream)
 

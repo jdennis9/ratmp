@@ -26,19 +26,20 @@ import wasapi "bindings:wasapi"
 
 _audio: struct {
 	device_enumerator: ^wasapi.IMMDeviceEnumerator,
-	volume_control: ^wasapi.ISimpleAudioVolume,
-	current_device_id: [128]u16,
-	default_device_id: [128]u16,
-	thread: ^thread.Thread,
-	stream_info: Stream_Info,
-	
-	thread_done_event: win.HANDLE,
-	thread_ready_event: win.HANDLE,
-	thread_interrupt_event: win.HANDLE,
-	want_stop_thread: bool,
+}
 
-	callback: Callback,
-	callback_data: rawptr,
+Stream :: struct {
+	using com: _Stream_Common,
+	_wasapi: struct {
+		device_id: [len(Device_ID)]u16,
+		// Released by audio thread
+		volume_control: ^wasapi.ISimpleAudioVolume,
+		thread_done_event: win.HANDLE,
+		thread_ready_event: win.HANDLE,
+		thread_interrupt_event: win.HANDLE,
+		want_stop_thread: bool,
+		thread: ^thread.Thread,
+	}
 }
 
 @private
@@ -94,58 +95,66 @@ init :: proc() -> (ok: bool) {
 		win.CLSCTX_ALL, wasapi.IMMDeviceEnumerator_UUID, auto_cast &_audio.device_enumerator)
 	_check(hr) or_return
 
-	_audio.thread_done_event = win.CreateEventW(nil, false, false, nil)
-	_audio.thread_ready_event = win.CreateEventW(nil, false, false, nil)
-	_audio.thread_interrupt_event = win.CreateEventW(nil, false, false, nil)
-
 	ok = true
 	return
 }
 
 shutdown :: proc() {
-	stop()
 	_safe_release(&_audio.device_enumerator)
-	win.CloseHandle(_audio.thread_done_event)
-	win.CloseHandle(_audio.thread_ready_event)
 }
 
-start :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
-	_audio.callback = callback
-	_audio.callback_data = callback_data
-	utf16.encode_string(_audio.current_device_id[:len(_audio.current_device_id)-1], string(cstring(&device_id[0])))
-	_audio.thread = thread.create_and_start(_thread_proc, context)
-	win.WaitForSingleObject(_audio.thread_ready_event, win.INFINITE)
+open_stream :: proc(device_id_arg: ^Device_ID, callback: Callback, callback_data: rawptr) -> (stream: ^Stream, ok: bool) {
+	device_id := device_id_arg != nil ? device_id_arg^ : get_default_device_id() or_return
 
-	info = _audio.stream_info
+	stream = new(Stream)
+	defer if !ok {free(stream)}
+
+	stream._callback = callback
+	stream._callback_data = callback_data
+
+	stream._wasapi.thread_done_event = win.CreateEventW(nil, false, false, nil)
+	stream._wasapi.thread_ready_event = win.CreateEventW(nil, false, false, nil)
+	stream._wasapi.thread_interrupt_event = win.CreateEventW(nil, false, false, nil)
+
+	// Encode device ID
+	utf16.encode_string(stream._wasapi.device_id[:len(Device_ID)-1], string(cstring(&device_id[0])))
+
+	stream._wasapi.thread = thread.create(_thread_proc)
+	stream._wasapi.thread.data = stream
+	thread.start(stream._wasapi.thread)
+	win.WaitForSingleObject(stream._wasapi.thread_ready_event, win.INFINITE)
+
 	ok = true
 	return
 }
 
-stop :: proc() {
-	if _audio.thread == nil {return}
-	_audio.want_stop_thread = true
-	win.SetEvent(_audio.thread_interrupt_event)
-	win.WaitForSingleObject(_audio.thread_done_event, win.INFINITE)
-	win.ResetEvent(_audio.thread_ready_event)
-	win.ResetEvent(_audio.thread_done_event)
-	win.ResetEvent(_audio.thread_interrupt_event)
-	thread.destroy(_audio.thread)
-	_audio.thread = nil
-	_audio.want_stop_thread = false
+close_stream :: proc(stream: ^Stream) {
+	if stream._wasapi.thread == nil {return}
+	stream._wasapi.want_stop_thread = true
+	win.SetEvent(stream._wasapi.thread_interrupt_event)
+	win.WaitForSingleObject(stream._wasapi.thread_done_event, win.INFINITE)
+	win.CloseHandle(stream._wasapi.thread_ready_event)
+	win.CloseHandle(stream._wasapi.thread_done_event)
+	win.CloseHandle(stream._wasapi.thread_interrupt_event)
+	thread.destroy(stream._wasapi.thread)
+	stream._wasapi.thread = nil
+	stream._wasapi.want_stop_thread = false
+	free(stream)
 }
 
-interrupt :: proc() {
-	win.SetEvent(_audio.thread_interrupt_event)
+stream_interrupt :: proc(stream: ^Stream) {
+	win.SetEvent(stream._wasapi.thread_interrupt_event)
 }
 
-set_volume :: proc(volume: f32) {
-	if _audio.volume_control != nil {
-		_audio.volume_control->SetMasterVolume(volume, nil)
+stream_set_volume :: proc(stream: ^Stream, volume: f32) {
+	if stream._wasapi.volume_control != nil {
+		stream._wasapi.volume_control->SetMasterVolume(volume, nil)
 	}
 }
-get_volume :: proc() -> (volume: f32 = 1) {
-	if _audio.volume_control != nil {
-		_audio.volume_control->GetMasterVolume(&volume)
+
+stream_get_volume :: proc(stream: ^Stream) -> (volume: f32 = 1) {
+	if stream._wasapi.volume_control != nil {
+		stream._wasapi.volume_control->GetMasterVolume(&volume)
 	}
 	return
 }
@@ -208,7 +217,8 @@ get_default_device_id :: proc() -> (device_id: Device_ID, ok: bool) {
 }
 
 @private
-_run_audio_session :: proc() -> (ok: bool) {
+_run_audio_session :: proc(stream: ^Stream) -> (ok: bool) {
+	impl := &stream._wasapi
 	format: ^wasapi.WAVEFORMATEX
 	buffer_frame_count: u32
 	device: ^wasapi.IMMDevice
@@ -219,11 +229,11 @@ _run_audio_session :: proc() -> (ok: bool) {
 	samplerate, channels: int
 
 	defer if !ok {
-		win.SetEvent(_audio.thread_ready_event)
-		win.SetEvent(_audio.thread_done_event)
+		win.SetEvent(impl.thread_ready_event)
+		win.SetEvent(impl.thread_done_event)
 	}
 
-	_check(_audio.device_enumerator->GetDevice(&_audio.current_device_id[0], &device)) or_return
+	_check(_audio.device_enumerator->GetDevice(&impl.device_id[0], &device)) or_return
 	defer device->Release()
 
 	_check(device->Activate(wasapi.IAudioClient_UUID, win.CLSCTX_ALL, nil, auto_cast &audio_client)) or_return
@@ -236,8 +246,8 @@ _run_audio_session :: proc() -> (ok: bool) {
 	audio_client->GetBufferSize(&buffer_frame_count)
 	_check(audio_client->GetService(wasapi.IAudioRenderClient_UUID, auto_cast &render_client)) or_return
 	defer render_client->Release()
-	_check(audio_client->GetService(wasapi.ISimpleAudioVolume_UUID, auto_cast &_audio.volume_control)) or_return
-	defer _safe_release(&_audio.volume_control)
+	_check(audio_client->GetService(wasapi.ISimpleAudioVolume_UUID, auto_cast &impl.volume_control)) or_return
+	defer _safe_release(&impl.volume_control)
 
 	
 	render_client->GetBuffer(buffer_frame_count, &buffer)
@@ -249,47 +259,45 @@ _run_audio_session :: proc() -> (ok: bool) {
 	log.debug("Buffer duration:", buffer_duration_ms, "ms")
 	log.debug("Sample rate:", format.nSamplesPerSec, "Hz")
 
-	_audio.stream_info = Stream_Info {
-		channels = auto_cast format.nChannels,
-		sample_rate = auto_cast format.nSamplesPerSec,
-	}
+	stream.channels = auto_cast format.nChannels
+	stream.samplerate = auto_cast format.nSamplesPerSec
 
 	// We've set the stream info. Now the calling thread can continue
-	win.SetEvent(_audio.thread_ready_event)
+	win.SetEvent(impl.thread_ready_event)
 
 	samplerate = auto_cast format.nSamplesPerSec
 	channels = auto_cast format.nChannels
 
 	audio_client->Start()
-	for !_audio.want_stop_thread {
+	for !impl.want_stop_thread {
 		frame_padding: u32
 		avail_frames: u32
 
-		if win.WaitForSingleObject(_audio.thread_interrupt_event, buffer_duration_ms/2) != win.WAIT_TIMEOUT {
-			win.ResetEvent(_audio.thread_interrupt_event)
+		if win.WaitForSingleObject(impl.thread_interrupt_event, buffer_duration_ms/2) != win.WAIT_TIMEOUT {
+			win.ResetEvent(impl.thread_interrupt_event)
 			audio_client->Stop()
 			audio_client->Reset()
 			audio_client->Start()
 		}
 
-		if _audio.want_stop_thread {break}
+		if impl.want_stop_thread {break}
 
 		audio_client->GetCurrentPadding(&frame_padding)
 		avail_frames = buffer_frame_count - frame_padding
 
 		render_client->GetBuffer(avail_frames, &buffer)
-		_audio.callback((cast([^]f32)buffer)[:int(avail_frames)*channels], _audio.callback_data)
+		stream._callback(stream._callback_data, (cast([^]f32)buffer)[:int(avail_frames)*channels])
 		render_client->ReleaseBuffer(avail_frames, 0)
 	}
 
-	win.SetEvent(_audio.thread_done_event)
+	win.SetEvent(impl.thread_done_event)
 
 	ok = true
 	return
 }
 
 @private
-_thread_proc :: proc() {
-	_run_audio_session()
+_thread_proc :: proc(thread_data: ^thread.Thread) {
+	_run_audio_session(cast(^Stream) thread_data.data)
 }
 
