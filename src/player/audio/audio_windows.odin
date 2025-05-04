@@ -87,6 +87,8 @@ _check :: proc(hr: win.HRESULT, loc := #caller_location) -> bool {
 init :: proc() -> (ok: bool) {
 	hr: win.HRESULT
 
+	if _audio.device_enumerator != nil {return true}
+
 	defer if !ok {shutdown()}
 
 	win.CoInitializeEx(nil)
@@ -129,6 +131,7 @@ open_stream :: proc(device_id_arg: ^Device_ID, callback: Callback, callback_data
 }
 
 close_stream :: proc(stream: ^Stream) {
+	if stream == nil {return}
 	if stream._wasapi.thread == nil {return}
 	stream._wasapi.want_stop_thread = true
 	win.SetEvent(stream._wasapi.thread_interrupt_event)
@@ -143,16 +146,19 @@ close_stream :: proc(stream: ^Stream) {
 }
 
 stream_interrupt :: proc(stream: ^Stream) {
+	if stream == nil {return}
 	win.SetEvent(stream._wasapi.thread_interrupt_event)
 }
 
 stream_set_volume :: proc(stream: ^Stream, volume: f32) {
+	if stream == nil {return}
 	if stream._wasapi.volume_control != nil {
 		stream._wasapi.volume_control->SetMasterVolume(volume, nil)
 	}
 }
 
 stream_get_volume :: proc(stream: ^Stream) -> (volume: f32 = 1) {
+	if stream == nil {return}
 	if stream._wasapi.volume_control != nil {
 		stream._wasapi.volume_control->GetMasterVolume(&volume)
 	}

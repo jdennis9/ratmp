@@ -65,6 +65,7 @@ get_default_device_id :: proc() -> (Device_ID, bool) {
 
 open_stream :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (stream: ^Stream, ok: bool) {
 	stream = new(Stream)
+	defer if !ok {free(stream)}
 
 	stream._callback = callback
 	stream._callback_data = callback_data
@@ -80,6 +81,7 @@ open_stream :: proc(device_id: ^Device_ID, callback: Callback, callback_data: ra
 }
 
 close_stream :: proc(stream: ^Stream) {
+	if stream == nil {return}
 	pa.StopStream(stream._pa.stream)
 	pa.CloseStream(stream._pa.stream)
 	free(stream)
@@ -89,10 +91,12 @@ stream_interrupt :: proc(stream: ^Stream) {
 }
 
 stream_set_volume :: proc(stream: ^Stream, volume: f32) {
+	if stream == nil {return}
 	stream._pa.volume = volume
 }
 
 stream_get_volume :: proc(stream: ^Stream) -> f32 {
+	if stream == nil {return}
 	return stream._pa.volume
 }
 
