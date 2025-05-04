@@ -140,7 +140,7 @@ _show_bars_widget :: proc(str_id: cstring, values: []f32, minval, maxval: f32, r
 
 		quiet_color := theme.custom_colors[.PeakQuiet]
 		loud_color := theme.custom_colors[.PeakLoud]
-		color := glm.lerp(quiet_color, loud_color, frac)
+		color := glm.lerp(loud_color, quiet_color, frac)
 
         imgui.DrawList_AddRectFilled(drawlist, 
             {cursor.x, cursor.y + bar_size.y}, 
