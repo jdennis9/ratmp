@@ -104,6 +104,6 @@ _callback_wrapper :: proc "c" (
 	userData: rawptr,
 ) -> pa.StreamCallbackResult {
 	context = _audio.ctx
-	_audio.callback((cast([^]f32)output)[:frameCount * auto_cast _audio.info.channels], nil)
+	_audio.callback((cast([^]f32)output)[:frameCount * auto_cast _audio.info.channels], _audio.callback_data)
 	return .Continue
 }
