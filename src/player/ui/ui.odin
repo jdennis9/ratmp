@@ -1009,7 +1009,7 @@ _handle_select_track :: proc(selection: ^_Selection, playlist_id: Playlist_ID, f
 				clear(&selection.tracks)
 				append(&selection.tracks, track_id)
 			}
-			if !selected {append(&selection.tracks, track_id)}
+			else if !selected {append(&selection.tracks, track_id)}
 		}
 		else if !selected {append(&selection.tracks, track_id)}
 	}
