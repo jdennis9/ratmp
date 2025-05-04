@@ -221,6 +221,19 @@ init :: proc(data_dir: string, saved_state: config.Saved_State) -> (ui: State, o
 	return
 }
 
+destroy :: proc(ui: State) {
+	if ui.background_metadata_scan_thread != nil {
+		thread.join(ui.background_metadata_scan_thread)
+	}
+	video.impl.destroy_texture(ui.background)
+	video.impl.destroy_texture(ui.metadata.thumbnail)
+	if ui.metadata.comment != nil {delete(ui.metadata.comment)}
+	delete(ui.selection.tracks)
+	delete(ui.file_scan_queue)
+	delete(ui.data_dir)
+	delete(ui.layout_names)
+}
+
 // Holds on to pointer !!!
 install_imgui_settings_handler :: proc(ui: ^State) {
 	io := imgui.GetIO()
@@ -243,15 +256,6 @@ install_imgui_settings_handler :: proc(ui: ^State) {
 		log.debug("Loading default layout")
 		imgui.LoadIniSettingsFromMemory(cstring(&DEFAULT_LAYOUT_INI[0]), len(DEFAULT_LAYOUT_INI))
 	}
-}
-
-destroy :: proc(ui: State) {
-	if ui.background_metadata_scan_thread != nil {
-		thread.join(ui.background_metadata_scan_thread)
-	}
-	video.impl.destroy_texture(ui.background)
-	video.impl.destroy_texture(ui.metadata.thumbnail)
-	if ui.metadata.comment != nil {delete(ui.metadata.comment)}
 }
 
 @private

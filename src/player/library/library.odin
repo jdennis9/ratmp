@@ -150,6 +150,27 @@ init :: proc(playlist_folder: string) -> (lib: Library) {
 	return
 }
 
+destroy :: proc(lib: Library) {
+	//_save_library("library.json")
+
+	delete(lib.library.tracks)
+
+	for p in lib.playlists {
+		free_playlist(p)
+	}
+
+	delete(lib.track_path_hashes)
+	delete(lib.tracks)
+	delete(lib.playlists)
+	delete(lib.playlist_dir)
+	delete_playlist_list(lib.albums)
+	delete_playlist_list(lib.genres)
+	delete_playlist_list(lib.artists)
+	delete_playlist_list(lib.folders)
+	path_pool.destroy(lib.paths)
+}
+
+
 load :: proc(lib: ^Library, filename: string,) -> (ok: bool) {
 	return _load_library(lib, filename)
 }
@@ -277,25 +298,6 @@ save_to_file :: proc(lib: Library, filename: string) {
 		write_kv_pair(file, "year", track.year)
 		write_kv_pair(file, "bitrate", track.bitrate)
 	}
-}
-
-destroy :: proc(lib: Library) {
-	//_save_library("library.json")
-
-	delete(lib.library.tracks)
-
-	for p in lib.playlists {
-		free_playlist(p)
-	}
-
-	delete(lib.track_path_hashes)
-	delete(lib.tracks)
-	delete(lib.playlists)
-	delete_playlist_list(lib.albums)
-	delete_playlist_list(lib.genres)
-	delete_playlist_list(lib.artists)
-	delete_playlist_list(lib.folders)
-	path_pool.destroy(lib.paths)
 }
 
 scan_folder :: proc(exclude_path_hashes: []u32, path: string, output: ^Track_Data) {

@@ -81,6 +81,9 @@ init :: proc(prefs_arg: config.Preferences, theme_folder: string) {
 }
 
 shutdown :: proc() {
+	for s in this.scanned_themes {
+		delete(s)
+	}
 	delete(theme_folder_path)
 }
 

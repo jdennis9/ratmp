@@ -76,8 +76,9 @@ open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type
 close :: proc(dec: ^Decoder) {
 	if dec._stream != nil {sf.close(dec._stream); dec._stream = nil}
 	if dec._resampler != nil {src.delete(dec._resampler); dec._resampler = nil}
-	clear(&dec._overflow)
+	delete(dec._overflow)
 	dec.frame = 0
+	dec._overflow = nil
 }
 
 is_open :: proc(dec: ^Decoder) -> bool {
