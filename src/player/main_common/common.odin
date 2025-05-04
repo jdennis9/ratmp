@@ -124,6 +124,13 @@ handle_events :: proc() {
 		state.prefs.dirty = false
 	}
 
+	@static playing_track: library.Track_ID
+
+	if state.playback.playing_track != playing_track {
+		playing_track = state.playback.playing_track
+		audio.stream_interrupt(state.stream)
+	}
+
 	if state.playback_eof {
 		state.playback_eof = false
 		playback.play_next_track(&state.playback, state.library)

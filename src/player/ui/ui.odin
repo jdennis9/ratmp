@@ -750,6 +750,7 @@ show :: proc(
 
 			if imgui.IsItemDeactivated() {
 				playback.seek(pb, int(ui.seek_target * f32(duration)))
+				audio.stream_interrupt(audio_stream)
 			}
 		}
 
