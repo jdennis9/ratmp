@@ -38,6 +38,7 @@ import "player:build"
 import "player:drag_drop"
 import "player:config"
 import "player:ui"
+import "player:audio"
 
 @private
 _windows: struct {
@@ -202,14 +203,16 @@ run :: proc() -> bool {
 				playback.play_prev_track(&state.playback, state.library)
 				_windows.media_controls.prev = false
 			}
-
+			
 			if _windows.media_controls.pause {
 				playback.set_paused(&state.playback, true)
+				audio.stream_interrupt(state.stream)
 				_windows.media_controls.pause = false
 			}
 
 			if _windows.media_controls.play {
 				playback.set_paused(&state.playback, false)
+				audio.stream_interrupt(state.stream)
 				_windows.media_controls.play = false
 			}
 
