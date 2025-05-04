@@ -53,6 +53,8 @@ _windows: struct {
 	close_policy: config.Close_Policy,
 	
 	window_title_track_id: library.Track_ID,
+
+	minimize_to_tray: bool,
 	
 	media_controls: struct {
 		play: bool,
@@ -165,6 +167,12 @@ run :: proc() -> bool {
 	_windows.running = true
 	for _windows.running {
 		msg: win.MSG
+
+		if _windows.minimize_to_tray {
+			win.ShowWindow(_windows.hwnd, win.SW_HIDE)
+			_windows.minimize_to_tray = false
+		}
+
 		minimized := !win.IsWindowVisible(_windows.hwnd)
 
 		if visible && !minimized {
@@ -238,7 +246,7 @@ run :: proc() -> bool {
 		
 		// Update and render frame
 		if !minimized && dx11.begin_frame() {
-			_windows.running = com.frame()
+			_windows.running, _windows.minimize_to_tray = com.frame()
 			visible = dx11.present()
 		}
 	}

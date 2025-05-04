@@ -440,7 +440,7 @@ show :: proc(
 	pb: ^Playback,
 	prefs: ^config.Preference_Manager,
 	audio_stream: ^audio.Stream,
-) -> (keep_running: bool = true) {
+) -> (keep_running := true, minimize_to_tray := false) {
 	@static tick_last_frame: time.Tick
 	@static is_first_frame := true
 	delta: f32
@@ -585,7 +585,9 @@ show :: proc(
 			if imgui.MenuItem("Preferences") {
 				ui.show_preferences = true
 			}
-			imgui.MenuItem("Minimize to tray")
+			if imgui.MenuItem("Minimize to tray") {
+				minimize_to_tray = true
+			}
 			imgui.Separator()
 			if imgui.MenuItem("Exit") {
 				keep_running = false

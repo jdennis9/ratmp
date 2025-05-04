@@ -138,10 +138,11 @@ handle_events :: proc() {
 	}
 }
 
-frame :: proc() -> bool {
+frame :: proc() -> (keep_running: bool, minimize_to_tray: bool) {
 	saved_state_before := state.saved_state
 
-	ui.show(&state.ui, &state.library, &state.playback, &state.prefs, state.stream) or_return
+	keep_running, minimize_to_tray = ui.show(&state.ui, &state.library, &state.playback, &state.prefs, state.stream)
+	if !keep_running {return false, false}
 
 	// Update saved state
 	state.saved_state.prefer_peak_meter_in_menu_bar = state.ui.prefer_peak_meter_in_menu_bar
@@ -151,7 +152,7 @@ frame :: proc() -> bool {
 		config.save_state(state.saved_state, state.saved_state_path)
 	}
 
-	return true
+	return
 }
 
 shutdown :: proc() {
