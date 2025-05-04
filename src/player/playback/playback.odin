@@ -87,7 +87,7 @@ stream :: proc(state: ^State, buffer: []f32, samplerate, channels: int) -> (eof:
 	context = state.ctx
 	frames := len(buffer) / channels
 	
-	if state.paused || state.decoder.stream == nil {
+	if state.paused || !decoder.is_open(&state.decoder) {
 		for i in 0..<(frames * channels) {
 			buffer[i] = 0
 		}
@@ -162,7 +162,7 @@ is_paused :: proc(state: State) -> bool {
 }
 
 set_paused :: proc(state: ^State, paused: bool) {
-	if !paused && state.playing_track == 0 && state.decoder.stream == nil {
+	if !paused && state.playing_track == 0 && state.decoder._stream == nil {
 		sync.atomic_store(&state.paused, true)
 		return
 	}

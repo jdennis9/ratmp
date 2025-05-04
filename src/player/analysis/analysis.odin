@@ -259,14 +259,14 @@ _waveform_preview_thread_proc :: proc() {
 	dec := &data.dec
 	data.out_count = 0
 	
-	samplerate := dec.info.samplerate
-	channels := dec.info.channels
-	segment_size := i32(dec.info.frames / 1080)
+	samplerate := dec.samplerate
+	channels := dec.channels
+	segment_size := dec.frame_count / 1080
 	buffer := make([]f32, segment_size * channels)
 	defer delete(buffer)
 	
 	sync.lock(&this.waveform_preview.lock)
-	resize(&data.output, (i32(dec.info.frames) / segment_size))
+	resize(&data.output, (dec.frame_count / segment_size))
 	sync.unlock(&this.waveform_preview.lock)
 
 	if data.want_cancel {return}

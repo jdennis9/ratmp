@@ -42,8 +42,7 @@ test_audio_playback :: proc(t: ^testing.T) {
 	testing.expect(t, ok)
 
 	play :: proc(t: ^testing.T, state: ^State, callback_state: ^Callback_State, path: string) {
-		_play_file(state, path)
-		testing.expect(t, state.decoder.stream != nil)
+		testing.expect(t, _play_file(state, path))
 		set_paused(state, false)
 		testing.expect(t, state.paused == false)
 
@@ -54,3 +53,4 @@ test_audio_playback :: proc(t: ^testing.T) {
 	play(t, &state, &callback_state, "../test_data/mono.mp3")
 	play(t, &state, &callback_state, "../test_data/stereo.mp3")
 }
+
