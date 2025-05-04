@@ -59,7 +59,7 @@ open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type
 	else {
 		path: [512]u8
 		copy(path[:511], file)
-		dec.stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &info)
+		dec._stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &info)
 	}
 
 	dec.samplerate = int(info.samplerate)
