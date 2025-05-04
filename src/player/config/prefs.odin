@@ -67,6 +67,8 @@ load_preferences :: proc(prefs: ^Preference_Manager, path: string) -> (loaded: b
 	log.debug("Loading preferences from", path)
 
 	data := os.read_entire_file_from_filename(path) or_return
+	defer delete(data)
+
 	mem.arena_free_all(&prefs.arena)
 	unmarshal_error := json.unmarshal(data, &prefs.values, allocator = mem.arena_allocator(&prefs.arena))
 
