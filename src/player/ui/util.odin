@@ -28,3 +28,8 @@ _begin_window_drag_drop_target :: proc(str_id: cstring) -> bool {
 
 	return imgui.BeginDragDropTargetCustom(rect, imgui.GetID(str_id))
 }
+
+@private
+_is_item_double_clicked :: proc(button := imgui.MouseButton.Left) -> bool {
+    return imgui.IsItemClicked(button) && imgui.IsMouseDoubleClicked(button)
+}

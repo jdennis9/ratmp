@@ -1096,7 +1096,7 @@ _show_playlist_track_table :: proc(ui: ^State, lib: Library, pb: ^Playback, play
 				_handle_select_track(&ui.selection, playlist.id, table.tracks, table.track)
 			}
 
-			if middle_clicked || (left_clicked && imgui.IsMouseDoubleClicked(.Left)) {
+			if middle_clicked || _is_item_double_clicked() {
 				playback.play_playlist(pb, lib, playlist^, table.track)
 			}
 
@@ -1155,7 +1155,7 @@ _show_queue_window :: proc(ui: ^State, lib: Library, pb: ^Playback) {
 				_handle_select_track(&ui.selection, queue_id, table.tracks, table.track)
 			}
 
-			if middle_clicked || (left_clicked && imgui.IsMouseDoubleClicked(.Left)) {
+			if middle_clicked || _is_item_double_clicked() {
 				playback.play_track_at_position(pb, lib, table._pos-1)
 			}
 
@@ -1223,7 +1223,7 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 		}
 		
 		row(ui, "Library", .Library, len(lib.library.tracks))
-		if imgui.IsItemClicked(.Middle) {
+		if imgui.IsItemClicked(.Middle) || _is_item_double_clicked() {
 			playback.play_playlist(pb, lib^, lib.library)
 		}
 		row(ui, "Artists", .Artists, len(lib.artists.playlists))
@@ -1249,6 +1249,10 @@ _show_navigation_window :: proc(ui: ^State, lib: ^Library, pb: ^Playback) {
 				if imgui.Selectable(p.name, p.id == ui.selected_playlist, {.SpanAllColumns}) {
 					_bring_window_to_front(ui, .Playlist)
 					ui.selected_playlist = p.id
+				}
+
+				if imgui.IsItemClicked(.Middle) || _is_item_double_clicked() {
+					playback.play_playlist(pb, lib^, p)
 				}
 
 				if p.id == queued_playlist_id {
@@ -1320,7 +1324,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 					state.selected_playlist_id = playlist.id
 				}
 
-				if visible && (imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))) {
+				if visible && (imgui.IsItemClicked(.Middle) || _is_item_double_clicked()) {
 					playback.play_playlist(pb, lib, playlist)
 					state.selected_playlist_id = playlist.id
 				}
@@ -1362,7 +1366,7 @@ _show_playlist_group_window :: proc(ui: ^State, lib: Library, pb: ^Playback, lis
 				middle_clicked := imgui.IsItemClicked(.Middle)
 				right_clicked := imgui.IsItemClicked(.Right)
 
-				if middle_clicked || (left_clicked && imgui.IsMouseDoubleClicked(.Left)) {
+				if middle_clicked || _is_item_double_clicked() {
 					playback.play_playlist(pb, lib, playlist, table.track)
 				}
 
