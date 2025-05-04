@@ -7,9 +7,12 @@ Device_Props :: struct {
 	name: [128]u8,
 }
 
-Stream_Info :: struct {
-	sample_rate, channels: i32,
+@private
+_Stream_Common :: struct {
+	samplerate, channels: int,
+	_callback: Callback,
+	_callback_data: rawptr,
 }
 
-Callback :: #type proc(buffer: []f32, data: rawptr)
+Callback :: #type proc(data: rawptr, buffer: []f32)
 

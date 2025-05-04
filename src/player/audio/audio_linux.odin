@@ -21,7 +21,7 @@ import "base:runtime"
 import "core:log"
 import C "core:c"
 
-import pa "../../bindings/portaudio"
+import pa "bindings:portaudio"
 
 // @NOTES:
 // PortAudio doesn't have any way of discarding the current buffer that I know of, so the solution is to use a short
@@ -31,11 +31,11 @@ import pa "../../bindings/portaudio"
 @private
 _audio: struct {
 	ctx: runtime.Context,
-	stream: pa.Stream,
-	callback: Callback,
-	callback_data: rawptr,
-	devices: []Device_Props,
-	info: Stream_Info,
+}
+
+Stream :: struct {
+	using com: _Stream_Common,
+	_pa: struct {stream: pa.Stream, volume: f32,}
 }
 
 @private
@@ -51,7 +51,6 @@ _check :: proc(error: pa.ErrorCode, loc := #caller_location, expr := #caller_exp
 init :: proc() -> (ok: bool) {
 	_audio.ctx = context
 	_check(pa.Initialize()) or_return
-	defer if !ok {shutdown()}
 	ok = true
 	return
 }
@@ -64,32 +63,38 @@ get_default_device_id :: proc() -> (Device_ID, bool) {
 	return {}, true
 }
 
-start :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (info: Stream_Info, ok: bool) {
-	_audio.callback = callback
-	_audio.callback_data = callback_data
-	_audio.info.channels = 2
-	_audio.info.sample_rate = 48000
+open_stream :: proc(device_id: ^Device_ID, callback: Callback, callback_data: rawptr) -> (stream: ^Stream, ok: bool) {
+	stream = new(Stream)
 
-	_check(pa.OpenDefaultStream(&_audio.stream, 0, 2, pa.SampleFormat_Float32, 48000, 48000/8, _callback_wrapper, nil)) or_return
-	_check(pa.StartStream(_audio.stream)) or_return
+	stream._callback = callback
+	stream._callback_data = callback_data
+	stream.channels = 2
+	stream.samplerate = 48000
+	stream._pa.volume = 1
 
-	info = _audio.info
+	_check(pa.OpenDefaultStream(&stream._pa.stream, 0, 2, pa.SampleFormat_Float32, 48000, 24000/4, _callback_wrapper, stream))
+	_check(pa.StartStream(stream._pa.stream))
+
 	ok = true
 	return
 }
 
-stop :: proc() {
-	pa.StopStream(_audio.stream)
-	pa.CloseStream(_audio.stream)
-	_audio.stream = nil
+close_stream :: proc(stream: ^Stream) {
+	pa.StopStream(stream._pa.stream)
+	pa.CloseStream(stream._pa.stream)
+	free(stream)
 }
 
-interrupt :: proc() {
-	//pa.AbortStream(_audio.stream)
-	//pa.StartStream(_audio.stream)
+stream_interrupt :: proc(stream: ^Stream) {
 }
-set_volume :: proc(volume: f32) {}
-get_volume :: proc() -> f32 {return 1}
+
+stream_set_volume :: proc(stream: ^Stream, volume: f32) {
+	stream._pa.volume = volume
+}
+
+stream_get_volume :: proc(stream: ^Stream) -> f32 {
+	return stream._pa.volume
+}
 
 enumerate_devices :: proc() -> (devices: []Device_Props, ok: bool) {
 	return {}, true
@@ -104,6 +109,7 @@ _callback_wrapper :: proc "c" (
 	userData: rawptr,
 ) -> pa.StreamCallbackResult {
 	context = _audio.ctx
-	_audio.callback((cast([^]f32)output)[:frameCount * auto_cast _audio.info.channels], _audio.callback_data)
+	stream := cast(^Stream) userData
+	stream._callback(stream._callback_data, (cast([^]f32)output)[:frameCount * auto_cast stream.channels])
 	return .Continue
 }

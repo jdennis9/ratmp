@@ -25,7 +25,7 @@ import "core:path/filepath"
 import "core:time"
 
 import "player:library"
-import "player:audio"
+//import "player:audio"
 import "player:decoder"
 
 @private
@@ -167,7 +167,7 @@ set_paused :: proc(state: ^State, paused: bool) {
 		return
 	}
 	sync.atomic_store(&state.paused, paused)
-	audio.interrupt()
+	//audio.interrupt()
 }
 
 toggle :: proc(state: ^State) {
@@ -184,7 +184,7 @@ stop :: proc(state: ^State) {
 	clear(&state.queue)
 	state.playing_track = 0
 	
-	audio.interrupt()
+	//audio.interrupt()
 }
 
 toggle_shuffle :: proc(state: ^State) {
@@ -291,7 +291,7 @@ seek :: proc(state: ^State, second: int) {
 	sync.lock(&state.lock)
 	decoder.seek(&state.decoder, second)
 	sync.unlock(&state.lock)
-	audio.interrupt()
+	//audio.interrupt()
 }
 
 get_second :: proc(state: State) -> int {
@@ -386,9 +386,10 @@ sort_queue :: proc(state: State, lib: library.Library, spec: library.Track_Sort_
 // =============================================================================
 
 set_volume :: proc(vol: f32) {
-	audio.set_volume(vol)
+	//audio.set_volume(vol)
 }
 
 get_volume :: proc() -> f32 {
-	return audio.get_volume()
+	//return audio.get_volume()
+	return 1
 }

@@ -15,13 +15,13 @@ test_init_and_destroy :: proc(t: ^testing.T) {
 test_audio_playback :: proc(t: ^testing.T) {
 	Callback_State :: struct {
 		state: ^State,
-		stream_info: audio.Stream_Info,
+		stream: ^audio.Stream,
 		eof: bool,
 	}
 
-	callback :: proc(buffer: []f32, data: rawptr) {
+	callback :: proc(data: rawptr, buffer: []f32) {
 		cb := cast(^Callback_State) data
-		cb.eof = stream(cb.state, buffer, auto_cast cb.stream_info.sample_rate, auto_cast cb.stream_info.channels)
+		cb.eof = stream(cb.state, buffer, cb.stream.samplerate, cb.stream.channels)
 	}
 
 	testing.expect(t, audio.init())
@@ -38,8 +38,9 @@ test_audio_playback :: proc(t: ^testing.T) {
 		state = &state,
 	}
 
-	callback_state.stream_info, ok = audio.start(&device_id, callback, &callback_state)
+	callback_state.stream, ok = audio.open_stream(&device_id, callback, &callback_state)
 	testing.expect(t, ok)
+	defer audio.close_stream(callback_state.stream)
 
 	play :: proc(t: ^testing.T, state: ^State, callback_state: ^Callback_State, path: string) {
 		testing.expect(t, _play_file(state, path))

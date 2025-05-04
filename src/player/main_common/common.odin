@@ -34,7 +34,7 @@ State :: struct {
 	library: library.Library,
 	ui: ui.State,
 	playback: playback.State,
-	audio_stream_info: audio.Stream_Info,
+	stream: ^audio.Stream,
 	prefs: config.Preference_Manager,
 	saved_state: config.Saved_State,
 
@@ -52,15 +52,16 @@ State :: struct {
 // Held by entry point
 state: ^State
 
-audio_callback :: proc(buffer: []f32, data: rawptr) {
+audio_callback :: proc(_: rawptr, buffer: []f32) {
 	sync.lock(&state.playback.lock)
 	defer sync.unlock(&state.playback.lock)
 
 	context = state.ctx
 
 	state.playback_eof = playback.stream(
-		&state.playback, buffer, cast(int) state.audio_stream_info.sample_rate,
-		cast(int) state.audio_stream_info.channels)
+		&state.playback, buffer,
+		state.stream.samplerate, state.stream.channels
+	)
 	
 	if state.playback_eof {
 		if state.wake_proc != nil {state.wake_proc()}
@@ -96,7 +97,7 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 		audio.init() or_return
 		device_id := _get_preferred_audio_device_id()
 		state.current_audio_device_id = device_id
-		state.audio_stream_info = audio.start(&device_id, audio_callback, nil) or_return
+		state.stream = audio.open_stream(&device_id, audio_callback, nil) or_return
 	}
 
 	ui.apply_prefs(&state.ui, state.prefs.values)
@@ -112,13 +113,13 @@ handle_events :: proc() {
 		if prefs.audio_device_id != "" && prefs.audio_device_id != string(cstring(&state.current_audio_device_id[0])) {
 			stream_ok: bool
 			device_id := _get_preferred_audio_device_id()
-			audio.stop()
-			state.audio_stream_info, stream_ok = audio.start(&device_id, audio_callback, nil)
+			audio.close_stream(state.stream)
+			state.stream, stream_ok = audio.open_stream(&device_id, audio_callback, nil)
 
 			if !stream_ok {
 				default_device_id, have_default := audio.get_default_device_id()
 				if have_default {
-					state.audio_stream_info, _ = audio.start(&default_device_id, audio_callback, nil)
+					state.stream, _ = audio.open_stream(&default_device_id, audio_callback, nil)
 				}
 			}
 		}
