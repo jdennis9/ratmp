@@ -696,11 +696,13 @@ show :: proc(
 		if playback.is_paused(pb^) {
 			if imgui.MenuItem(PLAY_ICON) {
 				playback.set_paused(pb, false)
+				audio.stream_interrupt(audio_stream)
 			}
 		}
 		else {
 			if imgui.MenuItem(PAUSE_ICON) {
 				playback.set_paused(pb, true)
+				audio.stream_interrupt(audio_stream)
 			}
 		}
 
@@ -865,7 +867,9 @@ show :: proc(
 			}
 			case .WavePreview: {
 				if _begin_window(ui, .WavePreview) {
-					_show_wave_preview_window(pb)
+					if _show_wave_preview_window(pb) {
+						audio.stream_interrupt(audio_stream)
+					}
 					imgui.End()
 				}
 			}

@@ -190,22 +190,7 @@ run :: proc() -> bool {
 			apply_prefs(state.prefs.values)
 		}
 
-		com.handle_events()
-
-		// Update window title to show playing track
-		if state.playback.playing_track != _windows.window_title_track_id {
-			buf: [256]u8
-			_windows.window_title_track_id = state.playback.playing_track
-
-			if state.playback.playing_track != 0 {
-				track := library.get_track_info(state.library, state.playback.playing_track)
-				set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
-			}
-			else {
-				set_window_title(build.PROGRAM_NAME_AND_VERSION)
-			}
-		}
-
+		
 		// Handle media controls
 		if _windows.enable_media_controls {
 			if _windows.media_controls.next {
@@ -230,6 +215,23 @@ run :: proc() -> bool {
 
 			sync_media_controls_state(state.playback, state.library)
 		}
+
+		com.handle_events()
+
+		// Update window title to show playing track
+		if state.playback.playing_track != _windows.window_title_track_id {
+			buf: [256]u8
+			_windows.window_title_track_id = state.playback.playing_track
+
+			if state.playback.playing_track != 0 {
+				track := library.get_track_info(state.library, state.playback.playing_track)
+				set_window_title(fmt.bprint(buf[:], build.PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title))
+			}
+			else {
+				set_window_title(build.PROGRAM_NAME_AND_VERSION)
+			}
+		}
+
 		
 		// Update and render frame
 		if !minimized && dx11.begin_frame() {

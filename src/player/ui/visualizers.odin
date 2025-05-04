@@ -126,7 +126,7 @@ _show_peak_window :: proc() {
 	_show_bars_widget("##peaks", peaks, 0, 1)
 }
 
-_show_wave_preview_window :: proc(pb: ^Playback) {
+_show_wave_preview_window :: proc(pb: ^Playback) -> bool {
 	samples := analysis.get_waveform_preview()
 	playback_pos := f32(playback.get_second(pb^))
 	playback_duration := f32(playback.get_duration(pb^))
@@ -136,7 +136,7 @@ _show_wave_preview_window :: proc(pb: ^Playback) {
 		size := imgui.GetContentRegionAvail()
 		cursor := imgui.GetCursorScreenPos()
 
-		if size.x == 0 || size.y == 0 {return}
+		if size.x == 0 || size.y == 0 {return false}
 
 		bar_width := size.x / f32(len(samples))
 		bar_height := size.y * 0.5
@@ -167,6 +167,10 @@ _show_wave_preview_window :: proc(pb: ^Playback) {
 			ratio := clamp(click_pos / size.x, 0, 1)
 			seek_second := playback_duration * ratio
 			playback.seek(pb, int(seek_second))
+
+			return true
 		}
 	}
+
+	return false
 }
