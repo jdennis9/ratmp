@@ -58,6 +58,10 @@ open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type
 	}
 	else {
 		path: [512]u8
+
+		// So -vet doesn't complain about utf16 package being unused
+		utf16.is_surrogate(' ')
+
 		copy(path[:511], file)
 		dec._stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &info)
 	}

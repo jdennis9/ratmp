@@ -17,11 +17,9 @@
 */
 package util
 
-import "core:os"
 import "core:strings"
 import "core:sys/posix"
 import "core:c/libc"
-import "core:fmt"
 import "core:slice"
 import "core:log"
 
