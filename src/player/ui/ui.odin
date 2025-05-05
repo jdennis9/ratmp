@@ -680,6 +680,7 @@ show :: proc(
 			if imgui.SliderFloat("##volume", &volume, 0, 100, "%.0f%%") {
 				audio.stream_set_volume(audio_stream, volume / 100)
 			}
+			imgui.SetItemTooltip("Volume")
 		}
 
 		imgui.Separator()
@@ -691,15 +692,18 @@ show :: proc(
 			playback.stop(pb)
 			audio.stream_interrupt(audio_stream)
 		}
+		imgui.SetItemTooltip("Stop")
 
 		if imgui.MenuItem(SHUFFLE_ICON, nil, pb.shuffle) {
 			playback.toggle_shuffle(pb)
 		}
+		imgui.SetItemTooltip("Shuffle")
 
 		if imgui.MenuItem(PREV_TRACK_ICON) {
 			playback.play_prev_track(pb, lib^)
 			audio.stream_interrupt(audio_stream)
 		}
+		imgui.SetItemTooltip("Previous track")
 
 		if playback.is_paused(pb^) {
 			if imgui.MenuItem(PLAY_ICON) {
@@ -713,11 +717,14 @@ show :: proc(
 				audio.stream_interrupt(audio_stream)
 			}
 		}
+		imgui.SetItemTooltip("Play/pause")
 
 		if imgui.MenuItem(NEXT_TRACK_ICON) {
 			playback.play_next_track(pb, lib^)
 			audio.stream_interrupt(audio_stream)
 		}
+		imgui.SetItemTooltip("Next track")
+
 		imgui.Separator()
 			
 		// -----------------------------------------------------------------------------
@@ -730,12 +737,14 @@ show :: proc(
 					ui.prefer_peak_meter_in_menu_bar = true
 					use_spectrum = false
 				}
+				imgui.SetItemTooltip("Spectrum (click to change)")
 			}
 			else {
 				if _show_peak_meter_widget("##peak_meter", {100, 0}) {
 					ui.prefer_peak_meter_in_menu_bar = false
 					use_spectrum = true
 				}
+				imgui.SetItemTooltip("Peak meter (click to change)")
 			}
 			imgui.Separator()
 		}
