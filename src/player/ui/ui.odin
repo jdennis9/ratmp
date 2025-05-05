@@ -689,6 +689,7 @@ show :: proc(
 		// -----------------------------------------------------------------------------
 		if imgui.MenuItem(STOP_ICON) {
 			playback.stop(pb)
+			audio.stream_interrupt(audio_stream)
 		}
 
 		if imgui.MenuItem(SHUFFLE_ICON, nil, pb.shuffle) {
@@ -697,6 +698,7 @@ show :: proc(
 
 		if imgui.MenuItem(PREV_TRACK_ICON) {
 			playback.play_prev_track(pb, lib^)
+			audio.stream_interrupt(audio_stream)
 		}
 
 		if playback.is_paused(pb^) {
@@ -714,6 +716,7 @@ show :: proc(
 
 		if imgui.MenuItem(NEXT_TRACK_ICON) {
 			playback.play_next_track(pb, lib^)
+			audio.stream_interrupt(audio_stream)
 		}
 		imgui.Separator()
 			
