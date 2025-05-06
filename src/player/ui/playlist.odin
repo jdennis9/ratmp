@@ -197,6 +197,9 @@ _show_next_track_table_row :: proc(lib: library.Library, pb: Playback, it: ^_Tra
 		it._pos = it._min
 	}
 
+	imgui.PushIDInt(auto_cast it._pos)
+	defer imgui.PopID()
+
 	imgui.TableNextRow()
 
 	it.visible = false
