@@ -690,7 +690,6 @@ show :: proc(
 		// -----------------------------------------------------------------------------
 		if imgui.MenuItem(STOP_ICON) {
 			playback.stop(pb)
-			audio.stream_interrupt(audio_stream)
 		}
 		imgui.SetItemTooltip("Stop")
 
@@ -701,27 +700,23 @@ show :: proc(
 
 		if imgui.MenuItem(PREV_TRACK_ICON) {
 			playback.play_prev_track(pb, lib^)
-			audio.stream_interrupt(audio_stream)
 		}
 		imgui.SetItemTooltip("Previous track")
 
 		if playback.is_paused(pb^) {
 			if imgui.MenuItem(PLAY_ICON) {
 				playback.set_paused(pb, false)
-				audio.stream_interrupt(audio_stream)
 			}
 		}
 		else {
 			if imgui.MenuItem(PAUSE_ICON) {
 				playback.set_paused(pb, true)
-				audio.stream_interrupt(audio_stream)
 			}
 		}
 		imgui.SetItemTooltip("Play/pause")
 
 		if imgui.MenuItem(NEXT_TRACK_ICON) {
 			playback.play_next_track(pb, lib^)
-			audio.stream_interrupt(audio_stream)
 		}
 		imgui.SetItemTooltip("Next track")
 

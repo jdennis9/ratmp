@@ -46,6 +46,7 @@ State :: struct {
 	wake_proc: proc(),
 
 	current_audio_device_id: audio.Device_ID,
+	frame_index: int,
 }
 
 // Held by entry point
@@ -103,7 +104,29 @@ init :: proc(state_ptr: ^State, config_dir: string, data_dir: string, wake_proc:
 	return true
 }
 
+interrupt_audio_once_this_frame :: proc() {
+	@static frame_index: int
+
+	if frame_index != state.frame_index {
+		audio.stream_interrupt(state.stream)
+		frame_index = state.frame_index
+	}
+}
+
 handle_events :: proc() {
+	@static playing_track: library.Track_ID
+	@static paused: bool = false
+
+	if state.playback.paused != paused {
+		paused = state.playback.paused
+		interrupt_audio_once_this_frame()
+	}
+
+	if state.playback.playing_track != playing_track {
+		playing_track = state.playback.playing_track
+		interrupt_audio_once_this_frame()
+	}
+
 	if state.prefs.dirty {
 		prefs := state.prefs.values
 		ui.apply_prefs(&state.ui, prefs)
@@ -128,8 +151,10 @@ handle_events :: proc() {
 	if state.playback_eof {
 		state.playback_eof = false
 		playback.play_next_track(&state.playback, state.library)
-		audio.stream_interrupt(state.stream)
+		interrupt_audio_once_this_frame()
 	}
+
+	state.frame_index += 1
 }
 
 frame :: proc() -> (keep_running: bool, minimize_to_tray: bool) {
