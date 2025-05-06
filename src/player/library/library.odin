@@ -302,13 +302,16 @@ save_to_file :: proc(lib: Library, filename: string) {
 
 scan_folder :: proc(exclude_path_hashes: []u32, path: string, output: ^Track_Data) {
 	dir, dir_error := os2.open(path)
-	if dir_error != nil {return}
-	files, read_error := os2.read_dir(dir, max(int), context.allocator)
-	if read_error != nil {return}
-	defer os2.file_info_slice_delete(files, context.allocator)
+	defer os2.close(dir)
+	if dir_error != nil {log.error(dir_error); return}
+	it, read_error := os2.read_directory_iterator_create(dir)
+	if read_error != nil {log.error(read_error); return}
+	defer os2.read_directory_iterator_destroy(&it)
 
-	for file in files {
+	for {
 		track: Raw_Track_Info
+		file, _, ok := os2.read_directory_iterator(&it)
+		if !ok {break}
 
 		path_id := xxhash.XXH32(transmute([]u8) file.fullpath)
 
