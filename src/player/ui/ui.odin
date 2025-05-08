@@ -194,11 +194,14 @@ State :: struct {
 	loaded_font: [512]u8,
 	loaded_font_size: int,
 	loaded_icon_size: int,
+	need_load_font: bool,
 
 	seek_target: f32,
 
 	new_playlist_name: [128]u8,
 	new_playlist_error: library.Add_Playlist_Error,
+
+	dpi_scale: f32,
 }
 
 init :: proc(data_dir: string, saved_state: config.Saved_State) -> (ui: State, ok: bool) {
@@ -212,6 +215,8 @@ init :: proc(data_dir: string, saved_state: config.Saved_State) -> (ui: State, o
 
 	// Set window flags
 	ui.windows[.Metadata].flags |= {.AlwaysVerticalScrollbar}
+
+	ui.dpi_scale = 1
 
 	_scan_layouts(&ui)
 
@@ -259,7 +264,7 @@ install_imgui_settings_handler :: proc(ui: ^State) {
 }
 
 @private
-_load_fonts :: proc(prefs: config.Preferences) {
+_load_fonts :: proc(prefs: config.Preferences, scale: f32, force: bool) {
 	@static loaded_font: [512]u8
 	@static loaded_font_size: int
 	@static loaded_icon_size: int
@@ -276,7 +281,7 @@ _load_fonts :: proc(prefs: config.Preferences) {
 	font_size := clamp(prefs.font_size, 8, 24)
 	icon_size := clamp(prefs.icon_size, 8, 24)
 
-	if string(cstring(&loaded_font[0])) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
+	if !force && string(cstring(&loaded_font[0])) == font_path && loaded_font_size == font_size && loaded_icon_size == icon_size {
 		return
 	}
 
@@ -298,7 +303,7 @@ _load_fonts :: proc(prefs: config.Preferences) {
 	imgui.FontAtlas_Clear(fonts)
 
 	if font_path != "" && os.exists(string(font_path)) {
-		if imgui.FontAtlas_AddFontFromFileTTF(fonts, strings.clone_to_cstring(font_path, context.temp_allocator), auto_cast font_size) == nil {
+		if imgui.FontAtlas_AddFontFromFileTTF(fonts, strings.clone_to_cstring(font_path, context.temp_allocator), auto_cast font_size * scale) == nil {
 			imgui.FontAtlas_AddFontDefault(fonts)
 		}
 	}
@@ -314,14 +319,14 @@ _load_fonts :: proc(prefs: config.Preferences) {
 	}
 
 	imgui.FontAtlas_AddFontFromMemoryTTF(fonts, raw_data(ICON_FONT), 
-		cast(i32) len(ICON_FONT), auto_cast icon_size, &cfg, raw_data(icon_ranges))
+		cast(i32) len(ICON_FONT), auto_cast icon_size * scale, &cfg, raw_data(icon_ranges))
 
 	util.copy_string_to_buf(loaded_font[:], font_path)
 	loaded_font_size = font_size
 	loaded_icon_size = icon_size
 }
 
-apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
+apply_prefs :: proc(ui: ^State, prefs: config.Preferences, force_load_font := false) {
 	log.debug("Applying preferences...")
 
 	_copy_preferences_to_editor(&ui.preference_editor, prefs)
@@ -343,7 +348,7 @@ apply_prefs :: proc(ui: ^State, prefs: config.Preferences) {
 		}
 	}
 
-	_load_fonts(prefs)
+	_load_fonts(prefs, ui.dpi_scale, force_load_font)
 
 	theme.load(prefs.theme_name)
 }

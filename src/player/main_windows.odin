@@ -99,6 +99,8 @@ run :: proc() -> bool {
 		log.info("======================= Beginning of log =======================" )
 	}
 
+	imgui_win32.EnableDpiAwareness()
+
 	use_light_theme := is_system_light_theme()
 	_windows.ctx = context
 	
@@ -160,6 +162,8 @@ run :: proc() -> bool {
 		media_controls.install_handler(media_controls_handler)
 		_windows.enable_media_controls = true
 	}
+
+	update_scaling()
 
 	visible := true
 	show_window()
@@ -304,6 +308,15 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 			}
 			return 0
 		}
+		case win.WM_DPICHANGED: {
+			rect := cast(^win.RECT) cast(uintptr) lparam
+			win.SetWindowPos(hwnd, nil, 
+				rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, 
+				win.SWP_NOZORDER
+			)
+			update_scaling()
+			return 0
+		}
 	}
 
 	return win.DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -410,4 +423,22 @@ sync_media_controls_state :: proc(pb: playback.State, lib: library.Library) {
 drag_drop_callback :: proc "c" (path: cstring) {
 	context = _windows.ctx
 	ui.queue_file_for_scanning(&state.ui, string(path))
+}
+
+update_scaling :: proc() {
+	style := imgui.GetStyle()
+	scale := imgui_win32.GetDpiScaleForHwnd(_windows.hwnd)
+	imgui.Style_ScaleAllSizes(style, scale)
+	style.WindowBorderSize = 1
+	style.ChildBorderSize = 1
+	style.PopupBorderSize = 1
+	style.FrameBorderSize = 1
+	style.TabBorderSize = 1
+
+	dx11.invalidate_imgui_objects()
+
+	state.ui.dpi_scale = scale
+	ui.apply_prefs(&state.ui, state.prefs.values, force_load_font=true)
+
+	dx11.create_imgui_objects()
 }
