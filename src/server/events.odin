@@ -41,5 +41,7 @@ handle_events :: proc(state: ^Server) {
 	clear(&state.event_queue)
 	free_all(context.temp_allocator)
 
+	flush_scan_queue(state)
 	library_save_dirty_playlists(state.library)
+	_background_scan_output_results(&state.library, &state.background_scan)
 }

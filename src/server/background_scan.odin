@@ -1,0 +1,121 @@
+#+private
+package server
+
+import "core:thread"
+import "core:os/os2"
+import "core:path/filepath"
+
+_Background_Scan :: struct {
+	thread: ^thread.Thread,
+	folders: [dynamic]Path,
+	file_count: int,
+	files_counted: bool,
+
+	output: Track_Set,
+
+	on_complete: proc(),
+}
+
+@(private="file")
+_background_scan_proc :: proc(scan_thread: ^thread.Thread) {
+	scan := cast(^_Background_Scan) scan_thread.data
+
+	count_files :: proc(path: string) -> int {	
+		if os2.is_dir(path) {
+			cleaned_path := filepath.clean(path)
+			defer delete(cleaned_path)
+
+			count: int
+			dir, dir_error := os2.open(path)
+			if dir_error != nil {return 0}
+			defer os2.close(dir)
+
+			iter := os2.read_directory_iterator_create(dir)
+			defer os2.read_directory_iterator_destroy(&iter)
+
+			for {
+				file, _ := os2.read_directory_iterator(&iter) or_break
+
+				// @FixMe: Workaround for Odin os2 bug when decoding file names, 
+				// remove when fix is released
+				c := filepath.clean(file.fullpath)
+				defer delete(c)
+				if c == cleaned_path {continue}
+
+				if file.type == .Regular &&  is_audio_file_supported(file.fullpath) {
+					count += 1
+				}
+				else if file.type == .Directory {
+					count += count_files(file.fullpath)
+				}
+			}
+
+			return count
+		}
+		else {
+			return 1
+		}
+	}
+
+	for &folder in scan.folders {
+		scan.file_count += count_files(string(cstring(&folder[0])))
+	}
+
+	scan.files_counted = true
+
+	for &folder in scan.folders {
+		scan_directory_tracks(string(cstring(&folder[0])), &scan.output)
+	}
+
+	if scan.on_complete != nil {scan.on_complete()}
+}
+
+_begin_background_scan :: proc(scan: ^_Background_Scan, input: []Path, on_complete: proc()) {
+	assert(len(scan.folders) == 0)
+	scan.thread = thread.create(_background_scan_proc)
+	scan.file_count = 0
+	scan.files_counted = false
+	scan.folders = nil
+	scan.output = {}
+	scan.thread.data = scan
+	scan.thread.init_context = context
+	scan.on_complete = on_complete
+
+	resize(&scan.folders, len(input))
+	for folder in input {
+		append(&scan.folders, folder)
+	}
+
+	thread.start(scan.thread)
+}
+
+_background_scan_is_running :: proc(scan: _Background_Scan) -> bool {
+	return scan.thread != nil && !thread.is_done(scan.thread)
+}
+
+_background_scan_wait_for_results :: proc(library: ^Library, scan: ^_Background_Scan) -> bool {
+	if scan.thread != nil {
+		thread.join(scan.thread)
+		_background_scan_output_results(library, scan)
+		return true
+	}
+
+	return false
+}
+
+_background_scan_output_results :: proc(library: ^Library, scan: ^_Background_Scan) -> bool {
+	if scan.thread != nil && thread.is_done(scan.thread) {
+		if library != nil {
+			library_add_track_set(library, scan.output)
+		}
+
+		thread.destroy(scan.thread)
+		delete(scan.folders)
+		delete_track_set(&scan.output)
+		scan^ = {}
+
+		return true
+	}
+
+	return false
+}

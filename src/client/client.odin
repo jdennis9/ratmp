@@ -21,7 +21,7 @@ import "src:build"
 import "src:path_pool"
 import "src:util"
 
-Path :: [384]u8
+Path :: server.Path
 
 Create_Texture_Proc :: #type proc(data: rawptr, width, height: int) -> (imgui.TextureID, bool)
 Destroy_Texture_Proc :: #type proc(texture: imgui.TextureID)
@@ -44,8 +44,6 @@ Client :: struct {
 	tick_last_frame: time.Tick,
 	frame_count: int,
 	selection: _Selection,
-	folder_queue: [dynamic]Path,
-	background_scan: _Background_Scan,
 	library_sort_spec: server.Track_Sort_Spec,
 	metadata_window: _Metadata_Window,
 	waveform_window: _Waveform_Window,
@@ -167,7 +165,6 @@ destroy :: proc(client: ^Client) {
 	delete(client.selection.tracks)
 	delete(client.current_theme_name)
 	delete(client.background.path)
-	_background_scan_wait_for_results(nil, &client.background_scan)
 	_async_dialog_destroy(&client.dialogs.remove_missing_files)
 }
 
@@ -230,8 +227,7 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 		media_controls.disable()
 	}
 
-	_async_file_dialog_get_results(&client.dialogs.add_folders, &client.folder_queue)
-	_background_scan_output_results(&sv.library, &client.background_scan)
+	_async_file_dialog_get_results(&client.dialogs.add_folders, &sv.scan_queue)
 	_update_analysis(client, sv, delta)
 	server.library_update_categories(&sv.library)
 
@@ -254,25 +250,19 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 	_draw_background(client^)
 	_main_menu_bar(client, sv)
 
-	// Begin scanning folders if needed
-	if len(client.folder_queue) > 0 && !_background_scan_is_running(client.background_scan) {
-		_begin_background_scan(&client.background_scan, client.folder_queue[:])
-		clear(&client.folder_queue)
-	}
-	else if _background_scan_is_running(client.background_scan) {
-		scan := client.background_scan
+	if progress, is_running := server.get_background_scan_progress(sv^); is_running {
 		if imgui.Begin("Metadata Scan Progress") {
-			input_count := scan.file_count
-			output_count := len(scan.output.metadata)
-			progress := f32(output_count) / f32(input_count)
+			input_count := progress.input_file_count
+			output_count := progress.files_scanned
+			frac := f32(output_count) / f32(input_count)
 
-			if scan.files_counted {
+			if !progress.counting_files {
 				imgui.Text("Scanning metadata (%u/%u)", u32(output_count), u32(input_count))
 			}
 			else {
 				imgui.Text("Calculating...")
 			}
-			imgui.ProgressBar(progress, {imgui.GetContentRegionAvail().x, 0})
+			imgui.ProgressBar(frac, {imgui.GetContentRegionAvail().x, 0})
 		}
 
 		imgui.End()
@@ -514,7 +504,8 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 				path: Path
 				util.copy_string_to_buf(path[:], path_pool.get_dir_path(dir))
 				log.debug("Queue folder", cstring(&path[0]))
-				append(&client.folder_queue, path)
+				//append(&client.folder_queue, path)
+				server.queue_files_for_scanning(sv, {path})
 			}
 		}
 

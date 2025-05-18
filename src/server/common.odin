@@ -10,3 +10,5 @@ Error :: enum {
 	NameExists,
 	FileError,
 }
+
+Path :: [512]u8

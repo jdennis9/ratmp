@@ -99,7 +99,6 @@ run :: proc() -> bool {
 		100, 100, win.CW_USEDEFAULT, win.CW_USEDEFAULT,
 		nil, nil, _win32.hinstance, nil
 	)
-	defer win.DestroyWindow(_win32.hwnd)
 	
 	{
 		on: win.BOOL = true
@@ -203,6 +202,8 @@ run :: proc() -> bool {
 			obscured = _win32.d3d.swapchain->Present(1, {}) == dxgi.STATUS_OCCLUDED
 		}
 	}
+
+	win.DestroyWindow(_win32.hwnd)
 
 	return true
 }

@@ -48,6 +48,9 @@ Server :: struct {
 	event_handlers: [dynamic]Event_Handler,
 	event_queue: [dynamic]Event,
 	wake_proc: proc(), // Called whenever an event is sent
+
+	background_scan: _Background_Scan,
+	scan_queue: [dynamic]Path,
 }
 
 init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: string) -> (ok: bool) {
@@ -74,6 +77,38 @@ clean_up :: proc(state: ^Server) {
 	library_save_to_file(state.library, state.paths.library)
 	library_destroy(&state.library)
 	audio_destroy_stream(&state.stream)
+}
+
+queue_files_for_scanning :: proc(state: ^Server, files: []Path) {
+	for file in files {
+		append(&state.scan_queue, file)
+	}
+}
+
+flush_scan_queue :: proc(state: ^Server) {
+	if !_background_scan_is_running(state.background_scan) && len(state.scan_queue) > 0 {
+		_begin_background_scan(&state.background_scan, state.scan_queue[:], state.wake_proc)
+		delete(state.scan_queue)
+		state.scan_queue = nil
+	}
+}
+
+Scan_Progress :: struct {
+	counting_files: bool,
+	input_file_count: int,
+	files_scanned: int,
+}
+
+get_background_scan_progress :: proc(state: Server) -> (progress: Scan_Progress, is_running: bool) {
+	if _background_scan_is_running(state.background_scan) {
+		is_running = true
+		progress.counting_files = !state.background_scan.files_counted
+		progress.files_scanned = len(state.background_scan.output.metadata)
+		progress.input_file_count = state.background_scan.file_count
+		return
+	}
+
+	return
 }
 
 play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_drop_buffer := false) -> bool {
