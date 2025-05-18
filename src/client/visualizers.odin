@@ -17,7 +17,7 @@ import "src:server"
 PEAK_ROUGHNESS :: 15
 SECONDARY_PEAK_ROUGHNESS :: 1
 WINDOW_SIZE :: 8192
-MAX_SPECTRUM_BAND_COUNT :: 60
+MAX_SPECTRUM_BAND_COUNT :: 80
 MAX_OSCILLOSCOPE_SAMPLES :: 16<<10
 
 @private
@@ -53,7 +53,7 @@ _Analysis_State :: struct {
 _init_analysis :: proc(cl: ^Client) {
 	window_sum: f32
 	state := &cl.analysis
-	state.spectrum_bands = 20
+	state.spectrum_bands = 40
 	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
 
 	// Hann window
@@ -235,18 +235,12 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	
 	if imgui.BeginPopupContextWindow() {
 		imgui.SeparatorText("Band count")
-		if imgui.MenuItem("10", nil, state.spectrum_bands == 10) {
-			state.spectrum_bands = 10
-		}
-		if imgui.MenuItem("20", nil, state.spectrum_bands == 20) {
-			state.spectrum_bands = 20
-		}
-		if imgui.MenuItem("40", nil, state.spectrum_bands == 40) {
-			state.spectrum_bands = 40
-		}
-		if imgui.MenuItem("60", nil, state.spectrum_bands == 60) {
-			state.spectrum_bands = 60
-		}
+		if imgui.MenuItem("10", nil, state.spectrum_bands == 10) {state.spectrum_bands = 10}
+		if imgui.MenuItem("20", nil, state.spectrum_bands == 20) {state.spectrum_bands = 20}
+		if imgui.MenuItem("40", nil, state.spectrum_bands == 40) {state.spectrum_bands = 40}
+		if imgui.MenuItem("60", nil, state.spectrum_bands == 60) {state.spectrum_bands = 60}
+		if imgui.MenuItem("80", nil, state.spectrum_bands == 80) {state.spectrum_bands = 80}
+
 		imgui.SeparatorText("Display mode")
 		if imgui.MenuItem("Bars", nil, state.spectrum_display_mode == .Bars) {
 			state.spectrum_display_mode = .Bars
