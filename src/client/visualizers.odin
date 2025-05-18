@@ -14,7 +14,7 @@ import "src:analysis"
 import "src:decoder"
 import "src:server"
 
-PEAK_ROUGHNESS :: 15
+PEAK_ROUGHNESS :: 20
 SECONDARY_PEAK_ROUGHNESS :: 1
 WINDOW_SIZE :: 8192
 MAX_SPECTRUM_BAND_COUNT :: 80

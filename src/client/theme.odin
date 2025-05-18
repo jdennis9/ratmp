@@ -21,6 +21,7 @@ Theme_Custom_Color :: enum {
 Theme :: struct {
 	imgui_colors: [imgui.Col][4]f32,
 	custom_colors: [Theme_Custom_Color][4]f32,
+	gen_params: Theme_Gen_Params,
 }
 
 Theme_Gen_Color :: enum {
@@ -229,7 +230,6 @@ _scan_theme_folder :: proc(client: ^Client) {
 _Theme_Editor_State :: struct {
 	new_theme_name: [64]u8,
 	name_error: [64]u8,
-	gen_params: Theme_Gen_Params,
 }
 
 @private
@@ -320,11 +320,11 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 	imgui.SeparatorText("Accent Colors")
 	{
 		gen: bool
-		gen |= imgui.ColorEdit3("Fg. Primary", &state.gen_params.colors[.FgPrimary])
-		gen |= imgui.ColorEdit3("Fg. Secondary", &state.gen_params.colors[.FgSecondary])
-		gen |= imgui.SliderFloat("Brightness", &state.gen_params.brightness_offset, -1, 1)
+		gen |= imgui.ColorEdit3("Fg. Primary", &theme.gen_params.colors[.FgPrimary])
+		gen |= imgui.ColorEdit3("Fg. Secondary", &theme.gen_params.colors[.FgSecondary])
+		gen |= imgui.SliderFloat("Brightness", &theme.gen_params.brightness_offset, -1, 1)
 		if gen {
-			theme_generate(theme, state.gen_params)
+			theme_generate(theme, theme.gen_params)
 		}
 	}
 
