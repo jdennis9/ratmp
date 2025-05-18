@@ -1,0 +1,3 @@
+[submodule "src/thirdparty/odin-imgui"]
+	path = src/thirdparty/odin-imgui
+	url = https://gitlab.com/jdennis9/odin-imgui.git
