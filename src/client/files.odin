@@ -60,15 +60,17 @@ _async_file_dialog_is_running :: proc(state: _File_Dialog_State) -> bool {return
 _async_file_dialog_get_results :: proc(state: ^_File_Dialog_State, output: ^[dynamic]Path) -> bool {
 	if state.thread == nil || !thread.is_done(state.thread) {return false}
 
-	if len(state.results) == 0 {return false}
+	defer {thread.destroy(state.thread); state.thread = nil}
+	defer {delete(state.results); state.results = nil}
+
+	if len(state.results) == 0 {
+		return false
+	}
 
 	for result in state.results {
 		append(output, result)
 	}
-
-	thread.destroy(state.thread); state.thread = nil
-	delete(state.results); state.results = nil
-
+	
 	return true
 }
 

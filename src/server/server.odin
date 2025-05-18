@@ -204,7 +204,7 @@ Audio_Time_Frame :: struct {
 
 audio_time_frame_from_playback :: proc(
 	state: ^Server, output: [][$WINDOW_SIZE]f32,
-	from_timestamp: time.Tick,
+	from_timestamp: time.Tick
 ) -> (samplerate, channels: int, ok: bool) {
 	time_frame := f32(WINDOW_SIZE)/f32(state.stream.samplerate)
 	assert(time_frame > 0)
@@ -271,17 +271,20 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 		}
 	}
 
+	//first_buffer_length := cpy.buffers[0].sizes[0]
+
 	_deinterlace(input, channels, &channel_data)
 	for ch in 0..<channels {
 		util.rotating_buffer_push(&cpy.buffers[ch], channel_data[ch][:])
 	}
 
-	cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[1]) / f32(samplerate)) * 1e9)
 	cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[2]) / f32(samplerate)) * 1e9)
+	//cpy.timestamp._nsec -= auto_cast((f32(first_buffer_length) / f32(samplerate)) * 1e9)
 }
 
 @(private="file")
 _clear_output_copy_buffer :: proc(state: ^Server) {
+	log.debug("Floob")
 	for &b in state.output_copy.buffers {
 		util.rotating_buffer_reset(&b)
 	}

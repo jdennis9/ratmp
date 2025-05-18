@@ -347,6 +347,7 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 		if imgui.MenuItem("2048") {state.osc_length = 2048}
 		if imgui.MenuItem("4096") {state.osc_length = 4096}
 		if imgui.MenuItem("8192") {state.osc_length = 8192}
+		if imgui.MenuItem("16384") {state.osc_length = 16384}
 		imgui.EndPopup()
 	}
 }
