@@ -17,11 +17,11 @@
 */
 package drag_drop
 
-foreign import lib "../../cpp/cpp.lib"
+foreign import lib "src:bindings/bindings.lib"
 import win "core:sys/windows"
-
 
 @(link_prefix="drag_drop_")
 foreign lib {
-	init :: proc(hwnd: win.HWND, callback: proc(path: cstring)) ---
+    ole_initialize :: proc() -> win.HRESULT ---
+	init :: proc(hwnd: win.HWND, drop: proc(path: cstring)) ---
 }

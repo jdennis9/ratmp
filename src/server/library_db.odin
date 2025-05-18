@@ -91,15 +91,17 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	
 	stmt: ^sqlite.Statement
 
+	sqlite.exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+
 	for md, index in lib.track_metadata {
 		path_buf: [512]u8
 		path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[index], path_buf[:])
 		path_hash := xxhash.XXH3_64_default(transmute([]u8) string(path))
 
-		es := string(cstring(""))
-
 		sqlite.prepare_v2(db, "INSERT INTO tracks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, nil)
 		defer sqlite.finalize(stmt)
+
+		es := string(cstring(""))
 
 		sqlite.bind_int64(stmt, 1, auto_cast path_hash)
 		sqlite.bind_text(stmt, 2, path, -1, nil)
@@ -114,6 +116,8 @@ library_save_to_file :: proc(lib: Library, path: string) {
 		sqlite.bind_int64(stmt, 11, md.values[.DateAdded].(i64) or_else 0)
 		sqlite.step(stmt)
 	}
+
+	sqlite.exec(db, "END TRANSACTION", nil, nil, nil)
 }
 
 library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {

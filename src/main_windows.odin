@@ -7,6 +7,7 @@ import "core:mem"
 import "core:fmt"
 import "core:unicode/utf16"
 import "core:time"
+import "core:sync"
 
 import imgui "thirdparty/odin-imgui"
 import imgui_dx11 "thirdparty/odin-imgui/imgui_impl_dx11"
@@ -15,6 +16,7 @@ import imgui_win32 "thirdparty/odin-imgui/imgui_impl_win32"
 import dx11 "vendor:directx/d3d11"
 import "vendor:directx/dxgi"
 
+import drag_drop "src:bindings/windows_drag_drop"
 import "build"
 import "server"
 import "client"
@@ -23,7 +25,6 @@ DWMA_USE_IMMERSIVE_DARK_MODE :: 20
 TRAY_BUTTON_SHOW :: 1
 TRAY_BUTTON_EXIT :: 2
 
-@(private="file")
 _win32: struct {
 	ctx: runtime.Context,
 	hinstance: win.HINSTANCE,
@@ -44,6 +45,9 @@ _win32: struct {
 		render_target: ^dx11.IRenderTargetView,
 		swapchain: ^dxgi.ISwapChain,
 	},
+
+	drag_drop_payload: [dynamic]server.Path,
+	drag_drop_done: bool,
 }
 
 wake_proc :: proc() {
@@ -72,15 +76,17 @@ server_event_handler :: proc(sv: server.Server, data: rawptr, event: server.Even
 run :: proc() -> bool {
 	@static sv: server.Server
 	@static ui: client.Client
-	
+
 	_win32.ctx = context
 	_win32.hinstance = auto_cast win.GetModuleHandleW(nil)
-	
+
 	imgui_win32.EnableDpiAwareness()
 	
 	wndclass_name := win.L("WINDOW_CLASS")
 	_win32.icon = win.LoadIconA(_win32.hinstance, "WindowIconLight")
 	
+	drag_drop.ole_initialize()
+
 	// Create window
 	win.RegisterClassExW(&win.WNDCLASSEXW{
 		hInstance = _win32.hinstance,
@@ -109,8 +115,9 @@ run :: proc() -> bool {
 	win.ShowWindow(_win32.hwnd, win.SW_HIDE)
 	add_tray_icon()
 	defer remove_tray_icon()
+	drag_drop.init(_win32.hwnd, drag_drop_drop)
 	_win32.dpi_scale = imgui_win32.GetDpiScaleForHwnd(_win32.hwnd)
-	
+
 	// Video
 	_init_dx11()
 	defer _clean_up_dx11()
@@ -160,6 +167,14 @@ run :: proc() -> bool {
 		}
 
 		if !_win32.running {break}
+
+		if _win32.drag_drop_done {
+			log.debug("Dropped", len(_win32.drag_drop_payload), "files")
+			server.queue_files_for_scanning(&sv, _win32.drag_drop_payload[:])
+			delete(_win32.drag_drop_payload)
+			_win32.drag_drop_payload = nil
+			_win32.drag_drop_done = false
+		}
 
 		_update_window_size()
 
@@ -522,5 +537,21 @@ remove_tray_icon :: proc() {
 
 	if _win32.tray_popup != nil {
 		win.DestroyMenu(_win32.tray_popup)
+	}
+}
+
+import "src:util"
+
+drag_drop_drop :: proc "c" (path: cstring) {
+	context = _win32.ctx
+	if _win32.drag_drop_done {return}
+	else if path == nil {
+		_win32.drag_drop_done = true
+	}
+	else {
+		buf: server.Path
+		util.copy_string_to_buf(buf[:], string(path))
+		append(&_win32.drag_drop_payload, buf)
+		log.debug(path)
 	}
 }

@@ -41,8 +41,6 @@ audio_create_stream :: proc(
 	callback_data: rawptr
 ) -> (stream: Audio_Stream, ok: bool) {
 	if _device_enumerator == nil {
-		win.CoInitializeEx(nil, .MULTITHREADED)
-
 		win32_check(
 			win.CoCreateInstance(
 				&wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL,
@@ -154,6 +152,8 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 	buffer: ^u8
 	buffer_duration_ms: win.DWORD
 	status := Audio_Callback_Status.Continue
+
+	win.CoInitializeEx()
 
 	defer if !ok {
 		win.SetEvent(stream.ready_event)
