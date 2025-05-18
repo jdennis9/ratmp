@@ -75,7 +75,7 @@ _playlist_table_update_sort_spec :: proc(out_spec: ^server.Playlist_Sort_Spec) -
 	return true
 }
 
-_playlist_table_row :: proc(table: ^_Playlist_Table, sv: Server, theme: Theme) -> (not_done: bool) {
+_playlist_table_row :: proc(cl: ^Client, table: ^_Playlist_Table, sv: Server) -> (not_done: bool) {
 	if table._pos >= table._max {
 		if !imgui.ListClipper_Step(table._list_clipper) {
 			return false
@@ -94,7 +94,7 @@ _playlist_table_row :: proc(table: ^_Playlist_Table, sv: Server, theme: Theme) -
 	imgui.TableNextRow()
 
 	if sv.current_playlist_id == table.playlist.id {
-		imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
+		imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(cl.theme.custom_colors[.PlayingHighlight]))
 	}
 
 	if imgui.TableSetColumnIndex(1) {
@@ -121,6 +121,11 @@ _playlist_table_row :: proc(table: ^_Playlist_Table, sv: Server, theme: Theme) -
 			table.playlist.id == table.selection^, {.SpanAllColumns}
 		) {
 			table.selection^ = table.playlist.id
+		}
+
+		if imgui.BeginDragDropSource() {
+			_set_track_drag_drop_payload(cl, table.playlist.tracks[:])
+			imgui.EndDragDropSource()
 		}
 	}
 

@@ -97,6 +97,8 @@ Client :: struct {
 
 	layouts: _Layout_State,
 
+	track_drag_drop_payload: []Track_ID,
+
 	wake_proc: proc(),
 }
 
@@ -289,7 +291,7 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 				server.sort_library_tracks(sv.library, client.library_sort_spec)
 			}
 
-			for _track_table_row(sv.library, &table, client.theme) {
+			for _track_table_row(client, sv.library, &table) {
 				if _play_track_input_pressed() {
 					server.play_playlist(sv, sv.library.track_ids[:], {}, table.track_id)
 				}
@@ -313,10 +315,10 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 		defer _process_track_context_menu_results(client, sv, context_menu)
 
 		if table, show_table := _begin_track_table(
-			"Queue", {}, sv.current_track_id,
+			"Queue", {serial=max(u32)}, sv.current_track_id,
 			sv.queue[:], &client.selection
 		); show_table {
-			for _track_table_row(sv.library, &table, client.theme) {
+			for _track_table_row(client, sv.library, &table) {
 				if _play_track_input_pressed() {
 					server.set_queue_position(sv, table.track_index)
 				}
@@ -759,4 +761,19 @@ _imgui_settings_write_proc :: proc "c" (
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
 		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)client.window_state[window_id].show)
 	}
+}
+
+@private
+_set_track_drag_drop_payload :: proc(cl: ^Client, tracks: []Track_ID) {
+	log.debug("Set payload")
+	delete(cl.track_drag_drop_payload)
+	cl.track_drag_drop_payload = slice.clone(tracks)
+	imgui.SetDragDropPayload("TRACKS", nil, 0)
+	imgui.SetTooltip("%d tracks", i32(len(tracks)))
+}
+
+@private
+_get_track_drag_drop_payload :: proc(cl: ^Client) -> (tracks: []Track_ID, have_payload: bool) {
+	payload := imgui.AcceptDragDropPayload("TRACKS")
+	return cl.track_drag_drop_payload, payload != nil
 }

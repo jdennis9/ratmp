@@ -98,7 +98,7 @@ _track_table_update_sort_spec :: proc(out_spec: ^server.Track_Sort_Spec) -> bool
 	return false
 }
 
-_track_table_row :: proc(lib: server.Library, it: ^_Track_Table, theme: Theme) -> (not_done: bool) {
+_track_table_row :: proc(cl: ^Client, lib: server.Library, it: ^_Track_Table) -> (not_done: bool) {
 	if it._pos >= it._max {
 		if !imgui.ListClipper_Step(it._list_clipper) {
 			return false
@@ -144,7 +144,7 @@ _track_table_row :: proc(lib: server.Library, it: ^_Track_Table, theme: Theme) -
 	
 	// Highlight track if it's playing
 	if it.track_id == it.current_playing_track_id {
-		imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
+		imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(cl.theme.custom_colors[.PlayingHighlight]))
 	}
 	
 	_number_column(track, .Year)
@@ -177,13 +177,15 @@ _track_table_row :: proc(lib: server.Library, it: ^_Track_Table, theme: Theme) -
 		title := strings.unsafe_string_to_cstring(track.values[.Title].(string) or_else string(cstring("")))
 		select: bool
 		keep_selection: bool
+		selected := it.selection.playlist_id == it.playlist_id && slice.contains(it.selection.tracks[:], it.track_id)
 
-		select |= imgui.Selectable(title, slice.contains(it.selection.tracks[:], it.track_id), {.SpanAllColumns})
+		select |= imgui.Selectable(title, selected, {.SpanAllColumns})
 		if imgui.IsItemClicked(.Right) || imgui.IsItemClicked(.Middle) {
 			keep_selection = true
 			select = true
 		}
 
+		// Selection
 		if select && it.selection != nil {
 			shift := imgui.IsKeyDown(.ImGuiMod_Shift)
 			ctrl := imgui.IsKeyDown(.ImGuiMod_Ctrl)
@@ -198,6 +200,12 @@ _track_table_row :: proc(lib: server.Library, it: ^_Track_Table, theme: Theme) -
 			else {
 				_selection_add(it.selection, it.playlist_id, it.track_id)
 			}
+		}
+
+		// Drag-drop
+		if imgui.BeginDragDropSource() {
+			_set_track_drag_drop_payload(cl, it.selection.tracks[:])
+			imgui.EndDragDropSource()
 		}
 	}
 	else {

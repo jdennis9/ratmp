@@ -12,7 +12,7 @@ _Playlist_List_Window :: struct {
 }
 
 _show_playlist_list_window :: proc(
-	client: ^Client, sv: ^Server,
+	cl: ^Client, sv: ^Server,
 	state: ^_Playlist_List_Window, cat: ^server.Playlist_List,
 	allow_edit := false
 ) {
@@ -58,7 +58,7 @@ _show_playlist_list_window :: proc(
 				server.playlist_list_sort(cat^, sort_spec)
 			}
 
-			for _playlist_table_row(&table, sv^, client.theme) {
+			for _playlist_table_row(cl, &table, sv^) {
 				// Play
 				if _play_track_input_pressed() {
 					server.play_playlist(sv, table.playlist.tracks[:], table.playlist.id)
@@ -71,6 +71,14 @@ _show_playlist_list_window :: proc(
 						want_delete_playlist = table.playlist.id
 					}
 					imgui.EndPopup()
+				}
+
+				if allow_edit && imgui.BeginDragDropTarget() {
+					payload, have_payload := _get_track_drag_drop_payload(cl)
+					if have_payload {
+						server.playlist_add_tracks(table.playlist, sv.library, payload)
+					}
+					imgui.EndDragDropTarget()
 				}
 			}
 
@@ -89,25 +97,25 @@ _show_playlist_list_window :: proc(
 	// Show selected playlist tracks
 	if list_found && imgui.TableSetColumnIndex(1) {
 		context_menu: _Track_Context_Menu_Result
-		defer _process_track_context_menu_results(client, sv, context_menu, client.selection.tracks[:])
+		defer _process_track_context_menu_results(cl, sv, context_menu, cl.selection.tracks[:])
 
 		want_remove_selection := false
 		list := &cat.lists[list_index]
 		playlist_id := cat.list_ids[list_index]
-		if table, show_table := _begin_track_table("##tracks", playlist_id, sv.current_track_id, list.tracks[:], &client.selection); show_table {
+		if table, show_table := _begin_track_table("##tracks", playlist_id, sv.current_track_id, list.tracks[:], &cl.selection); show_table {
 			sort_spec: server.Track_Sort_Spec
 
 			if _track_table_update_sort_spec(&sort_spec) {
 				server.sort_tracks(sv.library, table.tracks[:], sort_spec)
 			}
 
-			for _track_table_row(sv.library, &table, client.theme) {
+			for _track_table_row(cl, sv.library, &table) {
 				if _play_track_input_pressed() {
 					server.play_playlist(sv, table.tracks, playlist_id, table.track_id)
 				}
 
 				if imgui.BeginPopupContextItem() {
-					_show_generic_track_context_menu_items(client, sv, table.track_id, table.metadata, &context_menu)
+					_show_generic_track_context_menu_items(cl, sv, table.track_id, table.metadata, &context_menu)
 					if allow_edit {
 						imgui.Separator()
 						if imgui.MenuItem("Remove") {
@@ -122,7 +130,7 @@ _show_playlist_list_window :: proc(
 		}
 
 		if allow_edit && want_remove_selection {
-			server.playlist_remove_tracks(list, sv.library, client.selection.tracks[:])
+			server.playlist_remove_tracks(list, sv.library, cl.selection.tracks[:])
 		}
 	}
 }
