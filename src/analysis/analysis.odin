@@ -139,7 +139,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 	}
 }
 
-spectrum_analyzer_delete :: proc(state: ^Spectrum_Analyzer) {
+spectrum_analyzer_destroy :: proc(state: ^Spectrum_Analyzer) {
 	delete(state.buffer)
 	fftw.destroy_plan(state.plan)
 }

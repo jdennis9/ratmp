@@ -50,7 +50,7 @@ _Analysis_State :: struct {
 }
 
 @private
-_init_analysis :: proc(cl: ^Client) {
+_analysis_init :: proc(cl: ^Client) {
 	window_sum: f32
 	state := &cl.analysis
 	state.spectrum_bands = 40
@@ -67,6 +67,12 @@ _init_analysis :: proc(cl: ^Client) {
 	}
 
 	analysis.spectrum_analyzer_init(&state.spectrum_analyzer, WINDOW_SIZE, 1/window_sum)
+}
+
+@private
+_analysis_destroy :: proc(cl: ^Client) {
+	state := &cl.analysis
+	analysis.spectrum_analyzer_destroy(&state.spectrum_analyzer)
 }
 
 @private

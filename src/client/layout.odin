@@ -63,6 +63,17 @@ _scan_layouts_folder :: proc(client: ^Client) {
 	}
 }
 
+_layouts_destroy :: proc(client: ^Client) {
+	state := &client.layouts
+	for name in state.layout_names {
+		delete(name)
+	}
+	delete(state.layout_names)
+	if state.free_layout_after_load && state.layout_to_load != nil {
+		delete(state.layout_to_load)
+	}
+}
+
 _update_layout :: proc(client: ^Client) {
 	state := &client.layouts
 

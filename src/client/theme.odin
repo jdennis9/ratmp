@@ -204,7 +204,7 @@ theme_path_from_name :: proc(client: Client, name: string, allocator: runtime.Al
 }
 
 @private
-_scan_theme_folder :: proc(client: ^Client) {
+_themes_init :: proc(client: ^Client) {
 	if !os2.exists(client.paths.theme_folder) {
 		os2.make_directory_all(client.paths.theme_folder)
 	}
@@ -225,6 +225,12 @@ _scan_theme_folder :: proc(client: ^Client) {
 		name := filepath.stem(filepath.base(file.fullpath))
 		append(&client.theme_names, strings.clone_to_cstring(name))
 	}
+}
+
+@private
+_themes_destroy :: proc(client: ^Client) {
+	for name in client.theme_names {delete(name)}
+	delete(client.theme_names)
 }
 
 _Theme_Editor_State :: struct {
@@ -276,7 +282,7 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 			else {
 				theme_save_from_name(client^, theme^, string(name))
 				set_theme(client, theme^, string(name))
-				_scan_theme_folder(client)
+				_themes_init(client)
 				imgui.CloseCurrentPopup()
 				for &s in state.name_error {s = 0}
 				for &s in state.new_theme_name {s = 0}
@@ -288,7 +294,7 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 
 	imgui.SameLine()
 	if imgui.Button("Refresh themes") {
-		_scan_theme_folder(client)
+		_themes_init(client)
 	}
 
 	if imgui.Button("New") {

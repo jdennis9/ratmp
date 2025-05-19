@@ -145,12 +145,12 @@ init :: proc(
 	client.paths.persistent_state = filepath.join({data_dir, "settings.json"}, context.allocator)
 	client.paths.layout_folder = filepath.join({data_dir, "Layouts"}, context.allocator)
 
-	_scan_theme_folder(client)
+	_themes_init(client)
 	theme_set_defaults(&client.theme)
 	_scan_layouts_folder(client)
 
 	// Analysis
-	_init_analysis(client)
+	_analysis_init(client)
 
 	// Set defaults
 	client.enable_media_controls = true
@@ -165,7 +165,13 @@ destroy :: proc(client: ^Client) {
 	delete(client.selection.tracks)
 	delete(client.current_theme_name)
 	delete(client.background.path)
+	delete(client.paths.layout_folder)
+	delete(client.paths.persistent_state)
+	delete(client.paths.theme_folder)
 	_async_dialog_destroy(&client.dialogs.remove_missing_files)
+	_themes_destroy(client)
+	_layouts_destroy(client)
+	_analysis_destroy(client)
 }
 
 handle_events :: proc(client: ^Client, sv: ^Server) {

@@ -150,11 +150,12 @@ run :: proc() -> bool {
 		msg: win.MSG
 		frame_start := time.tick_now()
 		defer prev_frame_start = frame_start
-
+		
+		paused := server.is_paused(sv)
 		window_is_visible := win.IsWindowVisible(_win32.hwnd) && !win.IsIconic(_win32.hwnd)
 		
 		// Handle events
-		if window_is_visible && !obscured {
+		if window_is_visible && !obscured && !paused {
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
 				win.TranslateMessage(&msg)
 				win.DispatchMessageW(&msg)
@@ -169,7 +170,6 @@ run :: proc() -> bool {
 		if !_win32.running {break}
 
 		if _win32.drag_drop_done {
-			log.debug("Dropped", len(_win32.drag_drop_payload), "files")
 			server.queue_files_for_scanning(&sv, _win32.drag_drop_payload[:])
 			delete(_win32.drag_drop_payload)
 			_win32.drag_drop_payload = nil
