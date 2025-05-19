@@ -9,6 +9,7 @@ import "src:server"
 _Playlist_List_Window :: struct {
 	selected_id: Playlist_ID,
 	new_playlist_name: [128]u8,
+	track_filter: _Track_Filter_State,
 }
 
 _show_playlist_list_window :: proc(
@@ -102,7 +103,11 @@ _show_playlist_list_window :: proc(
 		want_remove_selection := false
 		list := &cat.lists[list_index]
 		playlist_id := cat.list_ids[list_index]
-		if table, show_table := _begin_track_table("##tracks", playlist_id, sv.current_track_id, list.tracks[:], &cl.selection); show_table {
+
+		// Filter
+		display_tracks := _track_filter_update(&state.track_filter, sv.library, list.tracks[:], playlist_id, list.serial)
+		
+		if table, show_table := _begin_track_table("##tracks", playlist_id, sv.current_track_id, display_tracks, &cl.selection); show_table {
 			sort_spec: server.Track_Sort_Spec
 
 			if _track_table_update_sort_spec(&sort_spec) {

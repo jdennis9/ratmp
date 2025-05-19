@@ -31,12 +31,11 @@ Server :: struct {
 	queue_is_shuffled: bool,
 
 	output_copy: struct {
-		timestamp: time.Tick,
 		channels, samplerate: int,
 		// The second number for the struct dictates how many samples can
 		// be retrieved for analysis windows. N means (N*(samplerate/2)) samples can
 		// be used at a time
-		buffers: [MAX_OUTPUT_CHANNELS]util.Rotating_Buffer(f32, 3),
+		buffers: [MAX_OUTPUT_CHANNELS]util.Rotating_Buffer(f32, 4),
 	},
 
 	paths: struct {
@@ -250,8 +249,10 @@ audio_time_frame_from_playback :: proc(
 	cpy := state.output_copy
 	if cpy.channels == 0 || len(cpy.buffers[0].data) == 0 {return}
 
-	time_start := cast(f32) time.duration_seconds(time.tick_diff(cpy.timestamp, from_timestamp))
+	time_start := cast(f32) time.duration_seconds(time.tick_diff(cpy.buffers[0].timestamps[min(2, cpy.buffers[0].max_block)], from_timestamp))
 	time_end := time_start + time_frame
+
+	//log.debug(time_start, time_end)
 
 	//assert(time_start >= 0)
 	if time_start < 0 {return}
@@ -286,18 +287,20 @@ audio_time_frame_delete :: proc(time_frame: Audio_Time_Frame) {
 	}
 }
 
+// This is being called on the audio thread!
 @(private="file")
 _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samplerate: int) {
 	cpy := &state.output_copy
-	
+	timestamp, have_timestamp := audio_get_buffer_timestamp(&state.stream)
+	// Should never happen but just in case
+	if !have_timestamp {log.error("Failed to get buffer timestamp!"); return}
+
 	if cpy.channels != channels || cpy.samplerate != samplerate {
 		_clear_output_copy_buffer(state)
 	}
 
 	cpy.channels = channels
 	cpy.samplerate = samplerate
-
-	cpy.timestamp = time.tick_now()
 
 	channel_data: [MAX_OUTPUT_CHANNELS][dynamic]f32
 	defer {
@@ -310,10 +313,10 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 
 	_deinterlace(input, channels, &channel_data)
 	for ch in 0..<channels {
-		util.rotating_buffer_push(&cpy.buffers[ch], channel_data[ch][:])
+		util.rotating_buffer_push(&cpy.buffers[ch], channel_data[ch][:], timestamp)
 	}
 
-	cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[2]) / f32(samplerate)) * 1e9)
+	//cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[2]) / f32(samplerate)) * 1e9)
 	//cpy.timestamp._nsec -= auto_cast((f32(first_buffer_length) / f32(samplerate)) * 1e9)
 }
 

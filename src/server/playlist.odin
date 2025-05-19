@@ -14,6 +14,7 @@ Playlist :: struct {
 	time_created: i64,
 	id: Playlist_ID,
 	tracks: [dynamic]Track_ID,
+	serial: uint,
 	dirty: bool,
 }
 
@@ -53,6 +54,7 @@ playlist_add_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_I
 		md := library_get_track_metadata(lib, track) or_continue
 		playlist_add_track(playlist, track, md)
 	}
+	playlist.serial += 1
 }
 
 playlist_add_track :: proc(playlist: ^Playlist, id: Track_ID, metadata: Track_Metadata, assume_unique := false) {
@@ -61,6 +63,7 @@ playlist_add_track :: proc(playlist: ^Playlist, id: Track_ID, metadata: Track_Me
 		playlist.dirty = true
 		playlist.duration += metadata.values[.Duration].(i64) or_else 0
 	}
+	playlist.serial += 1
 }
 
 playlist_remove_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_ID) {
@@ -70,6 +73,7 @@ playlist_remove_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Trac
 		playlist.duration -= md.values[.Duration].(i64) or_else 0
 		ordered_remove(&playlist.tracks, index_in_playlist)
 	}
+	playlist.serial += 1
 	playlist.dirty = true
 }
 

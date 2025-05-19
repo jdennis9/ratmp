@@ -13,6 +13,7 @@ import "core:log"
 import "core:mem"
 import "core:time"
 import "core:math/rand"
+import "core:unicode"
 
 import "src:bindings/taglib"
 import "src:path_pool"
@@ -519,25 +520,6 @@ delete_track_set :: proc(set: ^Track_Set) {
 	mem.dynamic_arena_destroy(&set.string_arena)
 }
 
-@private
-Json_Track :: struct {
-	path: string,
-	artist: string,
-	title: string,
-	album: string,
-	genre: string,
-	duration: i64,
-	bitrate: i64,
-	track_number: i64,
-	year: i64,
-	date_added: i64,
-}
-
-@private
-Json_Data :: struct {
-	tracks: []Json_Track,
-}
-
 clone_track_metadata :: proc(src: Track_Metadata, string_allocator: runtime.Allocator) -> (dst: Track_Metadata) {
 	for component in Metadata_Component {
 		switch v in src.values[component] {
@@ -551,4 +533,62 @@ clone_track_metadata :: proc(src: Track_Metadata, string_allocator: runtime.Allo
 	}
 
 	return
+}
+
+Track_Filter_Spec :: struct {
+	filter: string,
+	components: bit_set[Metadata_Component],
+}
+
+@private
+_filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
+	if len(utf8_str) == 0 {return false}
+
+	str_rune_buf: [256]rune
+	str := util.decode_utf8_to_runes(str_rune_buf[:], utf8_str)
+	filter_len := len(filter)
+	
+	for s in 0..<len(str) {
+		fail := false
+
+		if s + filter_len >= len(str) {
+			break
+		}
+
+		for f in 0..<len(filter) {
+			if unicode.to_lower(str[s+f]) != unicode.to_lower(filter[f]) {
+				fail = true
+				break
+			}
+		}
+
+		if !fail {return true}
+	}
+
+	return false
+}
+
+filter_track_from_runes :: proc(lib: Library, spec: Track_Filter_Spec, track_id: Track_ID, filter: []rune) -> bool {
+	md := library_get_track_metadata(lib, track_id) or_return
+	for component in Metadata_Component {
+		if component in spec.components {
+			val := md.values[component].(string) or_continue
+			if _filter_track_string(val, filter) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+filter_tracks :: proc(lib: Library, spec: Track_Filter_Spec, input: []Track_ID, output: ^[dynamic]Track_ID) {
+	filter_rune_buf: [512]rune
+	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], spec.filter)
+
+	for track in input {
+		if filter_track_from_runes(lib, spec, track, filter_runes) {
+			append(output, track)
+		}
+	}
 }

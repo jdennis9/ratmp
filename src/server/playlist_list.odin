@@ -30,6 +30,7 @@ playlist_list_join_metadata :: proc(cat: ^Playlist_List, library: Library, compo
 
 		new_list := playlist_list_add_new(cat, value, dst_id) or_continue
 		playlist_add_track(new_list, library.track_ids[track_index], md)
+		new_list.serial = library.serial
 	}
 }
 

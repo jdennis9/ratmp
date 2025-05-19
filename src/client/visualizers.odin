@@ -18,7 +18,7 @@ PEAK_ROUGHNESS :: 20
 SECONDARY_PEAK_ROUGHNESS :: 1
 WINDOW_SIZE :: 8192
 MAX_SPECTRUM_BAND_COUNT :: 80
-MAX_OSCILLOSCOPE_SAMPLES :: 16<<10
+MAX_OSCILLOSCOPE_SAMPLES :: 32<<10
 
 @private
 _Spectrum_Display_Mode :: enum {
@@ -110,6 +110,7 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	// Oscilloscope
 	if state.need_update_osc {
 		if state.osc_length == 0 {state.osc_length = 4096}
+		state.need_update_osc = false
 		server.audio_time_frame_from_playback(sv, state.osc_input[:], tick)
 	}
 
@@ -333,8 +334,20 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 	state.need_update_osc = true
 	if state.osc_length == 0 {return}
 	size := imgui.GetContentRegionAvail()
-	imgui.PlotLines("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, -1, 1, size)
+	//imgui.PlotLines("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, -1, 1, size)
 	//imgui.PlotHistogram("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, 0, 1, size)
+
+	color := imgui.GetColorU32(.PlotLines)
+	drawlist := imgui.GetWindowDrawList()
+	gap := size.x / f32(state.osc_length)
+	y_off := size.y * 0.5
+	cursor := imgui.GetCursorScreenPos()
+
+	for i in 0..<(state.osc_length-1) {
+		p1 := cursor + {f32(i) * gap, y_off + size.y * state.osc_input[0][i]}
+		p2 := cursor + {f32(i+1) * gap, y_off + size.y * state.osc_input[0][i+1]}
+		imgui.DrawList_AddLine(drawlist, p1, p2, color)
+	}
 
 	if imgui.BeginPopupContextWindow() {
 		imgui.SeparatorText("Samples")

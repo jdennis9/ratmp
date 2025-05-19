@@ -41,6 +41,8 @@ Client :: struct {
 
 	selected_user_playlist_id: Playlist_ID,
 
+	library_track_filter: _Track_Filter_State,
+
 	tick_last_frame: time.Tick,
 	frame_count: int,
 	selection: _Selection,
@@ -280,9 +282,11 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 		context_menu: _Track_Context_Menu_Result
 		defer _process_track_context_menu_results(client, sv, context_menu)
 
+		display_tracks := _track_filter_update(&client.library_track_filter, sv.library, sv.library.track_ids[:], {}, sv.library.serial)
+
 		if table, show_table := _begin_track_table(
 			"Library", {}, sv.current_track_id,
-			sv.library.track_ids[:], &client.selection
+			display_tracks, &client.selection
 		); show_table {
 			if _track_table_update_sort_spec(&client.library_sort_spec) {
 				server.sort_library_tracks(sv.library, client.library_sort_spec)
@@ -417,6 +421,7 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	width, height: i32
 	delete(client.background.path)
+	client.background.path = ""
 
 	client.destroy_texture_proc(client.background.texture)
 	client.background.texture = nil

@@ -4,6 +4,7 @@ import win "core:sys/windows"
 import "core:thread"
 import "core:log"
 import "core:sync"
+import "core:time"
 //import "core:fmt"
 
 import "src:bindings/wasapi"
@@ -23,6 +24,7 @@ _WASAPI_Stream :: struct {
 	event_callback: Audio_Event_Callback,
 	callback_data: rawptr,
 	callback_status: Audio_Callback_Status,
+	buffer_timestamp: time.Tick,
 }
 
 Audio_Stream :: struct {
@@ -123,6 +125,14 @@ audio_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
 	if stream._wasapi == nil || stream._wasapi.volume_controller == nil {return 0}
 	stream._wasapi.volume_controller->GetMasterVolume(&volume)
 	return
+}
+
+audio_get_buffer_timestamp :: proc(stream: ^Audio_Stream) -> (time.Tick, bool) {
+	sync.lock(&stream.lock)
+	defer sync.unlock(&stream.lock)
+
+	if stream._wasapi == nil {return {}, false}
+	return stream._wasapi.buffer_timestamp, true
 }
 
 audio_destroy_stream :: proc(stream: ^Audio_Stream) {
@@ -254,6 +264,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 			stream.callback_data, (cast([^]f32)buffer)[:i32(avail_frames)*stream.channels],
 			stream.channels, stream.samplerate
 		)
+		stream.buffer_timestamp = time.tick_now()
 		render_client->ReleaseBuffer(avail_frames, 0)
 	}
 	

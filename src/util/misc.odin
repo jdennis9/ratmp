@@ -40,3 +40,19 @@ load_json :: proc(obj: ^$T, path: string, allocator := context.allocator) -> (ok
 	json.unmarshal(data, obj, allocator=allocator)
 	return true
 }
+
+decode_utf8_to_runes :: proc(buf: []rune, str: string) -> []rune {
+	n: int
+	m := len(buf)
+
+	for r in str {
+		if n >= m {
+			break
+		}
+
+		buf[n] = r
+		n += 1
+	}
+
+	return buf[:n]
+}
