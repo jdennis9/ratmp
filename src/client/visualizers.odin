@@ -50,9 +50,8 @@ _Analysis_State :: struct {
 }
 
 @private
-_analysis_init :: proc(cl: ^Client) {
+_analysis_init :: proc(state: ^_Analysis_State) {
 	window_sum: f32
-	state := &cl.analysis
 	state.spectrum_bands = 40
 	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
 
@@ -70,8 +69,7 @@ _analysis_init :: proc(cl: ^Client) {
 }
 
 @private
-_analysis_destroy :: proc(cl: ^Client) {
-	state := &cl.analysis
+_analysis_destroy :: proc(state: ^_Analysis_State) {
 	analysis.spectrum_analyzer_destroy(&state.spectrum_analyzer)
 }
 

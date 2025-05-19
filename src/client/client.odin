@@ -116,6 +116,7 @@ init :: proc(
 	for info, window in _WINDOW_INFO {
 		client.window_state[window].show = .AlwaysShow in info.flags
 	}
+
 	// Imgui settings handler
 	{
 		handler := imgui.SettingsHandler {
@@ -132,7 +133,7 @@ init :: proc(
 			imgui.LoadIniSettingsFromDisk(io.IniFilename)
 		}
 		else {
-			_load_layout_from_memory(client, DEFAULT_LAYOUT_INI, false)
+			_load_layout_from_memory(&client.layouts, DEFAULT_LAYOUT_INI, false)
 		}
 	}
 
@@ -147,10 +148,10 @@ init :: proc(
 
 	_themes_init(client)
 	theme_set_defaults(&client.theme)
-	_scan_layouts_folder(client)
+	_layouts_init(&client.layouts, data_dir)
 
 	// Analysis
-	_analysis_init(client)
+	_analysis_init(&client.analysis)
 
 	// Set defaults
 	client.enable_media_controls = true
@@ -170,12 +171,12 @@ destroy :: proc(client: ^Client) {
 	delete(client.paths.theme_folder)
 	_async_dialog_destroy(&client.dialogs.remove_missing_files)
 	_themes_destroy(client)
-	_layouts_destroy(client)
-	_analysis_destroy(client)
+	_layouts_destroy(&client.layouts)
+	_analysis_destroy(&client.analysis)
 }
 
 handle_events :: proc(client: ^Client, sv: ^Server) {
-	_update_layout(client)
+	_update_layout(&client.layouts, &client.window_state)
 
 	if client.media_controls.enabled {
 		if client.media_controls.display_track != sv.current_track_id {
@@ -496,7 +497,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	defer imgui.EndMainMenuBar()
 
 	save_layout_popup_id := imgui.GetID("save_layout")
-	_show_save_layout_popup(client, save_layout_popup_id)
+	_show_save_layout_popup(&client.layouts, save_layout_popup_id)
 
 	// Menus
 	if imgui.BeginMenu("File") {
@@ -554,7 +555,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	}
 
 	if imgui.BeginMenu("Layout") {
-		_show_layout_menu_items(client, save_layout_popup_id)
+		_show_layout_menu_items(&client.layouts, save_layout_popup_id)
 		imgui.EndMenu()
 	}
 
