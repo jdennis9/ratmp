@@ -32,10 +32,8 @@ Server :: struct {
 
 	output_copy: struct {
 		channels, samplerate: int,
-		// The second number for the struct dictates how many samples can
-		// be retrieved for analysis windows. N means (N*(samplerate/2)) samples can
-		// be used at a time
-		buffers: [MAX_OUTPUT_CHANNELS]util.Rotating_Buffer(f32, 4),
+		prev_buffer: [dynamic]f32,
+		buffers: [MAX_OUTPUT_CHANNELS]util.Ring_Buffer(f32, 64<<10),
 	},
 
 	paths: struct {
@@ -67,6 +65,10 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 
 	library_load_from_file(&state.library, state.paths.library)
 	library_scan_playlists(&state.library)
+
+	for &b in state.output_copy.buffers {
+		util.rb_init(&b)
+	}
 
 	ok = true
 	return
@@ -238,7 +240,7 @@ Audio_Time_Frame :: struct {
 
 audio_time_frame_from_playback :: proc(
 	state: ^Server, output: [][$WINDOW_SIZE]f32,
-	from_timestamp: time.Tick
+	from_timestamp: time.Tick, delta: f32,
 ) -> (samplerate, channels: int, ok: bool) {
 	time_frame := f32(WINDOW_SIZE)/f32(state.stream.samplerate)
 	assert(time_frame > 0)
@@ -246,7 +248,16 @@ audio_time_frame_from_playback :: proc(
 	sync.lock(&state.playback_lock)
 	defer sync.unlock(&state.playback_lock)
 
-	cpy := state.output_copy
+	cpy := &state.output_copy
+	frame_delta := int(math.ceil(f32(cpy.samplerate) * delta))
+
+	for ch in 0..<cpy.channels {
+		util.rb_consume(&cpy.buffers[ch], output[ch][:], frame_delta)
+	}
+
+	return cpy.samplerate, cpy.channels, true
+
+	/*cpy := state.output_copy
 	if cpy.channels == 0 || len(cpy.buffers[0].data) == 0 {return}
 
 	time_start := cast(f32) time.duration_seconds(time.tick_diff(cpy.buffers[0].timestamps[min(2, cpy.buffers[0].max_block)], from_timestamp))
@@ -276,7 +287,7 @@ audio_time_frame_from_playback :: proc(
 	}
 
 	ok = true
-	return
+	return*/
 }
 
 import "core:fmt"
@@ -302,18 +313,17 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 	cpy.channels = channels
 	cpy.samplerate = samplerate
 
-	channel_data: [MAX_OUTPUT_CHANNELS][dynamic]f32
-	defer {
+	/*if len(cpy.prev_buffer) > 0 {
 		for ch in 0..<channels {
-			delete(channel_data[ch])
+			util.rb_produce(&cpy.buffers[0], cpy.prev_buffer[:], channels, ch)
 		}
 	}
 
-	//first_buffer_length := cpy.buffers[0].sizes[0]
+	resize(&cpy.prev_buffer, len(input)/2)
+	copy(cpy.prev_buffer[:], input[len(input)/2:])*/
 
-	_deinterlace(input, channels, &channel_data)
 	for ch in 0..<channels {
-		util.rotating_buffer_push(&cpy.buffers[ch], channel_data[ch][:], timestamp)
+		util.rb_produce(&cpy.buffers[ch], input[:], channels, ch)
 	}
 
 	//cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[2]) / f32(samplerate)) * 1e9)
@@ -324,7 +334,7 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 _clear_output_copy_buffer :: proc(state: ^Server) {
 	log.debug("Floob")
 	for &b in state.output_copy.buffers {
-		util.rotating_buffer_reset(&b)
+		util.rb_reset(&b)
 	}
 }
 

@@ -7,6 +7,14 @@ import "src:bindings/fftw"
 
 import "src:decoder"
 
+calc_peak :: proc(samples: []f32) -> f32 {
+	peak: f32 = 0
+	for s in samples {
+		peak = max(abs(s), peak)
+	}
+	return peak
+}
+
 calc_peaks :: proc(samples: [][$N]f32, channel_peaks: []f32) {
 	assert(len(samples) == len(channel_peaks))
 	channels := len(channel_peaks)
@@ -131,7 +139,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 		if freq > frequencies[band] {band = min(band + 1, len(output)-1)}
 	
 		d := glm.dot(frame, frame)
-		if d <= 10 {continue}
+		if d <= 5 {continue}
 		// @TODO: Figure out good scaling for this
 		mag := log10(d) * scale_factor * 1500
 

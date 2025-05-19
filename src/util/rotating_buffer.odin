@@ -60,7 +60,7 @@ rotating_buffer_push :: proc(b: ^Rotating_Buffer($T, $N), data: []T, timestamp: 
 	b.push_index += 1
 }
 
-import "core:testing"
+/*import "core:testing"
 import "core:fmt"
 
 @test
@@ -99,4 +99,4 @@ test_rotating_buffer :: proc(t: ^testing.T) {
 		rotating_buffer_push(&buf, f)
 		fmt.println(buf.data)
 	}*/
-}
+}*/

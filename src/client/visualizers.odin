@@ -18,7 +18,7 @@ PEAK_ROUGHNESS :: 20
 SECONDARY_PEAK_ROUGHNESS :: 1
 WINDOW_SIZE :: 8192
 MAX_SPECTRUM_BAND_COUNT :: 80
-MAX_OSCILLOSCOPE_SAMPLES :: 32<<10
+MAX_OSCILLOSCOPE_SAMPLES :: 4096
 
 @private
 _Spectrum_Display_Mode :: enum {
@@ -46,7 +46,48 @@ _Analysis_State :: struct {
 
 	need_update_osc: bool,
 	osc_input: [server.MAX_OUTPUT_CHANNELS][MAX_OSCILLOSCOPE_SAMPLES]f32,
+	osc_window: [dynamic]f32,
 	osc_length: int,
+}
+
+_hann_window :: proc(output: []f32) {
+	N := f32(len(output))
+	for i in 0..<len(output) {
+		n := f32(i)
+		output[i] = 0.5 * (1 - math.cos_f32((2 * math.PI * n) / (N - 1)))
+	}
+}
+
+_welch_window :: proc(output: []f32) {
+	N := f32(len(output))
+	N_2 := N/2
+
+	for i in 0..<len(output) {
+		n := f32(i)
+		t := (n - N_2)/(N_2)
+		output[i] = 1 - (t*t*t)
+	}
+}
+
+_osc_window :: proc(output: []f32) {
+	N: f32
+	margin := len(output)/10
+	end_of_middle := len(output)-margin
+	N = f32(margin)
+
+	for i in 0..<margin {
+		n := f32(i)
+		output[i] = n/N
+	}
+
+	for i in margin..<end_of_middle {
+		output[i] = 1
+	}
+
+	for i in end_of_middle..<len(output) {
+		n := f32(i-end_of_middle)
+		output[i] = 1 - (n/N)
+	}
 }
 
 @private
@@ -56,14 +97,7 @@ _analysis_init :: proc(state: ^_Analysis_State) {
 	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
 
 	// Hann window
-	{
-		N :: WINDOW_SIZE
-		for i in 0..<WINDOW_SIZE {
-			n := f32(i)
-			state.window_w[i] = 0.5 * (1 - math.cos_f32((2 * math.PI * n) / (N - 1)))
-			window_sum += state.window_w[i]
-		}
-	}
+	_hann_window(state.window_w[:])
 
 	analysis.spectrum_analyzer_init(&state.spectrum_analyzer, WINDOW_SIZE, 1/window_sum)
 }
@@ -71,6 +105,7 @@ _analysis_init :: proc(state: ^_Analysis_State) {
 @private
 _analysis_destroy :: proc(state: ^_Analysis_State) {
 	analysis.spectrum_analyzer_destroy(&state.spectrum_analyzer)
+	delete(state.osc_window)
 }
 
 @private
@@ -80,7 +115,7 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 
 	if server.is_paused(sv^) {return false}
 
-	state.samplerate, state.channels = server.audio_time_frame_from_playback(sv, state.window_data[:], tick) or_return
+	state.samplerate, state.channels = server.audio_time_frame_from_playback(sv, state.window_data[:], tick, delta) or_return
 
 	// Blackman window
 	/*for &f, i in window.data[0] {
@@ -101,17 +136,21 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	peaks: [server.MAX_OUTPUT_CHANNELS]f32
 	if state.need_update_peaks {
 		state.need_update_peaks = false
-		analysis.calc_peaks(state.window_data[:state.channels], peaks[:state.channels])
 		for ch in 0..<state.channels {
-			state.peaks[ch] = math.lerp(state.peaks[ch], peaks[ch], t)
+			peak := analysis.calc_peak(state.window_data[ch][:1024])
+			state.peaks[ch] = math.lerp(state.peaks[ch], peak, t)
 		}
 	}
 
 	// Oscilloscope
 	if state.need_update_osc {
 		if state.osc_length == 0 {state.osc_length = 4096}
+		if len(state.osc_window) != state.osc_length {
+			resize(&state.osc_window, state.osc_length)
+			_osc_window(state.osc_window[:])
+		}
 		state.need_update_osc = false
-		server.audio_time_frame_from_playback(sv, state.osc_input[:], tick)
+		state.samplerate, state.channels, _ = server.audio_time_frame_from_playback(sv, state.osc_input[:], tick, 0)
 	}
 
 	// Apply window multipliers
@@ -222,7 +261,6 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 
 	spectrum := state.spectrum[:state.spectrum_bands]
 
-	//imgui.PlotHistogram("##Spectrum", raw_data(spectrum), auto_cast state.spectrum_bands, 0, nil, 0, 1, imgui.GetContentRegionAvail())
 	drawlist := imgui.GetWindowDrawList()
 	theme := &client.theme
 
@@ -332,7 +370,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 _show_oscilloscope_window :: proc(client: ^Client) {
 	state := &client.analysis
 	state.need_update_osc = true
-	if state.osc_length == 0 {return}
+	if state.osc_length == 0 || len(state.osc_window) != state.osc_length {return}
 	size := imgui.GetContentRegionAvail()
 	//imgui.PlotLines("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, -1, 1, size)
 	//imgui.PlotHistogram("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, 0, 1, size)
@@ -344,8 +382,10 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 	cursor := imgui.GetCursorScreenPos()
 
 	for i in 0..<(state.osc_length-1) {
-		p1 := cursor + {f32(i) * gap, y_off + size.y * state.osc_input[0][i]}
-		p2 := cursor + {f32(i+1) * gap, y_off + size.y * state.osc_input[0][i+1]}
+		a := clamp(state.osc_input[0][i] * state.osc_window[i], -1, 1)
+		b := clamp(state.osc_input[0][i+1] * state.osc_window[i+1], -1, 1)
+		p1 := cursor + {f32(i) * gap, y_off + size.y * a}
+		p2 := cursor + {f32(i+1) * gap, y_off + size.y * b}
 		imgui.DrawList_AddLine(drawlist, p1, p2, color)
 	}
 
@@ -357,8 +397,6 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 		if imgui.MenuItem("1024") {state.osc_length = 1024}
 		if imgui.MenuItem("2048") {state.osc_length = 2048}
 		if imgui.MenuItem("4096") {state.osc_length = 4096}
-		if imgui.MenuItem("8192") {state.osc_length = 8192}
-		if imgui.MenuItem("16384") {state.osc_length = 16384}
 		imgui.EndPopup()
 	}
 }
