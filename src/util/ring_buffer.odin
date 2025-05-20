@@ -38,14 +38,18 @@ rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []f32, stride := 1, offse
 
 // Fills the output buffer as much as possible, then consumes consume_count elements
 rb_consume :: proc(buf: ^Ring_Buffer($T, $SIZE), output: []f32, consume_count: int) -> (elems_copied: int) {
+	base := buf.consumer_index
 	for i in 0..<len(output) {
-		n := _wrap(buf.consumer_index+i, int(SIZE))
+		n := _wrap(base+i, int(SIZE))
 		if n == buf.producer_index {break}
 		output[i] = buf.data[n]
 		elems_copied += 1
+
 	}
+
 	buf.consumer_index += consume_count
 	buf.consumer_index = _wrap(buf.consumer_index, int(SIZE))
+
 	return
 }
 

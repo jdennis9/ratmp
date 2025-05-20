@@ -242,9 +242,6 @@ audio_time_frame_from_playback :: proc(
 	state: ^Server, output: [][$WINDOW_SIZE]f32,
 	from_timestamp: time.Tick, delta: f32,
 ) -> (samplerate, channels: int, ok: bool) {
-	time_frame := f32(WINDOW_SIZE)/f32(state.stream.samplerate)
-	assert(time_frame > 0)
-
 	sync.lock(&state.playback_lock)
 	defer sync.unlock(&state.playback_lock)
 
