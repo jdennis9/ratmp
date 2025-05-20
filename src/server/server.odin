@@ -215,8 +215,8 @@ play_next_track :: proc(state: ^Server, dont_drop_buffer := false) {
 	set_queue_position(state, state.queue_pos+1, dont_drop_buffer)
 }
 
-set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) {
-	if len(state.queue) == 0 {return}
+set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) -> bool {
+	if len(state.queue) == 0 {return false}
 	state.queue_pos = pos
 
 	if state.queue_pos >= len(state.queue) {
@@ -229,8 +229,15 @@ set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) 
 	path_buf: [512]u8
 	track_id := state.queue[state.queue_pos]
 	if path, found := library_get_track_path(state.library, path_buf[:], track_id); found {
-		play_track(state, path, track_id, dont_drop_buffer)
+		return play_track(state, path, track_id, dont_drop_buffer)
 	}
+	
+	return false
+}
+
+set_queue_track :: proc(state: ^Server, track_id: Track_ID) -> bool {
+	index := slice.linear_search(state.queue[:], track_id) or_return
+	return set_queue_position(state, index)
 }
 
 Audio_Time_Frame :: struct {

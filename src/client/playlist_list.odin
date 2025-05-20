@@ -10,6 +10,7 @@ _Playlist_List_Window :: struct {
 	selected_id: Playlist_ID,
 	new_playlist_name: [128]u8,
 	track_filter: _Track_Filter_State,
+	playlist_filter: _Playlist_Filter_State,
 }
 
 _show_playlist_list_window :: proc(
@@ -52,8 +53,10 @@ _show_playlist_list_window :: proc(
 			}
 		}
 
+		display_playlist_ids := _playlist_filter_update(&state.playlist_filter, cat)
+
 		// Show playlist table
-		if table, show_table := _begin_playlist_table("##groups", cat.lists[:], &state.selected_id); show_table {
+		if table, show_table := _begin_playlist_table("##groups", cat, display_playlist_ids, &state.selected_id); show_table {
 			sort_spec: server.Playlist_Sort_Spec
 			if _playlist_table_update_sort_spec(&sort_spec) {
 				server.playlist_list_sort(cat^, sort_spec)

@@ -9,7 +9,8 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 
 _Playlist_Table :: struct {
-	playlists: []Playlist,
+	playlist_list: ^server.Playlist_List,
+	playlist_ids: []Playlist_ID,
 	playlist: ^Playlist,
 	selection: ^Playlist_ID,
 	index: int,
@@ -19,7 +20,8 @@ _Playlist_Table :: struct {
 
 _begin_playlist_table :: proc(
 	str_id: cstring,
-	playlists: []Playlist,
+	playlist_list: ^server.Playlist_List,
+	playlist_ids: []Playlist_ID,
 	selection: ^Playlist_ID,
 ) -> (table: _Playlist_Table, show: bool) {
 	assert(selection != nil)
@@ -29,10 +31,11 @@ _begin_playlist_table :: proc(
 		imgui.TableFlags_RowBg|imgui.TableFlags_ScrollY|imgui.TableFlags_Reorderable|
 		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp
 
-	if len(playlists) == 0 {return}
+	if len(playlist_ids) == 0 {return}
 
 	if imgui.BeginTable(str_id, 3, table_flags) {
-		table.playlists = playlists
+		table.playlist_list = playlist_list
+		table.playlist_ids = playlist_ids
 		table.index = -1
 		table.selection = selection
 
@@ -44,7 +47,7 @@ _begin_playlist_table :: proc(
 		imgui.TableHeadersRow()
 
 		table._list_clipper = new(imgui.ListClipper)
-		imgui.ListClipper_Begin(table._list_clipper, auto_cast len(table.playlists))
+		imgui.ListClipper_Begin(table._list_clipper, auto_cast len(table.playlist_ids))
 		show = true
 		return
 	}
@@ -88,8 +91,8 @@ _playlist_table_row :: proc(cl: ^Client, table: ^_Playlist_Table, sv: Server) ->
 
 	table.index = table._pos
 	table._pos += 1
-	if table.index >= len(table.playlists) {return false}
-	table.playlist = &table.playlists[table.index]
+	if table.index >= len(table.playlist_ids) {return false}
+	table.playlist = server.playlist_list_get(table.playlist_list, table.playlist_ids[table.index]) or_return
 
 	imgui.TableNextRow()
 

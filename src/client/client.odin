@@ -321,7 +321,7 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 		); show_table {
 			for _track_table_row(client, sv.library, &table) {
 				if _play_track_input_pressed() {
-					server.set_queue_position(sv, table.track_index)
+					server.set_queue_track(sv, table.track_id)
 				}
 
 				if imgui.BeginPopupContextItem() {

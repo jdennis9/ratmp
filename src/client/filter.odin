@@ -6,7 +6,7 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 
 _Track_Filter_State :: struct {
-	filter: [512]u8,
+	filter: [128]u8,
 	spec: server.Track_Filter_Spec,
 	output: [dynamic]Track_ID,
 	serial: uint,
@@ -48,6 +48,43 @@ _track_filter_update :: proc(
 }
 
 _track_filter_destroy :: proc(state: ^_Track_Filter_State) {
+	delete(state.output)
+	state.output = nil
+}
+
+_Playlist_Filter_State :: struct {
+	filter: [128]u8,
+	output: [dynamic]Playlist_ID,
+	serial: uint,
+}
+
+_playlist_filter_update :: proc(
+	state: ^_Playlist_Filter_State,
+	list: ^server.Playlist_List
+) -> []Playlist_ID {
+	apply_filter: bool
+	filter_cstring := cstring(&state.filter[0])
+
+	apply_filter |= imgui.InputTextWithHint("##playlist_filter", "Filter", filter_cstring, len(state.filter))
+	apply_filter |= state.serial != list.serial
+
+	if state.filter[0] == 0 {
+		return list.list_ids[:]
+	}
+	else if apply_filter {
+		clear(&state.output)
+		state.serial = list.serial
+		server.filter_playlists(list, string(filter_cstring), &state.output)
+		return state.output[:]
+	}
+	else if state.filter[0] != 0 {
+		return state.output[:]
+	}
+
+	return list.list_ids[:]
+}
+
+_playlist_filter_destroy :: proc(state: ^_Playlist_Filter_State) {
 	delete(state.output)
 	state.output = nil
 }
