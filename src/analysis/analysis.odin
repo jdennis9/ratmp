@@ -139,7 +139,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 		if freq > frequencies[band] {band = min(band + 1, len(output)-1)}
 	
 		d := glm.dot(frame, frame)
-		if d <= 5 {continue}
+		if d <= 10 {continue}
 		// @TODO: Figure out good scaling for this
 		mag := log10(d) * scale_factor * 1500
 

@@ -130,7 +130,8 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		f *= w
 	}*/
 
-	t := PEAK_ROUGHNESS*delta
+	t := clamp(PEAK_ROUGHNESS*delta, 0, 1)
+	//t := PEAK_ROUGHNESS*delta
 
 	// Peak
 	peaks: [server.MAX_OUTPUT_CHANNELS]f32

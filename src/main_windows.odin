@@ -261,6 +261,7 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 			_win32.resize_height = int(win.HIWORD(lparam))
 		}
 		case win.WM_QUIT: {
+			log.info("Received quit message")
 			_win32.running = false
 		}
 		case win.WM_CLOSE: {
@@ -287,7 +288,7 @@ win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, l
 		case win.WM_COMMAND: {
 			switch wparam {
 			case TRAY_BUTTON_SHOW: win.ShowWindow(_win32.hwnd, win.SW_SHOWDEFAULT)
-			case TRAY_BUTTON_EXIT: win.PostQuitMessage(0)
+			case TRAY_BUTTON_EXIT: _win32.running = false
 			}
 			return 0
 		}
