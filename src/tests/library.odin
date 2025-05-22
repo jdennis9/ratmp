@@ -45,13 +45,13 @@ test_library_sort :: proc(t: ^testing.T) {
 	server.library_add_track(&lib, "B.mp3", B)
 	server.library_add_track(&lib, "C.mp3", C)
 
-	server.sort_tracks(lib, tracks[:], {metric = .Title, order = .Descending})
+	server.library_sort_tracks(lib, tracks[:], {metric = .Title, order = .Descending})
 	testing.expect(t, tracks == {1, 2, 3})
-	server.sort_tracks(lib, tracks[:], {metric = .Title, order = .Ascending})
+	server.library_sort_tracks(lib, tracks[:], {metric = .Title, order = .Ascending})
 	testing.expect(t, tracks == {3, 2, 1})
 
 	tracks = {2, 3, 1}
-	server.sort_tracks(lib, tracks[:], {metric = .Duration, order = .Ascending})
+	server.library_sort_tracks(lib, tracks[:], {metric = .Duration, order = .Ascending})
 	testing.expect(t, tracks == {1, 2, 3})
 }
 

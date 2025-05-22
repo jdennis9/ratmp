@@ -402,7 +402,7 @@ track_set_cstring :: proc(track: ^Track_Metadata, dst: Metadata_Component, str: 
 	track.values[dst] = string(strings.clone_to_cstring(string(str), string_allocator))
 }
 
-compare_tracks :: proc(lib: Library, metric: Metadata_Component, a_index, b_index: int) -> bool {
+library_compare_tracks :: proc(lib: Library, metric: Metadata_Component, a_index, b_index: int) -> bool {
 	A := lib.track_metadata[a_index]
 	B := lib.track_metadata[b_index]
 
@@ -418,7 +418,7 @@ compare_tracks :: proc(lib: Library, metric: Metadata_Component, a_index, b_inde
 	return false
 }
 
-sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_Spec) {
+library_sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_Spec) {
 	Collection :: struct {
 		lib: Library,
 		tracks: []Track_ID,
@@ -433,7 +433,7 @@ sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_Spec) {
 		metric := collection.metric
 		a_index := library_lookup_track(collection.lib, collection.tracks[a]) or_return
 		b_index := library_lookup_track(collection.lib, collection.tracks[b]) or_return
-		return compare_tracks(collection.lib, metric, a_index, b_index)
+		return library_compare_tracks(collection.lib, metric, a_index, b_index)
 	}
 
 	len_proc :: proc(iface: sort.Interface) -> int {
@@ -464,9 +464,9 @@ sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_Spec) {
 	}
 }
 
-sort_library_tracks :: proc(lib: Library, spec: Track_Sort_Spec) {
+library_sort :: proc(lib: ^Library, spec: Track_Sort_Spec) {
 	Collection :: struct {
-		lib: Library,
+		lib: ^Library,
 		metric: Metadata_Component,
 	}
 
@@ -479,7 +479,7 @@ sort_library_tracks :: proc(lib: Library, spec: Track_Sort_Spec) {
 	compare_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
 		collection := cast(^Collection)iface.collection
 		metric := collection.metric
-		return compare_tracks(collection.lib, metric, a, b)
+		return library_compare_tracks(collection.lib^, metric, a, b)
 	}
 
 	len_proc :: proc(iface: sort.Interface) -> int {
@@ -511,6 +511,8 @@ sort_library_tracks :: proc(lib: Library, spec: Track_Sort_Spec) {
 	else {
 		sort.reverse_sort(iface)
 	}
+
+	lib.serial += 1
 }
 
 delete_track_set :: proc(set: ^Track_Set) {

@@ -25,6 +25,7 @@ _WASAPI_Stream :: struct {
 	callback_data: rawptr,
 	callback_status: Audio_Callback_Status,
 	buffer_timestamp: time.Tick,
+	volume: f32,
 }
 
 Audio_Stream :: struct {
@@ -116,15 +117,12 @@ audio_set_volume :: proc(stream: ^Audio_Stream, volume: f32) {
 
 	if stream._wasapi == nil || stream._wasapi.volume_controller == nil {return}
 	stream._wasapi.volume_controller->SetMasterVolume(volume, nil)
+	sync.atomic_store(&stream._wasapi.volume, volume)
 }
 
 audio_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
-	sync.lock(&stream.lock)
-	defer sync.unlock(&stream.lock)
-
 	if stream._wasapi == nil || stream._wasapi.volume_controller == nil {return 0}
-	stream._wasapi.volume_controller->GetMasterVolume(&volume)
-	return
+	return sync.atomic_load(&stream._wasapi.volume)
 }
 
 audio_get_buffer_timestamp :: proc(stream: ^Audio_Stream) -> (time.Tick, bool) {
@@ -186,6 +184,12 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 	defer render_client->Release()
 	win32_check(audio_client->GetService(wasapi.ISimpleAudioVolume_UUID, auto_cast &stream.volume_controller)) or_return
 	defer win32_safe_release(&stream.volume_controller)
+
+	if stream.volume_controller != nil {
+		volume: f32
+		stream.volume_controller->GetMasterVolume(&volume)
+		sync.atomic_store(&stream.volume, volume)
+	}
 	
 	log.debug("Sample rate:", format.nSamplesPerSec, "Hz")
 	

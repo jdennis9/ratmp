@@ -3,14 +3,18 @@ package client
 
 import imgui "src:thirdparty/odin-imgui"
 import "core:slice"
+import "core:log"
 
 import "src:server"
 
 _Playlist_List_Window :: struct {
-	selected_id: Playlist_ID,
+	viewing_id: Playlist_ID,
+	editing_id: Playlist_ID,
 	new_playlist_name: [128]u8,
-	track_filter: _Track_Filter_State,
-	playlist_filter: _Playlist_Filter_State,
+	playlist_table: _Playlist_Table_2,
+	track_table: _Track_Table_2,
+	track_filter: [128]u8,
+	playlist_filter: [128]u8,
 }
 
 _show_playlist_list_window :: proc(
@@ -53,13 +57,13 @@ _show_playlist_list_window :: proc(
 			}
 		}
 
-		display_playlist_ids := _playlist_filter_update(&state.playlist_filter, cat)
+		/*display_playlist_ids := _playlist_filter_update(&state.playlist_filter, cat)
 
 		// Show playlist table
 		if table, show_table := _begin_playlist_table("##groups", cat, display_playlist_ids, &state.selected_id); show_table {
 			sort_spec: server.Playlist_Sort_Spec
 			if _playlist_table_update_sort_spec(&sort_spec) {
-				server.playlist_list_sort(cat^, sort_spec)
+				server.playlist_list_sort(cat, sort_spec)
 			}
 
 			for _playlist_table_row(cl, &table, sv^) {
@@ -87,7 +91,32 @@ _show_playlist_list_window :: proc(
 			}
 
 			_end_playlist_table(&table)
+		}*/
+
+
+		context_id := imgui.GetID("##playlist_context_menu")
+		filter_cstring := cstring(&state.playlist_filter[0])
+
+		imgui.InputTextWithHint("##playlist_filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
+		_update_playlist_table(&state.playlist_table, cat, string(filter_cstring), state.viewing_id, sv.current_playlist_id, state.editing_id)
+		result := _display_playlist_table(cl.theme, state.playlist_table, "##playlists", context_id)
+
+		if result.play != nil {
+			playlist, found := server.playlist_list_get(cat^, result.play.?)
+			if found {
+				server.play_playlist(sv, playlist.tracks[:], playlist.id)
+				state.viewing_id = playlist.id
+			}
 		}
+		if result.select != nil {state.viewing_id = result.select.?}
+		if result.sort_spec != nil {server.playlist_list_sort(cat, result.sort_spec.?)}
+		if result.context_menu != nil {state.editing_id = result.context_menu.?}
+
+		if allow_edit && imgui.BeginPopupEx(context_id, imgui.WindowFlags_NoDecoration) {
+			if imgui.MenuItem("Delete") {want_delete_playlist = state.editing_id}
+			imgui.EndPopup()
+		}
+		else {state.editing_id = {}}
 	}
 
 	// Delete playlist
@@ -96,49 +125,43 @@ _show_playlist_list_window :: proc(
 	}
 
 	// Tracks
-	list_index, list_found := slice.linear_search(cat.list_ids[:], state.selected_id)
+	list_index, list_found := slice.linear_search(cat.list_ids[:], state.viewing_id)
 
 	// Show selected playlist tracks
 	if list_found && imgui.TableSetColumnIndex(1) {
-		context_menu: _Track_Context_Menu_Result
-		defer _process_track_context_menu_results(cl, sv, context_menu, cl.selection.tracks[:])
-
-		want_remove_selection := false
 		list := &cat.lists[list_index]
-		playlist_id := cat.list_ids[list_index]
+		want_remove_selection: bool
+		context_menu_id := imgui.GetID("##track_context")
+		filter_cstring := cstring(&state.track_filter[0])
+		context_flags := allow_edit ? _Track_Context_Flags{} : _Track_Context_Flags{.NoRemove}
 
-		// Filter
-		display_tracks := _track_filter_update(&state.track_filter, sv.library, list.tracks[:], playlist_id, list.serial)
+		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
+		_track_table_update(&state.track_table, list.serial, sv.library, list.tracks[:], list.id, string(filter_cstring))
+		result := _track_table_show(state.track_table, "##tracks", cl.theme, context_menu_id, sv.current_track_id)
 		
-		if table, show_table := _begin_track_table("##tracks", playlist_id, sv.current_track_id, display_tracks, &cl.selection); show_table {
-			sort_spec: server.Track_Sort_Spec
+		_track_table_process_results(state.track_table, result, cl, sv, {})
+		if result.sort_spec != nil {server.playlist_sort(list, sv.library, result.sort_spec.?)}
 
-			if _track_table_update_sort_spec(&sort_spec) {
-				server.sort_tracks(sv.library, table.tracks[:], sort_spec)
-			}
+		context_result := _track_table_show_context(state.track_table, result, context_menu_id, context_flags, sv^)
+		_track_table_process_context(state.track_table, result, context_result, cl, sv)
 
-			for _track_table_row(cl, sv.library, &table) {
-				if _play_track_input_pressed() {
-					server.play_playlist(sv, table.tracks, playlist_id, table.track_id)
-				}
-
-				if imgui.BeginPopupContextItem() {
-					_show_generic_track_context_menu_items(cl, sv, table.track_id, table.metadata, &context_menu)
-					if allow_edit {
-						imgui.Separator()
-						if imgui.MenuItem("Remove") {
-							want_remove_selection = true
-						}
-					}
-					imgui.EndPopup()
-				}
-			}
-
-			_end_track_table(table)
-		}
-
-		if allow_edit && want_remove_selection {
-			server.playlist_remove_tracks(list, sv.library, cl.selection.tracks[:])
+		if context_result.remove {
+			selection := _track_table_get_selection(state.track_table)
+			defer delete(selection)
+			server.playlist_remove_tracks(list, sv.library, selection)
 		}
 	}
+}
+
+_show_playlist_selector :: proc(name: cstring, from: server.Playlist_List) -> (id: Playlist_ID, clicked: bool) {
+	imgui.BeginMenu(name) or_return
+	defer imgui.EndMenu()
+
+	for pl, i in from.lists {
+		if pl.name != nil && imgui.MenuItem(pl.name) {
+			id = from.list_ids[i]
+			clicked = true
+		}
+	}
+	return
 }

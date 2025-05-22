@@ -26,6 +26,7 @@ Server :: struct {
 	current_playlist_id: Playlist_ID,
 	queue: [dynamic]Track_ID,
 	queue_pos: int,
+	queue_serial: uint,
 	paused: bool,
 	enable_shuffle: bool,
 	queue_is_shuffled: bool,
@@ -197,14 +198,31 @@ play_playlist :: proc(
 	}
 
 	set_queue_position(state, play_index)
+	state.queue_serial += 1
 }
 
 set_shuffle_enabled :: proc(state: ^Server, enabled: bool) {
 	if enabled && !state.queue_is_shuffled && len(state.queue) > 1 {
 		rand.shuffle(state.queue[:])
 		state.queue_is_shuffled = true
+		state.queue_serial += 1
 	}
 	state.enable_shuffle = enabled
+}
+
+remove_tracks_from_queue :: proc(state: ^Server, tracks: []Track_ID) {
+	removed: bool
+	for track in tracks {
+		index := slice.linear_search(state.queue[:], track) or_continue
+		removed = true
+		ordered_remove(&state.queue, index)
+	}
+	if removed {state.queue_serial += 1}
+}
+
+sort_queue :: proc(state: ^Server, spec: Track_Sort_Spec) {
+	library_sort_tracks(state.library, state.queue[:], spec)
+	state.queue_serial += 1
 }
 
 play_prev_track :: proc(state: ^Server, dont_drop_buffer := false) {

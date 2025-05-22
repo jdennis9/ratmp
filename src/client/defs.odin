@@ -65,6 +65,8 @@ _Window_State :: struct {
 	flags: imgui.WindowFlags,
 }
 
+//_Window_Proc :: #type proc(cl: ^Client, sv: ^Server, delta: f32, window: ^_Window_State)
+
 _native_text_unformatted :: proc(str: string) {
 	n := len(str)
 	if n == 0 {return}

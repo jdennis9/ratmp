@@ -77,6 +77,11 @@ playlist_remove_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Trac
 	playlist.dirty = true
 }
 
+playlist_sort :: proc(playlist: ^Playlist, lib: Library, spec: Track_Sort_Spec) {
+	library_sort_tracks(lib, playlist.tracks[:], spec)
+	playlist.serial += 1
+}
+
 sort_playlists :: proc(playlists_arg: []Playlist, spec: Playlist_Sort_Spec) {
 	playlists := playlists_arg
 

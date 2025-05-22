@@ -64,11 +64,12 @@ playlist_list_join_folders :: proc(cat: ^Playlist_List, library: Library) {
 	}
 }
 
-playlist_list_sort :: proc(cat: Playlist_List, spec: Playlist_Sort_Spec) {
+playlist_list_sort :: proc(cat: ^Playlist_List, spec: Playlist_Sort_Spec) {
 	sort_playlists(cat.lists[:], spec)
 	for list, index in cat.lists {
 		cat.list_ids[index] = list.id
 	}
+	cat.serial += 1
 }
 
 playlist_list_add_new :: proc(list: ^Playlist_List, name: string, id: Playlist_ID) -> (playlist: ^Playlist, error: Error) {
@@ -116,7 +117,7 @@ playlist_list_remove :: proc(list: ^Playlist_List, id: Playlist_ID) -> bool {
 	return true
 }
 
-playlist_list_get :: proc(list: ^Playlist_List, id: Playlist_ID) -> (playlist: ^Playlist, found: bool) {
+playlist_list_get :: proc(list: Playlist_List, id: Playlist_ID) -> (playlist: ^Playlist, found: bool) {
 	index := slice.linear_search(list.list_ids[:], id) or_return
 	return &list.lists[index], true
 }

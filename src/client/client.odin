@@ -80,6 +80,14 @@ Client :: struct {
 
 	analysis: _Analysis_State,
 
+	queue_window: struct {
+		table: _Track_Table_2,
+	},
+	library_window: struct {
+		table: _Track_Table_2,
+		filter: [128]u8,
+	},
+
 	user_playlist_window: _Playlist_List_Window,
 	categories: struct {
 		artists: _Playlist_List_Window,
@@ -207,7 +215,7 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 	}
 }
 
-frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) {
+frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) {
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
@@ -221,26 +229,26 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 
 	delta := cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
 
-	client.frame_count += 1
-	client.tick_last_frame = prev_frame_start
+	cl.frame_count += 1
+	cl.tick_last_frame = prev_frame_start
 
 	// Media controls
-	if client.enable_media_controls && !client.media_controls.enabled {
-		client.media_controls.enabled = true
+	if cl.enable_media_controls && !cl.media_controls.enabled {
+		cl.media_controls.enabled = true
 		log.debug("Enabling media controls...")
 		media_controls.enable(_media_controls_handler, sv)
 	}
-	else if !client.enable_media_controls && client.media_controls.enabled {
-		client.media_controls.enabled = false
+	else if !cl.enable_media_controls && cl.media_controls.enabled {
+		cl.media_controls.enabled = false
 		log.debug("Disabling media controls...")
 		media_controls.disable()
 	}
 
-	_async_file_dialog_get_results(&client.dialogs.add_folders, &sv.scan_queue)
-	_update_analysis(client, sv, delta)
+	_async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
+	_update_analysis(cl, sv, delta)
 	server.library_update_categories(&sv.library)
 
-	if result, have_result := _async_dialog_get_result(&client.dialogs.remove_missing_files); have_result && result {
+	if result, have_result := _async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
 		server.library_remove_missing_tracks(&sv.library)
 	}
 	
@@ -248,16 +256,16 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 	{
 		background_path: [dynamic]Path
 		
-		if _async_file_dialog_get_results(&client.dialogs.set_background, &background_path) {
+		if _async_file_dialog_get_results(&cl.dialogs.set_background, &background_path) {
 			if len(background_path) >= 1 {
-				set_background(client, string(cstring(&background_path[0][0])))
+				set_background(cl, string(cstring(&background_path[0][0])))
 			}
 			delete(background_path)
 		}
 	}
 
-	_draw_background(client^)
-	_main_menu_bar(client, sv)
+	_draw_background(cl^)
+	_main_menu_bar(cl, sv)
 
 	if progress, is_running := server.get_background_scan_progress(sv^); is_running {
 		if imgui.Begin("Metadata Scan Progress") {
@@ -278,131 +286,110 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 	}
 
 	// Library
-	if _begin_window(client, .Library) {
-		context_menu: _Track_Context_Menu_Result
-		defer _process_track_context_menu_results(client, sv, context_menu)
+	if _begin_window(cl, .Library) {
+		state := &cl.library_window
+		filter_cstring := cstring(&state.filter[0])
+		context_id := imgui.GetID("##library_track_context")
 
-		display_tracks := _track_filter_update(&client.library_track_filter, sv.library, sv.library.track_ids[:], {}, sv.library.serial)
+		imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
 
-		if table, show_table := _begin_track_table(
-			"Library", {}, sv.current_track_id,
-			display_tracks, &client.selection
-		); show_table {
-			if _track_table_update_sort_spec(&client.library_sort_spec) {
-				server.sort_library_tracks(sv.library, client.library_sort_spec)
-			}
+		_track_table_update(&state.table, sv.library.serial, sv.library, sv.library.track_ids[:], {}, string(filter_cstring))
+		table_result := _track_table_show(state.table, "##library_table", cl.theme, context_id, sv.current_track_id)
 
-			for _track_table_row(client, sv.library, &table) {
-				if _play_track_input_pressed() {
-					server.play_playlist(sv, sv.library.track_ids[:], {}, table.track_id)
-				}
+		if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
+		_track_table_process_results(state.table, table_result, cl, sv, {})
 
-				if imgui.BeginPopupContextItem() {
-					_show_generic_track_context_menu_items(client, sv, table.track_id, table.metadata, &context_menu)
-					imgui.EndPopup()
-				}
-			}
-
-			_end_track_table(table)
-		}
+		context_result := _track_table_show_context(state.table, table_result, context_id, {.NoRemove}, sv^)
+		_track_table_process_context(state.table, table_result, context_result, cl, sv)
 
 		imgui.End()
-	}
+	} else {_free_track_table(&cl.library_window.table)}
 
 	// Queue
-	if _begin_window(client, .Queue) {
-		want_remove_selection := false
-		context_menu: _Track_Context_Menu_Result
-		defer _process_track_context_menu_results(client, sv, context_menu)
+	if _begin_window(cl, .Queue) {
+		state := &cl.queue_window
+		context_id := imgui.GetID("##track_context")
 
-		if table, show_table := _begin_track_table(
-			"Queue", {serial=max(u32)}, sv.current_track_id,
-			sv.queue[:], &client.selection
-		); show_table {
-			for _track_table_row(client, sv.library, &table) {
-				if _play_track_input_pressed() {
-					server.set_queue_track(sv, table.track_id)
-				}
+		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "")
+		table_result := _track_table_show(state.table, "##queue", cl.theme, context_id, sv.current_track_id)
 
-				if imgui.BeginPopupContextItem() {
-					_show_generic_track_context_menu_items(client, sv, table.track_id, table.metadata, &context_menu)
-					want_remove_selection |= imgui.MenuItem("Remove")
-					imgui.EndPopup()
-				}
-			}
+		if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
+		_track_table_process_results(state.table, table_result, cl, sv, {.SetQueuePos})
+		
+		context_result := _track_table_show_context(state.table, table_result, context_id, {}, sv^)
+		_track_table_process_context(state.table, table_result, context_result, cl, sv)
 
-			_end_track_table(table)
+		if context_result.remove {
+			selection := _track_table_get_selection(state.table)
+			defer delete(selection)
+			server.remove_tracks_from_queue(sv, selection)
 		}
-
+		
 		imgui.End()
-
-		if want_remove_selection {
-			for track_id in client.selection.tracks[:] {
-				track_index := slice.linear_search(sv.queue[:], track_id) or_continue
-				ordered_remove(&sv.queue, track_index)
-			}
-
-			_selection_clear(&client.selection)
-		}
-	}
+	} else {_free_track_table(&cl.queue_window.table)}
 
 	// Playlists
-	if _begin_window(client, .Playlists) {
-		_show_playlist_list_window(client, sv, &client.user_playlist_window, &sv.library.user_playlists, allow_edit=true)
+	if _begin_window(cl, .Playlists) {
+		_show_playlist_list_window(cl, sv, &cl.user_playlist_window, &sv.library.user_playlists, allow_edit=true)
 		imgui.End()
 	}
+	else {_free_track_table(&cl.user_playlist_window.track_table)}
 
 	// Folders
-	if _begin_window(client, .Folders) {
-		_show_playlist_list_window(client, sv, &client.categories.folders, &sv.library.categories.folders)
+	if _begin_window(cl, .Folders) {
+		_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
 		imgui.End()
 	}
+	else {_free_track_table(&cl.categories.folders.track_table)}
 
 	// Artists
-	if _begin_window(client, .Artists) {
-		_show_playlist_list_window(client, sv, &client.categories.artists, &sv.library.categories.artists)
+	if _begin_window(cl, .Artists) {
+		_show_playlist_list_window(cl, sv, &cl.categories.artists, &sv.library.categories.artists)
 		imgui.End()
 	}
+	else {_free_track_table(&cl.categories.artists.track_table)}
 
 	// Albums
-	if _begin_window(client, .Albums) {
-		_show_playlist_list_window(client, sv, &client.categories.albums, &sv.library.categories.albums)
+	if _begin_window(cl, .Albums) {
+		_show_playlist_list_window(cl, sv, &cl.categories.albums, &sv.library.categories.albums)
 		imgui.End()
 	}
+	else {_free_track_table(&cl.categories.albums.track_table)}
 
 	// Genres
-	if _begin_window(client, .Genres) {
-		_show_playlist_list_window(client, sv, &client.categories.genres, &sv.library.categories.genres)
+	if _begin_window(cl, .Genres) {
+		_show_playlist_list_window(cl, sv, &cl.categories.genres, &sv.library.categories.genres)
 		imgui.End()
 	}
+	else {_free_track_table(&cl.categories.genres.track_table)}
 
 	// Metadata
-	if _begin_window(client, .Metadata) {
-		_show_metadata_details(client, sv, sv.current_track_id, &client.metadata_window)
+	if _begin_window(cl, .Metadata) {
+		_show_metadata_details(cl, sv, sv.current_track_id, &cl.metadata_window)
 		imgui.End()
 	}
 
 	// Waveform
-	if _begin_window(client, .WaveformSeek) {
-		_show_waveform_window(sv, &client.waveform_window)
+	if _begin_window(cl, .WaveformSeek) {
+		_show_waveform_window(sv, &cl.waveform_window)
 		imgui.End()
 	}
 
 	// Spectrum
-	if _begin_window(client, .Spectrum) {
-		_show_spectrum_window(client, &client.analysis)
+	if _begin_window(cl, .Spectrum) {
+		_show_spectrum_window(cl, &cl.analysis)
 		imgui.End()
 	}
 
 	// Oscilloscope
-	if _begin_window(client, .Oscilloscope) {
-		_show_oscilloscope_window(client)
+	if _begin_window(cl, .Oscilloscope) {
+		_show_oscilloscope_window(cl)
 		imgui.End()
 	}
 
 	// Theme editor
-	if _begin_window(client, .ThemeEditor) {
-		_show_theme_editor(client, &client.theme, &client.theme_editor)
+	if _begin_window(cl, .ThemeEditor) {
+		_show_theme_editor(cl, &cl.theme, &cl.theme_editor)
 		imgui.End()
 	}
 
@@ -413,7 +400,7 @@ frame :: proc(client: ^Client, sv: ^Server, prev_frame_start, frame_start: time.
 		}
 
 		if client.show_memory_usage {
-			_show_memory_usage(client, sv^)
+			_show_memory_usage(cl, sv^)
 		}
 	}
 }
@@ -470,21 +457,21 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 @private
 _go_to_artist :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Artist].(string) or_else "")
-	client.categories.artists.selected_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
+	client.categories.artists.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
 	_bring_window_to_front(client, .Artists)
 }
 
 @private
 _go_to_album :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Album].(string) or_else "")
-	client.categories.albums.selected_id = {serial=auto_cast Metadata_Component.Album, pool=id}
+	client.categories.albums.viewing_id = {serial=auto_cast Metadata_Component.Album, pool=id}
 	_bring_window_to_front(client, .Albums)
 }
 
 @private
 _go_to_genre :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Genre].(string) or_else "")
-	client.categories.genres.selected_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
+	client.categories.genres.viewing_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
 	_bring_window_to_front(client, .Genres)
 }
 

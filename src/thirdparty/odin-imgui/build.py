@@ -24,7 +24,7 @@ git_heads = {
 # Note - tested with Odin version `dev-2025-01`
 
 # @CONFIGURE: Elements must be keys into below table
-wanted_backends = ["vulkan", "sdl2", "opengl3", "sdlrenderer2", "glfw", "dx11", "dx12", "win32", "osx", "metal", "wgpu"]
+wanted_backends = ["opengl3", "glfw", "dx11", "win32"]
 # Supported means that an impl bindings file exists, and that it has been tested.
 # Some backends (like dx12, win32) have bindings but not been tested.
 backends = {
@@ -234,7 +234,7 @@ def main():
 
 	# Optimization flags
 	if compile_debug: compile_flags += platform_select({ "windows": ["/Od", "/Z7"], "linux, darwin": ["-g", "-O0"] })
-	else: compile_flags += platform_select({ "windows": ["/O2"], "linux, darwin": ["-O3"] })
+	else: compile_flags += platform_select({ "windows": ["/O2", "/DNDEBUG"], "linux, darwin": ["-O3"] })
 
 	# Write file describing the enabled backends
 	f = open("impl_enabled.odin", "w+")
