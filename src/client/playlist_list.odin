@@ -138,7 +138,7 @@ _show_playlist_list_window :: proc(
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 		_track_table_update(&state.track_table, list.serial, sv.library, list.tracks[:], list.id, string(filter_cstring))
 		result := _track_table_show(state.track_table, "##tracks", cl.theme, context_menu_id, sv.current_track_id)
-		
+
 		_track_table_process_results(state.track_table, result, cl, sv, {})
 		if result.sort_spec != nil {server.playlist_sort(list, sv.library, result.sort_spec.?)}
 
@@ -149,6 +149,7 @@ _show_playlist_list_window :: proc(
 			selection := _track_table_get_selection(state.track_table)
 			defer delete(selection)
 			server.playlist_remove_tracks(list, sv.library, selection)
+			cat.serial += 1
 		}
 	}
 }

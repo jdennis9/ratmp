@@ -19,52 +19,15 @@ _play_track_input_pressed :: proc() -> bool {
 	return imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))
 }
 
-_Track_Context_Menu_Result :: struct {
-	add_to_playlist: Maybe(Playlist_ID),
-}
-
-_show_generic_track_context_menu_items :: proc(
-	client: ^Client, sv: ^Server,
-	track_id: Track_ID, md: Track_Metadata,
-	result: ^_Track_Context_Menu_Result,
-) {
-	if imgui.BeginMenu("Add to playlist") {
-		if len(sv.library.user_playlists.lists) == 0 {
-			imgui.TextDisabled("No playlists")
-		}
-
-		for &playlist in sv.library.user_playlists.lists {
-			if imgui.MenuItem(playlist.name) {
-				result.add_to_playlist = playlist.id
-			}
-		}
-
-		imgui.EndMenu()
-	}
-
-	if imgui.BeginMenu("Go to") {
-		if imgui.MenuItem("Artist") {
-			_go_to_artist(client, md)
-		}
-		if imgui.MenuItem("Album") {
-			_go_to_album(client, md)
-		}
-		if imgui.MenuItem("Genre") {
-			_go_to_genre(client, md)
-		}
-		imgui.EndMenu()
-	}
-
-	return
-}
-
 _Track_Row :: struct {
-	duration_str: [8]u8,
-	id: Track_ID,
-	year_str: [4]u8,
 	genre, artist, album: string,
 	title: cstring,
+	duration_str: [8]u8,
+	year_str: [4]u8,
+	id: Track_ID,
 	track_num, bitrate: i32,
+	// @NOTE: Increase this to 5 characters in the 11th millenium
+	date_added_str: [10]u8,
 	selected: bool,
 }
 
@@ -143,7 +106,10 @@ _track_table_update :: proc(
 		duration := md.values[.Duration].(i64) or_else 0
 		h, m, s := time.clock_from_seconds(auto_cast duration)
 		fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s)
-		fmt.bprint(row.year_str[:], md.values[.Year].(i64) or_else 0)
+		fmt.bprintf(row.year_str[:], "%4d", md.values[.Year].(i64) or_else 0)
+
+		year, month, day := time.date(time.unix(md.values[.DateAdded].(i64) or_else 0, 0))
+		fmt.bprintf(row.date_added_str[:], "%4d-%2d-%2d", year, month, day)
 
 		ok = true
 		return
@@ -256,6 +222,10 @@ _track_table_show :: proc(
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Year) {
 				_native_text_unformatted(string(row.year_str[:]))
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.DateAdded) {
+				_native_text_unformatted(string(row.date_added_str[:]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Bitrate) {
@@ -388,10 +358,8 @@ _track_table_show_context :: proc(
 	if table_result.selection_count == 1 {
 		track_id := table.rows[table_result.lowest_selection_index].id
 		result.single_track = track_id
-		_track_show_context_items(track_id, &result)
+		_track_show_context_items(track_id, &result, sv)
 	}
-
-	_show_add_to_playlist_menu(sv, &result)
 	
 	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
 		result.remove = true
@@ -403,6 +371,7 @@ _track_table_show_context :: proc(
 _track_show_context_items :: proc(
 	track_id: Track_ID,
 	result: ^_Track_Context_Result,
+	sv: Server,
 ) {
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Album") {result.go_to_album = true}
@@ -410,6 +379,7 @@ _track_show_context_items :: proc(
 		if imgui.MenuItem("Genre") {result.go_to_genre = true}
 		imgui.EndMenu()
 	}
+	_show_add_to_playlist_menu(sv, result)
 }
 
 _track_show_context :: proc(
@@ -418,10 +388,9 @@ _track_show_context :: proc(
 	sv: Server,
 ) -> (result: _Track_Context_Result) {
 	if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) {
-		_track_show_context_items(track_id, &result)
+		_track_show_context_items(track_id, &result, sv)
 		imgui.EndPopup()
 	}
-	_show_add_to_playlist_menu(sv, &result)
 	return
 }
 
@@ -442,7 +411,7 @@ _track_process_context :: proc(
 	}
 
 	if allow_add_to_playlist && result.add_to_playlist != nil {
-		md, track_found := server.library_get_track_metadata(sv.library, result.single_track.?)
+		md, track_found := server.library_get_track_metadata(sv.library, track_id)
 		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
 		if track_found && playlist_found {
 			server.playlist_add_track(playlist, track_id, md)
