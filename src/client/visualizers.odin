@@ -383,8 +383,8 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 	cursor := imgui.GetCursorScreenPos()
 
 	for i in 0..<(state.osc_length-1) {
-		a := clamp(state.osc_input[0][i] * state.osc_window[i], -1, 1)
-		b := clamp(state.osc_input[0][i+1] * state.osc_window[i+1], -1, 1)
+		a := clamp(state.osc_input[0][i] * state.osc_window[i], -1, 1)*0.5
+		b := clamp(state.osc_input[0][i+1] * state.osc_window[i+1], -1, 1)*0.5
 		p1 := cursor + {f32(i) * gap, y_off + size.y * a}
 		p2 := cursor + {f32(i+1) * gap, y_off + size.y * b}
 		imgui.DrawList_AddLine(drawlist, p1, p2, color)
