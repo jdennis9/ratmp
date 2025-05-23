@@ -278,38 +278,6 @@ audio_time_frame_from_playback :: proc(
 	}
 
 	return cpy.samplerate, cpy.channels, true
-
-	/*cpy := state.output_copy
-	if cpy.channels == 0 || len(cpy.buffers[0].data) == 0 {return}
-
-	time_start := cast(f32) time.duration_seconds(time.tick_diff(cpy.buffers[0].timestamps[min(2, cpy.buffers[0].max_block)], from_timestamp))
-	time_end := time_start + time_frame
-
-	//log.debug(time_start, time_end)
-
-	//assert(time_start >= 0)
-	if time_start < 0 {return}
-
-	start_frame := int(time_start * f32(cpy.samplerate))
-	end_frame := int(time_end * f32(cpy.samplerate))
-
-	start_frame = clamp(start_frame, 0, len(cpy.buffers[0].data)-1)
-	end_frame = clamp(end_frame, 0, len(cpy.buffers[0].data)-1)
-
-	assert(start_frame <= end_frame)
-	if start_frame >= end_frame {return}
-
-	//frame_count := (end_frame - start_frame) + 1
-
-	channels = cpy.channels
-	samplerate = cpy.samplerate
-	for ch in 0..<cpy.channels {
-		//output.data[ch] = make([]f32, want_frame_count, allocator)
-		copy(output[ch][:], cpy.buffers[ch].data[start_frame:end_frame])
-	}
-
-	ok = true
-	return*/
 }
 
 import "core:fmt"
@@ -335,21 +303,9 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 	cpy.channels = channels
 	cpy.samplerate = samplerate
 
-	/*if len(cpy.prev_buffer) > 0 {
-		for ch in 0..<channels {
-			util.rb_produce(&cpy.buffers[0], cpy.prev_buffer[:], channels, ch)
-		}
-	}
-
-	resize(&cpy.prev_buffer, len(input)/2)
-	copy(cpy.prev_buffer[:], input[len(input)/2:])*/
-
 	for ch in 0..<channels {
 		util.rb_produce(&cpy.buffers[ch], input[:], channels, ch)
 	}
-
-	//cpy.timestamp._nsec -= auto_cast((f32(cpy.buffers[0].sizes[2]) / f32(samplerate)) * 1e9)
-	//cpy.timestamp._nsec -= auto_cast((f32(first_buffer_length) / f32(samplerate)) * 1e9)
 }
 
 @(private="file")

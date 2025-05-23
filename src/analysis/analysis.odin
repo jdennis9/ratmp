@@ -1,6 +1,7 @@
 package analysis
 
 import "core:math"
+import "core:math/bits"
 import glm "core:math/linalg/glsl"
 
 import "src:bindings/fftw"
@@ -96,11 +97,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 	frame_count := len(input)
 
 	msb :: proc "contextless" (x: i32) -> u32 {
-		for i := u32(30); ; i -= 1 {
-			if x & (1<<i) != 0 {return i}
-			if i == 0 {break}
-		}
-		return 0
+		return bits.log2(u32(x))
 	}
 
 	ln :: proc "contextless" (y: f32) -> (result: f32) {

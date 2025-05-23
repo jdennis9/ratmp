@@ -24,7 +24,7 @@ rb_reset :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
 	buf.producer_index = 0
 }
 
-rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []f32, stride := 1, offset := 0) {
+rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []T, stride := 1, offset := 0) {
 	for i := 0; i < len(data); i += stride {
 		if (buf.producer_index + 1) % int(SIZE) == buf.consumer_index {
 			return
@@ -37,18 +37,26 @@ rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []f32, stride := 1, offse
 }
 
 // Fills the output buffer as much as possible, then consumes consume_count elements
-rb_consume :: proc(buf: ^Ring_Buffer($T, $SIZE), output: []f32, consume_count: int) -> (elems_copied: int) {
-	base := buf.consumer_index
-	for i in 0..<len(output) {
-		n := _wrap(base+i, int(SIZE))
-		if n == buf.producer_index {break}
-		output[i] = buf.data[n]
-		elems_copied += 1
+rb_consume :: proc(buf: ^Ring_Buffer($T, $SIZE), output: []T, consume_count: int) -> (elems_copied: int) {
+	copied := 0
+	producer := sync.atomic_load(&buf.producer_index)
+	consumer := sync.atomic_load(&buf.consumer_index)
 
+	if producer < consumer {
+		copied = copy(output[:], buf.data[consumer:int(SIZE)])
+	}
+	else {
+		copied = copy(output[:], buf.data[consumer:producer])
 	}
 
-	buf.consumer_index += consume_count
-	buf.consumer_index = _wrap(buf.consumer_index, int(SIZE))
+	left_over := len(output) - copied
+	if left_over > 0 {
+		copy(output[copied:], buf.data[0:min(left_over, producer)])
+	}
+
+	consumer += consume_count
+	consumer = _wrap(consumer, int(SIZE))
+	sync.atomic_store(&buf.consumer_index, consumer)
 
 	return
 }
