@@ -172,6 +172,9 @@ _track_table_show :: proc(
 		imgui.TableSetupColumn(server.METADATA_COMPONENT_NAMES[component], column_flags[component])
 	}
 
+	imgui.TableSetupScrollFreeze(1, 1)
+	imgui.TableHeadersRow()
+
 	// Sorting
 	table_sort_specs := imgui.TableGetSortSpecs(); 
 	if table_sort_specs != nil && table_sort_specs.Specs != nil && table_sort_specs.SpecsDirty {
@@ -186,9 +189,6 @@ _track_table_show :: proc(
 		table_sort_specs.SpecsDirty = false
 		result.sort_spec = spec
 	}
-
-	imgui.TableSetupScrollFreeze(1, 1)
-	imgui.TableHeadersRow()
 
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows))
 	defer imgui.ListClipper_End(&list_clipper)

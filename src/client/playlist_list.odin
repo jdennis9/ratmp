@@ -57,43 +57,6 @@ _show_playlist_list_window :: proc(
 			}
 		}
 
-		/*display_playlist_ids := _playlist_filter_update(&state.playlist_filter, cat)
-
-		// Show playlist table
-		if table, show_table := _begin_playlist_table("##groups", cat, display_playlist_ids, &state.selected_id); show_table {
-			sort_spec: server.Playlist_Sort_Spec
-			if _playlist_table_update_sort_spec(&sort_spec) {
-				server.playlist_list_sort(cat, sort_spec)
-			}
-
-			for _playlist_table_row(cl, &table, sv^) {
-				// Play
-				if _play_track_input_pressed() {
-					server.play_playlist(sv, table.playlist.tracks[:], table.playlist.id)
-					state.selected_id = table.playlist.id
-				}
-
-				// Right-click context
-				if allow_edit && imgui.BeginPopupContextItem() {
-					if imgui.MenuItem("Delete playlist") {
-						want_delete_playlist = table.playlist.id
-					}
-					imgui.EndPopup()
-				}
-
-				if allow_edit && imgui.BeginDragDropTarget() {
-					payload, have_payload := _get_track_drag_drop_payload(cl)
-					if have_payload {
-						server.playlist_add_tracks(table.playlist, sv.library, payload)
-					}
-					imgui.EndDragDropTarget()
-				}
-			}
-
-			_end_playlist_table(&table)
-		}*/
-
-
 		context_id := imgui.GetID("##playlist_context_menu")
 		filter_cstring := cstring(&state.playlist_filter[0])
 

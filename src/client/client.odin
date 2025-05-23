@@ -395,11 +395,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Debug
 	when ODIN_DEBUG {
-		if client.show_imgui_theme_editor {
+		if cl.show_imgui_theme_editor {
 			imgui.ShowStyleEditor()
 		}
 
-		if client.show_memory_usage {
+		if cl.show_memory_usage {
 			_show_memory_usage(cl, sv^)
 		}
 	}
