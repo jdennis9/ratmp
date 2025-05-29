@@ -203,8 +203,14 @@ theme_path_from_name :: proc(client: Client, name: string, allocator: runtime.Al
 	return filepath.join({client.paths.theme_folder, with_extension}, allocator)
 }
 
+theme_delete_from_name :: proc(client: ^Client, name: string) {
+	path := theme_path_from_name(client^, name, context.allocator)
+	defer delete(path)
+	os2.remove(path)
+}
+
 @private
-_themes_init :: proc(client: ^Client) {
+_theme_scan_folder :: proc(client: ^Client) {
 	if !os2.exists(client.paths.theme_folder) {
 		os2.make_directory_all(client.paths.theme_folder)
 	}
@@ -225,6 +231,11 @@ _themes_init :: proc(client: ^Client) {
 		name := filepath.stem(filepath.base(file.fullpath))
 		append(&client.theme_names, strings.clone_to_cstring(name))
 	}
+}
+
+@private
+_themes_init :: proc(client: ^Client) {
+	_theme_scan_folder(client)
 }
 
 @private
@@ -302,11 +313,11 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 	}
 	imgui.SameLine()
 
-	if len(client.current_theme_name) == 0 {imgui.BeginDisabled()}
+	imgui.BeginDisabled(len(client.current_theme_name) == 0)
 	if imgui.Button("Save") {
 		theme_save_from_name(client^, theme^, string(client.current_theme_name))
 	}
-	if len(client.current_theme_name) == 0 {imgui.EndDisabled()}
+	imgui.EndDisabled()
 
 	imgui.SameLine()
 	if imgui.Button("Load") {
@@ -316,7 +327,15 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 
 	imgui.SameLine()
 	if imgui.Button("Delete") {
-		//theme_delete_from_name(client, string(client.current_theme_name))
+		theme_delete_from_name(client, string(client.current_theme_name))
+		_theme_scan_folder(client)
+		if len(client.theme_names) > 0 {
+			theme_load_from_name(client^, theme, string(client.theme_names[0]))
+			set_theme(client, theme^, string(client.theme_names[0]))
+		}
+		else {
+			client.current_theme_name = nil
+		}
 	}
 
 	for col in Theme_Custom_Color {
