@@ -342,12 +342,18 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 		changes |= imgui.ColorEdit4(_CUSTOM_COLOR_NAMES[col], &theme.custom_colors[col])
 	}
 
-	imgui.SeparatorText("Accent Colors")
+	imgui.SeparatorText("Quick Edit")
 	{
 		gen: bool
 		gen |= imgui.ColorEdit3("Fg. Primary", &theme.gen_params.colors[.FgPrimary])
 		gen |= imgui.ColorEdit3("Fg. Secondary", &theme.gen_params.colors[.FgSecondary])
 		gen |= imgui.SliderFloat("Brightness", &theme.gen_params.brightness_offset, -1, 1)
+		if imgui.ColorEdit4("Window background", &style.Colors[imgui.Col.WindowBg]) {
+			theme.imgui_colors[.WindowBg] = style.Colors[imgui.Col.WindowBg]
+		}
+		if imgui.ColorEdit4("Text", &style.Colors[imgui.Col.Text]) {
+			theme.imgui_colors[.Text] = style.Colors[imgui.Col.Text]
+		}
 		if gen {
 			theme_generate(theme, theme.gen_params)
 		}
