@@ -15,7 +15,7 @@ _Playlist_Row :: struct {
 	name: cstring,
 	//duration: struct {h, m, s: u8},
 	length: i32,
-	duration_str: [7]u8,
+	duration_str: [8]u8,
 }
 
 _Playlist_Table_2 :: struct {
