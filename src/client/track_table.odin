@@ -387,6 +387,7 @@ _track_show_context :: proc(
 	context_id: imgui.ID,
 	sv: Server,
 ) -> (result: _Track_Context_Result) {
+	result.single_track = track_id
 	if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) {
 		_track_show_context_items(track_id, &result, sv)
 		imgui.EndPopup()

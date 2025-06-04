@@ -86,6 +86,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 	if imgui.BeginPopupContextItem() {
 		//_track_process_context(track_id, _track_show_context(track_id, imgui.GetID("##track_context"), sv^), client, sv, true)
 		result: _Track_Context_Result
+		result.single_track = track_id
 		_track_show_context_items(track_id, &result, sv^)
 		_track_process_context(track_id, result, client, sv, true)
 		imgui.EndPopup()
