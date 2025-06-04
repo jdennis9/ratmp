@@ -478,12 +478,14 @@ _go_to_genre :: proc(client: ^Client, md: Track_Metadata) {
 @private
 _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	STOP_ICON :: ""
+	ARROW_ICON :: ""
 	SHUFFLE_ICON :: ""
 	PREV_TRACK_ICON :: ""
 	NEXT_TRACK_ICON :: ""
 	PLAY_ICON :: ""
 	PAUSE_ICON :: ""
-	REPEAT_ICON :: ""
+	REPEAT_ICON :: ""
+	REPEAT_SINGLE_ICON :: ""
 
 	if !imgui.BeginMainMenuBar() {return}
 	defer imgui.EndMainMenuBar()
@@ -578,21 +580,56 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	
 	// Playback controls
 	imgui.Separator()
-	if imgui.MenuItem(sv.enable_shuffle ? SHUFFLE_ICON : REPEAT_ICON) {
-		server.set_shuffle_enabled(sv, !sv.enable_shuffle)
+
+	switch sv.playback_mode {
+		case .Playlist: {
+			if imgui.MenuItem(ARROW_ICON) {
+				server.set_playback_mode(sv, .RepeatPlaylist)
+			}
+			imgui.SetItemTooltip("Stop after playlist")
+		}
+		case .RepeatPlaylist: {
+			if imgui.MenuItem(REPEAT_ICON) {
+				server.set_playback_mode(sv, .RepeatSingle)
+			}
+			imgui.SetItemTooltip("Repeat playlist")
+		}
+		case .RepeatSingle: {
+			if imgui.MenuItem(REPEAT_SINGLE_ICON) {
+				server.set_playback_mode(sv, .Playlist)
+			}
+			imgui.SetItemTooltip("Repeat track")
+		}
 	}
+
+	{
+		value := sv.enable_shuffle
+		if imgui.MenuItemBoolPtr(SHUFFLE_ICON, nil, &value) {
+			server.set_shuffle_enabled(sv, value)
+		}
+		imgui.SetItemTooltip("Shuffle")
+	}
+
+	imgui.Separator()
+	if imgui.MenuItem(STOP_ICON) {
+		server.stop_playback(sv)
+	}
+	imgui.SetItemTooltip("Stop playback")
 
 	if imgui.MenuItem(PREV_TRACK_ICON) {
 		server.play_prev_track(sv)
 	}
+	imgui.SetItemTooltip("Step back in queue")
 
 	if imgui.MenuItem(server.is_paused(sv^) ? PLAY_ICON : PAUSE_ICON) {
 		server.set_paused(sv, !server.is_paused(sv^))
 	}
+	imgui.SetItemTooltip("Play/pause")
 
 	if imgui.MenuItem(NEXT_TRACK_ICON) {
 		server.play_next_track(sv)
 	}
+	imgui.SetItemTooltip("Step forward in queue")
 
 	imgui.Separator()
 

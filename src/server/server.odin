@@ -14,6 +14,12 @@ import "src:util"
 
 MAX_OUTPUT_CHANNELS :: 2
 
+Playback_Mode :: enum {
+	Playlist,
+	RepeatPlaylist,
+	RepeatSingle,
+}
+
 Server :: struct {
 	ctx: runtime.Context,
 
@@ -28,8 +34,9 @@ Server :: struct {
 	queue_pos: int,
 	queue_serial: uint,
 	paused: bool,
-	enable_shuffle: bool,
+	playback_mode: Playback_Mode,
 	queue_is_shuffled: bool,
+	enable_shuffle: bool,
 
 	output_copy: struct {
 		channels, samplerate: int,
@@ -151,19 +158,35 @@ get_track_second :: proc(state: ^Server) -> int {
 
 set_paused :: proc(state: ^Server, paused: bool, no_lock := false) {
 	if state.paused != paused {
-		state.paused = paused
 		if paused {
 			audio_pause(&state.stream)
+			state.paused = paused
+			send_event(state, State_Changed_Event{paused = state.paused})
 		}
-		else {
+		else if decoder.is_open(state.decoder) {
 			audio_resume(&state.stream)
+			state.paused = paused
+			send_event(state, State_Changed_Event{paused = state.paused})
 		}
-		
-		send_event(state, State_Changed_Event{paused = state.paused})
 	}
 }
 
 is_paused :: proc(state: Server) -> bool {return state.paused}
+is_stopped :: proc(state: Server) -> bool {return !decoder.is_open(state.decoder)}
+
+set_shuffle_enabled :: proc(state: ^Server, value: bool) {
+	if value && !state.queue_is_shuffled {
+		rand.shuffle(state.queue[:])
+		state.queue_is_shuffled = true
+		state.queue_serial += 1
+	}
+
+	state.enable_shuffle = value
+}
+
+set_playback_mode :: proc(state: ^Server, mode: Playback_Mode) {
+	state.playback_mode = mode
+}
 
 set_volume :: proc(state: ^Server, volume: f32) {
 	audio_set_volume(&state.stream, volume)
@@ -201,15 +224,6 @@ play_playlist :: proc(
 	state.queue_serial += 1
 }
 
-set_shuffle_enabled :: proc(state: ^Server, enabled: bool) {
-	if enabled && !state.queue_is_shuffled && len(state.queue) > 1 {
-		rand.shuffle(state.queue[:])
-		state.queue_is_shuffled = true
-		state.queue_serial += 1
-	}
-	state.enable_shuffle = enabled
-}
-
 remove_tracks_from_queue :: proc(state: ^Server, tracks: []Track_ID) {
 	removed: bool
 	for track in tracks {
@@ -219,7 +233,7 @@ remove_tracks_from_queue :: proc(state: ^Server, tracks: []Track_ID) {
 	}
 	if removed {state.queue_serial += 1}
 }
-
+ 
 sort_queue :: proc(state: ^Server, spec: Track_Sort_Spec) {
 	library_sort_tracks(state.library, state.queue[:], spec)
 	state.queue_serial += 1
@@ -230,17 +244,31 @@ play_prev_track :: proc(state: ^Server, dont_drop_buffer := false) {
 }
 
 play_next_track :: proc(state: ^Server, dont_drop_buffer := false) {
+	if state.playback_mode == .Playlist && state.queue_pos == len(state.queue)-1 {
+		stop_playback(state)
+		return
+	}
+
 	set_queue_position(state, state.queue_pos+1, dont_drop_buffer)
+}
+
+stop_playback :: proc(state: ^Server) {
+	log.info("Stopping playback...")
+	sync.lock(&state.playback_lock)
+	defer sync.unlock(&state.playback_lock)
+	state.current_track_id = 0
+	state.current_playlist_id = {}
+	decoder.close(&state.decoder)
+	clear(&state.queue)
+	state.queue_serial += 1
+	set_paused(state, true, true)
 }
 
 set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) -> bool {
 	if len(state.queue) == 0 {return false}
 	state.queue_pos = pos
 
-	if state.queue_pos >= len(state.queue) {
-		state.queue_pos = 0
-	}
-	else if state.queue_pos < 0 {
+	if state.queue_pos >= len(state.queue) || state.queue_pos < 0 {
 		state.queue_pos = 0
 	}
 
@@ -258,11 +286,6 @@ set_queue_track :: proc(state: ^Server, track_id: Track_ID) -> bool {
 	return set_queue_position(state, index)
 }
 
-Audio_Time_Frame :: struct {
-	samplerate, channels: int,
-	data: [MAX_OUTPUT_CHANNELS][]f32,
-}
-
 audio_time_frame_from_playback :: proc(
 	state: ^Server, output: [][$WINDOW_SIZE]f32,
 	from_timestamp: time.Tick, delta: f32,
@@ -278,14 +301,6 @@ audio_time_frame_from_playback :: proc(
 	}
 
 	return cpy.samplerate, cpy.channels, true
-}
-
-import "core:fmt"
-
-audio_time_frame_delete :: proc(time_frame: Audio_Time_Frame) {
-	for d in time_frame.data {
-		delete(d)
-	}
 }
 
 // This is being called on the audio thread!
@@ -349,7 +364,12 @@ _audio_event_callback :: proc(data: rawptr, event: Audio_Event) {
 		}
 
 		case .Finish: {
-			play_next_track(state, true)
+			if state.playback_mode == .RepeatSingle {
+				set_queue_position(state, state.queue_pos, true)
+			}
+			else {
+				play_next_track(state, true)
+			}
 		}
 	}
 }

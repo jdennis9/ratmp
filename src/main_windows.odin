@@ -155,7 +155,7 @@ run :: proc() -> bool {
 		window_is_visible := win.IsWindowVisible(_win32.hwnd) && !win.IsIconic(_win32.hwnd)
 		
 		// Handle events
-		if window_is_visible && !obscured && !paused {
+		if window_is_visible && !obscured /*&& !paused*/ {
 			for win.PeekMessageW(&msg, nil, 0, 0, win.PM_REMOVE) {
 				win.TranslateMessage(&msg)
 				win.DispatchMessageW(&msg)
