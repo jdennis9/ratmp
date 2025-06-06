@@ -31,11 +31,15 @@ _Track_Row :: struct {
 	selected: bool,
 }
 
+_Track_Table_Flag :: enum {NoSort,}
+_Track_Table_Flags :: bit_set[_Track_Table_Flag]
+
 _Track_Table_2 :: struct {
 	rows: [dynamic]_Track_Row,
 	serial: uint,
 	playlist_id: Playlist_ID,
 	filter_hash: u32,
+	flags: _Track_Table_Flags,
 }
 
 _Track_Table_Result :: struct {
@@ -83,8 +87,10 @@ _track_table_update :: proc(
 	tracks: []Track_ID,
 	playlist_id: Playlist_ID,
 	filter: string,
+	flags: _Track_Table_Flags = {},
 ) {
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
+	table.flags = flags
 
 	if len(table.rows) != 0 && table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
 	table.playlist_id = playlist_id
@@ -150,9 +156,13 @@ _track_table_show :: proc(
 	first_selected_row: Maybe(int)
 
 	table_flags := imgui.TableFlags_BordersInner|imgui.TableFlags_Hideable|
-		imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate|imgui.TableFlags_Resizable|
+		imgui.TableFlags_Resizable|
 		imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Reorderable|imgui.TableFlags_RowBg|
 		imgui.TableFlags_ScrollY
+
+	if .NoSort not_in table.flags {
+		table_flags |= imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
+	}
 
 	column_flags := #partial [Metadata_Component]imgui.TableColumnFlags {
 		.Title = {.NoHide},

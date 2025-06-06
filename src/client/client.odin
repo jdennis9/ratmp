@@ -310,10 +310,10 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		state := &cl.queue_window
 		context_id := imgui.GetID("##track_context")
 
-		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "")
+		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
 		table_result := _track_table_show(state.table, "##queue", cl.theme, context_id, sv.current_track_id)
 
-		if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
+		//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
 		_track_table_process_results(state.table, table_result, cl, sv, {.SetQueuePos})
 		
 		context_result := _track_table_show_context(state.table, table_result, context_id, {}, sv^)
