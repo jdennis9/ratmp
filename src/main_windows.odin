@@ -8,6 +8,7 @@ import "core:fmt"
 import "core:unicode/utf16"
 import "core:time"
 import "core:sync"
+import "core:os"
 
 import imgui "thirdparty/odin-imgui"
 import imgui_dx11 "thirdparty/odin-imgui/imgui_impl_dx11"
@@ -225,6 +226,8 @@ run :: proc() -> bool {
 
 main :: proc() {
 	when ODIN_DEBUG {
+		context.logger = log.create_console_logger()
+
 		allocator: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&allocator, context.allocator)
 		context.allocator = mem.tracking_allocator(&allocator)
@@ -237,13 +240,18 @@ main :: proc() {
 		}
 	}
 	else {
+		log_file, file_error := os.open("log.txt", os.O_WRONLY)
+		if file_error != nil {
+			context.logger = log.create_file_logger(log_file)
+		}
+
+		defer if file_error != nil {os.close(log_file)}
+
 		// For -vet
 		a, _ := mem.make_dynamic_array([dynamic]f32)
 		fmt.println(a)
 		delete(a)
 	}
-
-	context.logger = log.create_console_logger()
 
 	run()
 }
