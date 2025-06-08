@@ -83,7 +83,7 @@ _waveform_seek_bar :: proc(
 
 		if (abs(pmin.y - pmax.y) < 1) {
 			pmin.y -= 1
-			pmax.y = pmin.y + 1
+			pmax.y = pmin.y + 2
 		}
 
 		color := imgui.GetStyleColorVec4(.PlotLines)^
