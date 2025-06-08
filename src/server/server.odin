@@ -8,6 +8,8 @@ import "core:time"
 import "core:log"
 import "core:path/filepath"
 import "core:math"
+import "core:encoding/json"
+import "core:os/os2"
 
 import decoder "src:decoder_v2"
 import "src:util"
@@ -18,6 +20,12 @@ Playback_Mode :: enum {
 	Playlist,
 	RepeatPlaylist,
 	RepeatSingle,
+}
+
+@private
+_Saved_State :: struct {
+	enable_shuffle: bool,
+	playback_mode: Playback_Mode,
 }
 
 Server :: struct {
@@ -57,6 +65,8 @@ Server :: struct {
 	background_scan: _Background_Scan,
 	scan_queue: [dynamic]Path,
 	library_save_serial: uint,
+
+	saved_state: _Saved_State,
 }
 
 init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: string) -> (ok: bool) {
@@ -71,10 +81,12 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	library_init(&state.library, state.paths.playlists_folder) or_return
 	state.stream = audio_create_stream(_audio_stream_callback, _audio_event_callback, state) or_return
 	set_paused(state, true)
-
+	
 	library_load_from_file(&state.library, state.paths.library)
 	library_scan_playlists(&state.library)
 
+	load_state(state)
+	
 	for &b in state.output_copy.buffers {
 		util.rb_init(&b)
 	}
@@ -84,6 +96,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 }
 
 clean_up :: proc(state: ^Server) {
+	save_state(state)
 	library_save_to_file(state.library, state.paths.library)
 	library_destroy(&state.library)
 	audio_destroy_stream(&state.stream)
@@ -93,6 +106,34 @@ queue_files_for_scanning :: proc(state: ^Server, files: []Path) {
 	for file in files {
 		append(&state.scan_queue, file)
 	}
+}
+
+save_state :: proc(state: ^Server) {
+	state.saved_state.enable_shuffle = state.enable_shuffle
+	state.saved_state.playback_mode = state.playback_mode
+
+	data, marshal_error := json.marshal(state.saved_state)
+	if marshal_error != nil {return}
+	defer delete(data)
+
+	os2.remove(state.paths.state)
+	file, file_error := os2.create(state.paths.state)
+	if file_error != nil {return}
+	defer os2.close(file)
+
+	os2.write(file, data)
+}
+
+load_state :: proc(state: ^Server) {
+	ss: _Saved_State
+
+	data, read_error := os2.read_entire_file_from_path(state.paths.state, context.allocator)
+	if read_error != nil {return}
+	if json.unmarshal(data, &ss) != nil {return}
+
+	set_shuffle_enabled(state, ss.enable_shuffle)
+	set_playback_mode(state, ss.playback_mode)
+	state.saved_state = ss
 }
 
 flush_scan_queue :: proc(state: ^Server) {
@@ -326,7 +367,6 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 
 @(private="file")
 _clear_output_copy_buffer :: proc(state: ^Server) {
-	log.debug("Floob")
 	for &b in state.output_copy.buffers {
 		util.rb_reset(&b)
 	}
