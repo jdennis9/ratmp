@@ -56,6 +56,7 @@ Server :: struct {
 
 	background_scan: _Background_Scan,
 	scan_queue: [dynamic]Path,
+	library_save_serial: uint,
 }
 
 init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: string) -> (ok: bool) {

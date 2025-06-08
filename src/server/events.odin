@@ -44,4 +44,9 @@ handle_events :: proc(state: ^Server) {
 	flush_scan_queue(state)
 	library_save_dirty_playlists(state.library)
 	_background_scan_output_results(&state.library, &state.background_scan)
+
+	if state.library.serial != state.library_save_serial {
+		state.library_save_serial = state.library.serial
+		library_save_to_file(state.library, state.paths.library)
+	}
 }
