@@ -228,7 +228,7 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, channels: int, samplerate: int
 		frames_decoded += packet_frames
 		dec.frame_index += packet_frames_in
 
-		if dec.frame_index > dec.frame_count {
+		if dec.frame_index >= dec.frame_count {
 			status = .Eof
 			break
 		}
