@@ -426,6 +426,7 @@ _track_process_context :: proc(
 		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
 		if track_found && playlist_found {
 			server.playlist_add_track(playlist, track_id, md)
+			sv.library.user_playlists.serial += 1
 		}
 	}
 }
