@@ -134,7 +134,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		result.single_track = track_id
 		_track_show_context_items(track_id, &result, sv^)
 		_track_process_context(track_id, result, client, sv, true)
-		imgui.MenuItemBoolPtr("Crop image to square", nil, &state.crop_art)
+		imgui.MenuItemBoolPtr("Crop image", nil, &state.crop_art)
 		imgui.EndPopup()
 	}
 
