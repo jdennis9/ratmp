@@ -17,6 +17,7 @@ _Persistent_State :: struct {
 	theme: string,
 	background: string,
 	enable_media_controls: bool,
+	crop_album_art: bool,
 	fonts: []_Persistent_State_Font,
 }
 
@@ -26,6 +27,7 @@ save_persistent_state :: proc(client: Client) {
 	state.theme = string(client.current_theme_name)
 	state.background = client.background.path
 	state.enable_media_controls = client.enable_media_controls
+	state.crop_album_art = client.metadata_window.crop_art
 
 	util.dump_json(state, client.paths.persistent_state)
 }
@@ -48,4 +50,5 @@ load_persistent_state :: proc(client: ^Client) {
 	set_background(client, state.background)
 
 	client.enable_media_controls = state.enable_media_controls
+	client.metadata_window.crop_art = state.crop_album_art
 }
