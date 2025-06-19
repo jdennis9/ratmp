@@ -11,7 +11,7 @@ import "core:time"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:analysis"
-import "src:decoder"
+import decoder "src:decoder_v2"
 import "src:server"
 
 PEAK_ROUGHNESS :: 20

@@ -25,6 +25,7 @@ Decoder :: struct {
 	overflow_samplerate: int,
 	overflow_channels: int,
 	samplerate: int,
+	channels: int,
 	frame_index: int,
 	frame_count: int,
 	duration_seconds: i64,
@@ -67,6 +68,7 @@ open :: proc(dec: ^Decoder, filename_native: string) -> (ok: bool) {
 	dec.packet = av.packet_alloc()
 	dec.frame = av.frame_alloc()
 	dec.samplerate = auto_cast codecpar.sample_rate
+	dec.channels = auto_cast codecpar.ch_layout.nb_channels
 	dec.frame_index = 0
 	dec.duration_seconds = (dec.demuxer.duration / av.TIME_BASE)
 	dec.frame_count = int(dec.duration_seconds) * int(codecpar.sample_rate)
