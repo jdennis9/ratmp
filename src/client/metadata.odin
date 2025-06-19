@@ -3,6 +3,7 @@ package client
 
 import "core:strings"
 import "core:time"
+import "core:os/os2"
 
 import stbi "vendor:stb/image"
 
@@ -16,6 +17,7 @@ _Metadata_Window :: struct {
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
 	crop_art: bool,
+	file_info: os2.File_Info,
 }
 
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
@@ -75,6 +77,9 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		else {
 			state.album_art_ratio = 1
 		}
+
+		os2.file_info_delete(state.file_info, context.allocator)
+		state.file_info = os2.stat(track_path, context.allocator) or_else {}
 	}
 	
 	if state.current_track_id == 0 {
@@ -160,6 +165,20 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		}
 	}
 
+	number_row :: proc(name: cstring, value: i64) {
+		if value == 0 {return}
+		imgui.TableNextRow()
+
+		if imgui.TableSetColumnIndex(0) {
+			imgui.TextUnformatted(name)
+		}
+
+		if imgui.TableSetColumnIndex(1) {
+			buf: [32]u8
+			_native_text(&buf, value)
+		}
+	}
+
 	// Tags
 	imgui.SeparatorText("Metadata")
 	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
@@ -173,6 +192,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 					string_row(server.METADATA_COMPONENT_NAMES[component], metadata.values[component].(string) or_else "")
 				}
 				case i64: {
+					//number_row(server.METADATA_COMPONENT_NAMES[component], metadata.values[component].(i64) or_else 0)
 				}
 			}
 		}
@@ -196,6 +216,16 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 
 		path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_else ""
 		string_row("File path", path)
+
+		// File size
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) {
+			_native_text_unformatted("Size")
+		}
+		if imgui.TableSetColumnIndex(1) {
+			buf: [32]u8
+			_native_textf(&buf, "%.2f MiB", f32(state.file_info.size) / (1024*1024))
+		}
 
 		imgui.EndTable()
 	}
