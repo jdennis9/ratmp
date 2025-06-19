@@ -14,9 +14,11 @@ import "src:server"
 _Metadata_Window :: struct {
 	current_track_id: Track_ID,
 	album_art: imgui.TextureID,
+	album_art_ratio: f32,
+	crop_art: bool,
 }
 
-_load_track_album_art :: proc(client: Client, str_path: string) -> (texture: imgui.TextureID, ok: bool) {
+_load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
 	if client.create_texture_proc == nil {return}
 
 	path_buf: Path
@@ -44,7 +46,7 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (texture: img
 		if image_data == nil {return}
 		defer stbi.image_free(image_data)
 
-		return client.create_texture_proc(image_data, auto_cast width, auto_cast height)
+		return auto_cast width, auto_cast height, client.create_texture_proc(image_data, auto_cast width, auto_cast height)
 	}
 
 	return
@@ -52,6 +54,9 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (texture: img
 
 _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID, state: ^_Metadata_Window) -> (ok: bool) {
 	if state.current_track_id != track_id {
+		width, height: int
+		have_art: bool
+
 		state.current_track_id = track_id
 
 		client.destroy_texture_proc(state.album_art)
@@ -63,7 +68,13 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 
 		path_buf: Path
 		track_path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_return
-		state.album_art = _load_track_album_art(client^, track_path) or_else nil
+		width, height, state.album_art, have_art = _load_track_album_art(client^, track_path)
+		if have_art {
+			state.album_art_ratio = f32(height) / f32(width)
+		}
+		else {
+			state.album_art_ratio = 1
+		}
 	}
 	
 	if state.current_track_id == 0 {
@@ -72,14 +83,49 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 	}
 
 	// Album art
-	imgui.PushStyleColor(.Button, 0)
-	imgui.PushStyleColor(.ButtonActive, 0)
-	imgui.PushStyleColor(.ButtonHovered, 0)
-	imgui.PushStyleVarImVec2(.FramePadding, {})
-	size := imgui.GetContentRegionAvail().x
-	imgui.ImageButton("##album_art", state.album_art, {size, size})
-	imgui.PopStyleVar()
-	imgui.PopStyleColor(3)
+	if imgui.CollapsingHeader("Album Art", {.DefaultOpen}) {
+		imgui.PushStyleColor(.Button, 0)
+		imgui.PushStyleColor(.ButtonActive, 0)
+		imgui.PushStyleColor(.ButtonHovered, 0)
+		imgui.PushStyleVarImVec2(.FramePadding, {})
+		width := imgui.GetContentRegionAvail().x
+		if state.album_art != nil {
+			if state.crop_art {
+				ratio := state.album_art_ratio
+				uv0: [2]f32
+				uv1: [2]f32
+
+				if state.album_art_ratio > 1 {
+					// width < height
+					uv0.x = 0
+					uv0.y = 0.5 - (ratio*0.5)
+					uv1.x = 1
+					uv1.y = uv0.y + ratio
+				}
+				else if state.album_art_ratio < 1 {
+					// width > height
+					uv0.x = 0.5 - (ratio*0.5)
+					uv0.y = 0
+					uv1.x = uv0.x + ratio
+					uv1.y = 1
+				}
+				else {
+					uv0 = {0, 0}
+					uv1 = {1, 1}
+				}
+
+				imgui.ImageButton("##album_art", state.album_art, {width, width}, uv0, uv1)
+			}
+			else {
+				imgui.ImageButton("##album_art", state.album_art, {width, width * state.album_art_ratio})
+			}
+		}
+		else {
+			imgui.InvisibleButton("##album_art", {width, width})
+		}
+		imgui.PopStyleVar()
+		imgui.PopStyleColor(3)
+	}
 
 	metadata := server.library_get_track_metadata(sv.library, track_id) or_return
 
@@ -88,6 +134,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		result.single_track = track_id
 		_track_show_context_items(track_id, &result, sv^)
 		_track_process_context(track_id, result, client, sv, true)
+		imgui.MenuItemBoolPtr("Crop image to square", nil, &state.crop_art)
 		imgui.EndPopup()
 	}
 
