@@ -315,11 +315,20 @@ set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) 
 	}
 
 	path_buf: [512]u8
-	track_id := state.queue[state.queue_pos]
-	if path, found := library_get_track_path(state.library, path_buf[:], track_id); found {
-		return play_track(state, path, track_id, dont_drop_buffer)
-	}
-	
+	try_pos := state.queue_pos
+
+	for i in 1..<len(state.queue) {
+		defer try_pos += 1
+		if try_pos >= len(state.queue) {try_pos = 0}
+		track_id := state.queue[try_pos]
+		path := library_get_track_path(state.library, path_buf[:], track_id) or_continue
+		if play_track(state, path, track_id, dont_drop_buffer) {
+			state.queue_pos = try_pos
+			return true
+		}
+	}	
+
+	stop_playback(state)
 	return false
 }
 
