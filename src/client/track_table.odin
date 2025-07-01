@@ -50,6 +50,8 @@ _Track_Table_Result :: struct {
 	selection_count: int,
 	lowest_selection_index: int,
 	sort_spec: Maybe(server.Track_Sort_Spec),
+	play_selection: bool,
+	add_selection_to_queue: bool,
 }
 
 _free_track_table :: proc(table: ^_Track_Table_2) {
@@ -204,14 +206,20 @@ _track_table_show :: proc(
 		result.sort_spec = spec
 	}
 
-	// Jump to track on Ctrl + Space
-	if window_focused && _is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
-		for row, index in table.rows {
-			if row.id == playing {
-				jump_to_track = index
-				break
+	// Handle hotkeys
+	if window_focused {
+		// Jump to track on Ctrl + Space
+		if _is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
+			for row, index in table.rows {
+				if row.id == playing {
+					jump_to_track = index
+					break
+				}
 			}
 		}
+
+		result.play_selection |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .P)
+		result.add_selection_to_queue |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .Q)
 	}
 
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows))
@@ -354,6 +362,18 @@ _track_table_process_results :: proc(
 			server.play_playlist(sv, tracks, table.playlist_id, result.play.?)
 		}
 	}
+
+	if result.play_selection {
+		selection := _track_table_get_selection(table)
+		defer delete(selection)
+		server.play_playlist(sv, selection, table.playlist_id)
+	}
+	
+	if result.add_selection_to_queue {
+		selection := _track_table_get_selection(table)
+		defer delete(selection)
+		server.append_to_queue(sv, selection, table.playlist_id)
+	}
 }
 
 _Track_Context_Flag :: enum {NoRemove, NoQueue}
@@ -489,6 +509,4 @@ _track_table_process_context :: proc(
 			sv.library.user_playlists.serial += 1
 		}
 	}
-
-
 }

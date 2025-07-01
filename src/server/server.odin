@@ -278,7 +278,6 @@ append_to_queue :: proc(sv: ^Server, tracks: []Track_ID, from_playlist: Playlist
 	for track in tracks {
 		if !slice.contains(sv.queue[:], track) {
 			append(&sv.queue, track)
-			log.debug(track)
 			shuffle_range_end += 1
 		}
 	}
