@@ -40,6 +40,7 @@ _Track_Table_2 :: struct {
 	playlist_id: Playlist_ID,
 	filter_hash: u32,
 	flags: _Track_Table_Flags,
+	jump_to_track: Maybe(int),
 }
 
 _Track_Table_Result :: struct {
@@ -154,6 +155,9 @@ _track_table_show :: proc(
 ) -> (result: _Track_Table_Result) {
 	list_clipper: imgui.ListClipper
 	first_selected_row: Maybe(int)
+	jump_to_track: Maybe(int)
+
+	window_focused := imgui.IsWindowFocused({.ChildWindows})
 
 	table_flags := imgui.TableFlags_BordersInner|imgui.TableFlags_Hideable|
 		imgui.TableFlags_Resizable|
@@ -200,8 +204,22 @@ _track_table_show :: proc(
 		result.sort_spec = spec
 	}
 
+	// Jump to track on Ctrl + Space
+	if window_focused && _is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
+		for row, index in table.rows {
+			if row.id == playing {
+				jump_to_track = index
+				break
+			}
+		}
+	}
+
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows))
 	defer imgui.ListClipper_End(&list_clipper)
+
+	if jump_to_track != nil {
+		imgui.ListClipper_IncludeItemByIndex(&list_clipper, auto_cast jump_to_track.?)
+	}
 
 	for imgui.ListClipper_Step(&list_clipper) {
 		for display_index in list_clipper.DisplayStart..<list_clipper.DisplayEnd {
@@ -209,6 +227,10 @@ _track_table_show :: proc(
 			row := &table.rows[index]
 
 			imgui.TableNextRow()
+
+			if jump_to_track != nil && index == jump_to_track.? {
+				imgui.SetScrollHereY()
+			}
 			
 			if row.id == playing {
 				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
@@ -334,7 +356,7 @@ _track_table_process_results :: proc(
 	}
 }
 
-_Track_Context_Flag :: enum {NoRemove}
+_Track_Context_Flag :: enum {NoRemove, NoQueue}
 _Track_Context_Flags :: bit_set[_Track_Context_Flag]
 _Track_Context_Result :: struct {
 	single_track: Maybe(Track_ID),
@@ -342,6 +364,8 @@ _Track_Context_Result :: struct {
 	go_to_artist: bool,
 	go_to_genre: bool,
 	remove: bool,
+	play: bool,
+	add_to_queue: bool,
 	add_to_playlist: Maybe(Playlist_ID),
 }
 
@@ -373,6 +397,11 @@ _track_table_show_context :: proc(
 	
 	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
 		result.remove = true
+	}
+
+	if .NoQueue not_in flags {
+		result.play |= imgui.MenuItem("Play", "Ctrl + P")
+		result.add_to_queue |= imgui.MenuItem("Add to queue", "Ctrl + Q")
 	}
 
 	return
@@ -438,6 +467,18 @@ _track_table_process_context :: proc(
 	if result.single_track != nil {
 		_track_process_context(result.single_track.?, result, cl, sv, false)
 	}
+	else {
+		if result.play {
+			selection := _track_table_get_selection(table)
+			defer delete(selection)
+			server.play_playlist(sv, selection, table.playlist_id)
+		}
+		if result.add_to_queue {
+			selection := _track_table_get_selection(table)
+			defer delete(selection)
+			server.append_to_queue(sv, selection, table.playlist_id)
+		}
+	}
 
 	if result.add_to_playlist != nil {
 		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
@@ -448,4 +489,6 @@ _track_table_process_context :: proc(
 			sv.library.user_playlists.serial += 1
 		}
 	}
+
+
 }

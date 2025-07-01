@@ -266,6 +266,32 @@ play_playlist :: proc(
 	state.queue_serial += 1
 }
 
+append_to_queue :: proc(sv: ^Server, tracks: []Track_ID, from_playlist: Playlist_ID) {
+	if from_playlist != sv.current_playlist_id {
+		sv.current_playlist_id = {}
+	}
+
+	shuffle_range_start := len(sv.queue)
+	shuffle_range_end := shuffle_range_start
+	sv.queue_serial += 1
+
+	for track in tracks {
+		if !slice.contains(sv.queue[:], track) {
+			append(&sv.queue, track)
+			log.debug(track)
+			shuffle_range_end += 1
+		}
+	}
+
+	assert(shuffle_range_end <= len(sv.queue))
+	
+	if sv.enable_shuffle {
+		if shuffle_range_end <= len(sv.queue) {
+			rand.shuffle(sv.queue[shuffle_range_start:shuffle_range_end])
+		}
+	}
+}
+
 remove_tracks_from_queue :: proc(state: ^Server, tracks: []Track_ID) {
 	removed: bool
 	for track in tracks {
