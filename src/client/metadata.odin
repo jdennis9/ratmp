@@ -10,6 +10,7 @@ import stbi "vendor:stb/image"
 import imgui "src:thirdparty/odin-imgui"
 import "src:bindings/taglib"
 
+import "src:util"
 import "src:server"
 
 _Metadata_Window :: struct {
@@ -23,12 +24,13 @@ _Metadata_Window :: struct {
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
 	if client.create_texture_proc == nil {return}
 
-	path_buf: Path
-	path := cstring(&path_buf[0])
+	when ODIN_OS == .Windows {
+		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(str_path, context.temp_allocator)))
+	}
+	else {
+		file := taglib.file_new(strings.clone_to_cstring(path, context.temp_allocator))
+	}
 
-	server.copy_string_to_buf(path_buf[:], str_path)
-
-	file := taglib.file_new(path)
 	if file == nil {return}
 	defer taglib.file_free(file)
 

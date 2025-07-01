@@ -224,11 +224,38 @@ run :: proc() -> bool {
 	return true
 }
 
+allocator_checker_proc :: proc(
+	allocator_data: rawptr, 
+	mode: runtime.Allocator_Mode, 
+	size, alignment: int, 
+	old_memory: rawptr, 
+	old_size: int, 
+	location := #caller_location, 
+) -> ([]u8, runtime.Allocator_Error) {
+	allocator := cast(^runtime.Allocator) allocator_data
+
+	#partial switch mode {
+		case .Alloc, .Alloc_Non_Zeroed: {
+			if size > 64<<10 {
+				log.debug("Big allocation", size, location)
+			}
+		}
+		case .Free: {
+			if size > 64<<10 {
+				log.debug("Big free", size, location)
+			}
+		}
+	}
+
+	return allocator.procedure(allocator.data, mode, size, alignment, old_memory, old_size, location)
+}
+
 main :: proc() {
 	when ODIN_DEBUG {
 		context.logger = log.create_console_logger()
+		default_allocator := context.allocator
 
-		allocator: mem.Tracking_Allocator
+		/*allocator: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&allocator, context.allocator)
 		context.allocator = mem.tracking_allocator(&allocator)
 		defer {
@@ -237,7 +264,12 @@ main :: proc() {
 			}
 
 			mem.tracking_allocator_destroy(&allocator)
-		}
+		}*/
+
+		/*allocator: log.Log_Allocator
+		log.log_allocator_init(&allocator, .Debug, log.Log_Allocator_Format.Human)
+		context.allocator = log.log_allocator(&allocator)*/
+		context.allocator = runtime.Allocator{data = &default_allocator, procedure = allocator_checker_proc}
 	}
 	else {
 		log_file, file_error := os.open("log.txt", os.O_WRONLY)
@@ -393,6 +425,36 @@ create_imgui_texture :: proc(data: rawptr, width, height: int) -> (out: imgui.Te
 	staging: ^dx11.ITexture2D
 	texture: ^dx11.ITexture2D
 	view: ^dx11.IShaderResourceView
+
+	/*desc := dx11.TEXTURE2D_DESC {
+		Width = auto_cast width,
+		Height = auto_cast height,
+		MipLevels = 1,
+		ArraySize = 1,
+		Format = .R8G8B8A8_UNORM,
+		SampleDesc = {
+			Count = 1,
+		},
+		Usage = .DEFAULT,
+		BindFlags = {.SHADER_RESOURCE},
+		CPUAccessFlags = {.WRITE},
+	}
+
+	sr := dx11.SHADER_RESOURCE_VIEW_DESC {
+		Format = desc.Format,
+		ViewDimension = .TEXTURE2D,
+		Texture2D = {
+			MipLevels = 1,
+		},
+	}
+
+	init_data: dx11.SUBRESOURCE_DATA
+	init_data.pSysMem = data
+	init_data.SysMemPitch = auto_cast width * 4
+
+	win32_check(_win32.d3d.device->CreateTexture2D(&desc, &init_data, &texture)) or_return
+	win32_check(_win32.d3d.device->CreateShaderResourceView(texture, &sr, &view)) or_return
+	return auto_cast view, true*/
 
 	desc := dx11.TEXTURE2D_DESC {
 		Width = auto_cast width,
