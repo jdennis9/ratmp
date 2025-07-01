@@ -95,7 +95,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		imgui.PushStyleColor(.ButtonActive, 0)
 		imgui.PushStyleColor(.ButtonHovered, 0)
 		imgui.PushStyleVarImVec2(.FramePadding, {})
-		width := imgui.GetContentRegionAvail().x
+		width := min(imgui.GetContentRegionAvail().x, 512)
 		if state.album_art != nil {
 			if state.crop_art {
 				ratio := state.album_art_ratio
