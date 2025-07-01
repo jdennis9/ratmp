@@ -258,7 +258,27 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	state.need_update_spectrum = true
 
-	if state.spectrum_bands == 0 {return}
+
+	if state.spectrum_bands == 0 {state.spectrum_bands = 0}
+
+	if imgui.BeginPopupContextWindow() {
+		imgui.SeparatorText("Band count")
+		if imgui.MenuItem("10", nil, state.spectrum_bands == 10) {state.spectrum_bands = 10}
+		if imgui.MenuItem("20", nil, state.spectrum_bands == 20) {state.spectrum_bands = 20}
+		if imgui.MenuItem("40", nil, state.spectrum_bands == 40) {state.spectrum_bands = 40}
+		if imgui.MenuItem("60", nil, state.spectrum_bands == 60) {state.spectrum_bands = 60}
+		if imgui.MenuItem("80", nil, state.spectrum_bands == 80) {state.spectrum_bands = 80}
+
+		imgui.SeparatorText("Display mode")
+		if imgui.MenuItem("Bars", nil, state.spectrum_display_mode == .Bars) {
+			state.spectrum_display_mode = .Bars
+		}
+		if imgui.MenuItem("Alpha", nil, state.spectrum_display_mode == .Alpha) {
+			state.spectrum_display_mode = .Alpha
+		}
+		imgui.EndPopup()
+	}
+
 
 	spectrum := state.spectrum[:state.spectrum_bands]
 
@@ -277,23 +297,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5})
 	defer imgui.PopStyleVar()
 	
-	if imgui.BeginPopupContextWindow() {
-		imgui.SeparatorText("Band count")
-		if imgui.MenuItem("10", nil, state.spectrum_bands == 10) {state.spectrum_bands = 10}
-		if imgui.MenuItem("20", nil, state.spectrum_bands == 20) {state.spectrum_bands = 20}
-		if imgui.MenuItem("40", nil, state.spectrum_bands == 40) {state.spectrum_bands = 40}
-		if imgui.MenuItem("60", nil, state.spectrum_bands == 60) {state.spectrum_bands = 60}
-		if imgui.MenuItem("80", nil, state.spectrum_bands == 80) {state.spectrum_bands = 80}
 
-		imgui.SeparatorText("Display mode")
-		if imgui.MenuItem("Bars", nil, state.spectrum_display_mode == .Bars) {
-			state.spectrum_display_mode = .Bars
-		}
-		if imgui.MenuItem("Alpha", nil, state.spectrum_display_mode == .Alpha) {
-			state.spectrum_display_mode = .Alpha
-		}
-		imgui.EndPopup()
-	}
 
 	table_flags := imgui.TableFlags_BordersInner
 	if imgui.BeginTable("##spectrum_table", auto_cast state.spectrum_bands, table_flags) {

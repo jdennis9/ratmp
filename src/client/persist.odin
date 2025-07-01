@@ -2,6 +2,9 @@
 package client
 
 import "core:mem"
+import "core:strings"
+import "core:reflect"
+import "core:log"
 
 import "src:util"
 
@@ -19,17 +22,41 @@ _Persistent_State :: struct {
 	enable_media_controls: bool,
 	crop_album_art: bool,
 	fonts: []_Persistent_State_Font,
+	analysis: struct {
+		spectrum_mode: _Spectrum_Display_Mode,
+		spectrum_bands: int,
+	},
+}
+
+_Persistent_State_Manager :: struct {
+	saved_state: _Persistent_State,
+}
+
+@(private="file")
+_get_persistent_state :: proc(client: Client, allocator: mem.Allocator) -> _Persistent_State {
+	state: _Persistent_State
+
+	state.theme = strings.clone(string(client.current_theme_name), allocator)
+	state.background = strings.clone(client.background.path, allocator)
+	state.enable_media_controls = client.enable_media_controls
+	state.crop_album_art = client.metadata_window.crop_art
+	state.analysis.spectrum_mode = client.analysis.spectrum_display_mode
+	state.analysis.spectrum_bands = client.analysis.spectrum_bands
+
+	return state
+}
+
+_persistent_state_update :: proc(client: ^Client) {
+	mgr := &client.persistent_state_manager
+	cur := _get_persistent_state(client^, context.temp_allocator)
+	if !reflect.equal(mgr.saved_state, cur, true) {
+		log.debug("Saving state", cur)
+		mgr.saved_state = _get_persistent_state(client^, context.allocator)
+	}
 }
 
 save_persistent_state :: proc(client: Client) {
-	state: _Persistent_State
-
-	state.theme = string(client.current_theme_name)
-	state.background = client.background.path
-	state.enable_media_controls = client.enable_media_controls
-	state.crop_album_art = client.metadata_window.crop_art
-
-	util.dump_json(state, client.paths.persistent_state)
+	util.dump_json(_get_persistent_state(client, context.temp_allocator), client.paths.persistent_state)
 }
 
 load_persistent_state :: proc(client: ^Client) {
@@ -51,4 +78,6 @@ load_persistent_state :: proc(client: ^Client) {
 
 	client.enable_media_controls = state.enable_media_controls
 	client.metadata_window.crop_art = state.crop_album_art
+	client.analysis.spectrum_display_mode = state.analysis.spectrum_mode
+	client.analysis.spectrum_bands = state.analysis.spectrum_bands
 }

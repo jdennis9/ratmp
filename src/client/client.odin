@@ -107,6 +107,8 @@ Client :: struct {
 
 	track_drag_drop_payload: []Track_ID,
 
+	persistent_state_manager: _Persistent_State_Manager,
+
 	wake_proc: proc(),
 }
 
@@ -246,6 +248,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	_async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	_update_analysis(cl, sv, delta)
+	_persistent_state_update(cl)
 	server.library_update_categories(&sv.library)
 
 	if result, have_result := _async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
