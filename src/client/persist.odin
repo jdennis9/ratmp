@@ -29,6 +29,9 @@ _Persistent_State :: struct {
 }
 
 _Persistent_State_Manager :: struct {
+	arena_data: [2048]byte,
+	arena: mem.Arena,
+	allocator: mem.Allocator,
 	saved_state: _Persistent_State,
 }
 
@@ -49,9 +52,16 @@ _get_persistent_state :: proc(client: Client, allocator: mem.Allocator) -> _Pers
 _persistent_state_update :: proc(client: ^Client) {
 	mgr := &client.persistent_state_manager
 	cur := _get_persistent_state(client^, context.temp_allocator)
+
+	if mgr.allocator.procedure == nil {
+		mem.arena_init(&mgr.arena, mgr.arena_data[:])
+		mgr.allocator = mem.arena_allocator(&mgr.arena)
+	}
+
 	if !reflect.equal(mgr.saved_state, cur, true) {
 		log.debug("Saving state", cur)
-		mgr.saved_state = _get_persistent_state(client^, context.allocator)
+		free_all(mgr.allocator)
+		mgr.saved_state = _get_persistent_state(client^, mgr.allocator)
 	}
 }
 

@@ -10,6 +10,7 @@ import "core:hash/xxhash"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:server"
+import "src:util"
 
 _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast(mods | key))
@@ -22,7 +23,8 @@ _play_track_input_pressed :: proc() -> bool {
 _Track_Row :: struct {
 	genre, artist, album: string,
 	title: cstring,
-	duration_str: [8]u8,
+	duration_str: [9]u8,
+	duration_len: int,
 	year_str: [4]u8,
 	id: Track_ID,
 	track_num, bitrate: i32,
@@ -113,8 +115,8 @@ _track_table_update :: proc(
 		row.bitrate = auto_cast(md.values[.Bitrate].(i64) or_else 0)
 
 		duration := md.values[.Duration].(i64) or_else 0
-		h, m, s := time.clock_from_seconds(auto_cast duration)
-		fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s)
+		h, m, s := util.clock_from_seconds(auto_cast duration)
+		row.duration_len = len(fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s))
 		fmt.bprintf(row.year_str[:], "%4d", md.values[.Year].(i64) or_else 0)
 
 		year, month, day := time.date(time.unix(md.values[.DateAdded].(i64) or_else 0, 0))
@@ -257,7 +259,7 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Duration) {
-				_native_text_unformatted(string(row.duration_str[:]))
+				_native_text_unformatted(string(row.duration_str[:row.duration_len]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Year) {

@@ -8,6 +8,7 @@ import "core:hash/xxhash"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:server"
+import "src:util"
 
 _Playlist_Row :: struct {
 	id: Playlist_ID,
@@ -15,7 +16,8 @@ _Playlist_Row :: struct {
 	name: cstring,
 	//duration: struct {h, m, s: u8},
 	length: i32,
-	duration_str: [8]u8,
+	duration_str: [9]u8,
+	duration_len: int,
 }
 
 _Playlist_Table_2 :: struct {
@@ -51,7 +53,7 @@ _update_playlist_table :: proc(
 
 	playlist_to_row :: proc(playlist: Playlist) -> _Playlist_Row {
 		// @FixMe: If hours is more than 24, it comes up as 0
-		h, m, s := time.clock_from_seconds(auto_cast playlist.duration)
+		h, m, s := util.clock_from_seconds(auto_cast playlist.duration)
 		
 		row := _Playlist_Row {
 			id = playlist.id,
@@ -60,7 +62,7 @@ _update_playlist_table :: proc(
 			length = auto_cast len(playlist.tracks),
 		}
 
-		fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s)
+		row.duration_len = len(fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s))
 
 		return row
 	}
@@ -75,7 +77,6 @@ _update_playlist_table :: proc(
 
 		for id in filtered_playlist_ids {
 			playlist := server.playlist_list_get(list^, id) or_continue
-			h, m, s := time.clock_from_seconds(auto_cast playlist.duration)
 			row := playlist_to_row(playlist^)
 			append(&table.rows, row)
 		}
@@ -147,7 +148,7 @@ _display_playlist_table :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(2) {
-				_native_text_unformatted(string(row.duration_str[:]))
+				_native_text_unformatted(string(row.duration_str[:row.duration_len]))
 			}
 
 			if imgui.TableSetColumnIndex(1) {

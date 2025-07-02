@@ -2,8 +2,9 @@ package util
 
 import "core:encoding/json"
 import "core:os/os2"
+import "core:time"
 
-copy_string_to_buf :: proc(buf: []u8, str: string) -> string {
+copy_string_to_buf :: proc "contextless" (buf: []u8, str: string) -> string {
 	length := len(str)
 	length = min(length, len(buf)-1)
 	copy(buf, (transmute([]u8)str)[:length])
@@ -12,7 +13,7 @@ copy_string_to_buf :: proc(buf: []u8, str: string) -> string {
 	return string(buf[:length])
 }
 
-swap :: proc(a, b: ^$T) {
+swap :: proc "contextless" (a, b: ^$T) {
 	temp := a^
 	a^ = b^
 	b^ = temp
@@ -41,7 +42,7 @@ load_json :: proc(obj: ^$T, path: string, allocator := context.allocator) -> (ok
 	return true
 }
 
-decode_utf8_to_runes :: proc(buf: []rune, str: string) -> []rune {
+decode_utf8_to_runes :: proc "contextless" (buf: []rune, str: string) -> []rune {
 	n: int
 	m := len(buf)
 
@@ -55,4 +56,13 @@ decode_utf8_to_runes :: proc(buf: []rune, str: string) -> []rune {
 	}
 
 	return buf[:n]
+}
+
+clock_from_seconds :: proc "contextless" (in_sec: int) -> (hour, min, sec: int) {
+	sec = in_sec
+	hour = sec / time.SECONDS_PER_HOUR
+	sec -= hour * time.SECONDS_PER_HOUR
+	min = sec / time.SECONDS_PER_MINUTE
+	sec -= min * time.SECONDS_PER_MINUTE
+	return
 }
