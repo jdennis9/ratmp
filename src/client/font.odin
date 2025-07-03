@@ -2,6 +2,7 @@ package client
 
 import "core:slice"
 import "core:mem"
+import "core:log"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -129,6 +130,8 @@ get_font_language_ranges :: proc(lang: Font_Languages, allocator := context.temp
 
 load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 	scratch: mem.Scratch
+	have_english_font: bool
+
 	if mem.scratch_allocator_init(&scratch, 16<<20) != nil {return}
 	defer mem.scratch_allocator_destroy(&scratch)
 
@@ -146,6 +149,14 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 	}
 
 	imgui.FontAtlas_Clear(atlas)
+
+	for font in fonts {have_english_font |= .English in font.languages}
+
+	if !have_english_font || len(fonts) == 0 {
+		log.debug("Loading default font")
+		imgui.FontAtlas_AddFontDefault(atlas)
+		cfg.MergeMode = true
+	}
 
 	for font in fonts {
 		glyph_ranges := get_font_language_ranges(font.languages, mem.scratch_allocator(&scratch))
@@ -165,10 +176,6 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 		cfg.MergeMode = true
 	}
 
-	if len(fonts) == 0 {
-		imgui.FontAtlas_AddFontDefault(atlas)
-		cfg.MergeMode = true
-	}
 
 	imgui.FontAtlas_Build(atlas)
 

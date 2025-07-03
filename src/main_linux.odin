@@ -56,6 +56,9 @@ run :: proc() -> bool {
 		server.queue_files_for_scanning(&sv, {folder})
 	}
 
+	// Load fonts
+	load_fonts(1)
+
 	// ImGui backend
 	imgui_glfw.InitForOpenGL(_linux.window, true) or_return
 	defer imgui_glfw.Shutdown()
@@ -91,6 +94,19 @@ run :: proc() -> bool {
 	}
 
 	return true
+}
+
+load_fonts :: proc(scale: f32) {
+	client.load_fonts(
+		&cl,
+		[]client.Load_Font {
+			{
+				data = #load("data/FontAwesome.otf"),
+				size = 11 * scale,
+				languages = {.Icons},
+			},
+		}
+	)
 }
 
 main :: proc() {
