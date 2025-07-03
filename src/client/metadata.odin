@@ -28,7 +28,7 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, t
 		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(str_path, context.temp_allocator)))
 	}
 	else {
-		file := taglib.file_new(strings.clone_to_cstring(path, context.temp_allocator))
+		file := taglib.file_new(strings.clone_to_cstring(str_path, context.temp_allocator))
 	}
 
 	if file == nil {return}

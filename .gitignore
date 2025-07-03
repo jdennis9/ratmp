@@ -8,3 +8,4 @@ out
 *.res
 *.a
 src/cpp/taglib
+src/thirdparty/odin-imgui/*

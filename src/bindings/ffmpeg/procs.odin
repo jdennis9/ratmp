@@ -16,6 +16,13 @@ when ODIN_OS == .Windows {
 		"system:Bcrypt.lib",
 	}
 }
+else {
+	foreign import lib {
+		"system:avcodec",
+		"system:avformat",
+		"system:avutil",
+	}
+}
 
 @(link_prefix="av_")
 foreign lib {

@@ -258,7 +258,7 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	state.need_update_spectrum = true
 
-	if state.spectrum_bands == 0 {state.spectrum_bands = 0}
+	if state.spectrum_bands == 0 {state.spectrum_bands = 10}
 
 	if imgui.BeginPopupContextWindow() {
 		imgui.SeparatorText("Band count")
