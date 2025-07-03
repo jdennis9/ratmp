@@ -13,6 +13,7 @@ import "core:os/os2"
 
 import decoder "src:decoder_v2"
 import "src:util"
+import "src:sys"
 
 MAX_OUTPUT_CHANNELS :: 2
 
@@ -32,7 +33,7 @@ Server :: struct {
 	ctx: runtime.Context,
 
 	library: Library,
-	stream: Audio_Stream,
+	stream: sys.Audio_Stream,
 
 	playback_lock: sync.Mutex,
 	decoder: decoder.Decoder,
@@ -79,7 +80,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	state.paths.library = filepath.join({data_dir, "library.sqlite"})
 
 	library_init(&state.library, state.paths.playlists_folder) or_return
-	state.stream = audio_create_stream(_audio_stream_callback, _audio_event_callback, state) or_return
+	state.stream = sys.audio_create_stream(_audio_stream_callback, _audio_event_callback, state) or_return
 	set_paused(state, true)
 	
 	library_load_from_file(&state.library, state.paths.library)
@@ -99,7 +100,7 @@ clean_up :: proc(state: ^Server) {
 	save_state(state)
 	library_save_to_file(state.library, state.paths.library)
 	library_destroy(&state.library)
-	audio_destroy_stream(&state.stream)
+	sys.audio_destroy_stream(&state.stream)
 }
 
 queue_files_for_scanning :: proc(state: ^Server, files: []Path) {
@@ -166,7 +167,7 @@ play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_dr
 	sync.lock(&state.playback_lock)
 	defer sync.unlock(&state.playback_lock)
 
-	if !dont_drop_buffer {audio_drop_buffer(&state.stream)}
+	if !dont_drop_buffer {sys.audio_drop_buffer(&state.stream)}
 	decoder.open(&state.decoder, filename) or_return
 	state.current_track_id = track_id
 	set_paused(state, false, no_lock=true)
@@ -181,7 +182,7 @@ seek_to_second :: proc(state: ^Server, second: int) {
 	defer sync.unlock(&state.playback_lock)
 
 	decoder.seek(&state.decoder, second)
-	audio_drop_buffer(&state.stream)
+	sys.audio_drop_buffer(&state.stream)
 }
 
 get_track_duration_seconds :: proc(state: ^Server) -> int {
@@ -201,12 +202,12 @@ get_track_second :: proc(state: ^Server) -> int {
 set_paused :: proc(state: ^Server, paused: bool, no_lock := false) {
 	if state.paused != paused {
 		if paused {
-			audio_pause(&state.stream)
+			sys.audio_pause(&state.stream)
 			state.paused = paused
 			send_event(state, State_Changed_Event{paused = state.paused})
 		}
 		else if decoder.is_open(state.decoder) {
-			audio_resume(&state.stream)
+			sys.audio_resume(&state.stream)
 			state.paused = paused
 			send_event(state, State_Changed_Event{paused = state.paused})
 		}
@@ -231,11 +232,11 @@ set_playback_mode :: proc(state: ^Server, mode: Playback_Mode) {
 }
 
 set_volume :: proc(state: ^Server, volume: f32) {
-	audio_set_volume(&state.stream, volume)
+	sys.audio_set_volume(&state.stream, volume)
 }
 
 get_volume :: proc(state: ^Server) -> f32 {
-	return audio_get_volume(&state.stream)
+	return sys.audio_get_volume(&state.stream)
 }
 
 play_playlist :: proc(
@@ -383,9 +384,6 @@ audio_time_frame_from_playback :: proc(
 @(private="file")
 _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samplerate: int) {
 	cpy := &state.output_copy
-	timestamp, have_timestamp := audio_get_buffer_timestamp(&state.stream)
-	// Should never happen but just in case
-	if !have_timestamp {log.error("Failed to get buffer timestamp!"); return}
 
 	if cpy.channels != channels || cpy.samplerate != samplerate {
 		_clear_output_copy_buffer(state)
@@ -407,7 +405,7 @@ _clear_output_copy_buffer :: proc(state: ^Server) {
 }
 
 @(private="file")
-_audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate: i32) -> Audio_Callback_Status {
+_audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate: i32) -> sys.Audio_Callback_Status {
 	state := cast(^Server)data
 
 	sync.lock(&state.playback_lock)
@@ -428,7 +426,7 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 }
 
 @(private="file")
-_audio_event_callback :: proc(data: rawptr, event: Audio_Event) {
+_audio_event_callback :: proc(data: rawptr, event: sys.Audio_Event) {
 	state := cast(^Server)data
 
 	#partial switch event {

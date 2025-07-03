@@ -12,6 +12,7 @@ import "src:bindings/taglib"
 
 import "src:util"
 import "src:server"
+import "src:sys"
 
 _Metadata_Window :: struct {
 	current_track_id: Track_ID,
@@ -22,8 +23,6 @@ _Metadata_Window :: struct {
 }
 
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
-	if client.create_texture_proc == nil {return}
-
 	when ODIN_OS == .Windows {
 		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(str_path, context.temp_allocator)))
 	}
@@ -50,7 +49,7 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, t
 		if image_data == nil {return}
 		defer stbi.image_free(image_data)
 
-		return auto_cast width, auto_cast height, client.create_texture_proc(image_data, auto_cast width, auto_cast height)
+		return auto_cast width, auto_cast height, sys.imgui_create_texture(image_data, auto_cast width, auto_cast height)
 	}
 
 	return
@@ -63,7 +62,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 
 		state.current_track_id = track_id
 
-		client.destroy_texture_proc(state.album_art)
+		sys.imgui_destroy_texture(state.album_art)
 		state.album_art = nil
 
 		if track_id == 0 {

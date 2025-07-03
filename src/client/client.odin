@@ -20,11 +20,9 @@ import "src:bindings/media_controls"
 import "src:build"
 import "src:path_pool"
 import "src:util"
+import "src:sys"
 
-Path :: server.Path
-
-Create_Texture_Proc :: #type proc(data: rawptr, width, height: int) -> (imgui.TextureID, bool)
-Destroy_Texture_Proc :: #type proc(texture: imgui.TextureID)
+Path :: sys.Path
 
 /*Property :: union {
 	int,
@@ -36,8 +34,6 @@ Client :: struct {
 	ctx: runtime.Context,
 
 	want_quit: bool,
-	create_texture_proc: Create_Texture_Proc,
-	destroy_texture_proc: Destroy_Texture_Proc,
 
 	selected_user_playlist_id: Playlist_ID,
 
@@ -59,9 +55,9 @@ Client :: struct {
 	show_memory_usage: bool,
 	
 	dialogs: struct {
-		set_background: _File_Dialog_State,
-		remove_missing_files: _Dialog_State,
-		add_folders: _File_Dialog_State,
+		set_background: sys.File_Dialog_State,
+		remove_missing_files: sys.Dialog_State,
+		add_folders: sys.File_Dialog_State,
 	},
 	
 	theme: Theme,
@@ -95,6 +91,7 @@ Client :: struct {
 		genres: _Playlist_List_Window,
 		folders: _Playlist_List_Window,
 	},
+	folders_view: _Folders_View,
 
 	enable_media_controls: bool,
 	media_controls: struct {
@@ -114,8 +111,6 @@ Client :: struct {
 
 init :: proc(
 	client: ^Client, sv: ^Server,
-	create_texture_proc: Create_Texture_Proc,
-	destroy_texture_proc: Destroy_Texture_Proc,
 	data_dir, config_dir: string,
 	wake_proc: proc(),
 ) -> bool {
@@ -123,7 +118,6 @@ init :: proc(
 	log.info("ImGui version:", imgui.GetVersion())
 
 	io := imgui.GetIO()
-	io.ConfigFlags |= {.DockingEnable}
 
 	for info, window in _WINDOW_INFO {
 		client.window_state[window].show = .AlwaysShow in info.flags
@@ -149,8 +143,6 @@ init :: proc(
 		}
 	}
 
-	client.create_texture_proc = create_texture_proc
-	client.destroy_texture_proc = destroy_texture_proc
 	client.wake_proc = wake_proc
 
 	// Create paths
@@ -170,6 +162,35 @@ init :: proc(
 
 	load_persistent_state(client)
 
+	// Load fonts
+	{
+		sys.imgui_invalidate_objects()
+		defer sys.imgui_create_objects()
+
+		fonts := []Load_Font {
+			{
+				data = #load("data/NotoSans-SemiBold.ttf"),
+				size = 16,
+				languages = {.English},
+			},
+			{
+				data = #load("data/FontAwesome.otf"),
+				size = 11,
+				languages = {.Icons},
+			}
+		}
+
+		load_fonts(client, fonts)
+	}
+
+	// Prefs test
+	{
+		prefs: Settings
+		load_settings(&prefs, "settings.ini")
+		log.debug(prefs)
+		save_settings(&prefs, "settings_test.ini")
+	}
+
 	return true
 }
 
@@ -181,7 +202,7 @@ destroy :: proc(client: ^Client) {
 	delete(client.paths.layout_folder)
 	delete(client.paths.persistent_state)
 	delete(client.paths.theme_folder)
-	_async_dialog_destroy(&client.dialogs.remove_missing_files)
+	sys.async_dialog_destroy(&client.dialogs.remove_missing_files)
 	_themes_destroy(client)
 	_layouts_destroy(&client.layouts)
 	_analysis_destroy(&client.analysis)
@@ -246,12 +267,12 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		media_controls.disable()
 	}
 
-	_async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
+	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	_update_analysis(cl, sv, delta)
 	_persistent_state_update(cl)
 	server.library_update_categories(&sv.library)
 
-	if result, have_result := _async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
+	if result, have_result := sys.async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
 		server.library_remove_missing_tracks(&sv.library)
 	}
 	
@@ -259,7 +280,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	{
 		background_path: [dynamic]Path
 		
-		if _async_file_dialog_get_results(&cl.dialogs.set_background, &background_path) {
+		if sys.async_file_dialog_get_results(&cl.dialogs.set_background, &background_path) {
 			if len(background_path) >= 1 {
 				set_background(cl, string(cstring(&background_path[0][0])))
 			}
@@ -340,7 +361,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Folders
 	if _begin_window(cl, .Folders) {
-		_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
+		//_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
+		_show_folders_window(cl, sv)
 		imgui.End()
 	}
 	else {_free_track_table(&cl.categories.folders.track_table)}
@@ -413,7 +435,7 @@ set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	delete(client.background.path)
 	client.background.path = ""
 
-	client.destroy_texture_proc(client.background.texture)
+	sys.imgui_destroy_texture(client.background.texture)
 	client.background.texture = nil
 
 	file_data, file_error := os2.read_entire_file_from_path(path, context.allocator)
@@ -424,7 +446,7 @@ set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	if image_data == nil {return}
 	defer stbi.image_free(image_data)
 
-	client.background.texture = client.create_texture_proc(image_data, int(width), int(height)) or_return
+	client.background.texture = sys.imgui_create_texture(image_data, int(width), int(height)) or_return
 	client.background.width = int(width)
 	client.background.height = int(height)
 	client.background.path = strings.clone(path)
@@ -499,7 +521,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	// Menus
 	if imgui.BeginMenu("File") {
 		if imgui.MenuItem("Add folders") {
-			_open_async_file_dialog(&client.dialogs.add_folders)
+			sys.open_async_file_dialog(&client.dialogs.add_folders)
 		}
 
 		if imgui.MenuItem("Scan for new music") {
@@ -517,7 +539,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 		imgui.Separator()
 
 		if imgui.MenuItem("Remove all missing tracks") {
-			_async_dialog_open(&client.dialogs.remove_missing_files, .OkCancel, "Confirm action", "Remove all missing tracks from library? This cannot be undone")
+			sys.async_dialog_open(&client.dialogs.remove_missing_files, .OkCancel, "Confirm action", "Remove all missing tracks from library? This cannot be undone")
 		}
 
 		imgui.Separator()
@@ -545,7 +567,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 		}
 
 		if imgui.MenuItem("Change background") {
-			_open_async_file_dialog(&client.dialogs.set_background, select_folders=false, multiselect=false, file_type=.Image)
+			sys.open_async_file_dialog(&client.dialogs.set_background, select_folders=false, multiselect=false, file_type=.Image)
 		}
 
 		imgui.EndMenu()

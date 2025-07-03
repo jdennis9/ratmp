@@ -1,9 +1,4 @@
-package server
-
-/*
-Implementation notes:
-All procs on Audio_Stream's need to be thread-safe
-*/
+package sys
 
 Audio_Event :: enum {
 	Pause,

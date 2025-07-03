@@ -14,6 +14,7 @@ when ODIN_OS == .Windows {
 		"system:Mfplat.lib",
 		"system:Mfuuid.lib",
 		"system:Bcrypt.lib",
+		"system:Ws2_32.lib",
 	}
 }
 else {

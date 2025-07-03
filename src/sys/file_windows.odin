@@ -1,14 +1,15 @@
-#+private file
-package client
+package sys
 
 import win "core:sys/windows"
 
-FILE_TYPE_DIALOG_GUID := [_File_Type]win.GUID{
+@(private="file")
+FILE_TYPE_DIALOG_GUID := [File_Type]win.GUID{
 	.Audio = {0x35dc0f32, 0xaf27, 0x4b39, {0xad, 0xc0, 0xbc, 0xd5, 0xe5, 0x45, 0x8e, 0x3e}},
 	.Font = {0x4016d885, 0x9c04, 0x4be7, {0xbf, 0x5d, 0x62, 0xb9, 0xb2, 0x5b, 0xf1, 0x16}},
 	.Image = {0x0714f821, 0xa80b, 0x4b79, {0xa5, 0x08, 0x73, 0x4d, 0xee, 0x25, 0x79, 0x0d}},
 }
 
+@(private="file")
 wstring_length :: proc(str: [^]u16) -> int {
 	i: int
 	for {
@@ -17,6 +18,7 @@ wstring_length :: proc(str: [^]u16) -> int {
 	}
 }
 
+@(private="file")
 _open_file_or_folder_select_dialog :: proc(buffer: []u16, select_folders: bool) -> bool {
 	dialog: ^win.IFileDialog
 	error := win.CoCreateInstance(win.CLSID_FileOpenDialog, nil, 
@@ -59,9 +61,10 @@ _open_file_or_folder_select_dialog :: proc(buffer: []u16, select_folders: bool) 
 	return true
 }
 
+@(private="file")
 _open_file_or_folder_multiselect_dialog :: proc(
-	iterator: _File_Iterator, iterator_data: rawptr, select_folders: bool,
-	multiselect := true, file_type := _File_Type.Audio
+	iterator: File_Iterator, iterator_data: rawptr, select_folders: bool,
+	multiselect := true, file_type := File_Type.Audio
 ) -> int {
 	dialog: ^win.IFileOpenDialog
 	error := win.CoCreateInstance(
@@ -144,17 +147,15 @@ _open_file_or_folder_multiselect_dialog :: proc(
 	return int(count)
 }
 
-@private
 for_each_file_in_dialog :: proc(
-	title: cstring, iterator: _File_Iterator, 
+	title: cstring, iterator: File_Iterator, 
 	iterator_data: rawptr, select_folders := false,
-	multiselect := true, file_type := _File_Type.Audio
+	multiselect := true, file_type := File_Type.Audio
 ) -> int {
 	return _open_file_or_folder_multiselect_dialog(iterator, iterator_data, select_folders, multiselect, file_type)
 }
 
-@private
-open_file_dialog :: proc(buf: []u8, file_type: _File_Type) -> (file: string, ok: bool) {
+open_file_dialog :: proc(buf: []u8, file_type: File_Type) -> (file: string, ok: bool) {
 	dialog: ^win.IFileDialog
 	hr := win.CoCreateInstance(win.CLSID_FileOpenDialog, nil, win.CLSCTX_INPROC_SERVER,
 		win.IID_IFileOpenDialog, cast(^rawptr) &dialog)

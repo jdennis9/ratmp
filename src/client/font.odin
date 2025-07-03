@@ -3,8 +3,19 @@ package client
 import "core:slice"
 import "core:mem"
 import "core:log"
+import sa "core:container/small_array"
+
+import "src:sys"
 
 import imgui "src:thirdparty/odin-imgui"
+
+// If path is nil, data is used
+Load_Font :: struct {
+	data: []u8,
+	path: cstring,
+	size: f32,
+	languages: sys.Font_Languages,
+}
 
 Font_Language :: enum {
 	ChineseFull,
@@ -21,13 +32,6 @@ Font_Language :: enum {
 
 Font_Languages :: bit_set[Font_Language]
 
-// If path is nil, data is used
-Load_Font :: struct {
-	data: []u8,
-	path: cstring,
-	size: f32,
-	languages: Font_Languages,
-}
 
 @(private="file")
 ICON_RANGES := []imgui.Wchar {
@@ -41,7 +45,7 @@ ICON_RANGES := []imgui.Wchar {
 	0
 }
 
-get_font_language_ranges :: proc(lang: Font_Languages, allocator := context.temp_allocator) -> []imgui.Wchar {
+get_font_language_ranges :: proc(lang: sys.Font_Languages, allocator := context.temp_allocator) -> []imgui.Wchar {
 	builder: imgui.FontGlyphRangesBuilder
 	vector: imgui.Vector_Wchar
 	defer imgui.Vector_Destruct(&vector)

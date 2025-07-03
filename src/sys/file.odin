@@ -1,43 +1,44 @@
-#+private
-package client
+package sys
 
 import "core:log"
 import "core:thread"
 import "core:os/os2"
 import "core:path/filepath"
 
-import "src:server"
+import "src:util"
 
-_File_Iterator :: #type proc(path: string, is_folder: bool, data: rawptr)
-_File_Type :: enum {
+Path :: [512]u8
+
+File_Iterator :: #type proc(path: string, is_folder: bool, data: rawptr)
+File_Type :: enum {
 	Audio,
 	Image,
 	Font,
 }
 
-_File_Dialog_State :: struct {
+File_Dialog_State :: struct {
 	thread: ^thread.Thread,
 	select_folders: bool,
 	multiselect: bool,
-	file_type: _File_Type,
+	file_type: File_Type,
 	results: [dynamic]Path,
 }
 
 @(private="file")
 _file_dialog_thread_proc :: proc(dialog_thread: ^thread.Thread) {
-	state := cast(^_File_Dialog_State) dialog_thread.data
+	state := cast(^File_Dialog_State) dialog_thread.data
 
 	iterator :: proc(path: string, is_folder: bool, data: rawptr) {
-		state := cast(^_File_Dialog_State)data
+		state := cast(^File_Dialog_State)data
 		path_buf: Path
-		server.copy_string_to_buf(path_buf[:], path)
+		util.copy_string_to_buf(path_buf[:], path)
 		append(&state.results, path_buf)
 	}
 
 	for_each_file_in_dialog(nil, iterator, state, state.select_folders, state.multiselect, state.file_type)
 }
 
-_open_async_file_dialog :: proc(state: ^_File_Dialog_State, select_folders := true, multiselect := true, file_type := _File_Type.Audio) -> bool {
+open_async_file_dialog :: proc(state: ^File_Dialog_State, select_folders := true, multiselect := true, file_type := File_Type.Audio) -> bool {
 	if state.thread != nil {
 		log.warn("Tried openning a file dialog in the background when there is already one running")
 		return false
@@ -54,10 +55,10 @@ _open_async_file_dialog :: proc(state: ^_File_Dialog_State, select_folders := tr
 	return true
 }
 
-_async_file_dialog_is_running :: proc(state: _File_Dialog_State) -> bool {return state.thread != nil}
+async_file_dialog_is_running :: proc(state: File_Dialog_State) -> bool {return state.thread != nil}
 
 // If files were selected, append them to the output array and destroy the dialog
-_async_file_dialog_get_results :: proc(state: ^_File_Dialog_State, output: ^[dynamic]Path) -> bool {
+async_file_dialog_get_results :: proc(state: ^File_Dialog_State, output: ^[dynamic]Path) -> bool {
 	if state.thread == nil || !thread.is_done(state.thread) {return false}
 
 	defer {thread.destroy(state.thread); state.thread = nil}

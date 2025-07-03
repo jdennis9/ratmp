@@ -166,4 +166,4 @@ _show_save_layout_popup :: proc(state: ^_Layout_State, id: imgui.ID) {
 
 }
 
-DEFAULT_LAYOUT_INI :: #load("default_layout.ini")
+DEFAULT_LAYOUT_INI :: #load("data/default_layout.ini")

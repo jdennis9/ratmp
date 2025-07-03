@@ -1,4 +1,4 @@
-package server
+package sys
 
 import "core:log"
 import win "core:sys/windows"

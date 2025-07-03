@@ -1,4 +1,4 @@
-package server
+package sys
 
 import win "core:sys/windows"
 import "core:thread"
@@ -8,6 +8,8 @@ import "core:time"
 //import "core:fmt"
 
 import "src:bindings/wasapi"
+
+MAX_OUTPUT_CHANNELS :: 2
 
 @(private="file")
 _WASAPI_Stream :: struct {

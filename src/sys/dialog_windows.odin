@@ -1,9 +1,9 @@
-package client
+package sys
 
 import win "core:sys/windows"
 import "core:unicode/utf16"
 
-_open_dialog :: proc(title: string, type: _Dialog_Type, message: string) -> bool {
+open_dialog :: proc(title: string, type: Dialog_Type, message: string) -> bool {
 	message_u16: [512]u16
 	title_u16: [64]u16
 
