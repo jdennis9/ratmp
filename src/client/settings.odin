@@ -216,7 +216,11 @@ show_settings_editor :: proc(cl: ^Client) {
 			copy(val_name_buf[:63], val_name)
 			if imgui.BeginCombo("##combo", cstring(&val_name_buf[0])) {
 				for e, index in reflect.enum_field_names(T) {
-					val^ = auto_cast reflect.enum_field_values(T)[index]
+					name_buf: [64]u8
+					copy(name_buf[:63], e)
+					if imgui.Selectable(cstring(&name_buf[0])) {
+						val^ = auto_cast reflect.enum_field_values(T)[index]
+					}
 				}
 				imgui.EndCombo()
 			}
