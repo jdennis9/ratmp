@@ -60,36 +60,39 @@ Client :: struct {
 	},
 	
 	theme: Theme,
-	theme_editor: _Theme_Editor_State,
-
+	
 	paths: struct {
 		theme_folder: string,
 		persistent_state: string,
 		layout_folder: string,
 		settings: string,
 	},
-
+	
 	theme_names: [dynamic]cstring,
-
+	
 	loaded_fonts: []Load_Font,
-
+	
 	analysis: _Analysis_State,
+	
+	windows: struct {
+		theme_editor: _Theme_Editor_State,
+		user_playlists: _Playlist_List_Window,
+		categories: struct {
+			artists: _Playlist_List_Window,
+			albums: _Playlist_List_Window,
+			genres: _Playlist_List_Window,
+			folders: _Playlist_List_Window,
+		},
+		settings: Settings_Editor,
+		library: struct {
+			table: _Track_Table_2,
+			filter: [128]u8,
+		},
+		queue: struct {
+			table: _Track_Table_2,
+		},
+	},
 
-	queue_window: struct {
-		table: _Track_Table_2,
-	},
-	library_window: struct {
-		table: _Track_Table_2,
-		filter: [128]u8,
-	},
-
-	user_playlist_window: _Playlist_List_Window,
-	categories: struct {
-		artists: _Playlist_List_Window,
-		albums: _Playlist_List_Window,
-		genres: _Playlist_List_Window,
-		folders: _Playlist_List_Window,
-	},
 	folders_view: _Folders_View,
 
 	enable_media_controls: bool,
@@ -290,7 +293,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Library
 	if _begin_window(cl, .Library) {
-		state := &cl.library_window
+		state := &cl.windows.library
 		filter_cstring := cstring(&state.filter[0])
 		context_id := imgui.GetID("##library_track_context")
 
@@ -306,11 +309,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		_track_table_process_context(state.table, table_result, context_result, cl, sv)
 
 		imgui.End()
-	} else {_free_track_table(&cl.library_window.table)}
+	} else {_free_track_table(&cl.windows.library.table)}
 
 	// Queue
 	if _begin_window(cl, .Queue) {
-		state := &cl.queue_window
+		state := &cl.windows.queue
 		context_id := imgui.GetID("##track_context")
 
 		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
@@ -329,43 +332,43 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		}
 		
 		imgui.End()
-	} else {_free_track_table(&cl.queue_window.table)}
+	} else {_free_track_table(&cl.windows.queue.table)}
 
 	// Playlists
 	if _begin_window(cl, .Playlists) {
-		_show_playlist_list_window(cl, sv, &cl.user_playlist_window, &sv.library.user_playlists, allow_edit=true)
+		_show_playlist_list_window(cl, sv, &cl.windows.user_playlists, &sv.library.user_playlists, allow_edit=true)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.user_playlist_window.track_table)}
+	else {_free_track_table(&cl.windows.user_playlists.track_table)}
 
 	// Folders
 	if _begin_window(cl, .Folders) {
-		_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
+		_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
 		//_show_folders_window(cl, sv)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.categories.folders.track_table)}
+	else {_free_track_table(&cl.windows.categories.folders.track_table)}
 
 	// Artists
 	if _begin_window(cl, .Artists) {
-		_show_playlist_list_window(cl, sv, &cl.categories.artists, &sv.library.categories.artists)
+		_show_playlist_list_window(cl, sv, &cl.windows.categories.artists, &sv.library.categories.artists)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.categories.artists.track_table)}
+	else {_free_track_table(&cl.windows.categories.artists.track_table)}
 
 	// Albums
 	if _begin_window(cl, .Albums) {
-		_show_playlist_list_window(cl, sv, &cl.categories.albums, &sv.library.categories.albums)
+		_show_playlist_list_window(cl, sv, &cl.windows.categories.albums, &sv.library.categories.albums)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.categories.albums.track_table)}
+	else {_free_track_table(&cl.windows.categories.albums.track_table)}
 
 	// Genres
 	if _begin_window(cl, .Genres) {
-		_show_playlist_list_window(cl, sv, &cl.categories.genres, &sv.library.categories.genres)
+		_show_playlist_list_window(cl, sv, &cl.windows.categories.genres, &sv.library.categories.genres)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.categories.genres.track_table)}
+	else {_free_track_table(&cl.windows.categories.genres.track_table)}
 
 	// Metadata
 	if _begin_window(cl, .Metadata) {
@@ -393,7 +396,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Theme editor
 	if _begin_window(cl, .ThemeEditor) {
-		_show_theme_editor(cl, &cl.theme, &cl.theme_editor)
+		_show_theme_editor(cl, &cl.theme, &cl.windows.theme_editor)
 		imgui.End()
 	}
 
@@ -473,21 +476,21 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 @private
 _go_to_artist :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Artist].(string) or_else "")
-	client.categories.artists.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
+	client.windows.categories.artists.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
 	_bring_window_to_front(client, .Artists)
 }
 
 @private
 _go_to_album :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Album].(string) or_else "")
-	client.categories.albums.viewing_id = {serial=auto_cast Metadata_Component.Album, pool=id}
+	client.windows.categories.albums.viewing_id = {serial=auto_cast Metadata_Component.Album, pool=id}
 	_bring_window_to_front(client, .Albums)
 }
 
 @private
 _go_to_genre :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Genre].(string) or_else "")
-	client.categories.genres.viewing_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
+	client.windows.categories.genres.viewing_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
 	_bring_window_to_front(client, .Genres)
 }
 
