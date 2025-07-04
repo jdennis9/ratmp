@@ -205,21 +205,18 @@ show_settings_editor :: proc(cl: ^Client) {
 		}
 	}
 
-	enum_picker_row :: proc(name: string, $T: typeid, val: ^T) -> bool {
+	enum_picker_row :: proc(name: string, $T: typeid, val: ^T, names: [$E]cstring) -> bool {
+		assert(len(names) == len(T))
 		imgui.TableNextRow()
 		imgui.PushIDPtr(val)
 		defer imgui.PopID()
 		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
 		if imgui.TableSetColumnIndex(1) {
-			val_name_buf: [64]u8
-			val_name := reflect.enum_name_from_value(val^) or_return
-			copy(val_name_buf[:63], val_name)
-			if imgui.BeginCombo("##combo", cstring(&val_name_buf[0])) {
-				for e, index in reflect.enum_field_names(T) {
-					name_buf: [64]u8
-					copy(name_buf[:63], e)
-					if imgui.Selectable(cstring(&name_buf[0])) {
-						val^ = auto_cast reflect.enum_field_values(T)[index]
+			if imgui.BeginCombo("##combo", names[val^]) {
+				for enum_field, index in reflect.enum_field_names(T) {
+					enum_val := reflect.enum_field_values(T)[index]
+					if imgui.Selectable(names[auto_cast enum_val]) {
+						val^ = auto_cast enum_val
 					}
 				}
 				imgui.EndCombo()
@@ -259,7 +256,11 @@ show_settings_editor :: proc(cl: ^Client) {
 
 	if imgui.CollapsingHeader("Behaviour", {.DefaultOpen}) {
 		if begin_settings_table("##behaviour") {
-			enum_picker_row("Close policy", Close_Policy, &settings.close_policy)
+			enum_picker_row("Close policy", Close_Policy, &settings.close_policy, [Close_Policy]cstring {
+				.AlwaysAsk = "Always ask",
+				.Exit = "Exit",
+				.MinimizeToTray = "Minimize to tray",
+			})
 			imgui.EndTable()
 		}
 	}
