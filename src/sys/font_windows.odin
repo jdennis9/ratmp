@@ -4,6 +4,8 @@ import "base:runtime"
 
 import "core:mem"
 import win "core:sys/windows"
+import "core:sort"
+import "core:strings"
 
 import "core:unicode/utf16"
 
@@ -40,6 +42,37 @@ get_font_path :: proc(buf: []u8, h_arg: Font_Handle) -> (path: string, found: bo
 }
 
 @(private="file")
+_sort_fonts :: proc(fonts_arg: []Font_Handle) {
+	fonts := fonts_arg
+	len_proc :: proc(iface: sort.Interface) -> int {
+		fonts := cast(^[]Font_Handle) iface.collection
+		return len(fonts)
+	}
+
+	swap_proc :: proc(iface: sort.Interface, a, b: int) {
+		fonts := cast(^[]Font_Handle) iface.collection
+		temp := fonts[a]
+		fonts[a] = fonts[b]
+		fonts[b] = temp
+	}
+
+	less_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
+		fonts := cast(^[]Font_Handle) iface.collection
+		A := string(cstring(&fonts[a].name[0]))
+		B := string(cstring(&fonts[b].name[0]))
+		return strings.compare(A, B) < 0
+	}
+
+	iface: sort.Interface
+	iface.collection = &fonts
+	iface.len = len_proc
+	iface.less = less_proc
+	iface.swap = swap_proc
+
+	sort.sort(iface)
+}
+
+@(private="file")
 _list_fonts :: proc() -> []Font_Handle {
 	Enum_Proc_Arg :: struct {
 		output: ^[dynamic]Font_Handle,
@@ -64,11 +97,9 @@ _list_fonts :: proc() -> []Font_Handle {
 		return 1
 	}
 
-	lf.lfCharSet = win.ANSI_CHARSET
-
 	win.EnumFontFamiliesExW(_hdc, &lf, enum_proc, cast(win.LPARAM) cast(uintptr) &arg, 0)
-	//win.EnumFontFamiliesW(_hdc, nil, enum_proc, cast(win.LPARAM) cast(uintptr) &arg)
 
+	
 	return output[:]
 }
 
@@ -78,6 +109,9 @@ _free_font_list :: proc() {delete(_font_list)}
 
 // Does not need to be freed
 get_font_list :: proc() -> []Font_Handle {
-	if len(_font_list) == 0 {_font_list = _list_fonts()}
+	if len(_font_list) == 0 {
+		_font_list = _list_fonts()
+		_sort_fonts(_font_list)
+	}
 	return _font_list
 }
