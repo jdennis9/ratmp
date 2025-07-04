@@ -170,7 +170,7 @@ show_settings_editor :: proc(cl: ^Client) {
 	}
 
 	begin_settings_table :: proc(str_id: cstring) -> bool {
-		if imgui.BeginTable(str_id, 3, imgui.TableFlags_SizingStretchSame) {
+		if imgui.BeginTable(str_id, 3, imgui.TableFlags_SizingStretchSame|imgui.TableFlags_RowBg) {
 			//imgui.TableSetupColumn("##name", {}, 0.4)
 			//imgui.TableSetupColumn("##value", {}, 0.4)
 			//imgui.TableSetupColumn("##misc", {}, 0.2)
@@ -266,7 +266,7 @@ show_settings_editor :: proc(cl: ^Client) {
 	}
 
 	if imgui.CollapsingHeader("Fonts", {.DefaultOpen}) {
-		if imgui.BeginTable("##font_table", 3, imgui.TableFlags_SizingStretchSame) {
+		if imgui.BeginTable("##font_table", 3, imgui.TableFlags_SizingStretchSame|imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner) {
 			row :: proc(lang: string, font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
 				imgui.TableNextRow()
 				imgui.PushIDPtr(font)
