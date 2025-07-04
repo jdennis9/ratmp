@@ -49,7 +49,6 @@ Client :: struct {
 	background: struct {
 		texture: imgui.TextureID,
 		width, height: int,
-		path: string,
 	},
 	show_imgui_theme_editor: bool,
 	show_memory_usage: bool,
@@ -61,13 +60,13 @@ Client :: struct {
 	},
 	
 	theme: Theme,
-	current_theme_name: cstring,
 	theme_editor: _Theme_Editor_State,
 
 	paths: struct {
 		theme_folder: string,
 		persistent_state: string,
 		layout_folder: string,
+		settings: string,
 	},
 
 	theme_names: [dynamic]cstring,
@@ -104,10 +103,9 @@ Client :: struct {
 
 	track_drag_drop_payload: []Track_ID,
 
-	persistent_state_manager: _Persistent_State_Manager,
-
 	settings_editor: Settings_Editor,
 	settings: Settings,
+	saved_settings: Settings,
 	show_settings_window: bool,
 	bring_settings_window_to_front: bool,
 	want_apply_settings: bool,
@@ -155,6 +153,7 @@ init :: proc(
 	client.paths.theme_folder = filepath.join({data_dir, "Themes"}, context.allocator)
 	client.paths.persistent_state = filepath.join({data_dir, "settings.json"}, context.allocator)
 	client.paths.layout_folder = filepath.join({data_dir, "Layouts"}, context.allocator)
+	client.paths.settings = filepath.join({config_dir, "settings.ini"}, context.allocator)
 
 	_themes_init(client)
 	theme_set_defaults(&client.theme)
@@ -166,37 +165,15 @@ init :: proc(
 	// Set defaults
 	client.enable_media_controls = true
 
-	load_persistent_state(client)
-
-	// Load fonts
-	{
-		sys.imgui_invalidate_objects()
-		defer sys.imgui_create_objects()
-
-		fonts := []Load_Font {
-			{
-				data = #load("data/NotoSans-SemiBold.ttf"),
-				size = 16,
-				languages = {.English},
-			},
-			{
-				data = #load("data/FontAwesome.otf"),
-				size = 11,
-				languages = {.Icons},
-			}
-		}
-
-		load_fonts(client, fonts)
-	}
+	load_settings(&client.settings, client.paths.settings)
+	apply_settings(client)
 
 	return true
 }
 
 destroy :: proc(client: ^Client) {
-	save_persistent_state(client^)
+	save_settings(&client.settings, client.paths.settings)
 	delete(client.selection.tracks)
-	delete(client.current_theme_name)
-	delete(client.background.path)
 	delete(client.paths.layout_folder)
 	delete(client.paths.persistent_state)
 	delete(client.paths.theme_folder)
@@ -272,7 +249,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	_update_analysis(cl, sv, delta)
-	_persistent_state_update(cl)
 	server.library_update_categories(&sv.library)
 
 	if result, have_result := sys.async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
@@ -447,24 +423,24 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	width, height: i32
-	delete(client.background.path)
-	client.background.path = ""
 
 	sys.imgui_destroy_texture(client.background.texture)
 	client.background.texture = nil
-
+	
 	file_data, file_error := os2.read_entire_file_from_path(path, context.allocator)
 	if file_error != nil {log.error(file_error); return}
 	defer delete(file_data)
-
+	
 	image_data := stbi.load_from_memory(raw_data(file_data), auto_cast len(file_data), &width, &height, nil, 4)
 	if image_data == nil {return}
 	defer stbi.image_free(image_data)
-
+	
 	client.background.texture = sys.imgui_create_texture(image_data, int(width), int(height)) or_return
 	client.background.width = int(width)
 	client.background.height = int(height)
-	client.background.path = strings.clone(path)
+
+	for &c in client.settings.background {c = 0}
+	copy(client.settings.background[:len(client.settings.background)-1], path)
 
 	ok = true
 	return
@@ -545,7 +521,6 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 				path: Path
 				util.copy_string_to_buf(path[:], path_pool.get_dir_path(dir))
 				log.debug("Queue folder", cstring(&path[0]))
-				//append(&client.folder_queue, path)
 				server.queue_files_for_scanning(sv, {path})
 			}
 		}

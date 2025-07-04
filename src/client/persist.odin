@@ -8,7 +8,7 @@ import "core:log"
 
 import "src:util"
 
-@(private="file")
+/*@(private="file")
 _Persistent_State_Font :: struct {
 	path: string,
 	size: f32,
@@ -90,4 +90,4 @@ load_persistent_state :: proc(client: ^Client) {
 	client.metadata_window.crop_art = state.crop_album_art
 	client.analysis.spectrum_display_mode = state.analysis.spectrum_mode
 	client.analysis.spectrum_bands = state.analysis.spectrum_bands
-}
+}*/

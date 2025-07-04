@@ -18,7 +18,6 @@ _Metadata_Window :: struct {
 	current_track_id: Track_ID,
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
-	crop_art: bool,
 	file_info: os2.File_Info,
 }
 
@@ -96,7 +95,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		imgui.PushStyleVarImVec2(.FramePadding, {})
 		width := min(imgui.GetContentRegionAvail().x, 512)
 		if state.album_art != nil {
-			if state.crop_art {
+			if client.settings.crop_album_art {
 				ratio := state.album_art_ratio
 				uv0: [2]f32
 				uv1: [2]f32
@@ -140,7 +139,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		result.single_track = track_id
 		_track_show_context_items(track_id, &result, sv^)
 		_track_process_context(track_id, result, client, sv, true)
-		imgui.MenuItemBoolPtr("Crop image", nil, &state.crop_art)
+		imgui.MenuItemBoolPtr("Crop image", nil, &client.settings.crop_album_art)
 		imgui.EndPopup()
 	}
 

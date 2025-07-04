@@ -146,8 +146,7 @@ set_theme :: proc(client: ^Client, theme: Theme, name: string) {
 	}
 
 	client.theme = theme
-	delete(client.current_theme_name)
-	client.current_theme_name = strings.clone_to_cstring(name)
+	util.copy_string_to_buf(client.settings.theme[:], name)
 }
 
 theme_save_to_file :: proc(theme: Theme, path: string) -> (ok: bool) {
@@ -254,8 +253,9 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 	popup_name: cstring = "New theme name"
 	popup_id := imgui.GetID(popup_name)
 	style := imgui.GetStyle()
+	current_theme_name := cstring(&client.settings.theme[0])
 
-	if imgui.BeginCombo("##select_theme", client.current_theme_name) {
+	if imgui.BeginCombo("##select_theme", current_theme_name) {
 		for theme_name in client.theme_names {
 			if imgui.MenuItem(theme_name) {
 				theme_load_from_name(client^, theme, string(theme_name))
@@ -313,28 +313,28 @@ _show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor
 	}
 	imgui.SameLine()
 
-	imgui.BeginDisabled(len(client.current_theme_name) == 0)
+	imgui.BeginDisabled(len(current_theme_name) == 0)
 	if imgui.Button("Save") {
-		theme_save_from_name(client^, theme^, string(client.current_theme_name))
+		theme_save_from_name(client^, theme^, string(current_theme_name))
 	}
 	imgui.EndDisabled()
 
 	imgui.SameLine()
 	if imgui.Button("Load") {
-		theme_load_from_name(client^, theme, string(client.current_theme_name))
-		set_theme(client, theme^, string(client.current_theme_name))
+		theme_load_from_name(client^, theme, string(current_theme_name))
+		set_theme(client, theme^, string(current_theme_name))
 	}
 
 	imgui.SameLine()
 	if imgui.Button("Delete") {
-		theme_delete_from_name(client, string(client.current_theme_name))
+		theme_delete_from_name(client, string(current_theme_name))
 		_theme_scan_folder(client)
 		if len(client.theme_names) > 0 {
 			theme_load_from_name(client^, theme, string(client.theme_names[0]))
 			set_theme(client, theme^, string(client.theme_names[0]))
 		}
 		else {
-			client.current_theme_name = nil
+			for &c in client.settings.theme {c = 0}
 		}
 	}
 

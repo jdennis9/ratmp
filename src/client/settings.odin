@@ -16,21 +16,18 @@ import imgui "src:thirdparty/odin-imgui"
 // Enums work too
 Settings_String :: [64]u8
 Settings_Path :: [512]u8
-Settings_Int :: int
 Settings_Float :: f32
-Settings_Bool :: bool
 // String format: <name>:<size>
 Settings_Font :: struct {
 	name: [56]u8,
 	size: int,
 }
-Settings_Fonts :: [sys.Font_Language]Settings_Font
 
 Settings :: struct {
 	theme: Settings_String,
 	background: Settings_Path,
 	crop_album_art: bool,
-	fonts: Settings_Fonts,
+	fonts: [sys.Font_Language]Settings_Font,
 	spectrum_bands: int,
 	spectrum_mode: _Spectrum_Display_Mode,
 }
@@ -54,11 +51,11 @@ load_settings :: proc(settings: ^Settings, path: string) -> bool {
 		field_ptr, _ := reflect.any_data(field_val)
 
 		switch field.type.id {
-			case Settings_Bool:
-				(cast(^Settings_Bool) field_ptr)^ = value == "true"
-			case Settings_Int:
+			case bool:
+				(cast(^bool) field_ptr)^ = value == "true"
+			case int:
 				val := strconv.parse_int(value) or_else 0
-				(cast(^Settings_Int) field_ptr)^ = val
+				(cast(^int) field_ptr)^ = val
 			case Settings_String:
 				str := cast(^Settings_String) field_ptr
 				copy(str^[:len(Settings_String) - 1], value)
@@ -121,18 +118,16 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 						font := (cast([^]Settings_Font)field_ptr)[enum_type.values[value_index]]
 						fmt.fprintf(f, "%s:%d\n", cstring(&font.name[0]), font.size)
 					}
-				}
-
-			case reflect.Type_Info_Float, reflect.Type_Info_Boolean, reflect.Type_Info_Integer, reflect.Type_Info_Enum:
-				fmt.fprintln(f, field.name, "=", field_data)
-			
+				}			
 			case reflect.Type_Info_Array:
 				elem := reflect.type_info_base(type.elem)
 
 				if elem.id == typeid_of(u8) {
 					str := cstring(cast([^]u8) field_ptr)
 					fmt.fprintln(f, field.name, "=", str)
-				}				
+				}
+			case:
+				fmt.fprintln(f, field.name, "=", field_data)			
 		}
 	}
 
@@ -152,7 +147,12 @@ show_settings_editor :: proc(cl: ^Client) {
 		defer imgui.PopID()
 
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-		if imgui.BeginCombo("##select_font", cstring(&font.name[0])) {
+
+		if imgui.BeginCombo("##select_font", font.name[0] != 0 ? cstring(&font.name[0]) : "<Default>") {
+			if imgui.Selectable("<Default>") {
+				for &c in font.name {c = 0}
+			}
+
 			for &sys_font in system_fonts {
 				if imgui.Selectable(cstring(&sys_font.name[0]), false) {
 					for &c in font.name {c = 0}
@@ -163,8 +163,67 @@ show_settings_editor :: proc(cl: ^Client) {
 		}
 	}
 
+	begin_settings_table :: proc(str_id: cstring) -> bool {
+		if imgui.BeginTable(str_id, 3, imgui.TableFlags_SizingStretchSame) {
+			//imgui.TableSetupColumn("##name", {}, 0.4)
+			//imgui.TableSetupColumn("##value", {}, 0.4)
+			//imgui.TableSetupColumn("##misc", {}, 0.2)
+			return true
+		}
+		
+		return false
+	}
+
+	path_row :: proc(name: string, path: ^Settings_Path, browse_dialog: ^sys.File_Dialog_State, file_type: sys.File_Type) {
+		imgui.TableNextRow()
+		imgui.PushIDPtr(path)
+		defer imgui.PopID()
+		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+			imgui.InputText("##path", cstring(&path^[0]), len(Settings_Path))
+		}
+		if imgui.TableSetColumnIndex(2) {
+			if imgui.Button("Browse") {
+				sys.open_async_file_dialog(
+					browse_dialog,
+					select_folders = false,
+					multiselect = false,
+					file_type = file_type,
+				)
+			}
+			imgui.SameLine()
+			if imgui.Button("Clear") {
+				for &c in path^ {c = 0}
+			}
+		}
+	}
+
 	if imgui.Button("Apply") {
 		cl.want_apply_settings = true
+		save_settings(settings, cl.paths.settings)
+	}
+
+	if imgui.CollapsingHeader("Appearance") {
+		if begin_settings_table("##appearance") {
+			path_row("Background", &settings.background, &cl.dialogs.set_background, .Image)
+		
+			imgui.TableNextRow()
+			if imgui.TableSetColumnIndex(0) {_native_text_unformatted("Default theme")}
+			if imgui.TableSetColumnIndex(1) {
+				imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+				if imgui.BeginCombo("Default theme", cstring(&settings.theme[0])) {
+					for theme in cl.theme_names {
+						if imgui.Selectable(theme) {
+							copy(settings.theme[:len(settings.theme)-1], string(theme))
+						}
+					}
+					imgui.EndCombo()
+				}
+			}
+
+			imgui.EndTable()
+		}
 	}
 
 	if imgui.CollapsingHeader("Fonts") {
@@ -198,8 +257,16 @@ show_settings_editor :: proc(cl: ^Client) {
 			imgui.EndTable()
 		}
 	}
+
 }
 
 apply_settings :: proc(cl: ^Client) {
+	theme: Theme
+	settings := cl.settings
+	theme_name := string(cstring(&settings.theme[0]))
+
 	load_fonts_from_settings(cl, 1)
+	theme_load_from_name(cl^, &theme, theme_name)
+	set_theme(cl, theme, theme_name)
+	set_background(cl, string(cstring(&settings.background[0])))
 }

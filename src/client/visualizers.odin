@@ -40,8 +40,6 @@ _Analysis_State :: struct {
 	spectrum_frequencies: [MAX_SPECTRUM_BAND_COUNT]f32,
 	spectrum_frequency_bands_calculated: int,
 	spectrum: [MAX_SPECTRUM_BAND_COUNT]f32,
-	spectrum_bands: int,
-	spectrum_display_mode: _Spectrum_Display_Mode,
 	need_update_spectrum: bool,
 
 	need_update_osc: bool,
@@ -93,7 +91,6 @@ _osc_window :: proc(output: []f32) {
 @private
 _analysis_init :: proc(state: ^_Analysis_State) {
 	window_sum: f32
-	state.spectrum_bands = 40
 	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
 
 	// Hann window
@@ -111,6 +108,7 @@ _analysis_destroy :: proc(state: ^_Analysis_State) {
 @private
 _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	state := &cl.analysis
+	settings := &cl.settings
 	tick := cl.tick_last_frame
 
 	if server.is_paused(sv^) {return false}
@@ -164,9 +162,9 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	// Spectrum
 	spectrum: [MAX_SPECTRUM_BAND_COUNT]f32
 	if state.need_update_spectrum {
-		if state.spectrum_bands == 0 || state.spectrum_bands != state.spectrum_frequency_bands_calculated {
-			state.spectrum_frequency_bands_calculated = state.spectrum_bands
-			analysis.calc_spectrum_frequencies(state.spectrum_frequencies[:state.spectrum_bands])
+		if settings.spectrum_bands == 0 || settings.spectrum_bands != state.spectrum_frequency_bands_calculated {
+			state.spectrum_frequency_bands_calculated = settings.spectrum_bands
+			analysis.calc_spectrum_frequencies(state.spectrum_frequencies[:settings.spectrum_bands])
 		}
 
 		state.need_update_spectrum = false
@@ -257,29 +255,30 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 @private
 _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	state.need_update_spectrum = true
+	settings := &client.settings
 
-	if state.spectrum_bands == 0 {state.spectrum_bands = 10}
+	if settings.spectrum_bands == 0 {settings.spectrum_bands = 10}
 
 	if imgui.BeginPopupContextWindow() {
 		imgui.SeparatorText("Band count")
-		if imgui.MenuItem("10", nil, state.spectrum_bands == 10) {state.spectrum_bands = 10}
-		if imgui.MenuItem("20", nil, state.spectrum_bands == 20) {state.spectrum_bands = 20}
-		if imgui.MenuItem("40", nil, state.spectrum_bands == 40) {state.spectrum_bands = 40}
-		if imgui.MenuItem("60", nil, state.spectrum_bands == 60) {state.spectrum_bands = 60}
-		if imgui.MenuItem("80", nil, state.spectrum_bands == 80) {state.spectrum_bands = 80}
+		if imgui.MenuItem("10", nil, settings.spectrum_bands == 10) {settings.spectrum_bands = 10}
+		if imgui.MenuItem("20", nil, settings.spectrum_bands == 20) {settings.spectrum_bands = 20}
+		if imgui.MenuItem("40", nil, settings.spectrum_bands == 40) {settings.spectrum_bands = 40}
+		if imgui.MenuItem("60", nil, settings.spectrum_bands == 60) {settings.spectrum_bands = 60}
+		if imgui.MenuItem("80", nil, settings.spectrum_bands == 80) {settings.spectrum_bands = 80}
 
 		imgui.SeparatorText("Display mode")
-		if imgui.MenuItem("Bars", nil, state.spectrum_display_mode == .Bars) {
-			state.spectrum_display_mode = .Bars
+		if imgui.MenuItem("Bars", nil, settings.spectrum_mode == .Bars) {
+			settings.spectrum_mode = .Bars
 		}
-		if imgui.MenuItem("Alpha", nil, state.spectrum_display_mode == .Alpha) {
-			state.spectrum_display_mode = .Alpha
+		if imgui.MenuItem("Alpha", nil, settings.spectrum_mode == .Alpha) {
+			settings.spectrum_mode = .Alpha
 		}
 		imgui.EndPopup()
 	}
 
 
-	spectrum := state.spectrum[:state.spectrum_bands]
+	spectrum := state.spectrum[:settings.spectrum_bands]
 
 	drawlist := imgui.GetWindowDrawList()
 	theme := &client.theme
@@ -299,8 +298,8 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 
 
 	table_flags := imgui.TableFlags_BordersInner
-	if imgui.BeginTable("##spectrum_table", auto_cast state.spectrum_bands, table_flags) {
-		for band in state.spectrum_frequencies[:state.spectrum_bands] {
+	if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
+		for band in state.spectrum_frequencies[:settings.spectrum_bands] {
 			buf: [32]u8
 			name: string
 			if band > 10000 {
@@ -329,14 +328,14 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 				loud_color := theme.custom_colors[.PeakLoud]
 				color := glm.lerp(quiet_color, loud_color, band)
 				
-				if state.spectrum_display_mode == .Bars {
+				if settings.spectrum_mode == .Bars {
 					imgui.DrawList_AddRectFilled(drawlist, 
 						{cursor.x, cursor.y + size.y}, 
 						{cursor.x + size.x, cursor.y + size.y * (1 - band)},
 						imgui.GetColorU32ImVec4(color),
 					)
 				}
-				else if state.spectrum_display_mode == .Alpha {
+				else if settings.spectrum_mode == .Alpha {
 					color.a *= band
 					imgui.DrawList_AddRectFilled(drawlist, 
 						cursor,
