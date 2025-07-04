@@ -299,7 +299,6 @@ show_settings_editor :: proc(cl: ^Client) {
 			imgui.EndTable()
 		}
 	}
-
 }
 
 apply_settings :: proc(cl: ^Client) {

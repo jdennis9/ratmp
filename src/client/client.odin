@@ -256,8 +256,9 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	}
 
 	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
-	_update_analysis(cl, sv, delta)
 	server.library_update_categories(&sv.library)
+	_update_analysis(cl, sv, delta)
+	_update_folders_view(cl, sv)
 
 	if result, have_result := sys.async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
 		server.library_remove_missing_tracks(&sv.library)
@@ -348,8 +349,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Folders
 	if _begin_window(cl, .Folders) {
-		_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
-		//_show_folders_window(cl, sv)
+		//_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
+		_show_folders_window(cl, sv)
 		imgui.End()
 	}
 	else {_free_track_table(&cl.windows.categories.folders.track_table)}
