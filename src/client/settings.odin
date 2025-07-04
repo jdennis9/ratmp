@@ -23,6 +23,12 @@ Settings_Font :: struct {
 	size: int,
 }
 
+Close_Policy :: enum {
+	AlwaysAsk,
+	MinimizeToTray,
+	Exit,
+}
+
 Settings :: struct {
 	theme: Settings_String,
 	background: Settings_Path,
@@ -30,6 +36,7 @@ Settings :: struct {
 	fonts: [sys.Font_Language]Settings_Font,
 	spectrum_bands: int,
 	spectrum_mode: _Spectrum_Display_Mode,
+	close_policy: Close_Policy,
 }
 
 load_settings :: proc(settings: ^Settings, path: string) -> bool {
@@ -198,12 +205,32 @@ show_settings_editor :: proc(cl: ^Client) {
 		}
 	}
 
+	enum_picker_row :: proc(name: string, $T: typeid, val: ^T) -> bool {
+		imgui.TableNextRow()
+		imgui.PushIDPtr(val)
+		defer imgui.PopID()
+		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
+		if imgui.TableSetColumnIndex(1) {
+			val_name_buf: [64]u8
+			val_name := reflect.enum_name_from_value(val^) or_return
+			copy(val_name_buf[:63], val_name)
+			if imgui.BeginCombo("##combo", cstring(&val_name_buf[0])) {
+				for e, index in reflect.enum_field_names(T) {
+					val^ = auto_cast reflect.enum_field_values(T)[index]
+				}
+				imgui.EndCombo()
+			}
+		}
+
+		return true
+	}
+
 	if imgui.Button("Apply") {
 		cl.want_apply_settings = true
 		save_settings(settings, cl.paths.settings)
 	}
 
-	if imgui.CollapsingHeader("Appearance") {
+	if imgui.CollapsingHeader("Appearance", {.DefaultOpen}) {
 		if begin_settings_table("##appearance") {
 			path_row("Background", &settings.background, &cl.dialogs.set_background, .Image)
 		
@@ -226,7 +253,14 @@ show_settings_editor :: proc(cl: ^Client) {
 		}
 	}
 
-	if imgui.CollapsingHeader("Fonts") {
+	if imgui.CollapsingHeader("Behaviour", {.DefaultOpen}) {
+		if begin_settings_table("##behaviour") {
+			enum_picker_row("Close policy", Close_Policy, &settings.close_policy)
+			imgui.EndTable()
+		}
+	}
+
+	if imgui.CollapsingHeader("Fonts", {.DefaultOpen}) {
 		if imgui.BeginTable("##font_table", 3, imgui.TableFlags_SizingStretchSame) {
 			row :: proc(lang: string, font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
 				imgui.TableNextRow()

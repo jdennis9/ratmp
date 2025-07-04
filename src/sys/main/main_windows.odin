@@ -48,7 +48,6 @@ create_window :: proc() -> bool {
 	imgui_win32.EnableDpiAwareness()
 
 	wndclass_name := win.L("WINDOW_CLASS")
-	_win32.icon = win.LoadIconA(_win32.hinstance, "WindowIconLight")
 
 	win.RegisterClassExW(&win.WNDCLASSEXW{
 		hInstance = _win32.hinstance,
@@ -83,6 +82,8 @@ create_window :: proc() -> bool {
 
 	sys._set_hdc(win.GetDC(_win32.hwnd))
 
+	_win32.running = true
+
 	return true
 }
 
@@ -104,7 +105,8 @@ new_frame :: proc() {
 	imgui_dx11.NewFrame()
 }
 
-handle_events :: proc() {
+// Return false to terminate program
+handle_events :: proc() -> bool {
 	msg: win.MSG
 
 	window_is_visible := win.IsWindowVisible(_win32.hwnd) && !win.IsIconic(_win32.hwnd)
@@ -134,6 +136,8 @@ handle_events :: proc() {
 		_win32.resize_width = 0
 		_win32.resize_height = 0
 	}
+
+	return _win32.running
 }
 
 show_window :: proc(show: bool) {

@@ -68,7 +68,20 @@ _win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, 
 			_win32.running = false
 		}
 		case win.WM_CLOSE: {
-			win.ShowWindow(hwnd, win.SW_HIDE)
+			switch _win32.cl.settings.close_policy {
+				case .AlwaysAsk:
+					text := "Keep running in the background? The default behaviour for this can be changed in your settings"
+					if sys.open_dialog("Minimize to tray?", .YesNo, text) {
+						win.ShowWindow(hwnd, win.SW_HIDE)
+					}
+					else {
+						win.PostQuitMessage(0)
+					}
+				case .MinimizeToTray:
+					win.ShowWindow(hwnd, win.SW_HIDE)
+				case .Exit:
+					win.PostQuitMessage(0)
+			}
 			return 0
 		}
 		case win.WM_DPICHANGED: {
