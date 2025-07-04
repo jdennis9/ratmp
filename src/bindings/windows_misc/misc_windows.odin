@@ -15,13 +15,16 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package drag_drop
+package windows_misc
+
+import "core:c"
 
 foreign import lib "src:bindings/bindings.lib"
 import win "core:sys/windows"
 
-@(link_prefix="drag_drop_")
 foreign lib {
     ole_initialize :: proc() -> win.HRESULT ---
-	init :: proc(hwnd: win.HWND, drop: proc(path: cstring)) ---
+    drag_drop_init :: proc(hwnd: win.HWND, drop: proc(path: cstring)) ---
+    //get_font_file_from_name :: proc(name: cstring, buf: cstring, buf_size: i32) -> bool ---
+    get_font_file_from_logfont :: proc(logfont: ^win.LOGFONTW, buf: cstring, buf_size: i32) -> bool ---
 }

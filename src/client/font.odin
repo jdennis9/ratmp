@@ -4,6 +4,7 @@ import "core:slice"
 import "core:mem"
 import "core:log"
 import sa "core:container/small_array"
+import "core:strings"
 
 import "src:sys"
 
@@ -136,8 +137,11 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 	scratch: mem.Scratch
 	have_english_font: bool
 
-	if mem.scratch_allocator_init(&scratch, 16<<20) != nil {return}
+	if mem.scratch_allocator_init(&scratch, 256<<10) != nil {return}
 	defer mem.scratch_allocator_destroy(&scratch)
+
+	sys.imgui_invalidate_objects()
+	defer sys.imgui_create_objects()
 
 	io := imgui.GetIO()
 	atlas := io.Fonts
@@ -182,9 +186,54 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 
 
 	imgui.FontAtlas_Build(atlas)
-
-	// @TODO: Save font info
-	//delete(client.loaded_fonts)
-	//client.loaded_fonts = slice.clone(fonts)
 }
 
+load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
+	path_scratch_allocator: mem.Scratch_Allocator
+	path_allocator: mem.Allocator
+
+	mem.scratch_init(&path_scratch_allocator, 16<<10)
+	defer mem.scratch_destroy(&path_scratch_allocator)
+
+	path_allocator = mem.scratch_allocator(&path_scratch_allocator)
+	
+	system_fonts := sys.get_font_list()
+	fonts: [dynamic]Load_Font
+	have_lang: [sys.Font_Language]bool
+	defer delete(fonts)
+
+	for &font, index in cl.settings.fonts {
+		handle: sys.Font_Handle
+		path_buf: [512]u8
+
+		if font.size == 0 {continue}
+		handle = sys.font_handle_from_name(system_fonts, string(cstring(&font.name[0]))) or_continue
+		path := sys.get_font_path(path_buf[:], handle) or_continue
+		
+		append(&fonts, Load_Font {
+			languages = {index},
+			size = f32(font.size) * scale,
+			path = strings.clone_to_cstring(path, path_allocator),
+		})
+
+		have_lang[index] = true
+	}
+
+	if !have_lang[.English] {
+		append(&fonts, Load_Font {
+			languages = {.English},
+			size = 16 * scale,
+			data = #load("data/NotoSans-SemiBold.ttf"),
+		})
+	}
+
+	if !have_lang[.Icons] {
+		append(&fonts, Load_Font {
+			languages = {.Icons},
+			size = 11 * scale,
+			data = #load("data/FontAwesome.otf"),
+		})
+	}
+
+	load_fonts(cl, fonts[:])
+}

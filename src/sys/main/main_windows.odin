@@ -3,6 +3,7 @@ package sys_main
 import "base:runtime"
 import win "core:sys/windows"
 import "core:unicode/utf16"
+import "core:log"
 
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
 import imgui_dx11 "src:thirdparty/odin-imgui/imgui_impl_dx11"
@@ -11,7 +12,7 @@ import "src:build"
 import "src:server"
 import "src:client"
 import "src:sys"
-import drag_drop "src:bindings/windows_drag_drop"
+import misc "src:bindings/windows_misc"
 
 @private
 _win32: struct {
@@ -39,7 +40,7 @@ init :: proc(sv: ^server.Server, cl: ^client.Client) -> bool {
 	_win32.ctx = context
 	_win32.hinstance = auto_cast win.GetModuleHandleW(nil)
 	_win32.icon = win.LoadIconA(_win32.hinstance, "WindowIconLight")
-	drag_drop.ole_initialize()
+	misc.ole_initialize()
 	return true
 }
 
@@ -75,10 +76,12 @@ create_window :: proc() -> bool {
 	win.UpdateWindow(_win32.hwnd)
 	win.ShowWindow(_win32.hwnd, win.SW_HIDE)
 	_add_tray_icon()
-	drag_drop.init(_win32.hwnd, _drag_drop_drop)
+	misc.drag_drop_init(_win32.hwnd, _drag_drop_drop)
 
 	imgui_win32.Init(_win32.hwnd)
 	sys._dx11_init(_win32.hwnd)
+
+	sys._set_hdc(win.GetDC(_win32.hwnd))
 
 	return true
 }

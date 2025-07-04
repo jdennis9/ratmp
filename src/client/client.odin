@@ -106,6 +106,12 @@ Client :: struct {
 
 	persistent_state_manager: _Persistent_State_Manager,
 
+	settings_editor: Settings_Editor,
+	settings: Settings,
+	show_settings_window: bool,
+	bring_settings_window_to_front: bool,
+	want_apply_settings: bool,
+
 	wake_proc: proc(),
 }
 
@@ -183,14 +189,6 @@ init :: proc(
 		load_fonts(client, fonts)
 	}
 
-	// Prefs test
-	{
-		prefs: Settings
-		load_settings(&prefs, "settings.ini")
-		log.debug(prefs)
-		save_settings(&prefs, "settings_test.ini")
-	}
-
 	return true
 }
 
@@ -235,6 +233,11 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 			client.media_controls.display_state = playback_state
 			media_controls.set_state(playback_state)
 		}
+	}
+
+	if client.want_apply_settings {
+		client.want_apply_settings = false
+		apply_settings(client)
 	}
 }
 
@@ -361,8 +364,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Folders
 	if _begin_window(cl, .Folders) {
-		//_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
-		_show_folders_window(cl, sv)
+		_show_playlist_list_window(cl, sv, &cl.categories.folders, &sv.library.categories.folders)
+		//_show_folders_window(cl, sv)
 		imgui.End()
 	}
 	else {_free_track_table(&cl.categories.folders.track_table)}
@@ -415,6 +418,18 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	// Theme editor
 	if _begin_window(cl, .ThemeEditor) {
 		_show_theme_editor(cl, &cl.theme, &cl.theme_editor)
+		imgui.End()
+	}
+
+	// Settings
+	if cl.show_settings_window {
+		if cl.bring_settings_window_to_front {
+			imgui.SetNextWindowFocus()
+			cl.bring_settings_window_to_front = false
+		}
+		if imgui.Begin("Settings", &cl.show_settings_window) {
+			show_settings_editor(cl)
+		}
 		imgui.End()
 	}
 
@@ -540,6 +555,13 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 		if imgui.MenuItem("Remove all missing tracks") {
 			sys.async_dialog_open(&client.dialogs.remove_missing_files, .OkCancel, "Confirm action", "Remove all missing tracks from library? This cannot be undone")
+		}
+
+		imgui.Separator()
+
+		if imgui.MenuItem("Settings") {
+			client.show_settings_window = true
+			client.bring_settings_window_to_front = true
 		}
 
 		imgui.Separator()

@@ -10,15 +10,6 @@ FILE_TYPE_DIALOG_GUID := [File_Type]win.GUID{
 }
 
 @(private="file")
-wstring_length :: proc(str: [^]u16) -> int {
-	i: int
-	for {
-		if str[i] == 0 {return i}
-		i += 1
-	}
-}
-
-@(private="file")
 _open_file_or_folder_select_dialog :: proc(buffer: []u16, select_folders: bool) -> bool {
 	dialog: ^win.IFileDialog
 	error := win.CoCreateInstance(win.CLSID_FileOpenDialog, nil, 

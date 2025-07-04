@@ -71,10 +71,6 @@ struct Drop_Target : IDropTarget {
 
 };
 
-extern "C" HRESULT drag_drop_ole_initialize() {
-	return OleInitialize(NULL);
-}
-
 extern "C" void drag_drop_init(HWND hWnd, void (*drop_proc)(const char *files)) {
 	static Drop_Target g_drag_drop_target;
 	HRESULT hr;

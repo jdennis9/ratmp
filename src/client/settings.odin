@@ -21,7 +21,7 @@ Settings_Float :: f32
 Settings_Bool :: bool
 // String format: <name>:<size>
 Settings_Font :: struct {
-	name: [124]u8,
+	name: [56]u8,
 	size: int,
 }
 Settings_Fonts :: [sys.Font_Language]Settings_Font
@@ -137,4 +137,69 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 	}
 
 	return true
+}
+
+Settings_Editor :: struct {
+}
+
+show_settings_editor :: proc(cl: ^Client) {
+	state := &cl.settings_editor
+	settings := &cl.settings
+	system_fonts := sys.get_font_list()
+
+	font_selector :: proc(font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
+		imgui.PushIDPtr(font)
+		defer imgui.PopID()
+
+		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+		if imgui.BeginCombo("##select_font", cstring(&font.name[0])) {
+			for &sys_font in system_fonts {
+				if imgui.Selectable(cstring(&sys_font.name[0]), false) {
+					for &c in font.name {c = 0}
+					copy(font.name[:len(font.name)-1], sys_font.name[:])
+				}
+			}
+			imgui.EndCombo()
+		}
+	}
+
+	if imgui.Button("Apply") {
+		cl.want_apply_settings = true
+	}
+
+	if imgui.CollapsingHeader("Fonts") {
+		if imgui.BeginTable("##font_table", 3, imgui.TableFlags_SizingStretchSame) {
+			row :: proc(lang: string, font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
+				imgui.TableNextRow()
+				imgui.PushIDPtr(font)
+				defer imgui.PopID()
+				if imgui.TableSetColumnIndex(0) {_native_text_unformatted(lang)}
+				if imgui.TableSetColumnIndex(1) {
+					font_selector(font, system_fonts)
+				}
+				if imgui.TableSetColumnIndex(2) {
+					font.size = clamp(font.size, 9, 48)
+					val := i32(font.size)
+					imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
+					if imgui.DragInt("##size", &val, 0.1, 9, 48) {
+						font.size = int(val)
+					}
+				}
+			}
+
+			row("Icons", &settings.fonts[.Icons], system_fonts)
+			row("Chinese Full", &settings.fonts[.ChineseFull], system_fonts)
+			row("Chinese Simplified", &settings.fonts[.ChineseSimplifiedCommon], system_fonts)
+			row("Cyrillic", &settings.fonts[.Cyrillic], system_fonts)
+			row("Greek", &settings.fonts[.Greek], system_fonts)
+			row("English", &settings.fonts[.English], system_fonts)
+			row("Japanese", &settings.fonts[.Japanese], system_fonts)
+
+			imgui.EndTable()
+		}
+	}
+}
+
+apply_settings :: proc(cl: ^Client) {
+	load_fonts_from_settings(cl, 1)
 }

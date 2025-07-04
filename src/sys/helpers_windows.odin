@@ -12,7 +12,6 @@ win32_check :: proc(hr: win.HRESULT, expr := #caller_expression, loc := #caller_
 	return true
 }
 
-@private
 win32_safe_release :: proc(p: ^^$T) {
 	if p^ != nil {
 		p^->Release()
@@ -20,3 +19,11 @@ win32_safe_release :: proc(p: ^^$T) {
 	}
 }
 
+
+wstring_length :: proc(str: [^]u16) -> int {
+	i: int
+	for {
+		if str[i] == 0 {return i}
+		i += 1
+	}
+}
