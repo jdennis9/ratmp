@@ -292,6 +292,9 @@ show_settings_editor :: proc(cl: ^Client) {
 			row("Greek", &settings.fonts[.Greek], system_fonts)
 			row("English", &settings.fonts[.English], system_fonts)
 			row("Japanese", &settings.fonts[.Japanese], system_fonts)
+			row("Korean", &settings.fonts[.Korean], system_fonts)
+			row("Thai", &settings.fonts[.Thai], system_fonts)
+			row("Vietnamese", &settings.fonts[.Vietnamese], system_fonts)
 
 			imgui.EndTable()
 		}
