@@ -33,7 +33,9 @@ run :: proc() -> bool {
 	sys_main.create_window() or_return
 
 	server.init(&g.sv, sys_main.post_empty_event, ".", ".") or_return
+	defer server.clean_up(&g.sv)
 	client.init(&g.cl, &g.sv, ".", ".", sys_main.post_empty_event) or_return
+	defer client.destroy(&g.cl)
 
 	sys_main.show_window(true)
 
@@ -42,7 +44,7 @@ run :: proc() -> bool {
 
 		server.handle_events(&g.sv)
 		client.handle_events(&g.cl, &g.sv)
-		sys_main.handle_events()
+		if !sys_main.handle_events() {break}
 
 		sys_main.new_frame()
 		imgui.NewFrame()

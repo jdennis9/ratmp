@@ -75,12 +75,13 @@ _win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, 
 						win.ShowWindow(hwnd, win.SW_HIDE)
 					}
 					else {
-						win.PostQuitMessage(0)
+						_win32.running = false
 					}
 				case .MinimizeToTray:
 					win.ShowWindow(hwnd, win.SW_HIDE)
 				case .Exit:
-					win.PostQuitMessage(0)
+					_win32.running = false
+
 			}
 			return 0
 		}
