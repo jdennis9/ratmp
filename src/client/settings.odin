@@ -214,6 +214,7 @@ show_settings_editor :: proc(cl: ^Client) {
 				if imgui.BeginCombo("Default theme", cstring(&settings.theme[0])) {
 					for theme in cl.theme_names {
 						if imgui.Selectable(theme) {
+							for &c in settings.theme {c = 0}
 							copy(settings.theme[:len(settings.theme)-1], string(theme))
 						}
 					}

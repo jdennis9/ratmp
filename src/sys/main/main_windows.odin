@@ -128,6 +128,12 @@ handle_events :: proc() {
 		_win32.drag_drop_payload = nil
 		_win32.drag_drop_done = false
 	}
+
+	if _win32.resize_height != 0 {
+		sys._dx11_resize_swapchain(_win32.resize_width, _win32.resize_height)
+		_win32.resize_width = 0
+		_win32.resize_height = 0
+	}
 }
 
 show_window :: proc(show: bool) {

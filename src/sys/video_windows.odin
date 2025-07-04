@@ -210,3 +210,9 @@ _dx11_destroy_render_target :: proc() {
 	}
 }
 
+_dx11_resize_swapchain :: proc(width, height: int) {
+	_dx11_destroy_render_target()
+	d3d.swapchain->ResizeBuffers(1, auto_cast width, auto_cast height, .UNKNOWN, {})
+	_dx11_create_render_target()
+}
+
