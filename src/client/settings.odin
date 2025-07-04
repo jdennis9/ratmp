@@ -138,7 +138,6 @@ Settings_Editor :: struct {
 }
 
 show_settings_editor :: proc(cl: ^Client) {
-	state := &cl.settings_editor
 	settings := &cl.settings
 	system_fonts := sys.get_font_list()
 

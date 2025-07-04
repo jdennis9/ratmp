@@ -106,7 +106,6 @@ Client :: struct {
 
 	track_drag_drop_payload: []Track_ID,
 
-	settings_editor: Settings_Editor,
 	settings: Settings,
 	saved_settings: Settings,
 	show_settings_window: bool,
@@ -218,6 +217,12 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 	if client.want_apply_settings {
 		client.want_apply_settings = false
 		apply_settings(client)
+	}
+	
+	if client.settings != client.saved_settings {
+		client.saved_settings = client.settings
+		log.debug("Saving settings...")
+		save_settings(&client.settings, client.paths.settings)
 	}
 }
 
