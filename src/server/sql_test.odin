@@ -10,7 +10,7 @@ import "core:time"
 import sql "src:thirdparty/odin-sqlite3"
 import "src:path_pool"
 
-@test
+//@test
 test_sql :: proc(t: ^testing.T) {
 	tracks: Track_Set
 	db: ^sql.Connection

@@ -93,12 +93,15 @@ Library :: struct {
 		genres: Playlist_List,
 		folders: Playlist_List,
 	},
+	folder_tree: Library_Folder_Tree,
+	folder_tree_serial: uint,
 }
 
 library_init :: proc(lib: ^Library, user_playlist_dir: string) -> (ok: bool) {
 	mem.dynamic_arena_init(&lib.string_arena)
 	lib.string_allocator = mem.dynamic_arena_allocator(&lib.string_arena)
 	lib.user_playlist_dir = user_playlist_dir
+	lib.serial = 1
 	if !os2.exists(lib.user_playlist_dir) {
 		os2.make_directory(lib.user_playlist_dir)
 	}
@@ -110,6 +113,7 @@ library_destroy :: proc(lib: ^Library) {
 	delete(lib.track_ids)
 	delete(lib.track_metadata)
 	delete(lib.track_paths)
+	delete(lib.track_path_hashes)
 	path_pool.destroy(lib.path_allocator)
 	mem.dynamic_arena_destroy(&lib.string_arena)
 	playlist_list_destroy(&lib.user_playlists)

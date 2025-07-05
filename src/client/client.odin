@@ -91,9 +91,8 @@ Client :: struct {
 		queue: struct {
 			table: _Track_Table_2,
 		},
+		folders: _Folders_Window,
 	},
-
-	folders_view: _Folders_View,
 
 	enable_media_controls: bool,
 	media_controls: struct {
@@ -258,7 +257,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	server.library_update_categories(&sv.library)
 	_update_analysis(cl, sv, delta)
-	_update_folders_view(cl, sv)
 
 	if result, have_result := sys.async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
 		server.library_remove_missing_tracks(&sv.library)
@@ -350,7 +348,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	// Folders
 	if _begin_window(cl, .Folders) {
 		//_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
-		_show_folders_window(cl, sv)
+		_folders_window_show(cl, sv)
 		imgui.End()
 	}
 	else {_free_track_table(&cl.windows.categories.folders.track_table)}

@@ -2,9 +2,11 @@ package main
 
 import "core:time"
 import "core:log"
+import "core:fmt"
 
 import imgui "src:thirdparty/odin-imgui"
 
+import "src:build"
 import "src:client"
 import "src:server"
 import "src:sys"
@@ -14,6 +16,7 @@ import sys_main "src:sys/main"
 g: struct {
 	cl: client.Client,
 	sv: server.Server,
+	title_track_id: server.Track_ID,
 }
 
 run :: proc() -> bool {
@@ -36,6 +39,8 @@ run :: proc() -> bool {
 	defer server.clean_up(&g.sv)
 	client.init(&g.cl, &g.sv, ".", ".", sys_main.post_empty_event) or_return
 	defer client.destroy(&g.cl)
+
+	server.add_event_handler(&g.sv, server_event_handler, nil)
 
 	sys_main.show_window(true)
 
@@ -69,6 +74,25 @@ run :: proc() -> bool {
 	}
 
 	return true
+}
+
+server_event_handler :: proc(sv: server.Server, data: rawptr, event: server.Event) {
+	#partial switch v in event {
+		case server.Current_Track_Changed_Event: {
+			if g.title_track_id != v.track_id {
+				g.title_track_id = v.track_id
+				if md, track_found := server.library_get_track_metadata(sv.library, v.track_id); track_found {
+					buf: [256]u8
+					title := fmt.bprint(buf[:255], build.PROGRAM_NAME_AND_VERSION, "|",
+						md.values[.Artist].(string) or_else "",
+						"-",
+						md.values[.Title].(string) or_else ""
+					)
+					sys_main.set_window_title(title)
+				}
+			}
+		}
+	}
 }
 
 main :: proc() {

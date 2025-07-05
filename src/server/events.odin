@@ -49,4 +49,9 @@ handle_events :: proc(state: ^Server) {
 		state.library_save_serial = state.library.serial
 		library_save_to_file(state.library, state.paths.library)
 	}
+
+	if state.library.folder_tree_serial != state.library.serial {
+		state.library.folder_tree_serial = state.library.serial
+		library_build_folder_tree(&state.library)
+	}
 }

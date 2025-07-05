@@ -2,11 +2,17 @@
 
 set collections=-collection:src=../src
 
+IF "%~1" == "" (
+	echo "Usage: test.bat <package>. Example: test.bat server"
+	exit
+) ELSE (
+	set args=%*
+)
+
 pushd .build
 
-REM odin test ../src/client -vet -debug %collections% -linker:radlink
-REM odin test ../src/tests -vet -debug %collections% -linker:radlink
-odin test ../src/util -debug %collections% -linker:radlink
-REM odin test ../src/server -o:speed %collections% -linker:radlink
+set cmd=odin test ../src/%1 -debug %collections% -linker:radlink
+echo %cmd%
+%cmd%
 
 popd
