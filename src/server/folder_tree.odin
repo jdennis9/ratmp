@@ -106,6 +106,7 @@ library_folder_tree_add_track :: proc(tree: ^Library_Folder_Tree, path: string, 
 
 	for part in parts[:len(parts)-1] {
 		index := _add_child(parent, part, tree.node_allocator, tree.string_allocator)
+		assert(index < len(parent.children))
 		parent = &parent.children[index]
 	}
 
@@ -117,8 +118,11 @@ library_folder_tree_add_track :: proc(tree: ^Library_Folder_Tree, path: string, 
 library_folder_tree_destroy :: proc(tree: ^Library_Folder_Tree) {
 	mem.dynamic_arena_destroy(&tree.node_arena)
 	mem.dynamic_arena_destroy(&tree.string_arena)
+	delete(tree.folder_ptrs)
 	tree.node_arena = {}
 	tree.string_arena = {}
+	tree.root_folder = {}
+	tree.folder_ptrs = nil
 }
 
 library_find_folder :: proc(lib: Library, id: u32) -> (ptr: ^Library_Folder, found: bool) {

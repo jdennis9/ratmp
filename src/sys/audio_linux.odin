@@ -68,6 +68,8 @@ audio_create_stream :: proc(
 }
 
 audio_drop_buffer :: proc(stream: ^Audio_Stream) {
+	// @TODO
+	// This can't be done with PortAudio for some reason
 }
 
 audio_pause :: proc(stream: ^Audio_Stream) {

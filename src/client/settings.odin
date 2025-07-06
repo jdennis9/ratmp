@@ -6,6 +6,7 @@ import "core:reflect"
 import "core:strconv"
 import "core:strings"
 import "core:log"
+import "core:os/os2"
 import "core:os"
 import "core:fmt"
 
@@ -100,10 +101,12 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 	settings_info := type_info_of(Settings)
 	ti := reflect.type_info_base(settings_info).variant.(reflect.Type_Info_Struct)
 
-	if os.exists(path) {os.remove(path)}
-	f, file_error := os.open(path, os.O_WRONLY | os.O_CREATE)
+	if os2.exists(path) {os2.remove(path)}
+	f_os2, file_error := os2.create(path)
 	if file_error != nil {log.error(file_error); return false}
-	defer os.close(f)
+	defer os2.close(f_os2)
+
+	f := cast(os.Handle) os2.fd(f_os2)
 
 	fmt.fprintln(f, "[settings]")
 

@@ -1,8 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
 collections=-collection:src=src
 
-cmd="odin build src -vet-shadowing $collections -out:out/linux/ratmp -debug -show-timings"
+odin build src/main -vet-shadowing $collections -out:out/linux/ratmp -debug -show-timings \
+	-extra-linker-flags:"-lfreetype $(pkgconf --libs gtk+-3.0)"
 
 $cmd
 
