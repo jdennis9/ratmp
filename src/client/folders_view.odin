@@ -89,7 +89,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 		_rebuild_nodes(cl, sv)
 	}
 
-	root_table_flags := imgui.TableFlags_BordersV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
+	root_table_flags := imgui.TableFlags_BordersInnerV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
 
 	if !imgui.BeginTable("##folders", 2, root_table_flags) {return}
 	defer imgui.EndTable()
@@ -145,6 +145,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 					if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
 						server.play_playlist(sv, folder.tracks[:], playlist_id)
 					}
+					state.sel_folder_id = node.id
 				}
 
 				if imgui.TableSetColumnIndex(1) {
@@ -188,7 +189,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 				server.library_sort_tracks(sv.library, sel_folder.tracks[:], table_result.sort_spec.?)
 			}
 
-			context_result := _track_table_show_context(state.track_table, table_result, context_id, {}, sv^)
+			context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
 			_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 		}
 	}

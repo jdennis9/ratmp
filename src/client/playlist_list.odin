@@ -23,7 +23,7 @@ _show_playlist_list_window :: proc(
 ) {
 	root_table_flags := imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|
 		imgui.TableFlags_SizingStretchProp|
-		imgui.TableFlags_BordersInner
+		imgui.TableFlags_BordersInnerV
 
 	if !imgui.BeginTable("##root", 2, root_table_flags) {return}
 	defer imgui.EndTable()
