@@ -1,7 +1,6 @@
 #+private
 package client
 
-import "core:time"
 import "core:fmt"
 import "core:hash/xxhash"
 
@@ -156,8 +155,6 @@ _display_playlist_table :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(0) {
-				sel_flags := imgui.SelectableFlags{.SpanAllColumns}
-
 				if row.name == nil {imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))}
 				if imgui.Selectable(row.name != nil ? row.name : "None", table.viewing == row.id, {.SpanAllColumns}) {
 					result.select = row.id

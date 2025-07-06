@@ -343,7 +343,7 @@ set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) 
 	path_buf: [512]u8
 	try_pos := state.queue_pos
 
-	for i in 1..<len(state.queue) {
+	for _ in 1..<len(state.queue) {
 		defer try_pos += 1
 		if try_pos >= len(state.queue) {try_pos = 0}
 		track_id := state.queue[try_pos]

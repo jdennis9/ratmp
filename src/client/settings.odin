@@ -115,7 +115,6 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 
 		#partial switch type in field_type.variant {
 			case reflect.Type_Info_Enumerated_Array:
-				elem_type := reflect.type_info_base(type.elem)
 				enum_type := reflect.type_info_base(type.index).variant.(reflect.Type_Info_Enum) or_break
 				is_fonts := reflect.are_types_identical(type.elem, type_info_of(Settings_Font))
 
@@ -213,8 +212,7 @@ show_settings_editor :: proc(cl: ^Client) {
 		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
 		if imgui.TableSetColumnIndex(1) {
 			if imgui.BeginCombo("##combo", names[val^]) {
-				for enum_field, index in reflect.enum_field_names(T) {
-					enum_val := reflect.enum_field_values(T)[index]
+				for enum_val in reflect.enum_field_values(T) {
 					if imgui.Selectable(names[auto_cast enum_val]) {
 						val^ = auto_cast enum_val
 					}

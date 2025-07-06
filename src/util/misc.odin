@@ -1,7 +1,6 @@
 package util
 
 import "core:encoding/json"
-import "core:os/os2"
 import "core:time"
 
 copy_string_to_buf :: proc "contextless" (buf: []u8, str: string) -> string {

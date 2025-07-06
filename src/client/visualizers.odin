@@ -6,7 +6,6 @@ import "core:math"
 import "core:fmt"
 import "core:strings"
 import glm "core:math/linalg/glsl"
-import "core:time"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -132,7 +131,6 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	//t := PEAK_ROUGHNESS*delta
 
 	// Peak
-	peaks: [server.MAX_OUTPUT_CHANNELS]f32
 	if state.need_update_peaks {
 		state.need_update_peaks = false
 		for ch in 0..<state.channels {

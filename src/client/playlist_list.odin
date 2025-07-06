@@ -3,7 +3,6 @@ package client
 
 import imgui "src:thirdparty/odin-imgui"
 import "core:slice"
-import "core:log"
 
 import "src:server"
 
@@ -93,7 +92,6 @@ _show_playlist_list_window :: proc(
 	// Show selected playlist tracks
 	if list_found && imgui.TableSetColumnIndex(1) {
 		list := &cat.lists[list_index]
-		want_remove_selection: bool
 		context_menu_id := imgui.GetID("##track_context")
 		filter_cstring := cstring(&state.track_filter[0])
 		context_flags := allow_edit ? _Track_Context_Flags{} : _Track_Context_Flags{.NoRemove}

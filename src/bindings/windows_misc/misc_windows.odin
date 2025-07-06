@@ -17,8 +17,6 @@
 */
 package windows_misc
 
-import "core:c"
-
 foreign import lib "src:bindings/bindings.lib"
 import win "core:sys/windows"
 

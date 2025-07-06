@@ -2,7 +2,6 @@
 package client
 
 import "core:time"
-import "core:slice"
 import "core:strings"
 import "core:fmt"
 import "core:hash/xxhash"

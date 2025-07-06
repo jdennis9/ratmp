@@ -137,7 +137,7 @@ filter_playlists :: proc(list: ^Playlist_List, filter: string, output: ^[dynamic
 	filter_rune_buf: [256]rune
 	filter_runes := util.decode_utf8_to_runes(filter_rune_buf[:], filter)
 
-	for &playlist, index in list.lists {
+	for &playlist in list.lists {
 		if _filter_track_string(string(playlist.name), filter_runes) {
 			append(output, playlist.id)
 		}

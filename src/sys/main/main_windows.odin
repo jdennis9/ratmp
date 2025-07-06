@@ -3,7 +3,6 @@ package sys_main
 import "base:runtime"
 import win "core:sys/windows"
 import "core:unicode/utf16"
-import "core:log"
 
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
 import imgui_dx11 "src:thirdparty/odin-imgui/imgui_impl_dx11"

@@ -1,9 +1,7 @@
 package client
 
-import "core:slice"
 import "core:mem"
 import "core:log"
-import sa "core:container/small_array"
 import "core:strings"
 
 import "src:sys"

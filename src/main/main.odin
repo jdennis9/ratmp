@@ -99,6 +99,9 @@ main :: proc() {
 	when ODIN_DEBUG {
 		context.logger = log.create_console_logger()
 	}
+	else {
+		context.logger = log.create_console_logger(.Info)
+	}
 
 	run()
 }

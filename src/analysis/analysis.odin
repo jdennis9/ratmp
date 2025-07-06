@@ -130,7 +130,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 	freq := freq_step
 	band := 0
 
-	for &frame, i in state.buffer[1:] {
+	for &frame in state.buffer[1:] {
 		defer freq += freq_step
 
 		if freq > frequencies[band] {band = min(band + 1, len(output)-1)}
@@ -177,7 +177,7 @@ calc_spectrum :: proc(
 	scale_factor := 1 / f32(frame_count)
 	freq := freq_step
 
-	for frame, i in fft_buffer[1:] {
+	for frame in fft_buffer[1:] {
 		band := 0
 		defer freq += freq_step
 

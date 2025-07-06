@@ -2,10 +2,8 @@
 package client
 
 import "core:mem"
-import "core:path/filepath"
 import "core:log"
 import "core:strings"
-import "core:slice"
 import "core:fmt"
 
 import imgui "src:thirdparty/odin-imgui"
@@ -296,8 +294,6 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 
 	if !imgui.BeginTable("##folders", 2, root_table_flags) {return}
 	defer imgui.EndTable()
-
-	root := state.root
 
 	imgui.TableNextRow()
 

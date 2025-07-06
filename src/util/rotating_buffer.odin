@@ -1,7 +1,5 @@
 package util
 
-import "core:math"
-import "core:slice"
 import "core:time"
 
 Rotating_Buffer :: struct($T: typeid, $N: uint) where N > 1 {

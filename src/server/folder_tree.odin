@@ -63,7 +63,7 @@ _create_folder_lookup :: proc(table: ^map[u32]^Library_Folder, parent: ^Library_
 }
 
 library_folder_print :: proc(name: string, folder: Library_Folder, depth: int) {
-	for i in 0..<depth {fmt.print('\t')}
+	for _ in 0..<depth {fmt.print('\t')}
 	fmt.println(name, len(folder.tracks))
 
 	for child in 0..<len(folder.child_names) {

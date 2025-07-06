@@ -2,8 +2,6 @@ package sys
 
 import "core:log"
 import "core:thread"
-import "core:os/os2"
-import "core:path/filepath"
 
 import "src:util"
 

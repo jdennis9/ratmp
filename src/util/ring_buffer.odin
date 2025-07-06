@@ -1,7 +1,6 @@
 package util
 
 import "core:sync"
-import "core:slice"
 
 Ring_Buffer :: struct($T: typeid, $SIZE: uint) {
 	data: [SIZE]T,

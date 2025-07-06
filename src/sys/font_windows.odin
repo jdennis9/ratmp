@@ -2,7 +2,6 @@ package sys
 
 import "base:runtime"
 
-import "core:mem"
 import win "core:sys/windows"
 import "core:sort"
 import "core:strings"

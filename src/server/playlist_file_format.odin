@@ -97,7 +97,7 @@ playlist_file_parse_m3u :: proc(lib: Library, input: string, output: ^Playlist) 
 	track_paths: [dynamic]string
 	defer delete(track_paths)
 
-	for line, index in lines[1:] {
+	for line in lines[1:] {
 		if line == "" {continue}
 
 		if strings.starts_with(line, "#PLAYLIST:") {
