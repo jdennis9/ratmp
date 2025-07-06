@@ -586,6 +586,9 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 			if imgui.MenuItem("Memory usage") {
 				client.show_memory_usage = true
 			}
+			if imgui.MenuItem("Fake library update") {
+				sv.library.serial += 1
+			}
 			imgui.EndMenu()
 		}
 	}

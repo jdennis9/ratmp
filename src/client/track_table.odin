@@ -5,6 +5,7 @@ import "core:time"
 import "core:strings"
 import "core:fmt"
 import "core:hash/xxhash"
+import "core:log"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -100,6 +101,7 @@ _track_table_update :: proc(
 	table.playlist_id = playlist_id
 	table.serial = serial
 	table.filter_hash = filter_hash
+	log.debug("Update track table for playlist ID", playlist_id)
 
 	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: _Track_Row, ok: bool) {
 		md := server.library_get_track_metadata(lib, id) or_return

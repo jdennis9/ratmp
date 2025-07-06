@@ -37,6 +37,8 @@ _Analysis_State :: struct {
 	
 	spectrum_analyzer: analysis.Spectrum_Analyzer,
 	spectrum_frequencies: [MAX_SPECTRUM_BAND_COUNT]f32,
+	spectrum_frequency_strings: [MAX_SPECTRUM_BAND_COUNT][6]u8,
+	spectrum_frequency_string_lengths: [MAX_SPECTRUM_BAND_COUNT]int,
 	spectrum_frequency_bands_calculated: int,
 	spectrum: [MAX_SPECTRUM_BAND_COUNT]f32,
 	need_update_spectrum: bool,
@@ -163,6 +165,26 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		if settings.spectrum_bands == 0 || settings.spectrum_bands != state.spectrum_frequency_bands_calculated {
 			state.spectrum_frequency_bands_calculated = settings.spectrum_bands
 			analysis.calc_spectrum_frequencies(state.spectrum_frequencies[:settings.spectrum_bands])
+
+			// Pre-format frequency strings
+			for band, index in state.spectrum_frequencies[:settings.spectrum_bands] {
+				name: string
+
+				buf := state.spectrum_frequency_strings[index][:]
+				for &r in buf {r = 0}
+
+				if band > 10000 {
+					name = fmt.bprintf(buf[:len(buf)-1], "%dK", int(f32(math.round(band))/1000))
+				}
+				else if band > 1000 {
+					name = fmt.bprintf(buf[:len(buf)-1], "%1.1fK", f32(math.round(band))/1000)
+				}
+				else {
+					name = fmt.bprintf(buf[:len(buf)-1], "%g", math.round(band))
+				}
+
+				state.spectrum_frequency_string_lengths[index] = len(name)
+			}
 		}
 
 		state.need_update_spectrum = false
@@ -297,19 +319,8 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 
 	table_flags := imgui.TableFlags_BordersInner
 	if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
-		for band in state.spectrum_frequencies[:settings.spectrum_bands] {
-			buf: [32]u8
-			name: string
-			if band > 10000 {
-				name = fmt.bprintf(buf[:31], "%dK", int(f32(math.round(band))/1000))
-			}
-			else if band > 1000 {
-				name = fmt.bprintf(buf[:31], "%1.1fK", f32(math.round(band))/1000)
-			}
-			else {
-				name = fmt.bprintf(buf[:31], "%g", math.round(band))
-			}
-			imgui.TableSetupColumn(strings.unsafe_string_to_cstring(name), {.AngledHeader})
+		for &str in state.spectrum_frequency_strings[:settings.spectrum_bands] {
+			imgui.TableSetupColumn(cstring(&str[0]), {.AngledHeader})
 		}
 		
 		imgui.TableAngledHeadersRow()
