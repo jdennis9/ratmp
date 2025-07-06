@@ -129,7 +129,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 				if !imgui.TableSetColumnIndex(0) {return}
 				if playlist_id == sv.current_playlist_id {
 					imgui.TableSetBgColor(
-						.RowBg0, imgui.GetColorU32ImVec4(cl.theme.custom_colors[.PlayingHighlight])
+						.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
 					)
 				}
 
@@ -183,7 +183,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 				string(filter)
 			)
 
-			table_result := _track_table_show(state.track_table, "##tracks", cl.theme, context_id, sv.current_track_id)
+			table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
 			_track_table_process_results(state.track_table, table_result, cl, sv, {})
 			if table_result.sort_spec != nil {
 				server.library_sort_tracks(sv.library, sel_folder.tracks[:], table_result.sort_spec.?)

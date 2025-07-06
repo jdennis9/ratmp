@@ -104,7 +104,7 @@ _waveform_seek_bar :: proc(
 }
 
 @private
-_show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, theme: Theme, req_size: [2]f32 = {0, 0}) -> bool {
+_show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, req_size: [2]f32 = {0, 0}) -> bool {
 	drawlist := imgui.GetWindowDrawList()
 	avail_size := imgui.GetContentRegionAvail()
 	cursor := imgui.GetCursorScreenPos()
@@ -121,8 +121,8 @@ _show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, theme: Theme, req
 	bar_height := (size.y / f32(channels)) - 1
 	y_offset: f32 = style.FramePadding.y
 
-	quiet_color := theme.custom_colors[.PeakQuiet]
-	loud_color := theme.custom_colors[.PeakLoud]
+	quiet_color := global_theme.custom_colors[.PeakQuiet]
+	loud_color := global_theme.custom_colors[.PeakLoud]
 	
 	for &peak in peaks {
 		peak = clamp(peak, 0, 1)

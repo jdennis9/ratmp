@@ -145,7 +145,7 @@ set_theme :: proc(client: ^Client, theme: Theme, name: string) {
 		col = theme.imgui_colors[auto_cast i]
 	}
 
-	client.theme = theme
+	global_theme = theme
 	util.copy_string_to_buf(client.settings.theme[:], name)
 }
 
@@ -248,12 +248,15 @@ _Theme_Editor_State :: struct {
 	name_error: [64]u8,
 }
 
+global_theme: Theme
+
 @private
-_show_theme_editor :: proc(client: ^Client, theme: ^Theme, state: ^_Theme_Editor_State) -> (changes: bool) {
+_show_theme_editor :: proc(client: ^Client, state: ^_Theme_Editor_State) -> (changes: bool) {
 	popup_name: cstring = "New theme name"
 	popup_id := imgui.GetID(popup_name)
 	style := imgui.GetStyle()
 	current_theme_name := cstring(&client.settings.theme[0])
+	theme := &global_theme
 
 	if imgui.BeginCombo("##select_theme", current_theme_name) {
 		for theme_name in client.theme_names {

@@ -61,7 +61,7 @@ _show_playlist_list_window :: proc(
 
 		imgui.InputTextWithHint("##playlist_filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
 		_update_playlist_table(&state.playlist_table, cat, string(filter_cstring), state.viewing_id, sv.current_playlist_id, state.editing_id)
-		result := _display_playlist_table(cl.theme, state.playlist_table, "##playlists", context_id)
+		result := _display_playlist_table(global_theme, state.playlist_table, "##playlists", context_id)
 
 		if result.play != nil {
 			playlist, found := server.playlist_list_get(cat^, result.play.?)
@@ -98,7 +98,7 @@ _show_playlist_list_window :: proc(
 
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 		_track_table_update(&state.track_table, list.serial, sv.library, list.tracks[:], list.id, string(filter_cstring))
-		result := _track_table_show(state.track_table, "##tracks", cl.theme, context_menu_id, sv.current_track_id)
+		result := _track_table_show(state.track_table, "##tracks", context_menu_id, sv.current_track_id)
 
 		_track_table_process_results(state.track_table, result, cl, sv, {})
 		if result.sort_spec != nil {server.playlist_sort(list, sv.library, result.sort_spec.?)}

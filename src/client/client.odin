@@ -58,9 +58,7 @@ Client :: struct {
 		remove_missing_files: sys.Dialog_State,
 		add_folders: sys.File_Dialog_State,
 	},
-	
-	theme: Theme,
-	
+		
 	paths: struct {
 		theme_folder: string,
 		persistent_state: string,
@@ -157,7 +155,7 @@ init :: proc(
 	client.paths.settings = filepath.join({config_dir, "settings.ini"}, context.allocator)
 
 	_themes_init(client)
-	theme_set_defaults(&client.theme)
+	theme_set_defaults(&global_theme)
 	_layouts_init(&client.layouts, data_dir)
 
 	// Analysis
@@ -304,7 +302,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
 
 		_track_table_update(&state.table, sv.library.serial, sv.library, sv.library.track_ids[:], {}, string(filter_cstring))
-		table_result := _track_table_show(state.table, "##library_table", cl.theme, context_id, sv.current_track_id)
+		table_result := _track_table_show(state.table, "##library_table", context_id, sv.current_track_id)
 
 		if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
 		_track_table_process_results(state.table, table_result, cl, sv, {})
@@ -321,7 +319,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		context_id := imgui.GetID("##track_context")
 
 		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
-		table_result := _track_table_show(state.table, "##queue", cl.theme, context_id, sv.current_track_id)
+		table_result := _track_table_show(state.table, "##queue", context_id, sv.current_track_id)
 
 		//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
 		_track_table_process_results(state.table, table_result, cl, sv, {.SetQueuePos})
@@ -400,7 +398,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Theme editor
 	if _begin_window(cl, .ThemeEditor) {
-		_show_theme_editor(cl, &cl.theme, &cl.windows.theme_editor)
+		_show_theme_editor(cl, &cl.windows.theme_editor)
 		imgui.End()
 	}
 
@@ -605,7 +603,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	// Peak meter
 	imgui.Separator()
 	client.analysis.need_update_peaks = true
-	_show_peak_meter_widget("##peak_meter", client.analysis.peaks[:client.analysis.channels], client.theme, {100, 0})
+	_show_peak_meter_widget("##peak_meter", client.analysis.peaks[:client.analysis.channels], {100, 0})
 	
 	// Playback controls
 	imgui.Separator()

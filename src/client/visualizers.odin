@@ -279,7 +279,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	spectrum := state.spectrum[:settings.spectrum_bands]
 
 	drawlist := imgui.GetWindowDrawList()
-	theme := &client.theme
+	theme := &global_theme
 
 	imgui.PushStyleColor(.TableHeaderBg, 0)
 	defer imgui.PopStyleColor()

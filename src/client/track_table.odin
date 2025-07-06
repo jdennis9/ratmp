@@ -152,7 +152,6 @@ _track_table_update :: proc(
 _track_table_show :: proc(
 	table: _Track_Table_2,
 	str_id: cstring,
-	theme: Theme,
 	context_menu_id: imgui.ID,
 	playing: Track_ID,
 ) -> (result: _Track_Table_Result) {
@@ -242,7 +241,7 @@ _track_table_show :: proc(
 			}
 			
 			if row.id == playing {
-				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
+				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Artist) {
