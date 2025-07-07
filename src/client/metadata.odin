@@ -4,6 +4,8 @@ package client
 import "core:strings"
 import "core:time"
 import "core:os/os2"
+import "core:slice"
+import "core:log"
 
 import stbi "vendor:stb/image"
 
@@ -231,4 +233,94 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 	}
 
 	return
+}
+
+_Metadata_Editor :: struct {
+	artist: [128]u8,
+	title: [128]u8,
+	album: [128]u8,
+	genre: [128]u8,
+	year: i32,
+
+	enable_artist, enable_album, enable_title, enable_genre: bool,
+
+	serial: uint,
+	library_serial: uint,
+	tracks: [dynamic]Track_ID,
+	track_table: _Track_Table_2,
+}
+
+_show_metadata_editor :: proc(cl: ^Client, sv: ^Server) {
+	state := &cl.windows.metadata_editor
+
+	if len(state.tracks) == 0 {
+		imgui.TextDisabled("No tracks selected for editing")
+		return
+	}
+
+	imgui.TextDisabled("Editing %d tracks", i32(len(state.tracks)))
+
+	string_row :: proc(name: cstring, buf: []u8, enable: ^bool) {
+		imgui.PushIDPtr(enable)
+		defer imgui.PopID()
+		imgui.BeginDisabled(!enable^)
+		imgui.InputText(name, cstring(raw_data(buf)), len(buf))
+		imgui.EndDisabled()
+		imgui.SameLine()
+		imgui.Checkbox("##checkbox", enable)
+	}
+
+	string_row("Title", state.title[:], &state.enable_title)
+	string_row("Artist", state.artist[:], &state.enable_artist)
+	string_row("Album", state.album[:], &state.enable_album)
+	string_row("Genre", state.genre[:], &state.enable_genre)
+
+	if imgui.Button("Apply") {
+		alter: server.Library_Track_Metadata_Alteration
+		alter.tracks = state.tracks[:]
+		alter.values[.Title] = state.enable_title ? string(cstring(&state.title[0])) : nil
+		alter.values[.Artist] = state.enable_artist ? string(cstring(&state.artist[0])) : nil
+		alter.values[.Album] = state.enable_album ? string(cstring(&state.album[0])) : nil
+		alter.values[.Genre] = state.enable_genre ? string(cstring(&state.genre[0])) : nil
+		server.library_alter_metadata(&sv.library, alter)
+	}
+
+	if imgui.CollapsingHeader("View tracks") {
+		if state.library_serial != sv.library.serial {
+			state.library_serial = sv.library.serial
+			state.serial += 1
+		}
+
+		context_id := imgui.GetID("##track_context")
+
+		_track_table_update(&state.track_table, state.serial, sv.library, state.tracks[:], {}, "")
+		table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
+		context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoEditMetadata}, sv^)
+		_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+
+		if context_result.remove {
+			sel := _track_table_get_selection(state.track_table)
+			defer delete(sel)
+
+			log.debug(sel)
+			log.debug(state.tracks[:])
+
+			for id in sel {
+				index := slice.linear_search(state.tracks[:], id) or_continue
+				ordered_remove(&state.tracks, index)
+			}
+
+			state.serial += 1
+		}
+	}
+
+}
+
+_metadata_editor_select_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
+	state := &cl.windows.metadata_editor
+	resize(&state.tracks, len(tracks))
+	copy(state.tracks[:], tracks)
+	state.serial += 1
+
+	_bring_window_to_front(cl, .MetadataEditor)
 }

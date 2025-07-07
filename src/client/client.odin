@@ -90,6 +90,7 @@ Client :: struct {
 			table: _Track_Table_2,
 		},
 		folders: _Folders_Window,
+		metadata_editor: _Metadata_Editor,
 	},
 
 	enable_media_controls: bool,
@@ -399,6 +400,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	// Theme editor
 	if _begin_window(cl, .ThemeEditor) {
 		_show_theme_editor(cl, &cl.windows.theme_editor)
+		imgui.End()
+	}
+
+	if _begin_window(cl, .MetadataEditor) {
+		_show_metadata_editor(cl, sv)
 		imgui.End()
 	}
 

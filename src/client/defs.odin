@@ -34,6 +34,7 @@ _Window :: enum {
 	Oscilloscope,
 	ThemeEditor,
 	Settings,
+	MetadataEditor,
 }
 
 _Window_Info :: struct {
@@ -57,6 +58,7 @@ _WINDOW_INFO := [_Window]_Window_Info {
 	.WaveformSeek = {"Wave Bar", "waveform", {}, {}},
 	.Oscilloscope = {"Oscilloscope", "oscilloscope", {}, {}},
 	.Settings = {"Settings", "settings", {}, {.DontSaveState}},
+	.MetadataEditor = {"Metadata Editor", "metadata_editor", {}, {}}
 }
 
 _Window_State :: struct {

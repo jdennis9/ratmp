@@ -378,7 +378,7 @@ _track_table_process_results :: proc(
 	}
 }
 
-_Track_Context_Flag :: enum {NoRemove, NoQueue}
+_Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
 _Track_Context_Flags :: bit_set[_Track_Context_Flag]
 _Track_Context_Result :: struct {
 	single_track: Maybe(Track_ID),
@@ -387,6 +387,7 @@ _Track_Context_Result :: struct {
 	go_to_genre: bool,
 	remove: bool,
 	play: bool,
+	edit_metadata: bool,
 	add_to_queue: bool,
 	add_to_playlist: Maybe(Playlist_ID),
 }
@@ -424,6 +425,10 @@ _track_table_show_context :: proc(
 	if .NoQueue not_in flags {
 		result.play |= imgui.MenuItem("Play", "Ctrl + P")
 		result.add_to_queue |= imgui.MenuItem("Add to queue", "Ctrl + Q")
+	}
+
+	if .NoEditMetadata not_in flags {
+		result.edit_metadata |= imgui.MenuItem("Edit metadata")
 	}
 
 	return
@@ -499,6 +504,11 @@ _track_table_process_context :: proc(
 			selection := _track_table_get_selection(table)
 			defer delete(selection)
 			server.append_to_queue(sv, selection, table.playlist_id)
+		}
+		if result.edit_metadata {
+			selection := _track_table_get_selection(table)
+			defer delete(selection)
+			_metadata_editor_select_tracks(cl, selection)
 		}
 	}
 

@@ -97,6 +97,11 @@ Library :: struct {
 	folder_tree_serial: uint,
 }
 
+Library_Track_Metadata_Alteration :: struct {
+	values: [Metadata_Component]Maybe(Metadata_Value),
+	tracks: []Track_ID,
+}
+
 library_init :: proc(lib: ^Library, user_playlist_dir: string) -> (ok: bool) {
 	mem.dynamic_arena_init(&lib.string_arena)
 	lib.string_allocator = mem.dynamic_arena_allocator(&lib.string_arena)
@@ -223,6 +228,18 @@ library_get_track_path :: proc(library: Library, buf: []u8, track_id: Track_ID) 
 library_get_track_metadata :: proc(library: Library, track_id: Track_ID) -> (track: Track_Metadata, found: bool) {
 	index := library_lookup_track(library, track_id) or_return
 	return library.track_metadata[index], true
+}
+
+library_get_track_array_metadata :: proc(lib: Library, tracks: []Track_ID, allocator: mem.Allocator) -> []Track_Metadata {
+	output := make([dynamic]Track_Metadata, allocator)
+	reserve(&output, len(tracks))
+
+	for track in tracks {
+		index := library_lookup_track(lib, track) or_continue
+		append(&output, lib.track_metadata[index])
+	}
+
+	return output[:]
 }
 
 library_dump_track :: proc(track_arg: Track_Metadata) {
@@ -352,6 +369,29 @@ library_scan_playlists :: proc(lib: ^Library) {
 	for file in files {
 		library_add_playlist_from_file(lib, file.fullpath)
 	}
+}
+
+
+library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alteration) {
+	alter_track :: proc(lib: ^Library, md: ^Track_Metadata, component: Metadata_Component, value: Metadata_Value) {
+		switch v in value {
+			case string:
+				track_set_string(md, component, v, lib.string_allocator)
+			case i64:
+				md.values[component] = v
+		}
+	}
+
+	for component in Metadata_Component {
+		if alter.values[component] == nil {continue}
+		for track in alter.tracks {
+			index := library_lookup_track(lib^, track) or_continue
+			md := &lib.track_metadata[index]
+			alter_track(lib, md, component, alter.values[component].?)
+		}
+	}
+
+	lib.serial += 1
 }
 
 is_audio_file_supported :: proc(path: string) -> bool {
