@@ -47,6 +47,9 @@ foreign lib {
 
 @(link_prefix="av")
 foreign lib {
+	codec_license :: proc() -> cstring ---
+	codec_version :: proc() -> c.uint ---
+	codec_configuration :: proc() -> cstring ---
 	codec_parameters_to_context :: proc(codec: ^CodecContext, par: ^CodecParameters) -> c.int ---
 	codec_find_decoder :: proc(id: CodecID) -> ^Codec ---
 	codec_alloc_context3 :: proc(codec: ^Codec) -> ^CodecContext ---

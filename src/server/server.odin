@@ -75,6 +75,7 @@ Server :: struct {
 
 init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: string) -> (ok: bool) {
 	log.debug("Initializing server...")
+
 	state.ctx = context
 	state.wake_proc = wake_proc
 

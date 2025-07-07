@@ -4,6 +4,7 @@ import "core:time"
 import "core:log"
 import "core:fmt"
 
+import "src:bindings/ffmpeg"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:build"
@@ -24,6 +25,8 @@ run :: proc() -> bool {
 
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
+
+	log.info("AVCodec license: ", ffmpeg.codec_license())
 
 	// Configure ImGui
 	{
