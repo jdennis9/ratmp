@@ -21,7 +21,7 @@ _Folder_Node :: struct {
 }
 
 _Folders_Window :: struct {
-	filter: [128]u8,
+	track_filter: [128]u8,
 	serial: uint,
 	node_arena: mem.Dynamic_Arena,
 	string_arena: mem.Dynamic_Arena,
@@ -173,14 +173,17 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	if state.sel_folder_id != 0 && imgui.TableSetColumnIndex(1) {
 		sel_folder, sel_folder_found := server.library_find_folder(sv.library, state.sel_folder_id)
 		
+		
 		if sel_folder_found {
 			playlist_id := _folder_id_to_playlist_id(sel_folder.id)
-			filter := cstring(&state.filter[0])
+			filter_cstring := cstring(&state.track_filter[0])
 			context_id := imgui.GetID("##track_context")
+
+			imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
 			_track_table_update(
 				&state.track_table, sv.library.serial, sv.library, sel_folder.tracks[:], playlist_id,
-				string(filter)
+				string(filter_cstring)
 			)
 
 			table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
