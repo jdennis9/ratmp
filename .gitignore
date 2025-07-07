@@ -7,5 +7,5 @@ out
 *.pdb
 *.res
 *.a
-src/cpp/taglib
+src/bindings/taglib/taglib
 src/thirdparty/odin-imgui/*
