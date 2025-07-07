@@ -252,7 +252,7 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 
 			path_buf: [512]u8
 			path := server.library_get_track_path(sv.library, path_buf[:], state.track_id) or_return
-			decoder.open(&state.dec, path) or_return
+			decoder.open(&state.dec, path, nil) or_return
 
 			ok = true
 

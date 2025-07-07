@@ -83,7 +83,6 @@ library_build_folder_tree :: proc(lib: ^Library) {
 		path_buf: [512]u8
 		md := lib.track_metadata[track_index]
 		path := library_get_track_path(lib^, path_buf[:], track_id) or_continue
-		log.debug(path)
 		library_folder_tree_add_track(tree, path, track_id, md)
 	}
 

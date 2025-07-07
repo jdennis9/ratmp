@@ -135,3 +135,26 @@ _show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, req_size: [2]f32 
 
 	return imgui.InvisibleButton(str_id, size)
 }
+
+_imgui_begin_status_bar :: proc() -> bool {
+	window_flags := imgui.WindowFlags{
+		.NoScrollbar, 
+		.NoSavedSettings, 
+		.MenuBar,
+	}
+
+	imgui.BeginViewportSideBar(
+		"##status_bar",
+		imgui.GetMainViewport(),
+		.Down,
+		imgui.GetFrameHeight(),
+		window_flags,
+	) or_return
+
+	return imgui.BeginMenuBar()
+}
+
+_imgui_end_status_bar :: proc() {
+	imgui.EndMenuBar()
+	imgui.End()
+}

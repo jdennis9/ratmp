@@ -91,6 +91,11 @@ Client :: struct {
 		},
 		folders: _Folders_Window,
 		metadata_editor: _Metadata_Editor,
+		status_bar: struct {
+			displayed_track_id: Track_ID,
+			metadata: Track_Metadata,
+			artist, album, title: [64]u8
+		},
 	},
 
 	enable_media_controls: bool,
@@ -275,24 +280,9 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	_draw_background(cl^)
 	_main_menu_bar(cl, sv)
+	_status_bar(cl, sv)
 
-	if progress, is_running := server.get_background_scan_progress(sv^); is_running {
-		if imgui.Begin("Metadata Scan Progress") {
-			input_count := progress.input_file_count
-			output_count := progress.files_scanned
-			frac := f32(output_count) / f32(input_count)
-
-			if !progress.counting_files {
-				imgui.Text("Scanning metadata (%u/%u)", u32(output_count), u32(input_count))
-			}
-			else {
-				imgui.Text("Calculating...")
-			}
-			imgui.ProgressBar(frac, {imgui.GetContentRegionAvail().x, 0})
-		}
-
-		imgui.End()
-	}
+	
 
 	// Library
 	if _begin_window(cl, .Library) {
@@ -687,6 +677,77 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 			server.seek_to_second(sv, cast(int) second)
 		}
 	}
+}
+
+_status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
+	if !_imgui_begin_status_bar() {return false}
+	defer _imgui_end_status_bar()
+
+	state := &cl.windows.status_bar
+	info := sv.current_track_info
+
+	if state.displayed_track_id != sv.current_track_id {
+		state.displayed_track_id = sv.current_track_id
+		if sv.current_track_id == 0 {return false}
+		state.metadata = server.library_get_track_metadata(sv.library, state.displayed_track_id) or_return
+		state.artist = {}
+		state.album = {}
+		state.title = {}
+		util.copy_string_to_buf(state.artist[:], state.metadata.values[.Artist].(string) or_else "")
+		util.copy_string_to_buf(state.album[:], state.metadata.values[.Album].(string) or_else "")
+		util.copy_string_to_buf(state.title[:], state.metadata.values[.Title].(string) or_else "")
+	}
+
+	if state.displayed_track_id == 0 {
+		imgui.BeginDisabled()
+		_native_text_unformatted("Album")
+		imgui.Separator()
+		_native_text_unformatted("Artist")
+		imgui.Separator()
+		_native_text_unformatted("Title")
+		imgui.Separator()
+		imgui.EndDisabled()
+	}
+	else {
+		button :: proc(buf: []u8) -> bool {
+			if buf[0] == 0 {imgui.TextDisabled("?"); return false}
+			imgui.PushIDPtr(raw_data(buf))
+			defer imgui.PopID()
+
+			return imgui.MenuItem(cstring(raw_data(buf)))
+		}
+
+		if button(state.album[:]) {_go_to_album(cl, state.metadata)}
+		imgui.SetItemTooltip("Album")
+		imgui.Separator()
+		if button(state.artist[:]) {_go_to_artist(cl, state.metadata)}
+		imgui.SetItemTooltip("Artist")
+		imgui.Separator()
+		if button(state.title[:]) {_go_to_album(cl, state.metadata)}
+		imgui.SetItemTooltip("Track title")
+		imgui.Separator()
+		_native_text_unformatted(string(cstring(&info.codec[0])))
+		imgui.Separator()
+		{buf: [32]u8; _native_text(&buf, info.samplerate, "Hz")}
+		imgui.Separator()
+	}
+
+	if progress, is_running := server.get_background_scan_progress(sv^); is_running {
+		input_count := progress.input_file_count
+		output_count := progress.files_scanned
+		frac := f32(output_count) / f32(input_count)
+
+		if !progress.counting_files {
+			imgui.Text("Scanning metadata (%u/%u)", u32(output_count), u32(input_count))
+		}
+		else {
+			imgui.Text("Counting tracks...")
+		}
+		imgui.ProgressBar(frac, {200, 0})
+		imgui.Separator()
+	}
+
+	return true
 }
 
 @private

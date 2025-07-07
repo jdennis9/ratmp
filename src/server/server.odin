@@ -29,6 +29,8 @@ _Saved_State :: struct {
 	playback_mode: Playback_Mode,
 }
 
+Track_Info :: decoder.File_Info
+
 Server :: struct {
 	ctx: runtime.Context,
 
@@ -38,6 +40,7 @@ Server :: struct {
 	playback_lock: sync.Mutex,
 	decoder: decoder.Decoder,
 	current_track_id: Track_ID,
+	current_track_info: Track_Info,
 	current_playlist_id: Playlist_ID,
 	queue: [dynamic]Track_ID,
 	queue_pos: int,
@@ -168,7 +171,7 @@ play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_dr
 	defer sync.unlock(&state.playback_lock)
 
 	if !dont_drop_buffer {sys.audio_drop_buffer(&state.stream)}
-	decoder.open(&state.decoder, filename) or_return
+	decoder.open(&state.decoder, filename, &state.current_track_info) or_return
 	state.current_track_id = track_id
 	set_paused(state, false, no_lock=true)
 

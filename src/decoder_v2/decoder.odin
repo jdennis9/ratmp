@@ -12,6 +12,12 @@ Decode_Status :: enum {
 	Eof,
 }
 
+File_Info :: struct {
+	codec: [64]u8,
+	samplerate: int,
+	channels: int,
+}
+
 Decoder :: struct {
 	demuxer: ^av.FormatContext,
 	decoder: ^av.CodecContext,
@@ -32,7 +38,7 @@ Decoder :: struct {
 	is_open: bool,
 }
 
-open :: proc(dec: ^Decoder, filename_native: string) -> (ok: bool) {
+open :: proc(dec: ^Decoder, filename_native: string, info: ^File_Info) -> (ok: bool) {
 	codec: ^av.Codec
 	stream: ^av.Stream
 	filename := strings.clone_to_cstring(filename_native)
@@ -73,6 +79,15 @@ open :: proc(dec: ^Decoder, filename_native: string) -> (ok: bool) {
 	dec.duration_seconds = (dec.demuxer.duration / av.TIME_BASE)
 	dec.frame_count = int(dec.duration_seconds) * int(codecpar.sample_rate)
 
+	if info != nil {
+		info^ = {}
+		if codec.name != nil {
+			copy(info.codec[:len(info.codec)-1], string(codec.name))
+		}
+		info.samplerate = dec.samplerate
+		info.channels = dec.channels
+	}
+	
 	dec.is_open = true
 	ok = true
 	return
