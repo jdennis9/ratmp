@@ -172,6 +172,11 @@ _track_table_show :: proc(
 		table_flags |= imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate
 	}
 
+	result.lowest_selection_index = max(type_of(result.lowest_selection_index))
+	defer if result.lowest_selection_index == max(type_of(result.lowest_selection_index)) {
+		result.lowest_selection_index = 0
+	}
+
 	column_flags := #partial [Metadata_Component]imgui.TableColumnFlags {
 		.Title = {.NoHide},
 		.Bitrate = {.DefaultHide},
@@ -466,14 +471,29 @@ _track_process_context :: proc(
 	result: _Track_Context_Result,
 	cl: ^Client,
 	sv: ^Server,
+	from_playlist: Playlist_ID,
 	allow_add_to_playlist: bool,
 ) {
-	if result.single_track != nil && (result.go_to_album || result.go_to_genre || result.go_to_artist) {
-		md, found := server.library_get_track_metadata(sv.library, result.single_track.?)
-		if found {
-			if result.go_to_album {_go_to_album(cl, md)}
-			if result.go_to_artist {_go_to_artist(cl, md)}
-			if result.go_to_genre {_go_to_genre(cl, md)}
+	if result.single_track != nil {
+		if (result.go_to_album || result.go_to_genre || result.go_to_artist) {
+			md, found := server.library_get_track_metadata(sv.library, result.single_track.?)
+			if found {
+				if result.go_to_album {_go_to_album(cl, md)}
+				if result.go_to_artist {_go_to_artist(cl, md)}
+				if result.go_to_genre {_go_to_genre(cl, md)}
+			}
+		}
+
+		if result.edit_metadata {
+			_metadata_editor_select_tracks(cl, {result.single_track.?})
+		}
+
+		if result.play {
+			server.play_playlist(sv, {result.single_track.?}, from_playlist)
+		}
+
+		if result.add_to_queue {
+			server.append_to_queue(sv, {result.single_track.?}, from_playlist)
 		}
 	}
 
@@ -492,7 +512,7 @@ _track_table_process_context :: proc(
 	result: _Track_Context_Result, cl: ^Client, sv: ^Server,
 ) {
 	if result.single_track != nil {
-		_track_process_context(result.single_track.?, result, cl, sv, false)
+		_track_process_context(result.single_track.?, result, cl, sv, table.playlist_id, false)
 	}
 	else {
 		if result.play {
