@@ -282,8 +282,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	_main_menu_bar(cl, sv)
 	_status_bar(cl, sv)
 
-	
-
 	// Library
 	if _begin_window(cl, .Library) {
 		state := &cl.windows.library
@@ -698,17 +696,9 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 		util.copy_string_to_buf(state.title[:], state.metadata.values[.Title].(string) or_else "")
 	}
 
-	if state.displayed_track_id == 0 {
-		imgui.BeginDisabled()
-		_native_text_unformatted("Album")
-		imgui.Separator()
-		_native_text_unformatted("Artist")
-		imgui.Separator()
-		_native_text_unformatted("Title")
-		imgui.Separator()
-		imgui.EndDisabled()
-	}
-	else {
+	if state.displayed_track_id != 0 {
+		text_buf: [32]u8
+
 		button :: proc(buf: []u8) -> bool {
 			if buf[0] == 0 {imgui.TextDisabled("?"); return false}
 			imgui.PushIDPtr(raw_data(buf))
@@ -728,7 +718,13 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 		imgui.Separator()
 		_native_text_unformatted(string(cstring(&info.codec[0])))
 		imgui.Separator()
-		{buf: [32]u8; _native_text(&buf, info.samplerate, "Hz")}
+		_native_text(&text_buf, info.samplerate, "Hz")
+		imgui.Separator()
+		switch info.channels {
+		case 1: _native_text_unformatted("Mono")
+		case 2: _native_text_unformatted("Stereo")
+		case: _native_text(&text_buf, info.channels, "channels")
+		}
 		imgui.Separator()
 	}
 
