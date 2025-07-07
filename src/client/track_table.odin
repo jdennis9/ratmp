@@ -225,6 +225,12 @@ _track_table_show :: proc(
 			}
 		}
 
+		if _is_key_chord_pressed(.ImGuiMod_Ctrl, .A) {
+			for &row in table.rows {
+				row.selected = true
+			}
+		}
+
 		result.play_selection |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .P)
 		result.add_selection_to_queue |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .Q)
 	}
