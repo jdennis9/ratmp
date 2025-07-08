@@ -24,12 +24,6 @@ import "src:sys"
 
 Path :: sys.Path
 
-/*Property :: union {
-	int,
-	string,
-	f32,
-}*/
-
 Client :: struct {
 	ctx: runtime.Context,
 
@@ -37,11 +31,8 @@ Client :: struct {
 
 	selected_user_playlist_id: Playlist_ID,
 
-	library_track_filter: _Track_Filter_State,
-
 	tick_last_frame: time.Tick,
 	frame_count: int,
-	selection: _Selection,
 	library_sort_spec: server.Track_Sort_Spec,
 	metadata_window: _Metadata_Window,
 	waveform_window: _Waveform_Window,
@@ -178,7 +169,6 @@ init :: proc(
 
 destroy :: proc(client: ^Client) {
 	save_settings(&client.settings, client.paths.settings)
-	delete(client.selection.tracks)
 	delete(client.paths.layout_folder)
 	delete(client.paths.persistent_state)
 	delete(client.paths.theme_folder)
