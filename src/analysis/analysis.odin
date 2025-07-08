@@ -6,7 +6,7 @@ import glm "core:math/linalg/glsl"
 
 import "src:bindings/fftw"
 
-import decoder "src:decoder_v2"
+import "src:decoder"
 
 calc_peak :: proc(samples: []f32) -> f32 {
 	peak: f32 = 0

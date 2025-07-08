@@ -10,7 +10,7 @@ import glm "core:math/linalg/glsl"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:analysis"
-import decoder "src:decoder_v2"
+import "src:decoder"
 import "src:server"
 
 PEAK_ROUGHNESS :: 20

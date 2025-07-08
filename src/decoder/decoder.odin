@@ -1,43 +1,10 @@
-/*
-	RAT MP: A lightweight graphical music player
-    Copyright (C) 2025 Jamie Dennis
+package decoder_v2
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
-package decoder
-
-import "core:unicode/utf16"
 import "core:math"
+import "core:strings"
 import "core:log"
-import "core:fmt"
 
-import sf "src:bindings/sndfile"
-import src "src:bindings/samplerate"
-
-Decoder :: struct {
-	frame: int,
-	frame_count: int,
-
-	// Information about input file
-	channels, samplerate: int,
-	
-	_stream: sf.Stream,
-	_resampler: src.State,
-	_in_to_out_sample_ratio: f32,
-	_resample_quality: src.Converter_Type,
-	_overflow: [dynamic]f32,
-}
+import av "src:bindings/ffmpeg"
 
 Decode_Status :: enum {
 	NoFile,
@@ -45,198 +12,240 @@ Decode_Status :: enum {
 	Eof,
 }
 
-open :: proc(dec: ^Decoder, file: string, resample_quality := src.Converter_Type.SINC_MEDIUM_QUALITY) -> bool {
-	info: sf.Info
+File_Info :: struct {
+	codec: [64]u8,
+	samplerate: int,
+	channels: int,
+}
+
+Decoder :: struct {
+	demuxer: ^av.FormatContext,
+	decoder: ^av.CodecContext,
+	packet: ^av.Packet,
+	resampler: ^av.SwrContext,
+	resampler_channels: int,
+	resampler_samplerate: int,
+	frame: ^av.Frame,
+	stream_index: int,
+	overflow: [dynamic]f32,
+	overflow_samplerate: int,
+	overflow_channels: int,
+	samplerate: int,
+	channels: int,
+	frame_index: int,
+	frame_count: int,
+	duration_seconds: i64,
+	is_open: bool,
+}
+
+open :: proc(dec: ^Decoder, filename_native: string, info: ^File_Info) -> (ok: bool) {
+	codec: ^av.Codec
+	stream: ^av.Stream
+	filename := strings.clone_to_cstring(filename_native)
+	defer delete(filename)
 
 	close(dec)
-	dec._resample_quality = resample_quality
 
-	when ODIN_OS == .Windows {
-		path: [512]u16
-		utf16.encode_string(path[:511], file)
-		dec._stream = sf.wchar_open(raw_data(path[:]), sf.MODE_READ, &info)
+	// Demuxer
+	dec.demuxer = av.format_alloc_context()
+	if dec.demuxer == nil {return}
+	if av.format_open_input(&dec.demuxer, filename, nil, nil) != 0 {return}
+	defer if !ok {av.format_close_input(&dec.demuxer); av.format_free_context(dec.demuxer)}
+
+	av.format_find_stream_info(dec.demuxer, nil)
+	dec.stream_index = -1
+	for i in 0..<dec.demuxer.nb_streams {
+		if dec.demuxer.streams[i].codecpar.codec_type == .AUDIO {
+			dec.stream_index = auto_cast i
+			break
+		}
 	}
-	else {
-		path: [512]u8
+	if dec.stream_index == -1 {return}
 
-		// So -vet doesn't complain about utf16 package being unused
-		utf16.is_surrogate(' ')
+	stream = dec.demuxer.streams[dec.stream_index]
 
-		copy(path[:511], file)
-		dec._stream = sf.open(cstring(raw_data(path[:])), sf.MODE_READ, &info)
+	// Decoder
+	codecpar := stream.codecpar
+	codec = av.codec_find_decoder(codecpar.codec_id)
+	dec.decoder = av.codec_alloc_context3(codec)
+	av.codec_parameters_to_context(dec.decoder, codecpar)
+	av.codec_open2(dec.decoder, codec, nil)
+
+	dec.packet = av.packet_alloc()
+	dec.frame = av.frame_alloc()
+	dec.samplerate = auto_cast codecpar.sample_rate
+	dec.channels = auto_cast codecpar.ch_layout.nb_channels
+	dec.frame_index = 0
+	dec.duration_seconds = (dec.demuxer.duration / av.TIME_BASE)
+	dec.frame_count = int(dec.duration_seconds) * int(codecpar.sample_rate)
+
+	if info != nil {
+		info^ = {}
+		if codec.name != nil {
+			copy(info.codec[:len(info.codec)-1], string(codec.name))
+		}
+		info.samplerate = dec.samplerate
+		info.channels = dec.channels
 	}
-
-	dec.samplerate = int(info.samplerate)
-	dec.channels = int(info.channels)
-	dec.frame_count = int(info.frames)
-
-	return dec._stream != nil
+	
+	dec.is_open = true
+	ok = true
+	return
 }
 
 close :: proc(dec: ^Decoder) {
-	if dec._stream != nil {sf.close(dec._stream); dec._stream = nil}
-	if dec._resampler != nil {src.delete(dec._resampler); dec._resampler = nil}
-	delete(dec._overflow)
-	dec.frame = 0
-	dec._overflow = nil
+	dec.is_open = false
+	dec.frame_index = 0
+	dec.frame_count = 0
+
+	delete(dec.overflow)
+	dec.overflow = nil
+
+	if dec.resampler != nil {
+		av.swr_free(&dec.resampler)
+		dec.resampler = nil
+	}
+	if dec.frame != nil {
+		av.frame_unref(dec.frame)
+		av.frame_free(&dec.frame)
+		dec.frame = nil
+	}
+	if dec.packet != nil {
+		av.packet_unref(dec.packet)
+		av.packet_free(&dec.packet)
+		dec.packet = nil
+	}
+	if dec.decoder != nil {
+		av.codec_close(dec.decoder)
+		av.codec_free_context(&dec.decoder)
+		dec.decoder = nil
+	}
+	if dec.demuxer != nil {
+		av.format_close_input(&dec.demuxer)
+		av.format_free_context(dec.demuxer)
+		dec.demuxer = nil
+	}
 }
 
 is_open :: proc(dec: Decoder) -> bool {
-	return dec._stream != nil
-}
-
-destroy :: proc(dec: Decoder) {
-	if dec._stream != nil {sf.close(dec._stream)}
-	src.delete(dec._resampler)
-	delete(dec._overflow)
+	return dec.is_open
 }
 
 @private
-_convert_channels :: proc(dst: []f32, dst_channels: int, src_channels: int) {
-	out_samples := len(dst)
-	out_frames := out_samples / dst_channels
+_decode_packet :: proc(dec: ^Decoder, output: ^[dynamic]f32, channels, samplerate: int) -> (read: int, written: int, eof: bool) {
+	error := av.read_frame(dec.demuxer, dec.packet)
+	if error < 0 {
+		eof = u32(error) == av.ERROR_EOF
+		log.debug("EOF")
+		return
+	}
 
-	src := make([]f32, out_frames * min(src_channels, dst_channels))
-	defer delete(src)
-	copy(src[:], dst[:])
+	clear(output)
 
-	assert(dst_channels != src_channels)
+	error = av.codec_send_packet(dec.decoder, dec.packet)
+	defer av.packet_unref(dec.packet)
 
-	if src_channels == 1 {
-		dst_i: int
-		for f in src {
-			for ch in 0..<dst_channels {
-				dst[dst_i+ch] = f
-			}
-			dst_i += dst_channels
+	if int(dec.packet.stream_index) != dec.stream_index {
+		return
+	}
+
+	if error < 0 {return}
+ 
+	if dec.resampler == nil || dec.resampler_channels != channels || dec.resampler_samplerate != samplerate {
+		if dec.resampler != nil {av.swr_free(&dec.resampler)}
+		dec.resampler_channels = channels
+		dec.resampler_samplerate = samplerate
+		out_ch_layout: av.ChannelLayout
+
+		av.channel_layout_default(&out_ch_layout, auto_cast channels)
+		av.swr_alloc_set_opts2(
+			&dec.resampler, &out_ch_layout, .FLT, auto_cast samplerate,
+			&dec.decoder.ch_layout, dec.decoder.sample_fmt, dec.decoder.sample_rate,
+			0, nil
+		)
+		if dec.resampler == nil {return}
+		av.swr_init(dec.resampler)
+	}
+
+	for av.codec_receive_frame(dec.decoder, dec.frame) >= 0 {
+		defer av.frame_unref(dec.frame)
+
+		sample_ratio := f32(samplerate) / f32(dec.frame.sample_rate)
+		write_frames := int(math.floor(f32(dec.frame.nb_samples) * sample_ratio))
+		read_frames := auto_cast dec.frame.nb_samples
+
+		output_offset := len(output)
+		resize(output, output_offset + (write_frames*channels))
+		output_ptr := &output[output_offset]
+
+		converted := av.swr_convert(
+			dec.resampler,
+			auto_cast &output_ptr, auto_cast write_frames,
+			auto_cast &dec.frame.data[0], read_frames
+		)
+
+		if converted < 0 {
+			log.error("swr_convert returned", converted)
+			continue
 		}
-	}
-	else if dst_channels == 1 {
-		src_i: int
-		for i in 0..<out_samples {
-			max_sample: f32
-			abs_max: f32
-			for ch in 0..<src_channels {
-				if abs(src[src_i+ch]) > abs_max {
-					max_sample = src[src_i+ch]
-					abs_max = abs(max_sample)
-				}
-			}
 
-			dst[i] = max_sample
-			src_i += 2
-		}
-	}
-	else {
-		panic("Unsupported channel conversion")
-	}
-}
-
-@private
-_decode_packet :: proc(dec: ^Decoder, output: []f32, samplerate, channels: int) -> (out_frames_read: int, out_frames_written: int) {
-	needs_resampling := dec.samplerate != samplerate
-	output_frames := len(output) / channels
-
-	if !needs_resampling {
-		frames_read := sf.readf_float(dec._stream, raw_data(output), sf.count_t(output_frames))
-		if channels != dec.channels {
-			_convert_channels(output, channels, dec.channels)
-		}
-		return auto_cast frames_read, auto_cast frames_read
+		written += auto_cast write_frames
+		read += auto_cast dec.frame.nb_samples
 	}
 
-	in_to_out_sample_ratio := f32(samplerate) / f32(dec.samplerate)
-	input_frames := cast(i32) math.ceil(f32(output_frames) / in_to_out_sample_ratio)
-	raw_buffer: []f32 = make([]f32, input_frames * cast(i32) max(channels, dec.channels))
-	defer delete(raw_buffer)
-
-	if dec._resampler == nil {
-		error: i32
-		dec._resampler = src.new(dec._resample_quality, auto_cast channels, &error)
-		dec._in_to_out_sample_ratio = in_to_out_sample_ratio
-	}
-
-	if in_to_out_sample_ratio != dec._in_to_out_sample_ratio {
-		dec._in_to_out_sample_ratio = in_to_out_sample_ratio
-		src.set_ratio(dec._resampler, auto_cast in_to_out_sample_ratio)
-	}
-
-	sf.readf_float(dec._stream, raw_data(raw_buffer), sf.count_t(input_frames))
-
-	if dec.channels != channels {
-		_convert_channels(raw_buffer[:], channels, dec.channels)
-	}
-
-	rs := src.Data {
-		data_in = raw_data(raw_buffer),
-		data_out = raw_data(output),
-		input_frames = auto_cast input_frames,
-		output_frames = auto_cast output_frames,
-		src_ratio = f64(in_to_out_sample_ratio),
-	}
-
-	if process_error := src.process(dec._resampler, &rs); process_error != 0 {
-		log.warn("src.process returned", process_error)
-	}
-
-	if rs.output_frames_gen != auto_cast output_frames {
-		fmt.println("Wanted", output_frames, "frames, got", rs.output_frames_gen)
-	}
-
-	return auto_cast rs.input_frames_used, auto_cast rs.output_frames_gen
+	return
 }
 
 fill_buffer :: proc(dec: ^Decoder, output: []f32, channels: int, samplerate: int) -> (status: Decode_Status) {
-	if dec._stream == nil {
-		return .NoFile
-	}
+	status = .Complete
 
-	
-	packet: [4800]f32
+	packet: [dynamic]f32
+	defer delete(packet)
+
 	frames_wanted := len(output) / channels
 	frames_decoded := 0
-	status = .Complete
-	
-	if len(dec._overflow) > 0 {
-		overflow_samples := min(len(dec._overflow), len(output))
+
+	if len(dec.overflow) > 0 {
+		overflow_samples := min(len(dec.overflow), len(output))
 		overflow_frames := overflow_samples / channels
 		
-		copy(output, dec._overflow[:overflow_samples])
+		copy(output, dec.overflow[:overflow_samples])
 		
-		if overflow_samples < len(dec._overflow) {
-			remove_range(&dec._overflow, 0, overflow_samples)
+		if overflow_samples < len(dec.overflow) {
+			remove_range(&dec.overflow, 0, overflow_samples)
 		}
 		else {
-			clear(&dec._overflow)
+			clear(&dec.overflow)
 		}
 		
 		frames_decoded += overflow_frames
 	}
-	
-	for (frames_decoded < frames_wanted) && (status != .Eof) {
-		packet_frames_in, packet_frames := _decode_packet(dec, packet[:], samplerate, channels)
 
-		if packet_frames == 0 {
+	for (frames_decoded < frames_wanted) && status != .Eof {
+		packet_frames_in, packet_frames, eof := _decode_packet(dec, &packet, channels, samplerate)
+
+		if eof {
 			status = .Eof
 			break
 		}
+
+		if packet_frames == 0 {continue}
 
 		overflow_frames := frames_decoded + packet_frames - frames_wanted
 
 		if overflow_frames > 0 {
 			copy(output[frames_decoded*channels:], packet[:(packet_frames-overflow_frames)*channels])
-			resize(&dec._overflow, overflow_frames * channels)
-			copy(dec._overflow[:], packet[(packet_frames-overflow_frames)*channels : packet_frames*channels])
+			resize(&dec.overflow, overflow_frames * channels)
+			copy(dec.overflow[:], packet[(packet_frames-overflow_frames)*channels : packet_frames*channels])
 		}
 		else {
-			copy(output[frames_decoded*channels:], packet[:])
+			copy(output[frames_decoded*channels:], packet[:packet_frames*channels])
 		}
 
 		frames_decoded += packet_frames
+		dec.frame_index += packet_frames_in
 
-		dec.frame += packet_frames_in
-
-		if dec.frame >= dec.frame_count {
+		if dec.frame_index >= dec.frame_count {
 			status = .Eof
 			break
 		}
@@ -246,25 +255,24 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, channels: int, samplerate: int
 }
 
 seek :: proc(dec: ^Decoder, second: int) {
-	if dec._stream == nil {return}
-
-	frame := sf.count_t(dec.samplerate) * sf.count_t(second)
-	sf.seek(dec._stream, frame, .SEEK_SET)
-	dec.frame = int(frame)
-	
-	clear(&dec._overflow)
-
-	if dec._resampler != nil {
-		src.reset(dec._resampler)
-	}
+	if !dec.is_open {return}
+	dec.frame_index = second * dec.samplerate
+	base := dec.demuxer.streams[dec.stream_index].time_base
+	ts := av.rescale(auto_cast second, auto_cast base.den, auto_cast base.num)
+	av.format_seek_file(dec.demuxer, auto_cast dec.stream_index, 0, ts, ts, 0)
+	av.codec_flush_buffers(dec.decoder)
+	clear(&dec.overflow)
 }
 
 get_second :: proc(dec: Decoder) -> int {
-	if dec._stream == nil {return 0}
-	return dec.frame / int(dec.samplerate)
+	if !dec.is_open {return 0}
+
+	return (dec.frame_index) / (dec.samplerate)
 }
 
 get_duration :: proc(dec: Decoder) -> int {
-	if dec._stream == nil {return 0}
-	return dec.frame_count / dec.samplerate
+	if !dec.is_open {return 0}
+
+	return auto_cast dec.duration_seconds
 }
+
