@@ -14,10 +14,15 @@ File_Type :: enum {
 	Font,
 }
 
+File_Dialog_Flag :: enum {
+	SelectFolders,
+	SelectMultiple,
+}
+File_Dialog_Flags :: bit_set[File_Dialog_Flag]
+
 File_Dialog_State :: struct {
 	thread: ^thread.Thread,
-	select_folders: bool,
-	multiselect: bool,
+	flags: File_Dialog_Flags,
 	file_type: File_Type,
 	results: [dynamic]Path,
 }
@@ -33,17 +38,16 @@ _file_dialog_thread_proc :: proc(dialog_thread: ^thread.Thread) {
 		append(&state.results, path_buf)
 	}
 
-	for_each_file_in_dialog(nil, iterator, state, state.select_folders, state.multiselect, state.file_type)
+	for_each_file_in_dialog(nil, iterator, state, state.file_type, state.flags)
 }
 
-open_async_file_dialog :: proc(state: ^File_Dialog_State, select_folders := true, multiselect := true, file_type := File_Type.Audio) -> bool {
+open_async_file_dialog :: proc(state: ^File_Dialog_State, file_type: File_Type, flags: File_Dialog_Flags) -> bool {
 	if state.thread != nil {
 		log.warn("Tried openning a file dialog in the background when there is already one running")
 		return false
 	}
 
-	state.select_folders = select_folders
-	state.multiselect = multiselect
+	state.flags = flags
 	state.file_type = file_type
 	state.thread = thread.create(_file_dialog_thread_proc)
 	if state.thread == nil {return false}

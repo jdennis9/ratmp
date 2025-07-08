@@ -193,12 +193,7 @@ show_settings_editor :: proc(cl: ^Client) {
 		}
 		if imgui.TableSetColumnIndex(2) {
 			if imgui.Button("Browse") {
-				sys.open_async_file_dialog(
-					browse_dialog,
-					select_folders = false,
-					multiselect = false,
-					file_type = file_type,
-				)
+				sys.open_async_file_dialog(browse_dialog, file_type, {})
 			}
 			imgui.SameLine()
 			if imgui.Button("Clear") {

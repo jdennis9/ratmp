@@ -511,7 +511,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	// Menus
 	if imgui.BeginMenu("File") {
 		if imgui.MenuItem("Add folders") {
-			sys.open_async_file_dialog(&client.dialogs.add_folders)
+			sys.open_async_file_dialog(&client.dialogs.add_folders, .Audio, {.SelectFolders, .SelectMultiple})
 		}
 
 		if imgui.MenuItem("Scan for new music") {
@@ -563,7 +563,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 		}
 
 		if imgui.MenuItem("Change background") {
-			sys.open_async_file_dialog(&client.dialogs.set_background, select_folders=false, multiselect=false, file_type=.Image)
+			sys.open_async_file_dialog(&client.dialogs.set_background, .Image, {})
 		}
 
 		imgui.EndMenu()

@@ -54,8 +54,7 @@ _open_file_or_folder_select_dialog :: proc(buffer: []u16, select_folders: bool) 
 
 @(private="file")
 _open_file_or_folder_multiselect_dialog :: proc(
-	iterator: File_Iterator, iterator_data: rawptr, select_folders: bool,
-	multiselect := true, file_type := File_Type.Audio
+	iterator: File_Iterator, iterator_data: rawptr, file_type: File_Type, flags: File_Dialog_Flags,
 ) -> int {
 	dialog: ^win.IFileOpenDialog
 	error := win.CoCreateInstance(
@@ -68,9 +67,9 @@ _open_file_or_folder_multiselect_dialog :: proc(
 	defer dialog->Release()
 
 	options: win.FILEOPENDIALOGOPTIONS;
-	if multiselect {options |= win.FOS_ALLOWMULTISELECT}
+	if .SelectMultiple in flags {options |= win.FOS_ALLOWMULTISELECT}
 
-	if select_folders {
+	if .SelectFolders in flags {
 		options |= win.FOS_PICKFOLDERS | win.FOS_PATHMUSTEXIST
 		dialog->SetOptions(options)
 	}
@@ -132,7 +131,7 @@ _open_file_or_folder_multiselect_dialog :: proc(
 
 		if path_len == 0 {continue}
 
-		iterator(transmute(string) path_u8[:path_len-1], select_folders, iterator_data)
+		iterator(transmute(string) path_u8[:path_len-1], .SelectFolders in flags, iterator_data)
 	}
 
 	return int(count)
@@ -140,10 +139,9 @@ _open_file_or_folder_multiselect_dialog :: proc(
 
 for_each_file_in_dialog :: proc(
 	title: cstring, iterator: File_Iterator, 
-	iterator_data: rawptr, select_folders := false,
-	multiselect := true, file_type := File_Type.Audio
+	iterator_data: rawptr, file_type: File_Type, flags: File_Dialog_Flags,
 ) -> int {
-	return _open_file_or_folder_multiselect_dialog(iterator, iterator_data, select_folders, multiselect, file_type)
+	return _open_file_or_folder_multiselect_dialog(iterator, iterator_data, file_type, flags)
 }
 
 open_file_dialog :: proc(buf: []u8, file_type: File_Type) -> (file: string, ok: bool) {
