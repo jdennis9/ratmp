@@ -97,11 +97,12 @@ _track_table_update :: proc(
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
 	table.flags = flags
 
-	if len(table.rows) != 0 && table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
+	if len(table.rows) == len(tracks) && table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
+	log.debug("Serial", table.serial, "!=", serial)
+	log.debug("Update track table for playlist ID", playlist_id)
 	table.playlist_id = playlist_id
 	table.serial = serial
 	table.filter_hash = filter_hash
-	log.debug("Update track table for playlist ID", playlist_id)
 
 	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: _Track_Row, ok: bool) {
 		md := server.library_get_track_metadata(lib, id) or_return
