@@ -11,6 +11,8 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 import "src:util"
 
+import "imx"
+
 _Folder_Node :: struct {
 	children: []_Folder_Node,
 	name: string,
@@ -149,12 +151,11 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 				}
 
 				if imgui.TableSetColumnIndex(1) {
-					_native_text_unformatted(string(node.duration_str[:node.duration_str_len]))
+					imx.text_unformatted(string(node.duration_str[:node.duration_str_len]))
 				}
 
 				if imgui.TableSetColumnIndex(2) {
-					buf: [8]u8
-					_native_text(&buf, node.track_count)
+					imx.text(8, node.track_count)
 				}
 			}
 		}

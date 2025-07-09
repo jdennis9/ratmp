@@ -68,21 +68,3 @@ _Window_State :: struct {
 }
 
 //_Window_Proc :: #type proc(cl: ^Client, sv: ^Server, delta: f32, window: ^_Window_State)
-
-_native_text_unformatted :: proc(str: string) {
-	n := len(str)
-	if n == 0 {return}
-	p := transmute([]u8) str
-	end := &((raw_data(p))[len(p)])
-	imgui.TextUnformatted(cstring(raw_data(p)), cstring(end))
-}
-
-_native_text :: proc(buf: ^[$N]u8, args: ..any, sep := " ") {
-	formatted := fmt.bprint(buf[:], ..args, sep=sep)
-	_native_text_unformatted(formatted)
-}
-
-_native_textf :: proc(buf: ^[$N]u8, format: string, args: ..any) {
-	formatted := fmt.bprintf(buf[:], format, ..args)
-	_native_text_unformatted(formatted)
-}

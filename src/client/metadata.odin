@@ -16,6 +16,8 @@ import "src:util"
 import "src:server"
 import "src:sys"
 
+import "imx"
+
 _Metadata_Window :: struct {
 	current_track_id: Track_ID,
 	album_art: imgui.TextureID,
@@ -163,7 +165,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		}
 
 		if imgui.TableSetColumnIndex(1) {
-			_native_text_unformatted(value)
+			imx.text_unformatted(value)
 		}
 	}
 
@@ -176,8 +178,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		}
 
 		if imgui.TableSetColumnIndex(1) {
-			buf: [32]u8
-			_native_text(&buf, value)
+			imx.text(16, value)
 		}
 	}
 
@@ -200,7 +201,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		}
 
 		imgui.TableNextRow()
-		if imgui.TableSetColumnIndex(0) {_native_text_unformatted("Duration")}
+		if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Duration")}
 		if imgui.TableSetColumnIndex(1) {
 			h, m, s := time.clock_from_seconds(auto_cast (metadata.values[.Duration].(i64) or_else 0))
 			imgui.Text("%02d:%02d:%02d", i32(h), i32(m), i32(s))
@@ -222,11 +223,10 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		// File size
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {
-			_native_text_unformatted("Size")
+			imx.text_unformatted("Size")
 		}
 		if imgui.TableSetColumnIndex(1) {
-			buf: [32]u8
-			_native_textf(&buf, "%.2f MiB", f32(state.file_info.size) / (1024*1024))
+			imx.textf(16, "%.2f MiB", f32(state.file_info.size) / (1024*1024))
 		}
 
 		imgui.EndTable()

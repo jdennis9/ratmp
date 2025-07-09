@@ -9,6 +9,8 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 import "src:util"
 
+import "imx"
+
 _Playlist_Row :: struct {
 	id: Playlist_ID,
 	serial: uint,
@@ -147,7 +149,7 @@ _display_playlist_table :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(2) {
-				_native_text_unformatted(string(row.duration_str[:row.duration_len]))
+				imx.text_unformatted(string(row.duration_str[:row.duration_len]))
 			}
 
 			if imgui.TableSetColumnIndex(1) {

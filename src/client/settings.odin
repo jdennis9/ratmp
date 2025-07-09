@@ -10,9 +10,12 @@ import "core:os/os2"
 import "core:os"
 import "core:fmt"
 
+import imgui "src:thirdparty/odin-imgui"
+
 import "src:sys"
 
-import imgui "src:thirdparty/odin-imgui"
+import "imx"
+
 
 // Enums work too
 Settings_String :: [64]u8
@@ -186,7 +189,7 @@ show_settings_editor :: proc(cl: ^Client) {
 		imgui.TableNextRow()
 		imgui.PushIDPtr(path)
 		defer imgui.PopID()
-		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
+		if imgui.TableSetColumnIndex(0) {imx.text_unformatted(name)}
 		if imgui.TableSetColumnIndex(1) {
 			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 			imgui.InputText("##path", cstring(&path^[0]), len(Settings_Path))
@@ -207,7 +210,7 @@ show_settings_editor :: proc(cl: ^Client) {
 		imgui.TableNextRow()
 		imgui.PushIDPtr(val)
 		defer imgui.PopID()
-		if imgui.TableSetColumnIndex(0) {_native_text_unformatted(name)}
+		if imgui.TableSetColumnIndex(0) {imx.text_unformatted(name)}
 		if imgui.TableSetColumnIndex(1) {
 			if imgui.BeginCombo("##combo", names[val^]) {
 				for enum_val in reflect.enum_field_values(T) {
@@ -232,7 +235,7 @@ show_settings_editor :: proc(cl: ^Client) {
 			path_row("Background", &settings.background, &cl.dialogs.set_background, .Image)
 		
 			imgui.TableNextRow()
-			if imgui.TableSetColumnIndex(0) {_native_text_unformatted("Default theme")}
+			if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Default theme")}
 			if imgui.TableSetColumnIndex(1) {
 				imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 				if imgui.BeginCombo("Default theme", cstring(&settings.theme[0])) {
@@ -267,7 +270,7 @@ show_settings_editor :: proc(cl: ^Client) {
 				imgui.TableNextRow()
 				imgui.PushIDPtr(font)
 				defer imgui.PopID()
-				if imgui.TableSetColumnIndex(0) {_native_text_unformatted(lang)}
+				if imgui.TableSetColumnIndex(0) {imx.text_unformatted(lang)}
 				if imgui.TableSetColumnIndex(1) {
 					font_selector(font, system_fonts)
 				}

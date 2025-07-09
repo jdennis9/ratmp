@@ -22,6 +22,8 @@ import "src:path_pool"
 import "src:util"
 import "src:sys"
 
+import "imx"
+
 Path :: sys.Path
 
 Client :: struct {
@@ -687,8 +689,6 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 	}
 
 	if state.displayed_track_id != 0 {
-		text_buf: [32]u8
-
 		button :: proc(buf: []u8) -> bool {
 			if buf[0] == 0 {imgui.TextDisabled("?"); return false}
 			imgui.PushIDPtr(raw_data(buf))
@@ -706,14 +706,14 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 		if button(state.title[:]) {_go_to_album(cl, state.metadata)}
 		imgui.SetItemTooltip("Track title")
 		imgui.Separator()
-		_native_text_unformatted(string(cstring(&info.codec[0])))
+		imx.text_unformatted(string(cstring(&info.codec[0])))
 		imgui.Separator()
-		_native_text(&text_buf, info.samplerate, "Hz")
+		imx.text(16, info.samplerate, "Hz")
 		imgui.Separator()
 		switch info.channels {
-		case 1: _native_text_unformatted("Mono")
-		case 2: _native_text_unformatted("Stereo")
-		case: _native_text(&text_buf, info.channels, "channels")
+		case 1: imx.text_unformatted("Mono")
+		case 2: imx.text_unformatted("Stereo")
+		case: imx.text(24, info.channels, "channels")
 		}
 		imgui.Separator()
 	}

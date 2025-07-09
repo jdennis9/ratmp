@@ -12,6 +12,8 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 import "src:util"
 
+import "imx"
+
 _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast(mods | key))
 }
@@ -259,32 +261,31 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Artist) {
-				_native_text_unformatted(row.artist)
+				imx.text_unformatted(row.artist)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Album) {
-				_native_text_unformatted(row.album)
+				imx.text_unformatted(row.album)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Genre) {
-				_native_text_unformatted(row.genre)
+				imx.text_unformatted(row.genre)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Duration) {
-				_native_text_unformatted(string(row.duration_str[:row.duration_len]))
+				imx.text_unformatted(string(row.duration_str[:row.duration_len]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Year) {
-				_native_text_unformatted(string(row.year_str[:]))
+				imx.text_unformatted(string(row.year_str[:]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.DateAdded) {
-				_native_text_unformatted(string(row.date_added_str[:]))
+				imx.text_unformatted(string(row.date_added_str[:]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Bitrate) {
-				buf: [12]u8
-				_native_text(&buf, row.bitrate, "kb/s")
+				imx.text(12, row.bitrate, "kb/s")
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Title) {
