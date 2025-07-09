@@ -12,9 +12,13 @@ _Layout_State :: struct {
 	layout_to_load: []u8,
 	free_layout_after_load: bool,
 	layout_names: [dynamic]cstring,
+	
 	save_layout_name: [64]u8,
 	save_layout_error: cstring,
 	layouts_folder: string,
+
+	want_save_layout: bool,
+	want_save_layout_name: string,
 }
 
 _load_layout_from_memory :: proc(state: ^_Layout_State, data: []u8, free_after_load: bool) {
@@ -89,6 +93,21 @@ _update_layout :: proc(state: ^_Layout_State, window_state: ^[_Window]_Window_St
 
 		state.layout_to_load = nil
 	}
+
+	if state.want_save_layout {
+		state.want_save_layout = false
+		assert(state.want_save_layout_name != "")
+
+		path := _get_layout_path_from_name(state, state.want_save_layout_name)
+		defer delete(path)
+		path_cstring := strings.clone_to_cstring(path)
+		defer delete(path_cstring)
+
+		imgui.SaveIniSettingsToDisk(path_cstring)
+
+		_scan_layouts_folder(state)
+		delete(state.want_save_layout_name)
+	}
 }
 
 _layout_exists :: proc(state: ^_Layout_State, name: string) -> bool {
@@ -99,14 +118,8 @@ _layout_exists :: proc(state: ^_Layout_State, name: string) -> bool {
 }
 
 _save_layout :: proc(state: ^_Layout_State, name: string) {
-	path := _get_layout_path_from_name(state, name)
-	defer delete(path)
-	path_cstring := strings.clone_to_cstring(path)
-	defer delete(path_cstring)
-
-	imgui.SaveIniSettingsToDisk(path_cstring)
-
-	_scan_layouts_folder(state)
+	state.want_save_layout = true
+	state.want_save_layout_name = strings.clone(name)
 }
 
 _show_layout_menu_items :: proc(state: ^_Layout_State, save_layout_popup_id: imgui.ID) {
