@@ -94,9 +94,8 @@ _update_layout :: proc(state: ^_Layout_State, window_state: ^[_Window]_Window_St
 		state.layout_to_load = nil
 	}
 
-	if state.want_save_layout {
+	if state.want_save_layout && state.want_save_layout_name != "" {
 		state.want_save_layout = false
-		assert(state.want_save_layout_name != "")
 
 		path := _get_layout_path_from_name(state, state.want_save_layout_name)
 		defer delete(path)
@@ -107,6 +106,7 @@ _update_layout :: proc(state: ^_Layout_State, window_state: ^[_Window]_Window_St
 
 		_scan_layouts_folder(state)
 		delete(state.want_save_layout_name)
+		state.want_save_layout_name = ""
 	}
 }
 
