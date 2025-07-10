@@ -1,13 +1,12 @@
-package client
+package imgui_extensions
 
-import glm "core:math/linalg/glsl"
+import "core:math/linalg"
 
 import imgui "src:thirdparty/odin-imgui"
 
-lerp :: glm.lerp_f32
+lerp :: linalg.lerp
 
-@private
-_show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.Vec2 = {}, marker_interval: f32 = 10) -> bool {
+scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.Vec2 = {}, marker_interval: f32 = 10) -> bool {
 	size: [2]f32
 	style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
@@ -55,8 +54,7 @@ _show_scrubber_widget :: proc(str_id: cstring, p_value: ^f32, min, max: f32, siz
 	return false
 }
 
-@private
-_waveform_seek_bar :: proc(
+wave_seek_bar :: proc(
 	str_id: cstring, peaks: []f32, position: ^f32, length: f32, size_arg := [2]f32{}
 ) -> (activated: bool) {
 	if len(peaks) == 0 {return}
@@ -103,8 +101,7 @@ _waveform_seek_bar :: proc(
 	return false
 }
 
-@private
-_show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, req_size: [2]f32 = {0, 0}) -> bool {
+peak_meter :: proc(str_id: cstring, peaks: []f32, loud_color: [4]f32, quiet_color: [4]f32, req_size: [2]f32 = {0, 0}) -> bool {
 	drawlist := imgui.GetWindowDrawList()
 	avail_size := imgui.GetContentRegionAvail()
 	cursor := imgui.GetCursorScreenPos()
@@ -120,13 +117,10 @@ _show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, req_size: [2]f32 
 
 	bar_height := (size.y / f32(channels)) - 1
 	y_offset: f32 = style.FramePadding.y
-
-	quiet_color := global_theme.custom_colors[.PeakQuiet]
-	loud_color := global_theme.custom_colors[.PeakLoud]
 	
 	for &peak in peaks {
 		peak = clamp(peak, 0, 1)
-		color := glm.lerp(quiet_color, loud_color, peak)
+		color := lerp(quiet_color, loud_color, peak)
 		pmin := [2]f32{cursor.x, cursor.y + y_offset}
 		pmax := [2]f32{pmin.x + size.x*peak, pmin.y + bar_height}
 		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color))
@@ -134,27 +128,4 @@ _show_peak_meter_widget :: proc(str_id: cstring, peaks: []f32, req_size: [2]f32 
 	}
 
 	return imgui.InvisibleButton(str_id, size)
-}
-
-_imgui_begin_status_bar :: proc() -> bool {
-	window_flags := imgui.WindowFlags{
-		.NoScrollbar, 
-		.NoSavedSettings, 
-		.MenuBar,
-	}
-
-	imgui.BeginViewportSideBar(
-		"##status_bar",
-		imgui.GetMainViewport(),
-		.Down,
-		imgui.GetFrameHeight(),
-		window_flags,
-	) or_return
-
-	return imgui.BeginMenuBar()
-}
-
-_imgui_end_status_bar :: proc() {
-	imgui.EndMenuBar()
-	imgui.End()
 }

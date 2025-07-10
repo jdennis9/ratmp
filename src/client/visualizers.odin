@@ -13,6 +13,8 @@ import "src:analysis"
 import "src:decoder"
 import "src:server"
 
+import "imx"
+
 PEAK_ROUGHNESS :: 20
 SECONDARY_PEAK_ROUGHNESS :: 1
 WINDOW_SIZE :: 8192
@@ -265,7 +267,7 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 	position := f32(server.get_track_second(sv))
 	duration := f32(server.get_track_duration_seconds(sv))
 
-	if _waveform_seek_bar("##waveform", state.output[:], &position, duration) {
+	if imx.wave_seek_bar("##waveform", state.output[:], &position, duration) {
 		server.seek_to_second(sv, int(position))
 	}
 
@@ -384,8 +386,6 @@ _show_oscilloscope_window :: proc(client: ^Client) {
 	state.need_update_osc = true
 	if state.osc_length == 0 || len(state.osc_window) != state.osc_length {return}
 	size := imgui.GetContentRegionAvail()
-	//imgui.PlotLines("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, -1, 1, size)
-	//imgui.PlotHistogram("##osc", &state.osc_input[0][0], auto_cast state.osc_length, 0, nil, 0, 1, size)
 
 	color := imgui.GetColorU32(.PlotLines)
 	drawlist := imgui.GetWindowDrawList()

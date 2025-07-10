@@ -592,7 +592,13 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	// Peak meter
 	imgui.Separator()
 	client.analysis.need_update_peaks = true
-	_show_peak_meter_widget("##peak_meter", client.analysis.peaks[:client.analysis.channels], {100, 0})
+	imx.peak_meter(
+		"##peak_meter",
+		client.analysis.peaks[:client.analysis.channels],
+		global_theme.custom_colors[.PeakLoud],
+		global_theme.custom_colors[.PeakQuiet],
+		{100, 0}
+	)
 	
 	// Playback controls
 	imgui.Separator()
@@ -663,15 +669,15 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 			i32(rh), i32(rm), i32(rs),
 		)
 
-		if _show_scrubber_widget("##seek_bar", &second, 0, duration) {
+		if imx.scrubber("##seek_bar", &second, 0, duration) {
 			server.seek_to_second(sv, cast(int) second)
 		}
 	}
 }
 
 _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
-	if !_imgui_begin_status_bar() {return false}
-	defer _imgui_end_status_bar()
+	if !imx.begin_status_bar() {return false}
+	defer imx.end_status_bar()
 
 	state := &cl.windows.status_bar
 	info := sv.current_track_info
