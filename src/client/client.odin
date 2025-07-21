@@ -226,6 +226,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
 
+	imx.table_test()
+
 	/*if client.frame_count == 0 {
 		delta = 1.0/60.0
 	}
@@ -273,6 +275,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	_draw_background(cl^)
 	_main_menu_bar(cl, sv)
 	_status_bar(cl, sv)
+
+	imgui.ShowDemoWindow()
 
 	// Library
 	if _begin_window(cl, .Library) {
