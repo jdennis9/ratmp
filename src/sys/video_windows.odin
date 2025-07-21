@@ -111,14 +111,14 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: i
 
 	win32_check(d3d.device->CreateShaderResourceView(texture, &sr, &view)) or_return
 
-	texture_id = view
+	texture_id = auto_cast uintptr(view)
 	ok = true
 	return
 }
 
 imgui_destroy_texture :: proc(texture: imgui.TextureID) {
-	if texture != nil {
-		view := cast(^dx11.IShaderResourceView)texture
+	if texture != 0 {
+		view := cast(^dx11.IShaderResourceView) uintptr(texture)
 		view->Release()
 	}
 }

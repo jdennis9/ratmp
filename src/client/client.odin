@@ -226,7 +226,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
 
-	imx.table_test()
+	//imx.table_test()
 
 	/*if client.frame_count == 0 {
 		delta = 1.0/60.0
@@ -420,7 +420,7 @@ set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	width, height: i32
 
 	sys.imgui_destroy_texture(client.background.texture)
-	client.background.texture = nil
+	client.background.texture = 0
 	
 	file_data, file_error := os2.read_entire_file_from_path(path, context.allocator)
 	if file_error != nil {log.error(file_error); return}

@@ -66,7 +66,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		state.current_track_id = track_id
 
 		sys.imgui_destroy_texture(state.album_art)
-		state.album_art = nil
+		state.album_art = 0
 
 		if track_id == 0 {
 			return
@@ -98,7 +98,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		imgui.PushStyleColor(.ButtonHovered, 0)
 		imgui.PushStyleVarImVec2(.FramePadding, {})
 		width := min(imgui.GetContentRegionAvail().x, 512)
-		if state.album_art != nil {
+		if state.album_art != 0 {
 			if client.settings.crop_album_art {
 				ratio := state.album_art_ratio
 				uv0: [2]f32

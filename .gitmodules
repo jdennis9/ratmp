@@ -1,3 +1,6 @@
 [submodule "src/thirdparty/odin-sqlite3"]
 	path = src/thirdparty/odin-sqlite3
 	url = https://github.com/saenai255/odin-sqlite3.git
+[submodule "src/thirdparty/odin-imgui"]
+	path = src/thirdparty/odin-imgui
+	url = https://gitlab.com/jdennis9/odin-imgui.git

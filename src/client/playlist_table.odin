@@ -139,11 +139,6 @@ _display_playlist_table :: proc(
 			row := table.rows[index]
 			imgui.TableNextRow()
 
-			// @TODO: Find more clear way of showing this
-			if row.id == table.editing {
-				imgui.TableSetBgColor(.RowBg1, imgui.GetColorU32(.NavHighlight))
-			}
-
 			if row.id == table.playing {
 				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
 			}

@@ -134,7 +134,7 @@ _show_layout_menu_items :: proc(state: ^_Layout_State, save_layout_popup_id: img
 	}
 	imgui.Separator()
 	if imgui.MenuItem("Save current layout") {
-		imgui.OpenPopupEx(save_layout_popup_id)
+		imgui.OpenPopupEx(save_layout_popup_id, 0)
 	}
 	if imgui.MenuItem("Refresh layouts") {
 		_scan_layouts_folder(state)

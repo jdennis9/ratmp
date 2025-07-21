@@ -41,7 +41,7 @@ scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.
 	imgui.DrawList_AddRectFilled(drawlist, 
 		{cursor.x + frac * size.x, cursor.y} - scrubber_padding,
 		{cursor.x + frac * size.x, cursor.y} + scrubber_padding + scrubber_size,
-		hovered ? imgui.GetColorU32(.NavHighlight) : imgui.GetColorU32(.HeaderActive),
+		hovered ? imgui.GetColorU32(.NavCursor) : imgui.GetColorU32(.HeaderActive),
 		2
 	)
 

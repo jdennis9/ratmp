@@ -104,7 +104,7 @@ theme_generate :: proc(theme: ^Theme, params: Theme_Gen_Params) {
 	color_map[.SeparatorHovered] = {.FgPrimary, {1, 1, 0.6}}
 	color_map[.SeparatorActive] = {.FgPrimary, {1, 1, 0.6}}
 
-	color_map[.NavHighlight] = {.FgPrimary, {1, 1, 1.1}}
+	color_map[.NavCursor] = {.FgPrimary, {1, 1, 1.1}}
 
 	for _, &value in color_map {
 		value.hsv[2] *= (1 + params.brightness_offset)
