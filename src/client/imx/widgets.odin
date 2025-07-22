@@ -67,6 +67,8 @@ wave_seek_bar :: proc(
 		size_arg.y == 0 ? avail_size.y : size_arg.y,
 	}
 
+	if size.x <= 1 || size.y <= 1 {return false}
+
 	bar_width := size.x / f32(len(peaks))
 	bar_height := size.y * 0.5
 	middle := cursor.y + (size.y * 0.5)

@@ -250,6 +250,9 @@ _track_table_show :: proc(
 			index := int(display_index)
 			row := &table.rows[index]
 
+			imgui.PushIDInt(auto_cast display_index)
+			defer imgui.PopID()
+			
 			imgui.TableNextRow()
 
 			if jump_to_track != nil && index == jump_to_track.? {
