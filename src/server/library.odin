@@ -186,7 +186,9 @@ library_add_track :: proc(library: ^Library, path: string, metadata: Track_Metad
 
 	// If the track is already in the library, update the metadata
 	if existing_index, exists := slice.linear_search(library.track_paths[:], path_loc); exists {
+		orig_date_added := library.track_metadata[existing_index].values[.DateAdded]
 		library.track_metadata[existing_index] = metadata
+		library.track_metadata[existing_index].values[.DateAdded] = orig_date_added
 		return library.track_ids[existing_index]
 	}
 	
