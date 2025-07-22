@@ -2,8 +2,10 @@
 
 mkdir .build
 
+set input=..\src\bindings
+
 pushd .build
-cl /Zi /c /EHsc /std:c++17 ..\src\bindings\media_controls\*.cpp ..\src\bindings\taglib\*.cpp ..\src\bindings\windows_misc\*.cpp
-lib .\*.obj /OUT:..\src\bindings\bindings.lib
+cl /Zi /c /EHsc /std:c++17 %input%\media_controls\*.cpp %input%\taglib\*.cpp %input%\windows_misc\*.cpp
+lib .\*.obj /OUT:%input%\bindings.lib
 del .\*.obj
 popd
