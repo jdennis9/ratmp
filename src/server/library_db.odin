@@ -1,5 +1,6 @@
 package server
 
+import "core:os/os2"
 import "core:strings"
 import "core:log"
 import "core:hash/xxhash"
@@ -10,52 +11,6 @@ import sqlite "src:thirdparty/odin-sqlite3"
 import "src:path_pool"
 
 library_save_to_file :: proc(lib: Library, path: string) {
-	/*data: Json_Data
-	opt: json.Marshal_Options
-
-	data.tracks = make([]Json_Track, len(lib.track_ids))
-	defer delete(data.tracks)
-
-	path_buf := make([][384]u8, len(lib.track_ids))
-	defer delete(path_buf)
-
-	for track_index in 0..<len(lib.track_ids) {
-		track := &data.tracks[track_index]
-		md := &lib.track_metadata[track_index]
-
-		track.path = path_pool.retrieve(lib.path_allocator, lib.track_paths[track_index], path_buf[track_index][:])
-		track.artist = md.values[.Artist].(string) or_else ""
-		track.title = md.values[.Title].(string) or_else ""
-		track.album = md.values[.Album].(string) or_else ""
-		track.genre = md.values[.Genre].(string) or_else ""
-		track.duration = md.values[.Duration].(i64) or_else 0
-		track.bitrate = md.values[.Bitrate].(i64) or_else 0
-		track.track_number = md.values[.TrackNumber].(i64) or_else 0
-		track.year = md.values[.Year].(i64) or_else 0
-	}
-
-	when ODIN_DEBUG {opt.pretty = true}
-	opt.spec = .JSON5
-
-	json_data, json_error := json.marshal(data, opt)
-	if json_error != nil {
-		log.error(json_error)
-		return
-	}
-
-	if os2.exists(path) {
-		os2.remove(path)
-	}
-
-	file, file_error := os2.create(path)
-	if file_error != nil {
-		log.error(file_error)
-		return
-	}
-	defer os2.close(file)
-
-	os2.write(file, json_data)*/
-
 	duration: time.Duration
 	defer log.info("Saved library in", time.duration_milliseconds(duration), "ms")
 	time.SCOPED_TICK_DURATION(&duration)
@@ -66,6 +21,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	exec_error: cstring
 	defer delete(path_cstring)
 
+	if remove_error := os2.remove(path); remove_error != nil {log.error(remove_error)}
 	error = sqlite.open(path_cstring, &db)
 	if error != .Ok {
 		log.error("Error opening SQL database:", error)
@@ -75,7 +31,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 
 	// Create table
 	error = sqlite.exec(db, `
-	CREATE TABLE IF NOT EXISTS tracks (
+	CREATE TABLE tracks (
 		id BIGINT PRIMARY KEY,
 		path VARCHAR(511),
 		title VARCHAR(127),
@@ -86,8 +42,13 @@ library_save_to_file :: proc(lib: Library, path: string) {
 		birate INTEGER,
 		track_number INTEGER,
 		year INTEGER,
-		date_added BIGINT
+		date_added BIGINT,
+		file_date BIGINT
 	)`, nil, nil, &exec_error)
+
+	if error != .Ok {
+		log.error(error, exec_error)
+	}
 	
 	stmt: ^sqlite.Statement
 
@@ -98,7 +59,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 		path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[index], path_buf[:])
 		path_hash := xxhash.XXH3_64_default(transmute([]u8) string(path))
 
-		sqlite.prepare_v2(db, "INSERT INTO tracks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, nil)
+		sqlite.prepare_v2(db, "INSERT INTO tracks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, nil)
 		defer sqlite.finalize(stmt)
 
 		es := string(cstring(""))
@@ -114,6 +75,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 		sqlite.bind_int(stmt, 9, auto_cast(md.values[.TrackNumber].(i64) or_else 0))
 		sqlite.bind_int(stmt, 10, auto_cast(md.values[.Year].(i64) or_else 0))
 		sqlite.bind_int64(stmt, 11, md.values[.DateAdded].(i64) or_else 0)
+		sqlite.bind_int64(stmt, 12, md.values[.FileDate].(i64) or_else 0)
 		sqlite.step(stmt)
 	}
 
@@ -199,6 +161,7 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {
 			track.values[.TrackNumber] = i64(sqlite.column_int(stmt, 8))
 			track.values[.Year] = i64(sqlite.column_int(stmt, 9))
 			track.values[.DateAdded] = i64(sqlite.column_int64(stmt, 10))
+			track.values[.FileDate] = i64(sqlite.column_int64(stmt, 11))
 
 			library_add_track(lib, string(path), track)
 		}

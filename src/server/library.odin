@@ -197,6 +197,7 @@ library_add_track :: proc(library: ^Library, path: string, metadata: Track_Metad
 		orig_date_added := library.track_metadata[existing_index].values[.DateAdded]
 		library.track_metadata[existing_index] = metadata
 		library.track_metadata[existing_index].values[.DateAdded] = orig_date_added
+		library.serial += 1
 		return library.track_ids[existing_index]
 	}
 	
