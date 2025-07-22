@@ -32,6 +32,7 @@ _Track_Row :: struct {
 	track_num, bitrate: i32,
 	// @NOTE: Increase this to 5 characters in the 11th millenium
 	date_added_str: [10]u8,
+	file_date_str: [10]u8,
 	selected: bool,
 }
 
@@ -125,6 +126,8 @@ _track_table_update :: proc(
 
 		year, month, day := time.date(time.unix(md.values[.DateAdded].(i64) or_else 0, 0))
 		fmt.bprintf(row.date_added_str[:], "%4d-%2d-%2d", year, month, day)
+		year, month, day = time.date(time.unix(md.values[.FileDate].(i64) or_else 0, 0))
+		fmt.bprintf(row.file_date_str[:], "%4d-%2d-%2d", year, month, day)
 
 		ok = true
 		return
@@ -187,6 +190,7 @@ _track_table_show :: proc(
 		.TrackNumber = {.DefaultHide},
 		.Genre = {.DefaultHide},
 		.DateAdded = {.DefaultHide},
+		.FileDate = {.DefaultHide},
 	}
 
 	imgui.TextDisabled("%u tracks", u32(len(table.rows)))
@@ -252,7 +256,7 @@ _track_table_show :: proc(
 
 			imgui.PushIDInt(auto_cast display_index)
 			defer imgui.PopID()
-			
+
 			imgui.TableNextRow()
 
 			if jump_to_track != nil && index == jump_to_track.? {
@@ -285,6 +289,10 @@ _track_table_show :: proc(
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.DateAdded) {
 				imx.text_unformatted(string(row.date_added_str[:]))
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.FileDate) {
+				imx.text_unformatted(string(row.file_date_str[:]))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Bitrate) {

@@ -35,6 +35,7 @@ Metadata_Component :: enum {
 	Year,
 	// Unix timestamp
 	DateAdded,
+	FileDate,
 }
 
 METADATA_COMPONENT_NAMES := [Metadata_Component]cstring {
@@ -46,7 +47,8 @@ METADATA_COMPONENT_NAMES := [Metadata_Component]cstring {
 	.Duration = "Duration",
 	.TrackNumber = "Track",
 	.Year = "Year",
-	.DateAdded = "Date Added"
+	.DateAdded = "Date Added",
+	.FileDate = "File Date",
 }
 
 Metadata_Value :: union {
@@ -151,6 +153,13 @@ get_file_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> 
 		file := taglib.file_new(strings.clone_to_cstring(path, context.temp_allocator))
 	}
 
+	metadata.values[.DateAdded] = time.to_unix_seconds(time.now())
+
+	if fi, error := os2.stat(path, context.allocator); error == nil {
+		metadata.values[.FileDate] = time.to_unix_seconds(fi.creation_time)
+		defer os2.file_info_delete(fi, context.allocator)
+	}
+
 	if file == nil {return get_default_metadata(path, string_allocator)}
 	defer taglib.file_free(file)
 
@@ -177,7 +186,6 @@ get_file_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> 
 		track_set_string(&metadata, .Title, filepath.stem(filepath.base(path)), string_allocator)
 	}
 
-	metadata.values[.DateAdded] = time.to_unix_seconds(time.now())
 	return
 }
 
