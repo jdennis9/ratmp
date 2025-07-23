@@ -100,7 +100,7 @@ _track_table_update :: proc(
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
 	table.flags = flags
 
-	if len(table.rows) == len(tracks) && table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
+	if table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
 	log.debug("Serial", table.serial, "!=", serial)
 	log.debug("Update track table for playlist ID", playlist_id)
 	table.playlist_id = playlist_id
