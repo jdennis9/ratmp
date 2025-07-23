@@ -600,20 +600,29 @@ Track_Filter_Spec :: struct {
 @private
 _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	if len(utf8_str) == 0 {return false}
+	if len(filter) == 0 {return true}
 
 	str_rune_buf: [256]rune
 	str := util.decode_utf8_to_runes(str_rune_buf[:], utf8_str)
 	filter_len := len(filter)
+
+	for &s in str {
+		s = unicode.to_lower(s)
+	}
+
+	for &s in filter {
+		s = unicode.to_lower(s)
+	}
 	
 	for s in 0..<len(str) {
 		fail := false
 
-		if s + filter_len >= len(str) {
+		/*if s + filter_len >= len(str) {
 			break
-		}
+		}*/
 
 		for f in 0..<len(filter) {
-			if unicode.to_lower(str[s+f]) != unicode.to_lower(filter[f]) {
+			if s+f >= len(str) || str[s+f] != filter[f] {
 				fail = true
 				break
 			}
