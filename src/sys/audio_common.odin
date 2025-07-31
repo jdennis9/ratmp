@@ -5,6 +5,7 @@ Audio_Event :: enum {
 	Resume,
 	DropBuffer,
 	Finish,
+	DeviceLost,
 }
 
 Audio_Callback_Status :: enum {

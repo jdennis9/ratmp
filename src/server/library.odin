@@ -617,10 +617,6 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 	for s in 0..<len(str) {
 		fail := false
 
-		/*if s + filter_len >= len(str) {
-			break
-		}*/
-
 		for f in 0..<len(filter) {
 			if s+f >= len(str) || str[s+f] != filter[f] {
 				fail = true

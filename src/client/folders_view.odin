@@ -31,6 +31,7 @@ _Folders_Window :: struct {
 	string_allocator: mem.Allocator,
 	sel_folder_id: u32,
 	track_table: _Track_Table_2,
+	track_table_serial: uint,
 	root: _Folder_Node,
 }
 
@@ -174,7 +175,6 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	if state.sel_folder_id != 0 && imgui.TableSetColumnIndex(1) {
 		sel_folder, sel_folder_found := server.library_find_folder(sv.library, state.sel_folder_id)
 		
-		
 		if sel_folder_found {
 			playlist_id := _folder_id_to_playlist_id(sel_folder.id)
 			filter_cstring := cstring(&state.track_filter[0])
@@ -183,7 +183,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
 			_track_table_update(
-				&state.track_table, sv.library.serial, sv.library, sel_folder.tracks[:], playlist_id,
+				&state.track_table, sv.library.serial + state.track_table_serial, sv.library, sel_folder.tracks[:], playlist_id,
 				string(filter_cstring)
 			)
 
@@ -191,6 +191,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			_track_table_process_results(state.track_table, table_result, cl, sv, {})
 			if table_result.sort_spec != nil {
 				server.library_sort_tracks(sv.library, sel_folder.tracks[:], table_result.sort_spec.?)
+				state.track_table_serial += 1
 			}
 
 			context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
