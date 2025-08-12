@@ -53,13 +53,14 @@ _add_child :: proc(parent: ^Library_Folder, name: string, node_allocator, string
 
 @(private="file")
 _create_folder_lookup :: proc(table: ^map[u32]^Library_Folder, parent: ^Library_Folder) {
-	if len(parent.tracks) > 0 {
+	//if len(parent.tracks) > 0 {
 		table[parent.id] = parent
-	}
+	//}
 
 	for i in 0..<len(parent.children) {
 		_create_folder_lookup(table, &parent.children[i])
 	}
+
 }
 
 library_folder_print :: proc(name: string, folder: Library_Folder, depth: int) {
@@ -126,6 +127,33 @@ library_folder_tree_destroy :: proc(tree: ^Library_Folder_Tree) {
 
 library_find_folder :: proc(lib: Library, id: u32) -> (ptr: ^Library_Folder, found: bool) {
 	return lib.folder_tree.folder_ptrs[id]
+}
+
+library_folder_tree_count_tracks_recursively :: proc(lib: Library, folder: Library_Folder) -> int {
+	count := len(folder.tracks)
+	for child in folder.children {
+		count += library_folder_tree_count_tracks_recursively(lib, child)
+	}
+	return count
+}
+
+library_folder_tree_copy_tracks_recursively :: proc(lib: Library, folder: Library_Folder, out: ^[dynamic]Track_ID) {
+	for track in folder.tracks {append(out, track)}
+	for child in folder.children {
+		library_folder_tree_copy_tracks_recursively(lib, child, out)
+	}
+}
+
+library_folder_tree_recurse_tracks :: proc(lib: Library, folder: Library_Folder, allocator: mem.Allocator) -> []Track_ID {
+	count := library_folder_tree_count_tracks_recursively(lib, folder)
+	if count == 0 {return nil}
+
+	out: [dynamic]Track_ID = make([dynamic]Track_ID, allocator)
+	reserve(&out, count)
+
+	library_folder_tree_copy_tracks_recursively(lib, folder, &out)
+
+	return out[:]
 }
 
 import "core:testing"

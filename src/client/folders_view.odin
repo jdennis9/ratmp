@@ -5,6 +5,7 @@ import "core:mem"
 import "core:log"
 import "core:strings"
 import "core:fmt"
+import "core:slice"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -33,6 +34,8 @@ _Folders_Window :: struct {
 	track_table: _Track_Table_2,
 	track_table_serial: uint,
 	root: _Folder_Node,
+	viewing_tracks: []Track_ID,
+	viewing_tracks_serial: uint,
 }
 
 @(private="file")
@@ -40,10 +43,13 @@ _rebuild_nodes :: proc(cl: ^Client, sv: ^Server) {
 	state := &cl.windows.folders
 	tree := &sv.library.folder_tree
 
+	delete(state.viewing_tracks)
+	state.viewing_tracks = nil
+
 	mem.dynamic_arena_destroy(&state.node_arena)
 	mem.dynamic_arena_destroy(&state.string_arena)
 
-	mem.dynamic_arena_init(&state.string_arena, )
+	mem.dynamic_arena_init(&state.string_arena)
 	mem.dynamic_arena_init(&state.node_arena)
 	state.string_allocator = mem.dynamic_arena_allocator(&state.string_arena)
 	state.node_allocator = mem.dynamic_arena_allocator(&state.node_arena)
@@ -83,8 +89,34 @@ _folder_id_to_playlist_id :: proc(id: u32) -> Playlist_ID {
 	return {serial = id, pool = auto_cast len(Metadata_Component)}
 }
 
+@(private="file")
+_set_viewing_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
+	state := &cl.windows.folders
+	delete(state.viewing_tracks)
+	state.viewing_tracks = slice.clone(tracks)
+	state.viewing_tracks_serial = 0
+}
+
 _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	state := &cl.windows.folders
+
+	select_folder :: proc(cl: ^Client, sv: ^Server, node: _Folder_Node) -> bool {
+		state := &cl.windows.folders
+		folder := server.library_find_folder(sv.library, node.id) or_return
+		delete(state.viewing_tracks)
+		log.debug(folder)
+		state.viewing_tracks = server.library_folder_tree_recurse_tracks(sv.library, folder^, context.allocator)
+		state.sel_folder_id = node.id
+		return true
+	}
+
+	play_folder :: proc(sv: ^Server, node: _Folder_Node) {
+		if folder, found := server.library_find_folder(sv.library, node.id); found {
+			tracks := server.library_folder_tree_recurse_tracks(sv.library, folder^, context.allocator)
+			server.play_playlist(sv, tracks, _folder_id_to_playlist_id(node.id))
+			delete(tracks)
+		} else {log.error("FUUUU")}
+	}
 
 	if state.serial != sv.library.serial {
 		log.debug("Rebuilding folder tree...")
@@ -114,9 +146,29 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			playlist_id := _folder_id_to_playlist_id(node.id)
 			imgui.TableNextRow()
 			
+			if playlist_id == sv.current_playlist_id {
+				imgui.TableSetBgColor(
+					.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
+				)
+			}
+
 			if node.track_count == 0 {
 				if !imgui.TableSetColumnIndex(0) {return}
-				if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), {.SpanAllColumns}) {
+				tree_node_flags := imgui.TreeNodeFlags{.SpanAllColumns}
+
+				if state.sel_folder_id == node.id {tree_node_flags |= {.Selected}}
+				if depth == 0 {tree_node_flags |= {.DefaultOpen}}
+
+				if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
+					if imgui.IsItemToggledOpen() {
+						select_folder(cl, sv, node^)
+					}
+
+					if _play_track_input_pressed() {
+						select_folder(cl, sv, node^)
+						play_folder(sv, node^)
+					}
+
 					for &child in node.children {
 						if child.track_count == 0 {show_node(cl, sv, &child, depth + 1)}
 					}
@@ -127,28 +179,27 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			
 					imgui.TreePop()
 				}
+				else if _play_track_input_pressed() {
+					select_folder(cl, sv, node^)
+					play_folder(sv, node^)
+				}
 			}
 			else {
 				if !imgui.TableSetColumnIndex(0) {return}
-				if playlist_id == sv.current_playlist_id {
-					imgui.TableSetBgColor(
-						.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
-					)
-				}
 
 				if imgui.Selectable(
 					strings.unsafe_string_to_cstring(node.name),
 					node.id == state.sel_folder_id,
 					{.SpanAllColumns}
 				) {
-					state.sel_folder_id = node.id
+					select_folder(cl, sv, node^)
 				}
 
 				if _play_track_input_pressed() {
 					if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
 						server.play_playlist(sv, folder.tracks[:], playlist_id)
 					}
-					state.sel_folder_id = node.id
+					select_folder(cl, sv, node^)
 				}
 
 				if imgui.TableSetColumnIndex(1) {
@@ -173,30 +224,27 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	}
 
 	if state.sel_folder_id != 0 && imgui.TableSetColumnIndex(1) {
-		sel_folder, sel_folder_found := server.library_find_folder(sv.library, state.sel_folder_id)
-		
-		if sel_folder_found {
-			playlist_id := _folder_id_to_playlist_id(sel_folder.id)
-			filter_cstring := cstring(&state.track_filter[0])
-			context_id := imgui.GetID("##track_context")
+		playlist_id := _folder_id_to_playlist_id(state.sel_folder_id)
+		filter_cstring := cstring(&state.track_filter[0])
+		context_id := imgui.GetID("##track_context")
 
-			imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
+		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
-			_track_table_update(
-				&state.track_table, sv.library.serial + state.track_table_serial, sv.library, sel_folder.tracks[:], playlist_id,
-				string(filter_cstring)
-			)
+		_track_table_update(
+			&state.track_table, sv.library.serial + state.track_table_serial, sv.library, state.viewing_tracks[:], playlist_id,
+			string(filter_cstring)
+		)
 
-			table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
-			_track_table_process_results(state.track_table, table_result, cl, sv, {})
-			if table_result.sort_spec != nil {
-				server.library_sort_tracks(sv.library, sel_folder.tracks[:], table_result.sort_spec.?)
-				state.track_table_serial += 1
-			}
-
-			context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
-			_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
+		_track_table_process_results(state.track_table, table_result, cl, sv, {})
+		if table_result.sort_spec != nil {
+			server.library_sort_tracks(sv.library, state.viewing_tracks[:], table_result.sort_spec.?)
+			state.track_table_serial += 1
 		}
+
+		context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
+		_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		
 	}
 }
 
