@@ -3,6 +3,7 @@ package main
 import "core:time"
 import "core:log"
 import "core:fmt"
+import "core:os"
 
 import "src:bindings/ffmpeg"
 import imgui "src:thirdparty/odin-imgui"
@@ -11,17 +12,39 @@ import "src:build"
 import "src:client"
 import "src:server"
 import "src:sys"
+import plugin "src:plugin_manager"
+import plugin_setup "src:plugins"
 import sys_main "src:sys/main"
 
 @private
 g: struct {
 	cl: client.Client,
 	sv: server.Server,
+	plugins: plugin.Plugin_Manager,
 	title_track_id: server.Track_ID,
 }
 
+USAGE :: `
+Options:
+
+-h, --help, -help, /?: Show this message
+-no-plugins: Disable plugins
+`
+
 run :: proc() -> bool {
 	prev_frame_start: time.Tick
+	enable_plugins := true
+
+	for arg in os.args {
+		if arg == "-h" || arg == "--help" || arg == "/?" || arg == "-help" {
+			fmt.println(USAGE)
+			return false
+		}
+
+		if arg == "-no-plugins" {
+			enable_plugins = false
+		}
+	}
 
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
@@ -43,8 +66,14 @@ run :: proc() -> bool {
 	client.init(&g.cl, &g.sv, ".", ".", sys_main.post_empty_event) or_return
 	defer client.destroy(&g.cl)
 
+	if enable_plugins {
+		plugin.init(&g.plugins, &g.cl, &g.sv)
+		plugin_setup.add(&g.plugins)
+		plugin.run_init_hooks(&g.plugins)
+	}
+	
 	server.add_event_handler(&g.sv, server_event_handler, nil)
-
+	
 	sys_main.show_window(true)
 
 	for {
@@ -57,7 +86,9 @@ run :: proc() -> bool {
 		sys_main.new_frame()
 		imgui.NewFrame()
 
-		client.frame(&g.cl, &g.sv, prev_frame_start, frame_start)
+		delta := client.frame(&g.cl, &g.sv, prev_frame_start, frame_start)
+		plugin.run_frame_hooks(&g.plugins, delta)
+		plugin.show_imgui_menu(&g.plugins)
 
 		imgui.Render()
 		draw_data := imgui.GetDrawData()
@@ -75,6 +106,8 @@ run :: proc() -> bool {
 			break
 		}
 	}
+
+	plugin.run_destroy_hooks(&g.plugins)
 
 	return true
 }
@@ -96,6 +129,8 @@ server_event_handler :: proc(sv: server.Server, data: rawptr, event: server.Even
 			}
 		}
 	}
+
+	plugin.run_event_hooks(&g.plugins, event)
 }
 
 main :: proc() {

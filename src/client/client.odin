@@ -221,12 +221,12 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 	}
 }
 
-frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) {
+frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) -> (delta: f32) {
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
 
-	delta := cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
+	delta = cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
 
 	//imx.table_test()
 
@@ -409,6 +409,8 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 			_show_memory_usage(cl, sv^)
 		}
 	}
+
+	return
 }
 
 set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
