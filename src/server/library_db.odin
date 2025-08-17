@@ -1,5 +1,7 @@
 package server
 
+import "base:runtime"
+import "core:strconv"
 import "core:os/os2"
 import "core:strings"
 import "core:log"
@@ -9,6 +11,9 @@ import "core:time"
 import sqlite "src:thirdparty/odin-sqlite3"
 
 import "src:path_pool"
+
+DB_VERSION :: 1
+DB_VERSION_PRAGMA :: "PRAGMA user_version=1"
 
 library_save_to_file :: proc(lib: Library, path: string) {
 	duration: time.Duration
@@ -45,13 +50,14 @@ library_save_to_file :: proc(lib: Library, path: string) {
 		date_added BIGINT,
 		file_date BIGINT
 	)`, nil, nil, &exec_error)
-
+	
 	if error != .Ok {
 		log.error(error, exec_error)
 	}
 	
 	stmt: ^sqlite.Statement
 
+	sqlite.exec(db, DB_VERSION_PRAGMA, nil, nil, nil)
 	sqlite.exec(db, "BEGIN TRANSACTION", nil, nil, nil)
 
 	for md, index in lib.track_metadata {
@@ -82,48 +88,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	sqlite.exec(db, "END TRANSACTION", nil, nil, nil)
 }
 
-library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {
-	/*log.debug("Load library from", path)
-
-	scratch: mem.Scratch
-	if mem.scratch_allocator_init(&scratch, 16<<20) != nil {return false}
-	defer {
-		mem.scratch_allocator_destroy(&scratch)
-	}
-
-	allocator := mem.scratch_allocator(&scratch)
-
-	file_data, file_error := os2.read_entire_file_from_path(path, context.allocator)
-	if file_error != nil {
-		log.error(file_error)
-		return
-	}
-	defer delete(file_data)
-
-	data: Json_Data
-	marshal_error := json.unmarshal(file_data, &data, .JSON5, allocator)
-	if marshal_error != nil {
-		log.error(marshal_error)
-		return
-	}
-
-	for track in data.tracks {
-		metadata: Track_Metadata
-		track_set_string(&metadata, .Title, track.title, lib.string_allocator)
-		track_set_string(&metadata, .Artist, track.artist, lib.string_allocator)
-		track_set_string(&metadata, .Genre, track.genre, lib.string_allocator)
-		track_set_string(&metadata, .Album, track.album, lib.string_allocator)
-		metadata.values[.Bitrate] = track.bitrate
-		metadata.values[.Duration] = track.duration
-		metadata.values[.TrackNumber] = track.track_number
-		metadata.values[.Year] = track.year
-		metadata.values[.DateAdded] = track.date_added
-
-		library_add_track(lib, track.path, metadata)
-	}
-
-	loaded = true*/
-
+library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded_version: int, loaded: bool) {
 	duration: time.Duration
 	defer log.info("Loaded library in", time.duration_milliseconds(duration), "ms")
 	time.SCOPED_TICK_DURATION(&duration)
@@ -141,6 +106,22 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {
 	defer sqlite.close(db)
 	
 	{
+		version: i32
+
+		set_version :: proc "c" (ctx: rawptr, argc: i32, argv: [^]cstring, col_names: [^]cstring) -> i32 {
+			if argc != 1 {return 0}
+			context = runtime.default_context()
+			version := cast(^i32) ctx
+			version^ = cast(i32) (strconv.parse_i64(string(argv[0])) or_else 0)
+			return 0
+		}
+
+		sqlite.exec(db, "PRAGMA user_version", set_version, &version, nil)
+		loaded_version = auto_cast version
+
+		log.info("DB version:", version)
+		if version < 1 {log.info("DB does not contain file dates. They will be retrieved while the DB is loaded")}
+
 		stmt: ^sqlite.Statement
 		sqlite.prepare_v2(db, "SELECT * FROM tracks", -1, &stmt, nil)
 		defer sqlite.finalize(stmt)
@@ -150,8 +131,8 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {
 			result = sqlite.step(stmt)
 			if result != .Row {break}
 
-			//path_hash := u64(sqlite.column_int64(stmt, 1))
 			path := sqlite.column_text(stmt, 1)
+			if path == nil {continue}
 			track_set_cstring(&track, .Title, sqlite.column_text(stmt, 2), lib.string_allocator)
 			track_set_cstring(&track, .Artist, sqlite.column_text(stmt, 3), lib.string_allocator)
 			track_set_cstring(&track, .Album, sqlite.column_text(stmt, 4), lib.string_allocator)
@@ -161,7 +142,12 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded: bool) {
 			track.values[.TrackNumber] = i64(sqlite.column_int(stmt, 8))
 			track.values[.Year] = i64(sqlite.column_int(stmt, 9))
 			track.values[.DateAdded] = i64(sqlite.column_int64(stmt, 10))
-			track.values[.FileDate] = i64(sqlite.column_int64(stmt, 11))
+			if version >= 1 {
+				track.values[.FileDate] = i64(sqlite.column_int64(stmt, 11))
+			}
+			else {
+				track.values[.FileDate] = get_file_date(string(path))
+			}
 
 			library_add_track(lib, string(path), track)
 		}

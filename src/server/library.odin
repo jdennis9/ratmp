@@ -145,6 +145,14 @@ get_default_metadata :: proc(path: string, string_allocator: runtime.Allocator) 
 	return
 }
 
+get_file_date :: proc(path: string) -> i64 {
+	if fi, error := os2.stat(path, context.allocator); error == nil {
+		defer os2.file_info_delete(fi, context.allocator)
+		return time.to_unix_seconds(fi.creation_time)
+	}
+	return 0
+}
+
 get_file_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> (metadata: Track_Metadata) {
 	when ODIN_OS == .Windows {
 		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(path, context.temp_allocator)))
@@ -154,11 +162,7 @@ get_file_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> 
 	}
 
 	metadata.values[.DateAdded] = time.to_unix_seconds(time.now())
-
-	if fi, error := os2.stat(path, context.allocator); error == nil {
-		metadata.values[.FileDate] = time.to_unix_seconds(fi.creation_time)
-		defer os2.file_info_delete(fi, context.allocator)
-	}
+	metadata.values[.FileDate] = get_file_date(path)
 
 	if file == nil {return get_default_metadata(path, string_allocator)}
 	defer taglib.file_free(file)
