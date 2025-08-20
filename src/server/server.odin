@@ -10,11 +10,13 @@ import "core:path/filepath"
 import "core:math"
 import "core:encoding/json"
 import "core:os/os2"
+import sa "core:container/small_array"
 
 import "src:decoder"
 import "src:util"
 import "src:sys"
 
+MAX_POST_PROCESS_HOOKS :: 8
 MAX_OUTPUT_CHANNELS :: 2
 
 Playback_Mode :: enum {
@@ -30,6 +32,12 @@ _Saved_State :: struct {
 }
 
 Track_Info :: decoder.File_Info
+
+Post_Process_Hook_Proc :: #type proc(data: rawptr, audio: []f32, samplerate, channels: int)
+Post_Process_Hook :: struct {
+	process: Post_Process_Hook_Proc,
+	data: rawptr,
+}
 
 Server :: struct {
 	ctx: runtime.Context,
@@ -71,6 +79,9 @@ Server :: struct {
 	library_save_serial: uint,
 
 	saved_state: _Saved_State,
+
+	post_process_hooks: sa.Small_Array(MAX_POST_PROCESS_HOOKS, Post_Process_Hook),
+	post_process_hooks_data: sa.Small_Array(MAX_POST_PROCESS_HOOKS, rawptr),
 }
 
 init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: string) -> (ok: bool) {
@@ -384,6 +395,10 @@ audio_time_frame_from_playback :: proc(
 	return cpy.samplerate, cpy.channels, true
 }
 
+add_post_process_hook :: proc(state: ^Server, hook: Post_Process_Hook_Proc, data: rawptr) {
+	sa.append(&state.post_process_hooks, Post_Process_Hook{process = hook, data = data})
+}
+
 // This is being called on the audio thread!
 @(private="file")
 _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samplerate: int) {
@@ -419,6 +434,10 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 
 	if !state.paused && decoder.is_open(state.decoder) {
 		status := decoder.fill_buffer(&state.decoder, buffer, int(channels), int(samplerate))
+
+		for hook in sa.slice(&state.post_process_hooks) {
+			hook.process(hook.data, buffer, auto_cast samplerate, auto_cast channels)
+		}
 
 		_update_output_copy_buffers(state, buffer, int(channels), int(samplerate))
 

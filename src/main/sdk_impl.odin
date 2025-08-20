@@ -32,8 +32,12 @@ ctx: struct {
 	spectrum_analysers: map[Spectrum_Analyser_Settings]Spectrum_Analyser,
 }
 
-@private
-sdk_proc_addr: sdk.SDK
+@private sdk_procs: sdk.SDK
+@private sdk_base_procs: sdk.Base_Procs
+@private sdk_ui_procs: sdk.UI_Procs
+@private sdk_draw_procs: sdk.Draw_Procs
+@private sdk_helper_procs: sdk.Helper_Procs
+@private sdk_playback_procs: sdk.Playback_Procs
 
 _sdk_version :: proc() -> sdk.Version {
 	return {0, 1, 0}
@@ -102,7 +106,6 @@ _draw_rect_filled :: proc(pmin, pmax: [2]f32, color: u32, rounding: f32) {
 _analysis_distribute_spectrum_frequencies :: proc(output: []f32) {
 	analysis.calc_spectrum_frequencies(output)
 }
-
 _analysis_calc_spectrum :: proc(input: []f32, freq_cutoffs: []f32, output: []f32) {
 	settings: Spectrum_Analyser_Settings
 	settings.window_size = len(input)
@@ -133,34 +136,65 @@ _analysis_calc_spectrum :: proc(input: []f32, freq_cutoffs: []f32, output: []f32
 	copy(output, analyser.output)
 }
 
+_playback_is_paused :: proc() -> bool {
+	return server.is_paused(ctx.sv^)
+}
+_playback_set_paused :: proc(paused: bool) {
+	server.set_paused(ctx.sv, paused)
+}
+_playback_toggle_paused :: proc() {
+	server.set_paused(ctx.sv, !server.is_paused(ctx.sv^))
+}
+_playback_get_track_duration_seconds :: proc() -> int {
+	return server.get_track_duration_seconds(ctx.sv)
+}
+_playback_seek_to_second :: proc(second: int) {
+	server.seek_to_second(ctx.sv, second)
+}
+
 @private
 sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	ctx.cl = cl
 	ctx.sv = sv
 
-	s := &sdk_proc_addr
-	s.version = _sdk_version
-	s.get_playing_track_id = _get_playing_track_id
+	base := &sdk_base_procs
+	sdk_procs.base = base
+	base.version = _sdk_version
+	base.get_playing_track_id = _get_playing_track_id
 
-	s.draw_rect = _draw_rect
-	s.draw_many_rects = _draw_many_rects
-	s.draw_rect_filled = _draw_rect_filled
-	s.draw_many_rects_filled = _draw_many_rects_filled
+	draw := &sdk_draw_procs
+	sdk_procs.draw = draw
+	draw.rect = _draw_rect
+	draw.many_rects = _draw_many_rects
+	draw.rect_filled = _draw_rect_filled
+	draw.many_rects_filled = _draw_many_rects_filled
 
-	s.ui_get_cursor = _ui_get_cursor
-	s.ui_begin = _ui_begin
-	s.ui_end = _ui_end
-	s.ui_dummy = _ui_dummy
-	s.ui_invisible_button = _ui_invisible_button
-	s.ui_text = _ui_text
-	s.ui_textf = _ui_textf
-	s.ui_text_unformatted = imx.text_unformatted
-	s.ui_selectable = _ui_selectable
-	s.ui_toggleable = _ui_toggleable
-	s.ui_button = _ui_button
+	ui := &sdk_ui_procs
+	sdk_procs.ui = ui
+	ui.get_cursor = _ui_get_cursor
+	ui.begin = _ui_begin
+	ui.end = _ui_end
+	ui.dummy = _ui_dummy
+	ui.invisible_button = _ui_invisible_button
+	ui.text = _ui_text
+	ui.textf = _ui_textf
+	ui.text_unformatted = imx.text_unformatted
+	ui.selectable = _ui_selectable
+	ui.toggleable = _ui_toggleable
+	ui.button = _ui_button
 
-	s.analysis_distribute_spectrum_frequencies = _analysis_distribute_spectrum_frequencies
-	s.analysis_calc_spectrum = _analysis_calc_spectrum
+	helpers := &sdk_helper_procs
+	sdk_procs.helpers = helpers
+	helpers.distribute_spectrum_frequencies = _analysis_distribute_spectrum_frequencies
+	helpers.calc_spectrum = _analysis_calc_spectrum
+
+	playback := &sdk_playback_procs
+	sdk_procs.playback = playback
+	playback.is_paused = _playback_is_paused
+	playback.set_paused = _playback_set_paused
+	playback.toggle_paused = _playback_toggle_paused
+	playback.get_track_duration_seconds = _playback_get_track_duration_seconds
+	playback.seek_to_second = _playback_seek_to_second
 }
 
 @private

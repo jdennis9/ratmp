@@ -9,7 +9,11 @@ import imgui "../src/thirdparty/odin-imgui"
 // =============================================================================
 // Required
 
-api: sdk.SDK
+base: ^sdk.Base_Procs
+draw: ^sdk.Draw_Procs
+ui: ^sdk.UI_Procs
+helpers: ^sdk.Helper_Procs
+playback: ^sdk.Playback_Procs
 
 state: struct {
 	spectrum_frequencies: [24]f32,
@@ -19,7 +23,11 @@ state: struct {
 // Called when the plugin is loaded. Pointers to the SDK functions are passed in
 @export @(link_name="plug_load")
 plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
-	api = lib
+	base = lib.base
+	draw = lib.draw
+	ui = lib.ui
+	helpers = lib.helpers
+	playback = lib.playback
 
 	info.name = "Example"
 	info.author = "RAT MP"
@@ -37,19 +45,19 @@ plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
 plug_init :: proc() {
 	log.info("****** Initialising example plugin ******")
 
-	api.analysis_distribute_spectrum_frequencies(state.spectrum_frequencies[:])
+	helpers.distribute_spectrum_frequencies(state.spectrum_frequencies[:])
 }
 
 // Called every frame. Previous frame length is passed in
 @export @(link_name="plug_frame")
 plug_frame :: proc(delta_time: f32) {
-	if api.ui_begin("My Plugin Window") {
-		pos := api.ui_get_cursor()
-		api.draw_rect_filled(pos, pos + {64, 64}, 0xff00ffff, 4)
-		api.ui_dummy({64, 64})
+	if ui.begin("My Plugin Window") {
+		pos := ui.get_cursor()
+		draw.rect_filled(pos, pos + {64, 64}, 0xff00ffff, 4)
+		ui.dummy({64, 64})
 
-		api.ui_text("Hello, world!")
-		api.ui_end()
+		ui.text("Hello, world!")
+		ui.end()
 	}
 }
 
@@ -64,26 +72,31 @@ plug_analyse :: proc(audio: [][]f32, samplerate: int, delta: f32) {
 
 	smooth_peak = linalg.lerp(smooth_peak, peak, delta * 5)
 
-	api.analysis_calc_spectrum(audio[0], state.spectrum_frequencies[:], state.spectrum_peaks[:])
+	helpers.calc_spectrum(audio[0], state.spectrum_frequencies[:], state.spectrum_peaks[:])
 
-	if api.ui_begin("My Plugin Window") {
-		api.ui_text("Peak:", smooth_peak)
+	if ui.begin("My Plugin Window") {
+		ui.text("Peak:", smooth_peak)
 		for i in 0..<len(state.spectrum_frequencies) {
-			api.ui_text(state.spectrum_frequencies[i], state.spectrum_peaks[i])
+			ui.text(state.spectrum_frequencies[i], state.spectrum_peaks[i])
 		}
-		api.ui_end()
+
+		if ui.button("Pause") {
+			playback.toggle_paused()
+		}
+		if ui.button("Restart") {
+			playback.seek_to_second(0)
+		}
+
+		ui.end()
 	}
 }
 
-/*@export @(link_name="plug_analyse_spectrum")
-plug_analyse_spectrum :: proc(spectrum: []sdk.Spectrum_Band, samplerate: int, delta: f32) {
-	if ui.begin("My Plugin Window") {
-		for p in spectrum {
-			ui.text(p.freq, p.peak)
-		}
-		ui.end()
+@export @(link_name="plug_post_process")
+plug_post_process :: proc(audio: []f32, samplerate, channels: int) {
+	for &s in audio {
+		s *= 0.5
 	}
-}*/
+}
 
 // Called when track is changed
 @export @(link_name="plug_on_track_changed")

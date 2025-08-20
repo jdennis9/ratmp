@@ -4,6 +4,7 @@ import "core:dynlib"
 import "core:os/os2"
 import "core:strings"
 import "core:log"
+import "core:sync"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -23,7 +24,7 @@ Plugin :: struct {
 		init: sdk.Init_Proc,
 		frame: sdk.Frame_Proc,
 		analyse: sdk.Analyse_Proc,
-		analyse_spectrum: sdk.Analyse_Spectrum_Proc,
+		post_process: sdk.Post_Process_Proc,
 	},
 }
 
@@ -32,8 +33,15 @@ Plugin_Manager :: struct {
 	open_ui: bool,
 }
 
-@(private="file")
-procs: sdk.SDK
+plugins_post_process :: proc(data: rawptr, audio: []f32, samplerate, channels: int) {
+	mgr := cast(^Plugin_Manager)data
+
+	for plugin in mgr.plugins {
+		if plugin.procs.post_process != nil && plugin.enabled {
+			plugin.procs.post_process(audio, samplerate, channels)
+		}
+	}
+}
 
 plugins_load :: proc(mgr: ^Plugin_Manager, path: string) {
 	files, error := os2.read_directory_by_path(path, -1, context.allocator)
@@ -59,18 +67,16 @@ plugins_load :: proc(mgr: ^Plugin_Manager, path: string) {
 
 		plugin.procs.load = auto_cast dynlib.symbol_address(plugin.lib, "plug_load")
 		if plugin.procs.load == nil {
-			log.error("Plugin", file.name, "does not define load proc, skipping...")
+			log.error("Plugin", file.name, "does not define plug_load proc, skipping...")
 			continue
 		}
 
 		plugin.procs.init = auto_cast dynlib.symbol_address(plugin.lib, "plug_init")
 		plugin.procs.frame = auto_cast dynlib.symbol_address(plugin.lib, "plug_frame")
 		plugin.procs.analyse = auto_cast dynlib.symbol_address(plugin.lib, "plug_analyse")
-		plugin.procs.analyse_spectrum = auto_cast dynlib.symbol_address(plugin.lib, "plug_analyse_spectrum")
+		plugin.procs.post_process = auto_cast dynlib.symbol_address(plugin.lib, "plug_post_process")
 
-		log.debug(plugin.procs)
-
-		plugin.info = plugin.procs.load(sdk_proc_addr)
+		plugin.info = plugin.procs.load(sdk_procs)
 		append(&mgr.plugins, plugin)
 		ok = true
 	}

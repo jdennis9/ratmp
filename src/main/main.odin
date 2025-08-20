@@ -71,8 +71,9 @@ run :: proc() -> bool {
 	}
 	
 	server.add_event_handler(&g.sv, server_event_handler, nil)
-	
+
 	plugins_init_all(&g.plugin_manager)
+	server.add_post_process_hook(&g.sv, plugins_post_process, &g.plugin_manager)
 	sys_main.show_window(true)
 
 	for {

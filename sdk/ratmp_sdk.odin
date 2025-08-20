@@ -27,8 +27,8 @@ plug_frame :: proc(delta_time: f32) {}
 @export @(link_name="plug_analyse")
 plug_analyse :: proc(audio: [][]f32, samplerate: int, delta: f32) {}
 
-@export @(link_name="plug_analyse_spectrum")
-plug_analyse_spectrum :: proc(spectrum: []f32, samplerate: int, delta: f32) {}
+@export @(link_name="plug_post_process")
+plug_post_process :: proc(audio: []f32, samplerate, channels: int) {}
 
 // Called when track is changed
 @export @(link_name="plug_on_track_changed")
@@ -44,7 +44,7 @@ Load_Proc :: #type proc(lib: SDK) -> Plugin_Info
 Init_Proc :: #type proc()
 Frame_Proc :: #type proc(delta: f32)
 Analyse_Proc :: #type proc(audio: [][]f32, samplerate: int, delta: f32)
-Analyse_Spectrum_Proc :: #type proc(spectrum: []Spectrum_Band, samplerate: int, delta: f32)
+Post_Process_Proc :: #type proc(audio: []f32, samplerate, channels: int)
 On_Track_Changed_Proc :: #type proc(track: Track_ID)
 On_Playback_State_Changed_Proc :: #type proc(new_state: Playback_State)
 
@@ -56,36 +56,58 @@ Rect :: struct {
 	pmin, pmax: [2]f32,
 }
 
-SDK :: struct {
+Base_Procs :: struct {
 	version: proc() -> Version,
 	get_playing_track_id: proc() -> Track_ID,
+}
 
-	ui_get_cursor: proc() -> [2]f32,
-	ui_begin: proc(str_id: cstring, p_open: ^bool = nil) -> bool,
-	ui_end: proc(),
-	ui_dummy: proc(size: [2]f32),
-	ui_invisible_button: proc(str_id: cstring, size: [2]f32) -> bool,
-	ui_text_unformatted: proc(str: string),
-	ui_text: proc(args: ..any),
-	ui_textf: proc(format: string, args: ..any),
-	ui_button: proc(label: cstring) -> bool,
-	ui_selectable: proc(label: cstring, selected: bool) -> bool,
-	ui_toggleable: proc(label: cstring, selected: ^bool) -> bool,
-	ui_checkbox: proc(label: cstring, value: ^bool) -> bool,
-	ui_begin_combo: proc(label: cstring, preview: cstring) -> bool,
-	ui_end_combo: proc(),
+UI_Procs :: struct {
+	get_cursor: proc() -> [2]f32,
+	begin: proc(str_id: cstring, p_open: ^bool = nil) -> bool,
+	end: proc(),
+	dummy: proc(size: [2]f32),
+	invisible_button: proc(str_id: cstring, size: [2]f32) -> bool,
+	text_unformatted: proc(str: string),
+	text: proc(args: ..any),
+	textf: proc(format: string, args: ..any),
+	button: proc(label: cstring) -> bool,
+	selectable: proc(label: cstring, selected: bool) -> bool,
+	toggleable: proc(label: cstring, selected: ^bool) -> bool,
+	checkbox: proc(label: cstring, value: ^bool) -> bool,
+	begin_combo: proc(label: cstring, preview: cstring) -> bool,
+	end_combo: proc(),
+}
 
-	draw_rect: proc(pmin, pmax: [2]f32, color: u32, thickness: f32 = 0, rounding: f32 = 0),
-	draw_rect_filled: proc(pmin, pmax: [2]f32, color: u32, rounding: f32 = 0),
-	draw_many_rects: proc(rects: []Rect, colors: []u32, thickness: f32 = 0, rounding: f32 = 0),
-	draw_many_rects_filled: proc(rects: []Rect, colors: []u32, rounding: f32 = 0),
+Draw_Procs :: struct {
+	rect: proc(pmin, pmax: [2]f32, color: u32, thickness: f32 = 0, rounding: f32 = 0),
+	rect_filled: proc(pmin, pmax: [2]f32, color: u32, rounding: f32 = 0),
+	many_rects: proc(rects: []Rect, colors: []u32, thickness: f32 = 0, rounding: f32 = 0),
+	many_rects_filled: proc(rects: []Rect, colors: []u32, rounding: f32 = 0),
+}
 
+Helper_Procs :: struct {
 	// Distribute frequencies naturally
-	analysis_distribute_spectrum_frequencies: proc(out: []f32),
+	distribute_spectrum_frequencies: proc(out: []f32),
 	// Calculates FFT and distributes values into bands based on freq_cutoffs input.
 	// It's recommended to use this with the same input size, output size and frequency cutoffs
 	// between calls for optimal performance
-	analysis_calc_spectrum: proc(input: []f32, freq_cutoffs: []f32, output: []f32),
+	calc_spectrum: proc(input: []f32, freq_cutoffs: []f32, output: []f32),
+}
+
+Playback_Procs :: struct {
+	is_paused: proc() -> bool,
+	set_paused: proc(paused: bool),
+	toggle_paused: proc(),
+	get_track_duration_seconds: proc() -> int,
+	seek_to_second: proc(second: int),
+}
+
+SDK :: struct {
+	base: ^Base_Procs,
+	ui: ^UI_Procs,
+	draw: ^Draw_Procs,
+	helpers: ^Helper_Procs,
+	playback: ^Playback_Procs,
 }
 
 Plugin_Info :: struct {
