@@ -12,15 +12,13 @@ import "src:build"
 import "src:client"
 import "src:server"
 import "src:sys"
-import plugin "src:plugin_manager"
-import plugin_setup "src:plugins"
 import sys_main "src:sys/main"
 
 @private
 g: struct {
 	cl: client.Client,
 	sv: server.Server,
-	plugins: plugin.Plugin_Manager,
+	plugin_manager: Plugin_Manager,
 	title_track_id: server.Track_ID,
 }
 
@@ -66,14 +64,15 @@ run :: proc() -> bool {
 	client.init(&g.cl, &g.sv, ".", ".", sys_main.post_empty_event) or_return
 	defer client.destroy(&g.cl)
 
+	// Set SDK proc addresses
+	sdk_init(&g.cl, &g.sv)
 	if enable_plugins {
-		plugin.init(&g.plugins, &g.cl, &g.sv)
-		plugin_setup.add(&g.plugins)
-		plugin.run_init_hooks(&g.plugins)
+		plugins_load(&g.plugin_manager, "Plugins")
 	}
 	
 	server.add_event_handler(&g.sv, server_event_handler, nil)
 	
+	plugins_init_all(&g.plugin_manager)
 	sys_main.show_window(true)
 
 	for {
@@ -87,8 +86,9 @@ run :: proc() -> bool {
 		imgui.NewFrame()
 
 		delta := client.frame(&g.cl, &g.sv, prev_frame_start, frame_start)
-		plugin.run_frame_hooks(&g.plugins, delta)
-		plugin.show_imgui_menu(&g.plugins)
+		if enable_plugins {
+			plugins_frame(&g.plugin_manager, &g.cl, &g.sv, delta)
+		}
 
 		imgui.Render()
 		draw_data := imgui.GetDrawData()
@@ -106,8 +106,6 @@ run :: proc() -> bool {
 			break
 		}
 	}
-
-	plugin.run_destroy_hooks(&g.plugins)
 
 	return true
 }
@@ -129,8 +127,6 @@ server_event_handler :: proc(sv: server.Server, data: rawptr, event: server.Even
 			}
 		}
 	}
-
-	plugin.run_event_hooks(&g.plugins, event)
 }
 
 main :: proc() {
@@ -143,3 +139,5 @@ main :: proc() {
 
 	run()
 }
+
+
