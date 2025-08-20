@@ -118,15 +118,6 @@ plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Serv
 			if plugin.procs.analyse != nil {
 				plugin.procs.analyse(audio[:cl.analysis.channels], cl.analysis.samplerate, delta)
 			}
-
-			if plugin.procs.analyse_spectrum != nil {
-				cl.analysis.need_update_spectrum = true
-				plugin.procs.analyse_spectrum(
-					spectrum[:cl.analysis.spectrum_frequency_bands_calculated],
-					cl.analysis.samplerate,
-					delta
-				)
-			}
 		}
 	}
 

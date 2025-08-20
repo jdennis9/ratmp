@@ -1,6 +1,10 @@
 #+private file
 package main
 
+import "core:hash/xxhash"
+import "core:slice"
+import "core:log"
+
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:client"
@@ -10,14 +14,22 @@ import "src:analysis"
 import "src:../sdk"
 
 Spectrum_Analyser_Settings :: struct {
-	band_count: int,
+	window_size: int,
+	output_size: u32,
+	freq_cutoff_hash: u32,
+}
+
+Spectrum_Analyser :: struct {
+	state: analysis.Spectrum_Analyser,
+	output: []f32,
+	calculated: bool,
 }
 
 ctx: struct {
 	cl: ^client.Client,
 	sv: ^server.Server,
 	drawlist: ^imgui.DrawList,
-	spectrum_analysers: map[Spectrum_Analyser_Settings]analysis.Spectrum_Analyzer,
+	spectrum_analysers: map[Spectrum_Analyser_Settings]Spectrum_Analyser,
 }
 
 @private
@@ -87,6 +99,40 @@ _draw_rect_filled :: proc(pmin, pmax: [2]f32, color: u32, rounding: f32) {
 	imgui.DrawList_AddRectFilled(ctx.drawlist, pmin, pmax, color, rounding)
 }
 
+_analysis_distribute_spectrum_frequencies :: proc(output: []f32) {
+	analysis.calc_spectrum_frequencies(output)
+}
+
+_analysis_calc_spectrum :: proc(input: []f32, freq_cutoffs: []f32, output: []f32) {
+	settings: Spectrum_Analyser_Settings
+	settings.window_size = len(input)
+	settings.output_size = auto_cast len(output)
+	settings.freq_cutoff_hash = xxhash.XXH32(slice.to_bytes(freq_cutoffs))
+
+	analyser := &ctx.spectrum_analysers[settings]
+	if analyser == nil {
+
+		log.debug("New spectrum analyser:", settings)
+
+		ctx.spectrum_analysers[settings] = {}
+		analyser = &ctx.spectrum_analysers[settings]
+		analysis.spectrum_analyser_init(&analyser.state, settings.window_size, 1)
+		analyser.output = make([]f32, len(output))
+		analyser.calculated = false
+	}
+
+	if !analyser.calculated {
+		for &f in analyser.output {f = 0}
+		analysis.spectrum_analyser_calc(
+			&analyser.state, input, freq_cutoffs,
+			analyser.output, f32(ctx.cl.analysis.samplerate),
+		)
+		analyser.calculated = true
+	}
+
+	copy(output, analyser.output)
+}
+
 @private
 sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	ctx.cl = cl
@@ -112,4 +158,14 @@ sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	s.ui_selectable = _ui_selectable
 	s.ui_toggleable = _ui_toggleable
 	s.ui_button = _ui_button
+
+	s.analysis_distribute_spectrum_frequencies = _analysis_distribute_spectrum_frequencies
+	s.analysis_calc_spectrum = _analysis_calc_spectrum
+}
+
+@private
+sdk_frame :: proc() {
+	for settings, &a in ctx.spectrum_analysers {
+		a.calculated = false
+	}
 }

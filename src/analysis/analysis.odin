@@ -77,20 +77,20 @@ calc_spectrum_frequencies :: proc(output: []f32) {
 	}
 }
 
-Spectrum_Analyzer :: struct {
+Spectrum_Analyser :: struct {
 	buffer: []fftw.complex,
 	plan: fftw.plan,
 	window_size: int,
 	scale: f32,
 }
 
-spectrum_analyzer_init :: proc(state: ^Spectrum_Analyzer, window_size: int, scale: f32) {
+spectrum_analyser_init :: proc(state: ^Spectrum_Analyser, window_size: int, scale: f32) {
 	state.buffer = make([]fftw.complex, (window_size/2) + 1)
 	state.window_size = window_size
 	state.scale = scale
 }
 
-spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequencies: []f32, output: []f32, samplerate: f32) {
+spectrum_analyser_calc :: proc(state: ^Spectrum_Analyser, input: []f32, frequencies: []f32, output: []f32, samplerate: f32) {
 	assert(len(input) == state.window_size)
 	assert(state.buffer != nil)
 
@@ -144,7 +144,7 @@ spectrum_analyzer_calc :: proc(state: ^Spectrum_Analyzer, input: []f32, frequenc
 	}
 }
 
-spectrum_analyzer_destroy :: proc(state: ^Spectrum_Analyzer) {
+spectrum_analyser_destroy :: proc(state: ^Spectrum_Analyser) {
 	delete(state.buffer)
 	fftw.destroy_plan(state.plan)
 }

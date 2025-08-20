@@ -81,12 +81,13 @@ run :: proc() -> bool {
 		server.handle_events(&g.sv)
 		client.handle_events(&g.cl, &g.sv)
 		if !sys_main.handle_events() {break}
-
+		
 		sys_main.new_frame()
 		imgui.NewFrame()
-
+		
 		delta := client.frame(&g.cl, &g.sv, prev_frame_start, frame_start)
 		if enable_plugins {
+			sdk_frame()
 			plugins_frame(&g.plugin_manager, &g.cl, &g.sv, delta)
 		}
 

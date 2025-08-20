@@ -10,15 +10,16 @@ import imgui "../src/thirdparty/odin-imgui"
 // Required
 
 api: sdk.SDK
-ui: ^sdk.UI_Procs
-draw: ^sdk.Draw_Procs
+
+state: struct {
+	spectrum_frequencies: [24]f32,
+	spectrum_peaks: [24]f32,
+}
 
 // Called when the plugin is loaded. Pointers to the SDK functions are passed in
 @export @(link_name="plug_load")
 plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
 	api = lib
-	ui = &api.ui
-	draw = &api.draw
 
 	info.name = "Example"
 	info.author = "RAT MP"
@@ -35,18 +36,20 @@ plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
 @export @(link_name="plug_init")
 plug_init :: proc() {
 	log.info("****** Initialising example plugin ******")
+
+	api.analysis_distribute_spectrum_frequencies(state.spectrum_frequencies[:])
 }
 
 // Called every frame. Previous frame length is passed in
 @export @(link_name="plug_frame")
 plug_frame :: proc(delta_time: f32) {
-	if ui.begin("My Plugin Window") {
-		pos := ui.get_cursor()
-		draw.rect_filled(pos, pos + {64, 64}, 0xff00ffff, 4)
-		ui.dummy({64, 64})
+	if api.ui_begin("My Plugin Window") {
+		pos := api.ui_get_cursor()
+		api.draw_rect_filled(pos, pos + {64, 64}, 0xff00ffff, 4)
+		api.ui_dummy({64, 64})
 
-		ui.text("Hello, world!")
-		ui.end()
+		api.ui_text("Hello, world!")
+		api.ui_end()
 	}
 }
 
@@ -61,13 +64,18 @@ plug_analyse :: proc(audio: [][]f32, samplerate: int, delta: f32) {
 
 	smooth_peak = linalg.lerp(smooth_peak, peak, delta * 5)
 
-	if ui.begin("My Plugin Window") {
-		ui.text("Peak:", smooth_peak)
-		ui.end()
+	api.analysis_calc_spectrum(audio[0], state.spectrum_frequencies[:], state.spectrum_peaks[:])
+
+	if api.ui_begin("My Plugin Window") {
+		api.ui_text("Peak:", smooth_peak)
+		for i in 0..<len(state.spectrum_frequencies) {
+			api.ui_text(state.spectrum_frequencies[i], state.spectrum_peaks[i])
+		}
+		api.ui_end()
 	}
 }
 
-@export @(link_name="plug_analyse_spectrum")
+/*@export @(link_name="plug_analyse_spectrum")
 plug_analyse_spectrum :: proc(spectrum: []sdk.Spectrum_Band, samplerate: int, delta: f32) {
 	if ui.begin("My Plugin Window") {
 		for p in spectrum {
@@ -75,7 +83,7 @@ plug_analyse_spectrum :: proc(spectrum: []sdk.Spectrum_Band, samplerate: int, de
 		}
 		ui.end()
 	}
-}
+}*/
 
 // Called when track is changed
 @export @(link_name="plug_on_track_changed")

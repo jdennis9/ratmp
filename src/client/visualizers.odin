@@ -37,7 +37,7 @@ _Analysis_State :: struct {
 	window_w: [WINDOW_SIZE]f32,
 	window_data: [server.MAX_OUTPUT_CHANNELS][WINDOW_SIZE]f32,
 	
-	spectrum_analyzer: analysis.Spectrum_Analyzer,
+	spectrum_analyzer: analysis.Spectrum_Analyser,
 	spectrum_frequencies: [MAX_SPECTRUM_BAND_COUNT]f32,
 	spectrum_frequency_strings: [MAX_SPECTRUM_BAND_COUNT][6]u8,
 	spectrum_frequency_string_lengths: [MAX_SPECTRUM_BAND_COUNT]int,
@@ -99,12 +99,12 @@ _analysis_init :: proc(state: ^_Analysis_State) {
 	// Hann window
 	_hann_window(state.window_w[:])
 
-	analysis.spectrum_analyzer_init(&state.spectrum_analyzer, WINDOW_SIZE, 1/window_sum)
+	analysis.spectrum_analyser_init(&state.spectrum_analyzer, WINDOW_SIZE, 1/window_sum)
 }
 
 @private
 _analysis_destroy :: proc(state: ^_Analysis_State) {
-	analysis.spectrum_analyzer_destroy(&state.spectrum_analyzer)
+	analysis.spectrum_analyser_destroy(&state.spectrum_analyzer)
 	delete(state.osc_window)
 }
 
@@ -190,7 +190,7 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		}
 
 		state.need_update_spectrum = false
-		analysis.spectrum_analyzer_calc(
+		analysis.spectrum_analyser_calc(
 			&state.spectrum_analyzer,
 			state.window_data[0][:],
 			state.spectrum_frequencies[:],

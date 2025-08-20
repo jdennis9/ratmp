@@ -79,6 +79,13 @@ SDK :: struct {
 	draw_rect_filled: proc(pmin, pmax: [2]f32, color: u32, rounding: f32 = 0),
 	draw_many_rects: proc(rects: []Rect, colors: []u32, thickness: f32 = 0, rounding: f32 = 0),
 	draw_many_rects_filled: proc(rects: []Rect, colors: []u32, rounding: f32 = 0),
+
+	// Distribute frequencies naturally
+	analysis_distribute_spectrum_frequencies: proc(out: []f32),
+	// Calculates FFT and distributes values into bands based on freq_cutoffs input.
+	// It's recommended to use this with the same input size, output size and frequency cutoffs
+	// between calls for optimal performance
+	analysis_calc_spectrum: proc(input: []f32, freq_cutoffs: []f32, output: []f32),
 }
 
 Plugin_Info :: struct {
