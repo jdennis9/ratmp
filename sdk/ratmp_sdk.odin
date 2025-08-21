@@ -20,13 +20,15 @@ plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
 @export @(link_name="plug_init")
 plug_init :: proc() {}
 
-// Called every frame. Previous frame length is passed in
+// Called every frame. Previous frame duration is passed in
 @export @(link_name="plug_frame")
 plug_frame :: proc(delta_time: f32) {}
 
+// Called every frame. Audio passed in is already windowed and is synced with current output time
 @export @(link_name="plug_analyse")
 plug_analyse :: proc(audio: [][]f32, samplerate: int, delta: f32) {}
 
+// Use to process audio buffer after decoding and before sending to output
 @export @(link_name="plug_post_process")
 plug_post_process :: proc(audio: []f32, samplerate, channels: int) {}
 
@@ -51,6 +53,7 @@ On_Playback_State_Changed_Proc :: #type proc(new_state: Playback_State)
 Version :: struct {major, minor, patch: int}
 Track_ID :: distinct u32
 Playback_State :: enum {Playing, Paused, Stopped}
+Texture_ID :: distinct uintptr
 
 Rect :: struct {
 	pmin, pmax: [2]f32,
@@ -58,7 +61,6 @@ Rect :: struct {
 
 Base_Procs :: struct {
 	version: proc() -> Version,
-	get_playing_track_id: proc() -> Track_ID,
 }
 
 UI_Procs :: struct {
@@ -100,14 +102,21 @@ Playback_Procs :: struct {
 	toggle_paused: proc(),
 	get_track_duration_seconds: proc() -> int,
 	seek_to_second: proc(second: int),
+	get_playing_track_id: proc() -> Track_ID,
+}
+
+Library_Procs :: struct {
+	lookup_track: proc(id: Track_ID) -> (index: int, found: bool),
+	get_track_metadata: proc(index: int, md: ^Track_Metadata),
+	get_track_cover_art: proc(index: int) -> (texture: Texture_ID, ok: bool),
 }
 
 SDK :: struct {
-	base: ^Base_Procs,
 	ui: ^UI_Procs,
 	draw: ^Draw_Procs,
 	helpers: ^Helper_Procs,
 	playback: ^Playback_Procs,
+	library: ^Library_Procs,
 }
 
 Plugin_Info :: struct {

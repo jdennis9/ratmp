@@ -33,11 +33,11 @@ ctx: struct {
 }
 
 @private sdk_procs: sdk.SDK
-@private sdk_base_procs: sdk.Base_Procs
 @private sdk_ui_procs: sdk.UI_Procs
 @private sdk_draw_procs: sdk.Draw_Procs
 @private sdk_helper_procs: sdk.Helper_Procs
 @private sdk_playback_procs: sdk.Playback_Procs
+@private sdk_library_procs: sdk.Library_Procs
 
 _sdk_version :: proc() -> sdk.Version {
 	return {0, 1, 0}
@@ -152,15 +152,31 @@ _playback_seek_to_second :: proc(second: int) {
 	server.seek_to_second(ctx.sv, second)
 }
 
+_library_lookup_track :: proc(id: sdk.Track_ID) -> (index: int, found: bool) {
+	return server.library_lookup_track(ctx.sv.library, auto_cast id)
+}
+
+_library_get_track_metadata :: proc(index: int, out: ^sdk.Track_Metadata) {
+	assert(index < len(ctx.sv.library.track_metadata))
+	md := ctx.sv.library.track_metadata[index]
+	out.artist = md.values[.Artist].(string) or_else ""
+	out.album = md.values[.Album].(string) or_else ""
+	out.title = md.values[.Title].(string) or_else ""
+	out.genre = md.values[.Genre].(string) or_else ""
+	out.duration_seconds = md.values[.Duration].(i64) or_else 0
+	out.unix_added_date = md.values[.DateAdded].(i64) or_else 0
+	out.unix_file_date = md.values[.FileDate].(i64) or_else 0
+}
+
 @private
 sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	ctx.cl = cl
 	ctx.sv = sv
 
-	base := &sdk_base_procs
-	sdk_procs.base = base
-	base.version = _sdk_version
-	base.get_playing_track_id = _get_playing_track_id
+	lib := &sdk_library_procs
+	sdk_procs.library = lib
+	lib.lookup_track = _library_lookup_track
+	lib.get_track_metadata = _library_get_track_metadata
 
 	draw := &sdk_draw_procs
 	sdk_procs.draw = draw
@@ -168,7 +184,7 @@ sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	draw.many_rects = _draw_many_rects
 	draw.rect_filled = _draw_rect_filled
 	draw.many_rects_filled = _draw_many_rects_filled
-
+	
 	ui := &sdk_ui_procs
 	sdk_procs.ui = ui
 	ui.get_cursor = _ui_get_cursor
@@ -182,14 +198,15 @@ sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	ui.selectable = _ui_selectable
 	ui.toggleable = _ui_toggleable
 	ui.button = _ui_button
-
+	
 	helpers := &sdk_helper_procs
 	sdk_procs.helpers = helpers
 	helpers.distribute_spectrum_frequencies = _analysis_distribute_spectrum_frequencies
 	helpers.calc_spectrum = _analysis_calc_spectrum
-
+	
 	playback := &sdk_playback_procs
 	sdk_procs.playback = playback
+	playback.get_playing_track_id = _get_playing_track_id
 	playback.is_paused = _playback_is_paused
 	playback.set_paused = _playback_set_paused
 	playback.toggle_paused = _playback_toggle_paused

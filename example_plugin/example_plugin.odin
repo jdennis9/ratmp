@@ -6,10 +6,7 @@ import "core:math/linalg"
 import "../sdk"
 import imgui "../src/thirdparty/odin-imgui"
 
-// =============================================================================
-// Required
-
-base: ^sdk.Base_Procs
+library: ^sdk.Library_Procs
 draw: ^sdk.Draw_Procs
 ui: ^sdk.UI_Procs
 helpers: ^sdk.Helper_Procs
@@ -20,14 +17,17 @@ state: struct {
 	spectrum_peaks: [24]f32,
 }
 
+// =============================================================================
+// Required
+
 // Called when the plugin is loaded. Pointers to the SDK functions are passed in
 @export @(link_name="plug_load")
-plug_load :: proc(lib: sdk.SDK) -> (info: sdk.Plugin_Info) {
-	base = lib.base
-	draw = lib.draw
-	ui = lib.ui
-	helpers = lib.helpers
-	playback = lib.playback
+plug_load :: proc(procs: sdk.SDK) -> (info: sdk.Plugin_Info) {
+	draw = procs.draw
+	ui = procs.ui
+	helpers = procs.helpers
+	playback = procs.playback
+	library = procs.library
 
 	info.name = "Example"
 	info.author = "RAT MP"
