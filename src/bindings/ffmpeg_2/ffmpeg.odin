@@ -44,6 +44,7 @@ foreign lib {
 	close_input :: proc(ctx: ^Context) ---
 	is_open :: proc(ctx: ^Context) -> bool ---
 	decode_packet :: proc(ctx: ^Context, output_spec: ^Audio_Spec, packet_out: ^Packet) -> Decode_Status ---
+	free_packet :: proc(packet: ^Packet) ---
 	load_thumbnail :: proc(filename: cstring, data: ^rawptr, w: ^i32, h: ^i32) -> bool ---
 	free_thumbnail :: proc(data: rawptr) ---
 }

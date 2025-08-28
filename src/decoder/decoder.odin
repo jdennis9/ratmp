@@ -90,6 +90,8 @@ _decode_packet :: proc(dec: ^Decoder, output: ^[dynamic]f32, channels, samplerat
 		return
 	}
 
+	defer ffmpeg.free_packet(&pkt)
+
 	read = auto_cast pkt.frames_in
 	written = auto_cast pkt.frames_out
 
@@ -185,74 +187,6 @@ get_duration :: proc(dec: Decoder) -> int {
 }
 
 load_thumbnail :: proc(filename: string) -> (data: rawptr, w, h: int, ok: bool) {
-	/*pkt: ^av.Packet
-	codec: ^av.Codec
-	decoder: ^av.CodecContext
-	codecpar: ^av.CodecParameters
-	src_frame, dst_frame: ^av.Frame
-	demuxer: ^av.FormatContext
-	rescaler: ^av.SwsContext
-
-	filename_buf: [512]u8
-	copy(filename_buf[:511], filename)
-
-	demuxer = av.format_alloc_context()
-	if demuxer == nil {return}
-	defer av.format_free_context(demuxer)
-	if av.format_open_input(&demuxer, cstring(&filename_buf[0]), nil, nil) != 0 {
-		return
-	}
-	defer av.format_close_input(&demuxer)
-
-	for stream in demuxer.streams[:demuxer.nb_streams] {
-		if stream.codecpar == nil {continue}
-		if stream.codecpar.codec_type == av.MediaType.VIDEO {
-			pkt = &stream.attached_pic
-			codecpar = stream.codecpar
-			break
-		}
-	}
-
-	if pkt == nil {return}
-	
-	src_frame = av.frame_alloc()
-	defer av.frame_free(&src_frame)
-	
-	dst_frame = av.frame_alloc()
-	defer av.frame_free(&dst_frame)
-	
-	codec = av.codec_find_decoder(codecpar.codec_id)
-	if codec == nil {return}
-	
-	decoder = av.codec_alloc_context3(codec)
-	defer av.codec_free_context(&decoder)
-	av.codec_parameters_to_context(decoder, codecpar)
-	if av.codec_open2(decoder, codec, nil) != 0 {return}
-	defer av.codec_close(decoder)
-	
-	if av.codec_send_packet(decoder, pkt) != 0 {return}
-	if av.codec_receive_frame(decoder, src_frame) != 0 {return}
-	
-	w = auto_cast src_frame.width
-	h = auto_cast src_frame.height
-
-	rescaler = av.sws_getContext(
-		src_frame.width, src_frame.height, auto_cast src_frame.format,
-		src_frame.width, src_frame.height, .RGBA, 0,
-	)
-
-	if rescaler == nil {return}
-
-	data, _ = mem.alloc(w * h * 4)
-
-	av.image_copy_to_buffer(
-		auto_cast data, auto_cast(w * h * 4),
-		&dst_frame.data[0], &dst_frame.linesize[0],
-		.RGBA, auto_cast w, auto_cast h, 4
-	)
-
-	ok = true*/
-
 	filename_buf: [512]u8
 	_w, _h: i32
 
@@ -260,7 +194,7 @@ load_thumbnail :: proc(filename: string) -> (data: rawptr, w, h: int, ok: bool) 
 	ffmpeg.load_thumbnail(cstring(&filename_buf[0]), &data, &_w, &_h) or_return
 	w = auto_cast _w
 	h = auto_cast _h
-	
+
 	ok = true
 	return
 }

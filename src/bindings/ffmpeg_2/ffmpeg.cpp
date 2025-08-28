@@ -108,6 +108,9 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	info_out->spec = ff->input_spec;
 	info_out->total_frames = duration * ff->input_spec.samplerate;
 
+	ff->frame = av_frame_alloc();
+	ff->packet = av_packet_alloc();
+
 	return true;
 }
 
@@ -121,21 +124,26 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 	packet_out->frames_out = 0;
 	for (int i = 0; i < output_spec.channels; ++i) {
 		free(packet_out->data[i]);
+		packet_out->data[i] = NULL;
 	}
 
 	// Read frames until we get one from the desired stream, or error/eof
 	while (1) {
 		error = av_read_frame(ff->demuxer, ff->packet);
-		if (error == AVERROR_EOF) 
+		if (error == AVERROR_EOF) {
+			av_packet_unref(ff->packet);
 			return DecodeStatus_Eof;
-		else if (error < 0)
+		}
+		else if (error < 0) {
+			av_packet_unref(ff->packet);
 			return DecodeStatus_Error;
+		}
 		else if (ff->packet->stream_index == ff->stream_index) {
 			avcodec_send_packet(ff->decoder, ff->packet);
 			break;
 		}
+		av_packet_unref(ff->packet);
 	}
-
 	defer(av_packet_unref(ff->packet));
 
 	// Create resampler if needed
@@ -167,7 +175,7 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 		int write_frames = (int)floorf((float)read_frames * sample_ratio);
 		auto output_offset = packet_out->frames_out;
 		uint8_t *output_ptr[AV_NUM_DATA_POINTERS];
-		int packet_length = output_offset + (write_frames * output_spec.channels);
+		int packet_length = output_offset + write_frames;
 
 		for (int i = 0; i < output_spec.channels; ++i) {
 			packet_out->data[i] = (f32*)realloc(packet_out->data[i], packet_length * sizeof(f32));
@@ -188,12 +196,30 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 	return status;
 }
 
+void ffmpeg_free_packet(Packet *packet) {
+	for (int ch = 0; ch < MAX_AUDIO_CHANNELS; ++ch) {
+		if (packet->data[ch]) free(packet->data[ch]);
+	}
+}
+
 void ffmpeg_close_input(FFMPEG_Context *ff) {
 	if (!ff) return;
 
 	if (ff->resampler) {
 		swr_free(&ff->resampler);
 		ff->resampler = NULL;
+	}
+
+	if (ff->frame) {
+		av_frame_unref(ff->frame);
+		av_frame_free(&ff->frame);
+		ff->frame = NULL;
+	}
+
+	if (ff->packet) {
+		av_packet_unref(ff->packet);
+		av_packet_free(&ff->packet);
+		ff->packet = NULL;
 	}
 
 	if (ff->decoder) {
@@ -205,6 +231,7 @@ void ffmpeg_close_input(FFMPEG_Context *ff) {
 	if (ff->demuxer) {
 		avformat_close_input(&ff->demuxer);
 		avformat_free_context(ff->demuxer);
+		ff->demuxer = NULL;
 	}
 }
 
@@ -214,6 +241,8 @@ bool ffmpeg_is_open(FFMPEG_Context *ff) {
 }
 
 bool ffmpeg_load_thumbnail(const char *filename, void **data, int32_t *w, int32_t *h) {
+	return false;
+
 	AVFormatContext *demuxer;
 	AVCodecContext *decoder;
 	AVCodecParameters *codecpar;
