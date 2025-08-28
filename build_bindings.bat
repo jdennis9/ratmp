@@ -5,7 +5,7 @@ mkdir .build
 set input=..\src\bindings
 
 pushd .build
-cl /Zi /c /EHsc /std:c++17 ^
+cl /O2 /c /EHsc /std:c++17 ^
 /I %input%\ffmpeg_2 ^
 %input%\media_controls\*.cpp ^
 %input%\taglib\*.cpp ^
