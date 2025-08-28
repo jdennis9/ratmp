@@ -26,6 +26,7 @@ USAGE :: `
 Options:
 
 -h, --help, -help, /?: Show this message
+
 -no-plugins: Disable plugins
 `
 

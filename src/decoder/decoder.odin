@@ -276,3 +276,42 @@ get_duration :: proc(dec: Decoder) -> int {
 	return auto_cast dec.duration_seconds
 }
 
+load_thumbnail :: proc(dec: Decoder) -> (data: rawptr, w, h: int, ok: bool) {
+	pkt: ^av.Packet
+	codec: ^av.Codec
+	decoder: ^av.CodecContext
+	codecpar: ^av.CodecParameters
+	frame: ^av.Frame
+
+	for stream in dec.demuxer.streams[:dec.demuxer.nb_streams] {
+		if stream.codecpar == nil {continue}
+		if stream.codecpar.codec_type == av.MediaType.VIDEO {
+			pkt = stream.attached_pic
+			codecpar = stream.codecpar
+			break
+		}
+	}
+
+	if pkt == nil {return}
+
+	frame = av.frame_alloc()
+	defer av.frame_free(&frame)
+
+	codec = av.codec_find_decoder(codecpar.codec_id)
+	if codec == nil {return}
+
+	decoder = av.codec_alloc_context3(codec)
+	defer av.codec_free_context(&decoder)
+
+	if av.codec_open2(decoder, codec, nil) != 0 {return}
+	defer av.codec_close(decoder)
+
+	if av.codec_send_packet(decoder, pkt) != 0 {return}
+	if av.codec_receive_frame(decoder, frame) != 0 {return}
+
+	w = auto_cast frame.width
+	h = auto_cast frame.height
+
+	return
+}
+

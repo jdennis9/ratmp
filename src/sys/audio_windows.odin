@@ -21,7 +21,7 @@ _WASAPI_Stream :: struct {
 	request_pause_event: win.HANDLE,
 	request_resume_event: win.HANDLE,
 	is_paused: bool,
-	error: bool,
+	status: _Session_Status,
 	stream_callback: Audio_Stream_Callback,
 	event_callback: Audio_Event_Callback,
 	callback_data: rawptr,
@@ -35,6 +35,12 @@ Audio_Stream :: struct {
 	thread: ^thread.Thread,
 	lock: sync.Mutex,
 	_wasapi: ^_WASAPI_Stream,
+}
+
+_Session_Status :: enum {
+	Ok,
+	FailedToStart,
+	BufferError,
 }
 
 @(private="file")
@@ -74,7 +80,7 @@ audio_create_stream :: proc(
 	stream.channels = stream._wasapi.channels
 	stream.samplerate = stream._wasapi.samplerate
 	
-	if !stream._wasapi.error {
+	if stream._wasapi.status == .Ok {
 		ok = true
 		return
 	}
@@ -265,13 +271,22 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 		audio_client->GetCurrentPadding(&frame_padding)
 		avail_frames = buffer_frame_count - frame_padding
 		
-		render_client->GetBuffer(avail_frames, &buffer)
-		status = stream.stream_callback(
-			stream.callback_data, (cast([^]f32)buffer)[:i32(avail_frames)*stream.channels],
-			stream.channels, stream.samplerate
-		)
-		stream.buffer_timestamp = time.tick_now()
-		render_client->ReleaseBuffer(avail_frames, 0)
+		if win32_check(render_client->GetBuffer(avail_frames, &buffer)) {
+			status = stream.stream_callback(
+				stream.callback_data, (cast([^]f32)buffer)[:i32(avail_frames)*stream.channels],
+				stream.channels, stream.samplerate
+			)
+			stream.buffer_timestamp = time.tick_now()
+		}
+		else {
+			stream.status = .BufferError
+			return
+		}
+
+		if !win32_check(render_client->ReleaseBuffer(avail_frames, 0)) {
+			stream.status = .BufferError
+			return
+		}
 	}
 	
 	ok = true
@@ -281,6 +296,11 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 @(private="file")
 _audio_thread_proc :: proc(thread_data: ^thread.Thread) {
 	stream := cast(^_WASAPI_Stream) thread_data.data
-	ok := _run_wasapi_session(stream)
-	stream.error = !ok
+	for {
+		ok := _run_wasapi_session(stream)
+		if stream.status == .FailedToStart || stream.status == .Ok {
+			return
+		}
+		log.debug("Restarting audio stream...")
+	}
 }
