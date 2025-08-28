@@ -15,6 +15,7 @@ import "src:bindings/taglib"
 import "src:util"
 import "src:server"
 import "src:sys"
+import "src:decoder"
 
 import "imx"
 
@@ -26,35 +27,11 @@ _Metadata_Window :: struct {
 }
 
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
-	when ODIN_OS == .Windows {
-		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(str_path, context.temp_allocator)))
-	}
-	else {
-		file := taglib.file_new(strings.clone_to_cstring(str_path, context.temp_allocator))
-	}
+	data: rawptr
+	data, w, h = decoder.load_thumbnail(str_path) or_return
+	texture = sys.imgui_create_texture(data, w, h) or_return
 
-	if file == nil {return}
-	defer taglib.file_free(file)
-
-	picture := taglib.complex_property_get(file, "PICTURE")
-	if picture == nil {return}
-	defer taglib.complex_property_free(picture)
-
-	picture_data: taglib.Complex_Property_Picture_Data
-	taglib.picture_from_complex_property(picture, &picture_data)
-
-	if picture_data.data != nil {
-		width, height: i32
-		image_data := stbi.load_from_memory(
-			picture_data.data, auto_cast picture_data.size,
-			&width, &height, nil, 4
-		)
-		if image_data == nil {return}
-		defer stbi.image_free(image_data)
-
-		return auto_cast width, auto_cast height, sys.imgui_create_texture(image_data, auto_cast width, auto_cast height)
-	}
-
+	ok = true
 	return
 }
 

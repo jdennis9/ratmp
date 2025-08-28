@@ -33,25 +33,42 @@ def main():
 		dry_run = True
 
 	# Find and copy taglib headers
-	taglib_headers = glob.glob(pathname=f"taglib\\*", root_dir=f"{vcpkg}\\include")
+	wanted_headers = [
+		["taglib", "taglib"],
+		["libavutil", "ffmpeg_2"],
+		["libavcodec", "ffmpeg_2"],
+		["libavformat", "ffmpeg_2"],
+		["libswresample", "ffmpeg_2"],
+		["libswscale", "ffmpeg_2"],
+	]
+
+	include_dir = f"{vcpkg}\\include"
+	for want in wanted_headers:
+		headers = glob.glob(pathname=f"{want[0]}\\*", root_dir=include_dir)
+		if len(headers) == 0:
+			print(f"Missing headers for {want[0]}")
+			return
+		for file in headers:
+			copy_ensuring_dirs(f"{vcpkg}\\include\\{file}", f"src\\bindings\\{want[1]}\\{file}")
 
 	if not dry_run and not os.path.exists("lib"):
 		os.mkdir("lib")
 
-	if len(taglib_headers) == 0:
-		print("Missing TagLib headers")
-		return
-	
-	for file in taglib_headers:
-		copy_ensuring_dirs(f"{vcpkg}\\include\\{file}", f"src\\bindings\\taglib\\{file}")
-
-	# Copy binding libraries
 	libs = [
 		["fftw3f.lib", "src\\bindings\\fftw"],
 		["avcodec.lib", "src\\bindings\\ffmpeg"],
 		["avutil.lib", "src\\bindings\\ffmpeg"],
 		["avformat.lib", "src\\bindings\\ffmpeg"],
 		["swresample.lib", "src\\bindings\\ffmpeg"],
+		["swscale.lib", "src\\bindings\\ffmpeg"],
+
+		["avcodec.lib", "lib"],
+		["avutil.lib", "lib"],
+		["avformat.lib", "lib"],
+		["swresample.lib", "lib"],
+		["swscale.lib", "lib"],
+		["zlib.lib", "lib"],
+
 		["tag.lib", "src\\bindings\\taglib"],
 		["tag_c.lib", "src\\bindings\\taglib"],
 

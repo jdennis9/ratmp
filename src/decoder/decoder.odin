@@ -1,10 +1,11 @@
 package decoder_v2
 
+import "core:mem"
 import "core:math"
 import "core:strings"
 import "core:log"
 
-import av "src:bindings/ffmpeg"
+import ffmpeg "src:bindings/ffmpeg_2"
 
 Decode_Status :: enum {
 	NoFile,
@@ -19,14 +20,7 @@ File_Info :: struct {
 }
 
 Decoder :: struct {
-	demuxer: ^av.FormatContext,
-	decoder: ^av.CodecContext,
-	packet: ^av.Packet,
-	resampler: ^av.SwrContext,
-	resampler_channels: int,
-	resampler_samplerate: int,
-	frame: ^av.Frame,
-	stream_index: int,
+	ff: ^ffmpeg.Context,
 	overflow: [dynamic]f32,
 	overflow_samplerate: int,
 	overflow_channels: int,
@@ -39,51 +33,27 @@ Decoder :: struct {
 }
 
 open :: proc(dec: ^Decoder, filename_native: string, info: ^File_Info) -> (ok: bool) {
-	codec: ^av.Codec
-	stream: ^av.Stream
 	filename := strings.clone_to_cstring(filename_native)
 	defer delete(filename)
+	file_info: ffmpeg.File_Info
 
 	close(dec)
 
-	// Demuxer
-	dec.demuxer = av.format_alloc_context()
-	if dec.demuxer == nil {return}
-	if av.format_open_input(&dec.demuxer, filename, nil, nil) != 0 {return}
-	defer if !ok {av.format_close_input(&dec.demuxer); av.format_free_context(dec.demuxer)}
-
-	av.format_find_stream_info(dec.demuxer, nil)
-	dec.stream_index = -1
-	for i in 0..<dec.demuxer.nb_streams {
-		if dec.demuxer.streams[i].codecpar.codec_type == .AUDIO {
-			dec.stream_index = auto_cast i
-			break
-		}
+	if dec.ff == nil {
+		dec.ff = ffmpeg.create_context()
 	}
-	if dec.stream_index == -1 {return}
 
-	stream = dec.demuxer.streams[dec.stream_index]
+	ffmpeg.open_input(dec.ff, filename, &file_info)
 
-	// Decoder
-	codecpar := stream.codecpar
-	codec = av.codec_find_decoder(codecpar.codec_id)
-	dec.decoder = av.codec_alloc_context3(codec)
-	av.codec_parameters_to_context(dec.decoder, codecpar)
-	av.codec_open2(dec.decoder, codec, nil)
-
-	dec.packet = av.packet_alloc()
-	dec.frame = av.frame_alloc()
-	dec.samplerate = auto_cast codecpar.sample_rate
-	dec.channels = auto_cast codecpar.ch_layout.nb_channels
+	dec.samplerate = auto_cast file_info.spec.samplerate
+	dec.channels = auto_cast file_info.spec.channels
 	dec.frame_index = 0
-	dec.duration_seconds = (dec.demuxer.duration / av.TIME_BASE)
-	dec.frame_count = int(dec.duration_seconds) * int(codecpar.sample_rate)
+	dec.duration_seconds = file_info.total_frames / auto_cast file_info.spec.samplerate
+	dec.frame_count = auto_cast file_info.total_frames
 
 	if info != nil {
 		info^ = {}
-		if codec.name != nil {
-			copy(info.codec[:len(info.codec)-1], string(codec.name))
-		}
+		copy(info.codec[:], "TODO")
 		info.samplerate = dec.samplerate
 		info.channels = dec.channels
 	}
@@ -101,30 +71,7 @@ close :: proc(dec: ^Decoder) {
 	delete(dec.overflow)
 	dec.overflow = nil
 
-	if dec.resampler != nil {
-		av.swr_free(&dec.resampler)
-		dec.resampler = nil
-	}
-	if dec.frame != nil {
-		av.frame_unref(dec.frame)
-		av.frame_free(&dec.frame)
-		dec.frame = nil
-	}
-	if dec.packet != nil {
-		av.packet_unref(dec.packet)
-		av.packet_free(&dec.packet)
-		dec.packet = nil
-	}
-	if dec.decoder != nil {
-		av.codec_close(dec.decoder)
-		av.codec_free_context(&dec.decoder)
-		dec.decoder = nil
-	}
-	if dec.demuxer != nil {
-		av.format_close_input(&dec.demuxer)
-		av.format_free_context(dec.demuxer)
-		dec.demuxer = nil
-	}
+	ffmpeg.close_input(dec.ff)
 }
 
 is_open :: proc(dec: Decoder) -> bool {
@@ -133,64 +80,25 @@ is_open :: proc(dec: Decoder) -> bool {
 
 @private
 _decode_packet :: proc(dec: ^Decoder, output: ^[dynamic]f32, channels, samplerate: int) -> (read: int, written: int, eof: bool) {
-	error := av.read_frame(dec.demuxer, dec.packet)
-	if error < 0 {
-		eof = u32(error) == av.ERROR_EOF
-		log.debug("EOF")
+	pkt: ffmpeg.Packet
+	spec: ffmpeg.Audio_Spec
+	spec.channels = auto_cast channels
+	spec.samplerate = auto_cast samplerate
+
+	if ffmpeg.decode_packet(dec.ff, &spec, &pkt) == .Eof {
+		eof = true
 		return
 	}
 
-	clear(output)
+	read = auto_cast pkt.frames_in
+	written = auto_cast pkt.frames_out
 
-	error = av.codec_send_packet(dec.decoder, dec.packet)
-	defer av.packet_unref(dec.packet)
+	resize(output, pkt.frames_out * auto_cast channels)
 
-	if int(dec.packet.stream_index) != dec.stream_index {
-		return
-	}
-
-	if error < 0 {return}
- 
-	if dec.resampler == nil || dec.resampler_channels != channels || dec.resampler_samplerate != samplerate {
-		if dec.resampler != nil {av.swr_free(&dec.resampler)}
-		dec.resampler_channels = channels
-		dec.resampler_samplerate = samplerate
-		out_ch_layout: av.ChannelLayout
-
-		av.channel_layout_default(&out_ch_layout, auto_cast channels)
-		av.swr_alloc_set_opts2(
-			&dec.resampler, &out_ch_layout, .FLT, auto_cast samplerate,
-			&dec.decoder.ch_layout, dec.decoder.sample_fmt, dec.decoder.sample_rate,
-			0, nil
-		)
-		if dec.resampler == nil {return}
-		av.swr_init(dec.resampler)
-	}
-
-	for av.codec_receive_frame(dec.decoder, dec.frame) >= 0 {
-		defer av.frame_unref(dec.frame)
-
-		sample_ratio := f32(samplerate) / f32(dec.frame.sample_rate)
-		write_frames := int(math.floor(f32(dec.frame.nb_samples) * sample_ratio))
-		read_frames := auto_cast dec.frame.nb_samples
-
-		output_offset := len(output)
-		resize(output, output_offset + (write_frames*channels))
-		output_ptr := &output[output_offset]
-
-		converted := av.swr_convert(
-			dec.resampler,
-			auto_cast &output_ptr, auto_cast write_frames,
-			auto_cast &dec.frame.data[0], read_frames
-		)
-
-		if converted < 0 {
-			log.error("swr_convert returned", converted)
-			continue
+	for frame in 0..<int(pkt.frames_out) {
+		for ch in 0..<channels {
+			output[(frame*channels) + ch] = pkt.data[ch][frame]
 		}
-
-		written += auto_cast write_frames
-		read += auto_cast dec.frame.nb_samples
 	}
 
 	return
@@ -256,12 +164,12 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, channels: int, samplerate: int
 
 seek :: proc(dec: ^Decoder, second: int) {
 	if !dec.is_open {return}
-	dec.frame_index = second * dec.samplerate
+	/*dec.frame_index = second * dec.samplerate
 	base := dec.demuxer.streams[dec.stream_index].time_base
 	ts := av.rescale(auto_cast second, auto_cast base.den, auto_cast base.num)
 	av.format_seek_file(dec.demuxer, auto_cast dec.stream_index, 0, ts, ts, 0)
 	av.codec_flush_buffers(dec.decoder)
-	clear(&dec.overflow)
+	clear(&dec.overflow)*/
 }
 
 get_second :: proc(dec: Decoder) -> int {
@@ -276,42 +184,88 @@ get_duration :: proc(dec: Decoder) -> int {
 	return auto_cast dec.duration_seconds
 }
 
-load_thumbnail :: proc(dec: Decoder) -> (data: rawptr, w, h: int, ok: bool) {
-	pkt: ^av.Packet
+load_thumbnail :: proc(filename: string) -> (data: rawptr, w, h: int, ok: bool) {
+	/*pkt: ^av.Packet
 	codec: ^av.Codec
 	decoder: ^av.CodecContext
 	codecpar: ^av.CodecParameters
-	frame: ^av.Frame
+	src_frame, dst_frame: ^av.Frame
+	demuxer: ^av.FormatContext
+	rescaler: ^av.SwsContext
 
-	for stream in dec.demuxer.streams[:dec.demuxer.nb_streams] {
+	filename_buf: [512]u8
+	copy(filename_buf[:511], filename)
+
+	demuxer = av.format_alloc_context()
+	if demuxer == nil {return}
+	defer av.format_free_context(demuxer)
+	if av.format_open_input(&demuxer, cstring(&filename_buf[0]), nil, nil) != 0 {
+		return
+	}
+	defer av.format_close_input(&demuxer)
+
+	for stream in demuxer.streams[:demuxer.nb_streams] {
 		if stream.codecpar == nil {continue}
 		if stream.codecpar.codec_type == av.MediaType.VIDEO {
-			pkt = stream.attached_pic
+			pkt = &stream.attached_pic
 			codecpar = stream.codecpar
 			break
 		}
 	}
 
 	if pkt == nil {return}
-
-	frame = av.frame_alloc()
-	defer av.frame_free(&frame)
-
+	
+	src_frame = av.frame_alloc()
+	defer av.frame_free(&src_frame)
+	
+	dst_frame = av.frame_alloc()
+	defer av.frame_free(&dst_frame)
+	
 	codec = av.codec_find_decoder(codecpar.codec_id)
 	if codec == nil {return}
-
+	
 	decoder = av.codec_alloc_context3(codec)
 	defer av.codec_free_context(&decoder)
-
+	av.codec_parameters_to_context(decoder, codecpar)
 	if av.codec_open2(decoder, codec, nil) != 0 {return}
 	defer av.codec_close(decoder)
-
+	
 	if av.codec_send_packet(decoder, pkt) != 0 {return}
-	if av.codec_receive_frame(decoder, frame) != 0 {return}
+	if av.codec_receive_frame(decoder, src_frame) != 0 {return}
+	
+	w = auto_cast src_frame.width
+	h = auto_cast src_frame.height
 
-	w = auto_cast frame.width
-	h = auto_cast frame.height
+	rescaler = av.sws_getContext(
+		src_frame.width, src_frame.height, auto_cast src_frame.format,
+		src_frame.width, src_frame.height, .RGBA, 0,
+	)
 
+	if rescaler == nil {return}
+
+	data, _ = mem.alloc(w * h * 4)
+
+	av.image_copy_to_buffer(
+		auto_cast data, auto_cast(w * h * 4),
+		&dst_frame.data[0], &dst_frame.linesize[0],
+		.RGBA, auto_cast w, auto_cast h, 4
+	)
+
+	ok = true*/
+
+	filename_buf: [512]u8
+	_w, _h: i32
+
+	copy(filename_buf[:511], filename)
+	ffmpeg.load_thumbnail(cstring(&filename_buf[0]), &data, &_w, &_h) or_return
+	w = auto_cast _w
+	h = auto_cast _h
+	
+	ok = true
 	return
+}
+
+delete_thumbnail :: proc(data: rawptr) {
+	ffmpeg.free_thumbnail(data);
 }
 

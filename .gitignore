@@ -8,4 +8,9 @@ out
 *.res
 *.a
 src/bindings/taglib/taglib
+src/bindings/ffmpeg_2/libavcodec
+src/bindings/ffmpeg_2/libavformat
+src/bindings/ffmpeg_2/libavutil
+src/bindings/ffmpeg_2/libswresample
+src/bindings/ffmpeg_2/libswscale
 src/thirdparty/odin-imgui/*

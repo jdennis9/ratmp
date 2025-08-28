@@ -91,7 +91,7 @@ Stream :: struct {
     sample_aspect_ratio: Rational,
     metadata: ^Dictionary,
     avg_frame_rate: Rational,
-    attached_pic: ^Packet,
+    attached_pic: Packet,
 	_: rawptr,
 	_: c.int,
     event_flags: c.int,

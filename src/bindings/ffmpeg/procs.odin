@@ -43,6 +43,12 @@ foreign lib {
 	channel_layout_default :: proc(layout: ^ChannelLayout, nb_channels: c.int) ---
 
 	rescale :: proc(a, b, c: i64) -> i64 ---
+
+	image_copy_to_buffer :: proc(
+		dst: [^]u8, dst_size: c.int,
+		src: [/*4*/^][^]u8, src_linesize: [^]c.int,
+		pix_fmt: PixelFormat, width: c.int, height: c.int, align: c.int
+	) ---
 }
 
 @(link_prefix="av")
