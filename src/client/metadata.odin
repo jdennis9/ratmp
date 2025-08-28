@@ -29,6 +29,7 @@ _Metadata_Window :: struct {
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
 	data: rawptr
 	data, w, h = decoder.load_thumbnail(str_path) or_return
+	defer decoder.delete_thumbnail(data)
 	texture = sys.imgui_create_texture(data, w, h) or_return
 
 	ok = true

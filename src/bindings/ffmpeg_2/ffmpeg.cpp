@@ -241,13 +241,11 @@ bool ffmpeg_is_open(FFMPEG_Context *ff) {
 }
 
 bool ffmpeg_load_thumbnail(const char *filename, void **data, int32_t *w, int32_t *h) {
-	return false;
-
 	AVFormatContext *demuxer;
 	AVCodecContext *decoder;
 	AVCodecParameters *codecpar;
 	const AVCodec *codec;
-	AVPacket *pkt;
+	AVPacket *pkt = NULL;
 	AVFrame *src_frame;
 	AVFrame *dst_frame;
 	SwsContext *rescaler;
@@ -258,6 +256,7 @@ bool ffmpeg_load_thumbnail(const char *filename, void **data, int32_t *w, int32_
 	if (avformat_open_input(&demuxer, filename, NULL, NULL)) {
 		return false;
 	}
+	defer(avformat_close_input(&demuxer));
 
 	for (int i = 0; i < demuxer->nb_streams; ++i) {
 		AVStream *stream = demuxer->streams[i];
