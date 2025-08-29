@@ -166,12 +166,9 @@ fill_buffer :: proc(dec: ^Decoder, output: []f32, channels: int, samplerate: int
 
 seek :: proc(dec: ^Decoder, second: int) {
 	if !dec.is_open {return}
-	/*dec.frame_index = second * dec.samplerate
-	base := dec.demuxer.streams[dec.stream_index].time_base
-	ts := av.rescale(auto_cast second, auto_cast base.den, auto_cast base.num)
-	av.format_seek_file(dec.demuxer, auto_cast dec.stream_index, 0, ts, ts, 0)
-	av.codec_flush_buffers(dec.decoder)
-	clear(&dec.overflow)*/
+	ffmpeg.seek_to_second(dec.ff, auto_cast second)
+	dec.frame_index = second * dec.samplerate
+	clear(&dec.overflow)
 }
 
 get_second :: proc(dec: Decoder) -> int {

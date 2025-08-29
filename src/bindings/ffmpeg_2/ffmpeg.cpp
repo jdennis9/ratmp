@@ -19,10 +19,13 @@ struct FFMPEG_Context {
 	uint32_t stream_index;
 	AVSampleFormat sample_format;
 	Audio_Spec input_spec;
+	int64_t current_frame;
 	
 	SwrContext *resampler;
 	// Spec used when creating resampler
 	Audio_Spec resampler_spec;
+
+	int32_t samplerate;
 };
 
 void ffmpeg_free_context(FFMPEG_Context *ff) {
@@ -101,6 +104,7 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	}
 
 	ff->sample_format = (AVSampleFormat)codecpar->format;
+	ff->samplerate = codecpar->sample_rate;
 	ff->input_spec.samplerate = codecpar->sample_rate;
 	ff->input_spec.channels = codecpar->ch_layout.nb_channels;
 
@@ -194,6 +198,19 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 	}
 
 	return status;
+}
+
+bool ffmpeg_seek_to_second(FFMPEG_Context *ff, int64_t second) {
+	if (ff->demuxer != NULL) {
+		auto base = ff->demuxer->streams[ff->stream_index]->time_base;
+		int64_t ts = av_rescale(second, base.den, base.num);
+		avformat_seek_file(ff->demuxer, ff->stream_index, 0, ts, ts, 0);
+		avcodec_flush_buffers(ff->decoder);
+		ff->current_frame = second * ff->samplerate;
+		return true;
+	}
+
+	return false;
 }
 
 void ffmpeg_free_packet(Packet *packet) {
