@@ -1,6 +1,7 @@
 #+private
 package client
 
+import "core:path/filepath"
 import "core:strings"
 import "core:time"
 import "core:os/os2"
@@ -28,9 +29,41 @@ _Metadata_Window :: struct {
 
 _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
 	data: rawptr
-	data, w, h = decoder.load_thumbnail(str_path) or_return
-	defer decoder.delete_thumbnail(data)
-	texture = sys.imgui_create_texture(data, w, h) or_return
+	image_found_in_file: bool
+
+	if data, w, h, image_found_in_file = decoder.load_thumbnail(str_path);
+	image_found_in_file {
+		defer decoder.delete_thumbnail(data)
+		texture = sys.imgui_create_texture(data, w, h) or_return
+		ok = true
+		return
+	}
+
+	// Look for art in same folder
+	folder := filepath.dir(str_path)
+	defer delete(folder)
+
+	files_to_try := []string {"cover.jpg", "cover.jpeg", "cover.png"}
+	for file_to_try in files_to_try {
+		try_path := filepath.join({folder, file_to_try})
+		defer delete(try_path)
+
+		if !os2.exists(try_path) {continue}
+
+		try_path_cstring := strings.clone_to_cstring(try_path)
+		defer delete(try_path_cstring)
+
+		iw, ih: i32
+		image_data := stbi.load(try_path_cstring, &iw, &ih, nil, 4)
+		if image_data == nil {continue}
+		defer stbi.image_free(image_data)
+
+		w = auto_cast iw
+		h = auto_cast ih
+		texture = sys.imgui_create_texture(image_data, w, h) or_return
+		ok = true
+		return
+	}
 
 	ok = true
 	return
