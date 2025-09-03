@@ -22,6 +22,8 @@ scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.
 	size -= style.FramePadding*1.5
 	cursor.y += size.y / 4
 
+	if avail_size.x <= 4 || avail_size.y <= 4 {return false}
+
 	// Button
 	imgui.InvisibleButton(str_id, avail_size)
 	if imgui.IsItemActive() || imgui.IsItemDeactivated() {

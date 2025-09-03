@@ -69,7 +69,7 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, t
 	return
 }
 
-_show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID, state: ^_Metadata_Window) -> (ok: bool) {
+_show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state: ^_Metadata_Window) -> (ok: bool) {
 	if state.current_track_id != track_id {
 		width, height: int
 		have_art: bool
@@ -85,7 +85,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 
 		path_buf: Path
 		track_path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_return
-		width, height, state.album_art, have_art = _load_track_album_art(client^, track_path)
+		width, height, state.album_art, have_art = _load_track_album_art(cl^, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
 		}
@@ -110,7 +110,7 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		imgui.PushStyleVarImVec2(.FramePadding, {})
 		width := min(imgui.GetContentRegionAvail().x, 512)
 		if state.album_art != 0 {
-			if client.settings.crop_album_art {
+			if cl.settings.crop_album_art {
 				ratio := state.album_art_ratio
 				uv0: [2]f32
 				uv1: [2]f32
@@ -153,18 +153,18 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		result: _Track_Context_Result
 		result.single_track = track_id
 		_track_show_context_items(track_id, &result, sv^)
-		_track_process_context(track_id, result, client, sv, {}, true)
-		imgui.MenuItemBoolPtr("Crop image", nil, &client.settings.crop_album_art)
+		_track_process_context(track_id, result, cl, sv, {}, true)
+		imgui.MenuItemBoolPtr("Crop image", nil, &cl.settings.crop_album_art)
 		imgui.EndPopup()
 	}
 
 
-	string_row :: proc(name: cstring, value: string) {
+	string_row :: proc(name: cstring, value: string) -> (clicked: bool) {
 		if value == "" {return}
 		imgui.TableNextRow()
 
 		if imgui.TableSetColumnIndex(0) {
-			imgui.Selectable(name, false, {.SpanAllColumns})
+			clicked = imgui.Selectable(name, false, {.SpanAllColumns})
 			if imgui.BeginPopupContextItem() {
 				if imgui.MenuItem("Copy to clipboard") {
 					value_cstring := strings.clone_to_cstring(value)
@@ -178,6 +178,8 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		if imgui.TableSetColumnIndex(1) {
 			imx.text_unformatted(value)
 		}
+
+		return clicked
 	}
 
 	number_row :: proc(name: cstring, value: i64) {
@@ -193,23 +195,22 @@ _show_metadata_details :: proc(client: ^Client, sv: ^Server, track_id: Track_ID,
 		}
 	}
 
+	metadata_string_row :: proc(name: cstring, md: Track_Metadata, component: Metadata_Component) -> (clicked: bool) {
+		v := md.values[component].(string) or_return
+		if v == "" {return}
+		return string_row(name, v)
+	}
+
 	// Tags
 	imgui.SeparatorText("Metadata")
 	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
 		imgui.TableSetupColumn("name", {}, 0.12)
 		imgui.TableSetupColumn("value", {}, 0.88)
 
-		for component in Metadata_Component {
-			switch v in metadata.values[component] {
-				case string: {
-					//string_row(&metadata, component, v)
-					string_row(server.METADATA_COMPONENT_NAMES[component], metadata.values[component].(string) or_else "")
-				}
-				case i64: {
-					//number_row(server.METADATA_COMPONENT_NAMES[component], metadata.values[component].(i64) or_else 0)
-				}
-			}
-		}
+		metadata_string_row("Title", metadata, .Title)
+		if metadata_string_row("Artist", metadata, .Artist) {_go_to_artist(cl, metadata)}
+		if metadata_string_row("Album", metadata, .Album) {_go_to_album(cl, metadata)}
+		if metadata_string_row("Genre", metadata, .Genre) {_go_to_genre(cl, metadata)}
 
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Duration")}
