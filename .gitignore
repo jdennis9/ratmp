@@ -7,6 +7,9 @@ out
 *.pdb
 *.res
 *.a
+*.exe
+*.dll
+*.so
 src/bindings/taglib/taglib
 src/bindings/ffmpeg_2/libavcodec
 src/bindings/ffmpeg_2/libavformat
