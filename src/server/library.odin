@@ -426,8 +426,6 @@ library_scan_folder_for_cover_art :: proc(lib: ^Library, dir: string) {
 			return
 		}
 	}
-
-	lib.dir_cover_files[dir_hash] = ""
 }
 
 library_find_track_folder_cover_art :: proc(lib: Library, track_index: int) -> (cover: string, found: bool) {
