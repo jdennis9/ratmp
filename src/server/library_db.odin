@@ -29,8 +29,8 @@ import sqlite "src:thirdparty/odin-sqlite3"
 
 import "src:path_pool"
 
-DB_VERSION :: 1
-DB_VERSION_PRAGMA :: "PRAGMA user_version=1"
+DB_VERSION :: 2
+DB_VERSION_PRAGMA :: "PRAGMA user_version=2"
 
 library_save_to_file :: proc(lib: Library, path: string) {
 	duration: time.Duration
@@ -51,7 +51,7 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	}
 	defer sqlite.close(db)
 
-	// Create table
+	// Track table
 	error = sqlite.exec(db, `
 	CREATE TABLE tracks (
 		id BIGINT PRIMARY KEY,
@@ -71,12 +71,24 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	if error != .Ok {
 		log.error(error, exec_error)
 	}
+
+	// Cover art table
+	error = sqlite.exec(db, `
+	CREATE TABLE cover_art (
+		dir_hash BIGINT PRIMARY KEY,
+		path VARCHAR(511)
+	)`, nil, nil, &exec_error)
+	
+	if error != .Ok {
+		log.error(error, exec_error)
+	}
 	
 	stmt: ^sqlite.Statement
 
 	sqlite.exec(db, DB_VERSION_PRAGMA, nil, nil, nil)
 	sqlite.exec(db, "BEGIN TRANSACTION", nil, nil, nil)
 
+	// Tracks
 	for md, index in lib.track_metadata {
 		path_buf: [512]u8
 		path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[index], path_buf[:])
@@ -103,6 +115,22 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	}
 
 	sqlite.exec(db, "END TRANSACTION", nil, nil, nil)
+
+	// Cover art
+	sqlite.exec(db, "BEGIN TRANSACTION", nil, nil, nil)
+
+	for dir_hash, cover_path in lib.dir_cover_files {
+		if dir_hash == 0 || len(cover_path) == 0 {continue}
+		error = sqlite.prepare_v2(db, "INSERT INTO cover_art VALUES (?, ?)", -1, &stmt, nil)
+		defer sqlite.finalize(stmt)
+		if error != .Ok {log.error(error)}
+
+		sqlite.bind_int64(stmt, 1, auto_cast dir_hash)
+		sqlite.bind_text(stmt, 2, cstring(raw_data(cover_path)), auto_cast len(cover_path), nil)
+		sqlite.step(stmt)
+	}
+
+	sqlite.exec(db, "END TRANSACTION", nil, nil, nil)
 }
 
 library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded_version: int, loaded: bool) {
@@ -121,24 +149,26 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded_version: 
 		return
 	}
 	defer sqlite.close(db)
-	
+
+	version: i32
+
+	set_version :: proc "c" (ctx: rawptr, argc: i32, argv: [^]cstring, col_names: [^]cstring) -> i32 {
+		if argc != 1 {return 0}
+		context = runtime.default_context()
+		version := cast(^i32) ctx
+		version^ = cast(i32) (strconv.parse_i64(string(argv[0])) or_else 0)
+		return 0
+	}
+
+	sqlite.exec(db, "PRAGMA user_version", set_version, &version, nil)
+	loaded_version = auto_cast version
+
+	log.info("DB version:", version)
+	if version < 1 {log.info("DB does not contain file dates. They will be retrieved while the DB is loaded")}
+	if version < 2 {log.info("DB does not contain cover art. Track folders will be scanned for image files")}
+
+	// Tracks
 	{
-		version: i32
-
-		set_version :: proc "c" (ctx: rawptr, argc: i32, argv: [^]cstring, col_names: [^]cstring) -> i32 {
-			if argc != 1 {return 0}
-			context = runtime.default_context()
-			version := cast(^i32) ctx
-			version^ = cast(i32) (strconv.parse_i64(string(argv[0])) or_else 0)
-			return 0
-		}
-
-		sqlite.exec(db, "PRAGMA user_version", set_version, &version, nil)
-		loaded_version = auto_cast version
-
-		log.info("DB version:", version)
-		if version < 1 {log.info("DB does not contain file dates. They will be retrieved while the DB is loaded")}
-
 		stmt: ^sqlite.Statement
 		sqlite.prepare_v2(db, "SELECT * FROM tracks", -1, &stmt, nil)
 		defer sqlite.finalize(stmt)
@@ -167,6 +197,29 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded_version: 
 			}
 
 			library_add_track(lib, string(path), track)
+		}
+	}
+
+	// Cover art
+	if version >= 2 {
+		stmt: ^sqlite.Statement
+		sqlite.prepare_v2(db, "SELECT * FROM cover_art", -1, &stmt, nil)
+		defer sqlite.finalize(stmt)
+
+		for {
+			if sqlite.step(stmt) != .Row {break}
+			path_hash := sqlite.column_int64(stmt, 0)
+			cover_path := sqlite.column_text(stmt, 1)
+			if cover_path == nil {continue}
+			library_add_folder_cover_art_from_hash(lib, u64(path_hash), string(cover_path))
+		}
+
+	}
+	else {
+		log.debug("Scanning track directories for cover art...")
+
+		for dir in lib.path_allocator.dirs {
+			library_scan_folder_for_cover_art(lib, path_pool.get_dir_path(dir))
 		}
 	}
 

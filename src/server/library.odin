@@ -83,6 +83,7 @@ Track_Set :: struct {
 	path_allocator: path_pool.Pool,
 	paths: [dynamic]path_pool.Path,
 	metadata: [dynamic]Track_Metadata,
+	cover_art: map[u64]string,
 }
 
 Track_Sort_Spec :: struct {
@@ -102,6 +103,7 @@ Library :: struct {
 	track_path_hashes: [dynamic]u64,
 	track_paths: [dynamic]path_pool.Path,
 	track_metadata: [dynamic]Track_Metadata,
+	dir_cover_files: map[u64]string,
 	next_playlist_id: u32,
 	user_playlists: Playlist_List,
 	user_playlist_dir: string,
@@ -110,7 +112,6 @@ Library :: struct {
 		artists: Playlist_List,
 		albums: Playlist_List,
 		genres: Playlist_List,
-		folders: Playlist_List,
 	},
 	folder_tree: Library_Folder_Tree,
 	folder_tree_serial: uint,
@@ -144,7 +145,6 @@ library_destroy :: proc(lib: ^Library) {
 	playlist_list_destroy(&lib.categories.artists)
 	playlist_list_destroy(&lib.categories.albums)
 	playlist_list_destroy(&lib.categories.genres)
-	playlist_list_destroy(&lib.categories.folders)
 }
 
 library_hash_path :: proc(str: string) -> u64 {
@@ -241,6 +241,11 @@ library_add_track_set :: proc(library: ^Library, set: Track_Set) {
 		path := path_pool.retrieve(set.path_allocator, set.paths[index], path_buf[:])
 		library_add_track(library, path, clone_track_metadata(set.metadata[index], library.string_allocator))
 	}
+
+	for hash, path in set.cover_art {
+		log.debug("Add cover art from scan:", hash, "=>", path)
+		library_add_folder_cover_art_from_hash(library, hash, path)
+	}
 }
 
 library_lookup_track :: proc(library: Library, id: Track_ID) -> (int, bool) {
@@ -312,22 +317,22 @@ library_update_categories :: proc(lib: ^Library) {
 	if lib.categories.serial != lib.serial {
 		log.debug("Rebuilding categories...")
 
-		duration: time.Duration
-		defer {
-			log.debug(time.duration_milliseconds(duration), "ms")
-			log.debug(len(lib.categories.albums.lists), "albums")
-			log.debug(len(lib.categories.artists.lists), "artists")
-			log.debug(len(lib.categories.genres.lists), "genres")
+		when ODIN_DEBUG {
+			duration: time.Duration
+			defer {
+				log.debug(time.duration_milliseconds(duration), "ms")
+				log.debug(len(lib.categories.albums.lists), "albums")
+				log.debug(len(lib.categories.artists.lists), "artists")
+				log.debug(len(lib.categories.genres.lists), "genres")
+			}
+
+			time.SCOPED_TICK_DURATION(&duration)
 		}
-
-		time.SCOPED_TICK_DURATION(&duration)
-
 
 		lib.categories.serial = lib.serial
 		playlist_list_join_metadata(&lib.categories.albums, lib^, .Album)
 		playlist_list_join_metadata(&lib.categories.artists, lib^, .Artist)
 		playlist_list_join_metadata(&lib.categories.genres, lib^, .Genre)
-		playlist_list_join_folders(&lib.categories.folders, lib^)
 	}
 }
 
@@ -403,14 +408,71 @@ library_scan_playlists :: proc(lib: ^Library) {
 	}
 }
 
+library_scan_folder_for_cover_art :: proc(lib: ^Library, dir: string) {
+	dir_hash := library_hash_path(dir)
+
+	if _, exists := lib.dir_cover_files[dir_hash]; exists {return}
+
+	files, _ := os2.read_all_directory_by_path(dir, context.allocator)
+	defer os2.file_info_slice_delete(files, context.allocator)
+
+	log.debug("Searching directory", dir, "for cover art")
+	cover_extensions := []string {".png", ".jpg", ".jpeg"}
+
+	for file in files {
+		ext := filepath.ext(file.name)
+		for cover_ext in cover_extensions {
+			if ext == cover_ext {
+				log.debug("Found cover", file.name)
+				lib.dir_cover_files[dir_hash] = strings.clone(file.fullpath, lib.string_allocator)
+				return
+			}
+		}
+	}
+
+	lib.dir_cover_files[dir_hash] = ""
+}
+
+library_find_track_folder_cover_art :: proc(lib: Library, track_index: int) -> (cover: string, found: bool) {
+	path_buf: [512]u8
+	path := path_pool.retrieve(lib.path_allocator, lib.track_paths[track_index], path_buf[:])
+	dir := filepath.dir(path)
+	defer delete(dir)
+
+	return library_find_folder_cover_art(lib, dir)
+}
+
+library_find_folder_cover_art :: proc(lib: Library, dir: string) -> (cover: string, found: bool) {
+	cover, found = lib.dir_cover_files[library_hash_path(dir)]
+	if found {found = cover != ""}
+	return
+}
+
+library_add_folder_cover_art_from_path :: proc(lib: ^Library, dir: string, cover_path: string) {
+	dir_hash := library_hash_path(dir)
+	if _, exists := lib.dir_cover_files[dir_hash]; exists {return}
+	lib.dir_cover_files[dir_hash] = strings.clone(cover_path, lib.string_allocator)
+}
+
+library_add_folder_cover_art_from_hash :: proc(lib: ^Library, hash: u64, cover_path: string) {
+	if _, exists := lib.dir_cover_files[hash]; exists {return}
+	lib.dir_cover_files[hash] = strings.clone(cover_path, lib.string_allocator)
+}
+
+library_add_folder_cover_art :: proc {
+	library_add_folder_cover_art_from_path,
+	library_add_folder_cover_art_from_hash,
+}
 
 library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alteration) {
 	alter_track :: proc(lib: ^Library, md: ^Track_Metadata, component: Metadata_Component, value: Metadata_Value) {
 		switch v in value {
-			case string:
+			case string: {
 				track_set_string(md, component, v, lib.string_allocator)
-			case i64:
+			}
+			case i64: {
 				md.values[component] = v
+			}
 		}
 	}
 
@@ -426,8 +488,17 @@ library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alte
 	lib.serial += 1
 }
 
-is_audio_file_supported :: proc(path: string) -> bool {
-	ext := filepath.ext(path)
+is_image_ext_supported :: proc(ext: string) -> bool {
+	return ext == ".jpg" ||
+		ext == ".jpeg" ||
+		ext == ".png"
+}
+
+is_image_file_supported :: proc(path: string) -> bool {
+	return is_image_ext_supported(filepath.ext(path))
+}
+
+is_audio_ext_supported :: proc(ext: string) -> bool {
 	return ext == ".mp3" ||
 		ext == ".wav" ||
 		ext == ".flac" ||
@@ -439,7 +510,12 @@ is_audio_file_supported :: proc(path: string) -> bool {
 		ext == ".m4a"
 }
 
+is_audio_file_supported :: proc(path: string) -> bool {
+	return is_audio_ext_supported(filepath.ext(path))
+}
+
 scan_directory_tracks :: proc(dir_path: string, set: ^Track_Set) {
+	dir_hash := library_hash_path(dir_path)
 	dir, dir_error := os2.open(dir_path)
 	if dir_error != nil {return}
 	defer os2.close(dir)
@@ -458,10 +534,15 @@ scan_directory_tracks :: proc(dir_path: string, set: ^Track_Set) {
 			scan_directory_tracks(file.fullpath, set)
 		}
 		else if file.type == .Regular {
-			if !is_audio_file_supported(file.fullpath) {continue}
-			metadata := get_file_metadata(file.fullpath, set.string_allocator)
-			append(&set.paths, path_pool.store(&set.path_allocator, file.fullpath))
-			append(&set.metadata, metadata)
+			if is_audio_file_supported(file.name) {
+				metadata := get_file_metadata(file.fullpath, set.string_allocator)
+				append(&set.paths, path_pool.store(&set.path_allocator, file.fullpath))
+				append(&set.metadata, metadata)
+			}
+			else if is_image_file_supported(file.name) {
+				if _, exists := set.cover_art[dir_hash]; exists {continue}
+				set.cover_art[dir_hash] = strings.clone(file.fullpath, set.string_allocator)
+			}
 		}
 	}
 
@@ -594,6 +675,7 @@ library_sort :: proc(lib: ^Library, spec: Track_Sort_Spec) {
 delete_track_set :: proc(set: ^Track_Set) {
 	delete(set.metadata)
 	delete(set.paths)
+	delete(set.cover_art)
 	path_pool.destroy(set.path_allocator)
 	mem.dynamic_arena_destroy(&set.string_arena)
 }

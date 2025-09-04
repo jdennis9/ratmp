@@ -44,11 +44,8 @@ _Metadata_Window :: struct {
 	file_info: os2.File_Info,
 }
 
-_load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, texture: imgui.TextureID, ok: bool) {
-	data: rawptr
-	image_found_in_file: bool
-
-	if data, w, h, image_found_in_file = decoder.load_thumbnail(str_path);
+_load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
+	if data, w, h, image_found_in_file := decoder.load_thumbnail(str_path);
 	image_found_in_file {
 		defer decoder.delete_thumbnail(data)
 		texture = sys.imgui_create_texture(data, w, h) or_return
@@ -60,29 +57,19 @@ _load_track_album_art :: proc(client: Client, str_path: string) -> (w, h: int, t
 	folder := filepath.dir(str_path)
 	defer delete(folder)
 
-	files_to_try := []string {"cover.jpg", "cover.jpeg", "cover.png"}
-	for file_to_try in files_to_try {
-		try_path := filepath.join({folder, file_to_try})
-		defer delete(try_path)
+	if cover, found := server.library_find_folder_cover_art(sv.library, folder); found {
+		cover_cstring := strings.clone_to_cstring(cover, context.allocator)
+		defer delete(cover_cstring)
 
-		if !os2.exists(try_path) {continue}
-
-		try_path_cstring := strings.clone_to_cstring(try_path)
-		defer delete(try_path_cstring)
-
-		iw, ih: i32
-		image_data := stbi.load(try_path_cstring, &iw, &ih, nil, 4)
-		if image_data == nil {continue}
-		defer stbi.image_free(image_data)
-
-		w = auto_cast iw
-		h = auto_cast ih
-		texture = sys.imgui_create_texture(image_data, w, h) or_return
+		w, h: i32
+		image_data := stbi.load(cover_cstring, &w, &h, nil, 4)
+		width = auto_cast w
+		height = auto_cast h
+		texture = sys.imgui_create_texture(image_data, width, height) or_return
 		ok = true
 		return
 	}
 
-	ok = true
 	return
 }
 
@@ -102,7 +89,7 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 
 		path_buf: Path
 		track_path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_return
-		width, height, state.album_art, have_art = _load_track_album_art(cl^, track_path)
+		width, height, state.album_art, have_art = _load_track_album_art(cl^, sv^, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
 		}
