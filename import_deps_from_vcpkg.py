@@ -4,6 +4,7 @@ import glob
 import shutil
 
 dry_run = False
+copy_dlls = False
 
 def copy_ensuring_dirs(src, dst):
 	global dry_run
@@ -22,6 +23,8 @@ def multicopy_ensuring_dirs(files, dst):
 
 def main():
 	global dry_run
+	global copy_dlls
+
 	if len(sys.argv) < 2:
 		print("Usage: import_deps_from_vcpkg.py [--dry-run] <path-to-vcpkg-triplet-root>")
 
@@ -31,6 +34,8 @@ def main():
 
 	if "--dry-run" in sys.argv:
 		dry_run = True
+	if "--dynamic" in sys.argv:
+		copy_dlls = True
 
 	# Find and copy taglib headers
 	wanted_headers = [
@@ -80,8 +85,29 @@ def main():
 		["libpng16.lib", "lib"],
 	]
 
+	dlls = [
+		"fftw3f.dll",
+		"libavcodec.dll",
+		"libavutil.dll",
+		"libavformat.dll",
+		"libswresample.dll",
+		"libswscale.dll",
+		"zlib.dll",
+		"tag.dll",
+		"tag_c.dll",
+		"freetype.dll",
+		"brotlienc.dll",
+		"brotlidec.dll",
+		"bz2.dll",
+		"libpng16.dll",
+	]
+
 	for lib in libs:
 		copy_ensuring_dirs(f"{vcpkg}\\lib\\{lib[0]}", lib[1])
+
+	if copy_dlls:
+		for dll in dlls:
+			copy_ensuring_dirs(f"{vcpkg}\\bin\\{dll}", "lib")
 	
 
 if __name__ == "__main__":
