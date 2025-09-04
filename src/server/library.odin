@@ -417,16 +417,13 @@ library_scan_folder_for_cover_art :: proc(lib: ^Library, dir: string) {
 	defer os2.file_info_slice_delete(files, context.allocator)
 
 	log.debug("Searching directory", dir, "for cover art")
-	cover_extensions := []string {".png", ".jpg", ".jpeg"}
 
 	for file in files {
 		ext := filepath.ext(file.name)
-		for cover_ext in cover_extensions {
-			if ext == cover_ext {
-				log.debug("Found cover", file.name)
-				lib.dir_cover_files[dir_hash] = strings.clone(file.fullpath, lib.string_allocator)
-				return
-			}
+		if is_image_ext_supported(ext) {
+			log.debug("Found cover", file.name)
+			lib.dir_cover_files[dir_hash] = strings.clone(file.fullpath, lib.string_allocator)
+			return
 		}
 	}
 
