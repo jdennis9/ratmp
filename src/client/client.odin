@@ -245,8 +245,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	delta = cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
 
-	//imx.table_test()
-
 	cl.frame_count += 1
 	cl.tick_last_frame = prev_frame_start
 
