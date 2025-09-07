@@ -47,6 +47,8 @@ _load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (
 	image_found_in_file {
 		defer decoder.delete_thumbnail(data)
 		texture = sys.imgui_create_texture(data, w, h) or_return
+		width = w
+		height = h
 		ok = true
 		return
 	}
@@ -119,10 +121,11 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 
 				if state.album_art_ratio > 1 {
 					// width < height
+					r := 1/ratio
 					uv0.x = 0
-					uv0.y = 0.5 - (ratio*0.5)
+					uv0.y = 0.5 - (r*0.5)
 					uv1.x = 1
-					uv1.y = uv0.y + ratio
+					uv1.y = uv0.y + r
 				}
 				else if state.album_art_ratio < 1 {
 					// width > height
