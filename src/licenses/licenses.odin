@@ -68,6 +68,14 @@ licenses := [License_ID]License {
 	},
 }
 
-get :: proc() -> [License_ID]License {
+get_license :: proc() -> License {
+	return {
+		name = "RAT MP",
+		ownage = "2025 Jamie Dennis",
+		url = "https://github.com/jdennis9/ratmp",
+	}
+}
+
+get_third_party_licenses :: proc() -> [License_ID]License {
 	return licenses
 }

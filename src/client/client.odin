@@ -106,6 +106,12 @@ Client :: struct {
 			metadata: Track_Metadata,
 			artist, album, title: [64]u8
 		},
+		licenses: struct {
+			show: bool,
+		},
+		about: struct {
+			show: bool,
+		},
 	},
 
 	enable_media_controls: bool,
@@ -414,6 +420,20 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		imgui.End()
 	}
 
+	if cl.windows.licenses.show {
+		if imgui.Begin("Licenses", &cl.windows.licenses.show) {
+			_show_license_window()
+		}
+		imgui.End()
+	}
+
+	if cl.windows.about.show {
+		if imgui.Begin("About", &cl.windows.about.show) {
+			_show_about_window()
+		}
+		imgui.End()
+	}
+
 	// Debug
 	when ODIN_DEBUG {
 		if cl.show_imgui_theme_editor {
@@ -579,6 +599,16 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 	if imgui.BeginMenu("Layout") {
 		_show_layout_menu_items(&client.layouts, save_layout_popup_id)
+		imgui.EndMenu()
+	}
+
+	if imgui.BeginMenu("Help") {
+		if imgui.MenuItem("Licenses") {
+			client.windows.licenses.show = true
+		}
+		if imgui.MenuItem("About") {
+			client.windows.about.show = true
+		}
 		imgui.EndMenu()
 	}
 

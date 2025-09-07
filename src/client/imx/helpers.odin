@@ -41,6 +41,17 @@ textf :: proc($MAX_CHARS: uint, format: string, args: ..any) {
 	text_unformatted(formatted)
 }
 
+separator_text :: proc(str: string) {
+	buf: [256]u8
+	copy(buf[:255], str)
+	imgui.SeparatorText(cstring(&buf[0]))
+}
+
+hyperlink :: proc(str: string) {
+	buf: [128]u8
+	copy(buf[:127], str)
+	imgui.TextLink(cstring(&buf[0]))
+}
 
 begin_status_bar :: proc() -> bool {
 	window_flags := imgui.WindowFlags{
