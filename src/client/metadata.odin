@@ -28,9 +28,7 @@ import "core:log"
 import stbi "vendor:stb/image"
 
 import imgui "src:thirdparty/odin-imgui"
-import "src:bindings/taglib"
 
-import "src:util"
 import "src:server"
 import "src:sys"
 import "src:decoder"

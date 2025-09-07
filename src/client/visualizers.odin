@@ -21,7 +21,6 @@ package client
 import "core:thread"
 import "core:math"
 import "core:fmt"
-import "core:strings"
 import glm "core:math/linalg/glsl"
 
 import imgui "src:thirdparty/odin-imgui"

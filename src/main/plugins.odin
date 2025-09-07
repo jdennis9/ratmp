@@ -21,7 +21,6 @@ import "core:dynlib"
 import "core:os/os2"
 import "core:strings"
 import "core:log"
-import "core:sync"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -111,7 +110,6 @@ plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Serv
 	if imgui.Begin("Plugin Manager", &mgr.open_ui) {
 		for &plugin in mgr.plugins {
 			info := plugin.info
-			hooks := plugin.procs
 			imx.text(256, "Name:", info.name)
 			imx.text(256, "By:", info.author)
 			imx.text(2048, "Description:", info.description)

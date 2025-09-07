@@ -18,8 +18,6 @@
 #+private
 package client
 
-import "core:fmt"
-
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:server"

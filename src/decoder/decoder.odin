@@ -17,10 +17,7 @@
 */
 package decoder_v2
 
-import "core:mem"
-import "core:math"
 import "core:strings"
-import "core:log"
 
 import ffmpeg "src:bindings/ffmpeg_2"
 

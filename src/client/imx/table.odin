@@ -26,7 +26,6 @@ and that the number of rows in always known ahead of time.
 */
 
 import "core:fmt"
-import "core:log"
 import sa "core:container/small_array"
 
 import imgui "src:thirdparty/odin-imgui"
@@ -90,7 +89,7 @@ _table_calc_column_weights :: proc(table: ^Table_State) {
 
 	base_weight := 1.0 / f32(visible_columns)
 
-	for &col, index in sa.slice(&table.columns) {
+	for &col in sa.slice(&table.columns) {
 		col.weight = base_weight
 	}
 }
@@ -123,7 +122,6 @@ begin_table :: proc(
 			}
 		}
 
-		base_weight := 1.0 / f32(visible_columns)
 		sa.resize(&state.columns, len(columns))
 		
 		for &col, index in sa.slice(&state.columns) {
@@ -430,8 +428,8 @@ _table_begin_row :: proc(table: ^Table_State) -> (cursor: [2]f32) {
 
 @private
 _table_end_row :: proc(table: ^Table_State) {
-	drawlist := imgui.GetWindowDrawList()
-	style := imgui.GetStyle()
+	//drawlist := imgui.GetWindowDrawList()
+	//style := imgui.GetStyle()
 
 	table.row_index += 1
 	table.cursor.y += table.row_height
@@ -463,9 +461,9 @@ _table_row_bg :: proc(table: ^Table_State, color: u32) {
 }
 
 table_row_text :: proc(table: ^Table_State, str: string) {
-	style := imgui.GetStyle()
+	//style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
-	cursor := _table_begin_row(table)
+	//cursor := _table_begin_row(table)
 	imgui.DrawList_AddText(drawlist, table.cursor, max(u32), cstring(raw_data(str)), cstring(&raw_data(str)[len(str)]))
 	_table_end_row(table)
 }
@@ -477,7 +475,6 @@ table_row_text_fmt :: proc(table: ^Table_State, $MAX_CHARS: uint, args: ..any) {
 
 table_row_selectable :: proc(table: ^Table_State, label: string, selected: bool) -> bool {
 	assert(table.column_index == table.master_column)
-	style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
 	cursor := _table_begin_row(table)
 

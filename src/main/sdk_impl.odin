@@ -233,7 +233,7 @@ sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 
 @private
 sdk_frame :: proc() {
-	for settings, &a in ctx.spectrum_analysers {
+	for _, &a in ctx.spectrum_analysers {
 		a.calculated = false
 	}
 }

@@ -314,7 +314,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 _audio_thread_proc :: proc(thread_data: ^thread.Thread) {
 	stream := cast(^_WASAPI_Stream) thread_data.data
 	for {
-		ok := _run_wasapi_session(stream)
+		_run_wasapi_session(stream)
 		if stream.status == .FailedToStart || stream.status == .Ok {
 			return
 		}

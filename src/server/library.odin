@@ -702,7 +702,6 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 
 	str_rune_buf: [256]rune
 	str := util.decode_utf8_to_runes(str_rune_buf[:], utf8_str)
-	filter_len := len(filter)
 
 	for &s in str {
 		s = unicode.to_lower(s)
