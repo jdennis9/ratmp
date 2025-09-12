@@ -119,10 +119,6 @@ _list_fonts :: proc() -> []Font_Handle {
 	return output[:]
 }
 
-@(private="file")
-@fini
-_free_font_list :: proc() {delete(_font_list)}
-
 // Does not need to be freed
 get_font_list :: proc() -> []Font_Handle {
 	if len(_font_list) == 0 {

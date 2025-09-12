@@ -144,7 +144,7 @@ _open_file_or_folder_multiselect_dialog :: proc(
 		if path == nil {continue}
 		defer win.CoTaskMemFree(path)
 
-		path_len = cast(int) win.WideCharToMultiByte(win.CP_UTF8, 0, path, -1, &path_u8[0], len(path_u8)-1, nil, nil)
+		path_len = cast(int) win.WideCharToMultiByte(win.CP_UTF8, 0, cstring16(path), -1, &path_u8[0], len(path_u8)-1, nil, nil)
 
 		if path_len == 0 {continue}
 
@@ -207,7 +207,7 @@ open_file_dialog :: proc(buf: []u8, file_type: File_Type) -> (file: string, ok: 
 	if result_path == nil {return}
 	defer win.CoTaskMemFree(result_path)
 
-	path_len := win.WideCharToMultiByte(win.CP_UTF8, 0, result_path, -1, &buf[0], auto_cast len(buf)-1, nil, nil)
+	path_len := win.WideCharToMultiByte(win.CP_UTF8, 0, cstring16(result_path), -1, &buf[0], auto_cast len(buf)-1, nil, nil)
 	if path_len == 0 {return}
 
 	return string(buf[:path_len-1]), true

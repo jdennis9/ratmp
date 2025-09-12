@@ -46,7 +46,7 @@ init :: proc(sv: ^server.Server, cl: ^client.Client) -> bool {
 create_window :: proc() -> bool {
 	imgui_win32.EnableDpiAwareness()
 
-	wndclass_name := win.L("WINDOW_CLASS")
+	wndclass_name := cstring16("WINDOW_CLASS")
 
 	win.RegisterClassExW(&win.WNDCLASSEXW{
 		hInstance = _win32.hinstance,
@@ -155,5 +155,5 @@ post_empty_event :: proc() {
 set_window_title :: proc(title: string) {
 	buf_u16: [256]u16
 	utf16.encode_string(buf_u16[:len(buf_u16)-1], title)
-	win.SetWindowTextW(_win32.hwnd, raw_data(buf_u16[:]))
+	win.SetWindowTextW(_win32.hwnd, cstring16(&buf_u16[0]))
 }

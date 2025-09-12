@@ -27,17 +27,20 @@ open_dialog :: proc(title: string, type: Dialog_Type, message: string) -> bool {
 	utf16.encode_string(message_u16[:511], message)
 	utf16.encode_string(title_u16[:63], title)
 
+	message_cstr := cstring16(&message_u16[0])
+	title_cstr := cstring16(&title_u16[0])
+
 	switch type {
 		case .Message: {
-			win.MessageBoxW(nil, raw_data(message_u16[:]), raw_data(title_u16[:]), win.MB_ICONWARNING)
+			win.MessageBoxW(nil, message_cstr, title_cstr, win.MB_ICONWARNING)
 			return true
 		}
 		case .YesNo: {
-			return win.MessageBoxW(nil, raw_data(message_u16[:]), raw_data(title_u16[:]), 
+			return win.MessageBoxW(nil, message_cstr, title_cstr,
 				win.MB_ICONQUESTION|win.MB_YESNO) == win.IDYES
 		}
 		case .OkCancel: {
-			return win.MessageBoxW(nil, raw_data(message_u16[:]), raw_data(title_u16[:]), 
+			return win.MessageBoxW(nil, message_cstr, title_cstr,
 				win.MB_ICONQUESTION|win.MB_OKCANCEL) == win.IDOK
 		}
 	}
