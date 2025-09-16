@@ -63,6 +63,8 @@ _load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (
 
 		w, h: i32
 		image_data := stbi.load(cover_cstring, &w, &h, nil, 4)
+		if image_data == nil {return}
+		defer stbi.image_free(image_data)
 		width = auto_cast w
 		height = auto_cast h
 		texture = sys.imgui_create_texture(image_data, width, height) or_return
