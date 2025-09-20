@@ -24,11 +24,11 @@ import "core:strings"
 
 for_each_file_in_dialog :: proc(
 	title: cstring, iterator: File_Iterator, 
-	iterator_data: rawptr, select_folders := false,
-	multiselect := true, file_type := File_Type.Audio
+	iterator_data: rawptr, file_type: File_Type, flags: File_Dialog_Flags,
 ) -> int {
 	buf: [512]u8
 	count: int
+	select_folders := .SelectFolders in flags
 
     fp: ^posix.FILE
     if select_folders {

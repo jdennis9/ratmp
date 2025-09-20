@@ -33,9 +33,9 @@ _gl_clear_buffer :: proc() {
 
 imgui_create_texture :: proc(data: rawptr, width, height: int) -> (imgui.TextureID, bool) {
 	h: u32
-	if gl.GenTextures == nil {return nil, false}
+	if gl.GenTextures == nil {return 0, false}
 	gl.GenTextures(1, &h)
-	if h == 0 {return nil, false}
+	if h == 0 {return 0, false}
 
 	gl.BindTexture(gl.TEXTURE_2D, h)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)

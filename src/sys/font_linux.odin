@@ -62,11 +62,11 @@ _list_fonts :: proc() -> (output: []Font_Handle) {
 	return
 }
 
-@(private="file")
+/*@(private="file")
 @fini
 _free_font_list :: proc() {
 	delete(_font_list)
-}
+}*/
 
 get_font_list :: proc() -> []Font_Handle {
 	if _font_list == nil {_font_list = _list_fonts()}
