@@ -134,21 +134,7 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 
 	state.samplerate, state.channels = server.audio_time_frame_from_playback(sv, state.window_data[:], tick, delta) or_return
 
-	// Blackman window
-	/*for &f, i in window.data[0] {
-		n := f32(i)
-		N := f32(len(window.data[0]))
-		a0 :: 0.42
-		a1 :: 0.5
-		a2 :: 0.08
-		t0 := (2*math.PI*n)/N
-		t1 := (4*math.PI*n)/N
-		w := a0 - (a1*math.cos(t0)) + (a2*math.cos(t1))
-		f *= w
-	}*/
-
 	t := clamp(PEAK_ROUGHNESS*delta, 0, 1)
-	//t := PEAK_ROUGHNESS*delta
 
 	// Peak
 	if state.need_update_peaks {
