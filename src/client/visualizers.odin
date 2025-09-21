@@ -41,6 +41,7 @@ MAX_OSCILLOSCOPE_SAMPLES :: 4096
 _Spectrum_Display_Mode :: enum {
 	Bars,
 	Alpha,
+	Line,
 }
 
 @private
@@ -202,8 +203,8 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		)
 
 		for f, i in spectrum {
-			state.spectrum[i] = math.lerp(state.spectrum[i], f, t)
-			state.spectrum_smooth[i] = math.lerp(state.spectrum_smooth[i], f, t*0.1)
+			state.spectrum[i] = clamp(0, 1, math.lerp(state.spectrum[i], f, t))
+			state.spectrum_smooth[i] = clamp(0, 1, math.lerp(state.spectrum_smooth[i], f, t*0.1))
 			state.spectrum_smooth[i] = max(state.spectrum_smooth[i], state.spectrum[i])
 		}
 	}
@@ -303,6 +304,9 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 		if imgui.MenuItem("Alpha", nil, settings.spectrum_mode == .Alpha) {
 			settings.spectrum_mode = .Alpha
 		}
+		if imgui.MenuItem("Line", nil, settings.spectrum_mode == .Line) {
+			settings.spectrum_mode = .Line
+		}
 
 		imgui.SeparatorText("Display settings")
 		imgui.MenuItemBoolPtr("Show slow peaks", nil, &settings.spectrum_show_slow_peaks)
@@ -316,84 +320,119 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	drawlist := imgui.GetWindowDrawList()
 	theme := &global_theme
 
-	imgui.PushStyleColor(.TableHeaderBg, 0)
-	defer imgui.PopStyleColor()
+	// Calculate band colors
+	{
+		quiet_color := theme.custom_colors[.PeakQuiet]
+		loud_color := theme.custom_colors[.PeakLoud]
 
-	imgui.PushStyleVarImVec2(.CellPadding, {})
-	defer imgui.PopStyleVar()
-
-	imgui.PushStyleVar(.TableAngledHeadersAngle, math.to_radians_f32(20))
-	defer imgui.PopStyleVar()
-
-	imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5})
-	defer imgui.PopStyleVar()
-	
-	color_negative :: proc(color: imgui.Vec4) -> imgui.Vec4 {
-		return {1, 1, 1, 1} - color
+		for band, index in spectrum {
+			band_colors[index] = glm.lerp(quiet_color, loud_color, band)
+		}
 	}
 
-	table_flags := imgui.TableFlags_BordersInner
-	if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
-		for &str in state.spectrum_frequency_strings[:settings.spectrum_bands] {
-			imgui.TableSetupColumn(cstring(&str[0]), {.AngledHeader})
+	if settings.spectrum_mode != .Line {
+		imgui.PushStyleColor(.TableHeaderBg, 0)
+		defer imgui.PopStyleColor()
+
+		imgui.PushStyleVarImVec2(.CellPadding, {})
+		defer imgui.PopStyleVar()
+
+		imgui.PushStyleVar(.TableAngledHeadersAngle, math.to_radians_f32(20))
+		defer imgui.PopStyleVar()
+
+		imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5})
+		defer imgui.PopStyleVar()
+		
+		color_negative :: proc(color: imgui.Vec4) -> imgui.Vec4 {
+			return {1, 1, 1, 1} - color
 		}
-		
-		imgui.TableAngledHeadersRow()
-		
-		imgui.TableNextRow()
-		for unclamped_band, band_index in spectrum {
-			band := clamp(unclamped_band, 0, 1)
 
-			if imgui.TableNextColumn() {
-				size := imgui.GetContentRegionAvail()
-				cursor := imgui.GetCursorScreenPos()
-
-				quiet_color := theme.custom_colors[.PeakQuiet]
-				loud_color := theme.custom_colors[.PeakLoud]
-				color := glm.lerp(quiet_color, loud_color, band)
-				band_colors[band_index] = color
-				
-				if settings.spectrum_mode == .Bars {
-					imgui.DrawList_AddRectFilled(drawlist, 
-						{cursor.x, cursor.y + size.y}, 
-						{cursor.x + size.x, cursor.y + size.y * (1 - band)},
-						imgui.GetColorU32ImVec4(color),
-					)
-				}
-				else if settings.spectrum_mode == .Alpha {
-					color.a *= band
-					imgui.DrawList_AddRectFilled(drawlist, 
-						cursor,
-						cursor + size,
-						imgui.GetColorU32ImVec4(color),
-					)
+		table_flags := imgui.TableFlags_BordersInner
+		if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
+			for &str in state.spectrum_frequency_strings[:settings.spectrum_bands] {
+				imgui.TableSetupColumn(cstring(&str[0]), {.AngledHeader})
+			}
+			
+			imgui.TableAngledHeadersRow()
+			
+			imgui.TableNextRow()
+			for band, band_index in spectrum {
+				if imgui.TableNextColumn() {
+					size := imgui.GetContentRegionAvail()
+					cursor := imgui.GetCursorScreenPos()
+					color := band_colors[band_index]
+					
+					if settings.spectrum_mode == .Bars {
+						imgui.DrawList_AddRectFilled(drawlist, 
+							{cursor.x, cursor.y + size.y}, 
+							{cursor.x + size.x, cursor.y + size.y * (1 - band)},
+							imgui.GetColorU32ImVec4(color),
+						)
+					}
+					else if settings.spectrum_mode == .Alpha {
+						color.a *= band
+						imgui.DrawList_AddRectFilled(drawlist, 
+							cursor,
+							cursor + size,
+							imgui.GetColorU32ImVec4(color),
+						)
+					}
 				}
 			}
-		}
 
-		// Slow peaks
-		if settings.spectrum_show_slow_peaks && imgui.TableSetColumnIndex(0) {
-			for unclamped_band, band_index in state.spectrum_smooth[:settings.spectrum_bands] {
-				band := clamp(unclamped_band, 0, 1)
-				color := color_negative(band_colors[band_index])
-				color.a = 1
+			// Slow peaks
+			if settings.spectrum_show_slow_peaks && imgui.TableSetColumnIndex(0) {
+				for band, band_index in state.spectrum_smooth[:settings.spectrum_bands] {
+					color := color_negative(band_colors[band_index])
+					color.a = 1
 
-				cursor := imgui.GetCursorScreenPos()
-				size := imgui.GetContentRegionAvail()
-				y := cursor.y + (size.y * (1 - band))
+					cursor := imgui.GetCursorScreenPos()
+					size := imgui.GetContentRegionAvail()
+					y := cursor.y + (size.y * (1 - band))
 
-				imgui.DrawList_AddLine(drawlist, 
-					{cursor.x, y}, 
-					{cursor.x + size.x, y},
-					imgui.GetColorU32ImVec4(color),
-					2
-				)
+					imgui.DrawList_AddLine(drawlist, 
+						{cursor.x, y}, 
+						{cursor.x + size.x, y},
+						imgui.GetColorU32ImVec4(color),
+						2
+					)
 
-				if !imgui.TableNextColumn() {break}
+					if !imgui.TableNextColumn() {break}
+				}
 			}
+
+			imgui.EndTable()
+		}
+	}
+	else {
+		band_positions: [MAX_SPECTRUM_BAND_COUNT]imgui.Vec2
+		cursor := imgui.GetCursorScreenPos()
+		size := imgui.GetContentRegionAvail()
+		gap := size.x / f32(settings.spectrum_bands)
+
+		cursor.y += size.y
+
+		band_positions[0] = {
+			cursor.x,
+			cursor.y - (state.spectrum[0] * size.y),
 		}
 
-		imgui.EndTable()
+		for index in 1..<settings.spectrum_bands {
+			band := state.spectrum[index]
+			band_positions[index] = {
+				cursor.x + (gap * f32(index)),
+				cursor.y - (band * size.y),
+			}
+
+			imgui.DrawList_AddLine(
+				drawlist,
+				band_positions[index-1],
+				band_positions[index],
+				imgui.GetColorU32ImVec4(band_colors[index])
+			)
+		}
+
+		
 	}
 }
 
