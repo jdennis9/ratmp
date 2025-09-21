@@ -57,6 +57,7 @@ Settings :: struct {
 	fonts: [sys.Font_Language]Settings_Font,
 	spectrum_bands: int,
 	spectrum_mode: _Spectrum_Display_Mode,
+	spectrum_show_slow_peaks: bool,
 	close_policy: Close_Policy,
 }
 

@@ -59,6 +59,7 @@ _Analysis_State :: struct {
 	spectrum_frequency_string_lengths: [MAX_SPECTRUM_BAND_COUNT]int,
 	spectrum_frequency_bands_calculated: int,
 	spectrum: [MAX_SPECTRUM_BAND_COUNT]f32,
+	spectrum_smooth: [MAX_SPECTRUM_BAND_COUNT]f32,
 	need_update_spectrum: bool,
 
 	need_update_osc: bool,
@@ -202,6 +203,8 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 
 		for f, i in spectrum {
 			state.spectrum[i] = math.lerp(state.spectrum[i], f, t)
+			state.spectrum_smooth[i] = math.lerp(state.spectrum_smooth[i], f, t*0.1)
+			state.spectrum_smooth[i] = max(state.spectrum_smooth[i], state.spectrum[i])
 		}
 	}
 
@@ -278,6 +281,8 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 
 @private
 _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
+	band_colors: [MAX_SPECTRUM_BAND_COUNT]imgui.Vec4
+
 	state.need_update_spectrum = true
 	settings := &client.settings
 
@@ -298,6 +303,10 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 		if imgui.MenuItem("Alpha", nil, settings.spectrum_mode == .Alpha) {
 			settings.spectrum_mode = .Alpha
 		}
+
+		imgui.SeparatorText("Display settings")
+		imgui.MenuItemBoolPtr("Show slow peaks", nil, &settings.spectrum_show_slow_peaks)
+
 		imgui.EndPopup()
 	}
 
@@ -319,7 +328,9 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 	imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5})
 	defer imgui.PopStyleVar()
 	
-
+	color_negative :: proc(color: imgui.Vec4) -> imgui.Vec4 {
+		return {1, 1, 1, 1} - color
+	}
 
 	table_flags := imgui.TableFlags_BordersInner
 	if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
@@ -330,7 +341,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 		imgui.TableAngledHeadersRow()
 		
 		imgui.TableNextRow()
-		for unclamped_band in spectrum {
+		for unclamped_band, band_index in spectrum {
 			band := clamp(unclamped_band, 0, 1)
 
 			if imgui.TableNextColumn() {
@@ -340,6 +351,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 				quiet_color := theme.custom_colors[.PeakQuiet]
 				loud_color := theme.custom_colors[.PeakLoud]
 				color := glm.lerp(quiet_color, loud_color, band)
+				band_colors[band_index] = color
 				
 				if settings.spectrum_mode == .Bars {
 					imgui.DrawList_AddRectFilled(drawlist, 
@@ -360,9 +372,11 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 		}
 
 		// Slow peaks
-		/*if imgui.TableSetColumnIndex(0) {
-			for unclamped_band in spectrum.slow_peaks {
+		if settings.spectrum_show_slow_peaks && imgui.TableSetColumnIndex(0) {
+			for unclamped_band, band_index in state.spectrum_smooth[:settings.spectrum_bands] {
 				band := clamp(unclamped_band, 0, 1)
+				color := color_negative(band_colors[band_index])
+				color.a = 1
 
 				cursor := imgui.GetCursorScreenPos()
 				size := imgui.GetContentRegionAvail()
@@ -371,12 +385,13 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 				imgui.DrawList_AddLine(drawlist, 
 					{cursor.x, y}, 
 					{cursor.x + size.x, y},
-					imgui.GetColorU32(.PlotLines),
+					imgui.GetColorU32ImVec4(color),
+					2
 				)
 
 				if !imgui.TableNextColumn() {break}
 			}
-		}*/
+		}
 
 		imgui.EndTable()
 	}
