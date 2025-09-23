@@ -23,6 +23,8 @@ Audio_Spec :: struct {
 }
 
 File_Info :: struct {
+	codec_name: [64]u8,
+	format_name: [64]u8,
 	spec: Audio_Spec,
 	total_frames: i64,
 }

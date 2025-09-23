@@ -29,6 +29,7 @@ Decode_Status :: enum {
 
 File_Info :: struct {
 	codec: [64]u8,
+	format_name: [64]u8,
 	samplerate: int,
 	channels: int,
 }
@@ -67,7 +68,8 @@ open :: proc(dec: ^Decoder, filename_native: string, info: ^File_Info) -> (ok: b
 
 	if info != nil {
 		info^ = {}
-		copy(info.codec[:], "TODO")
+		copy(info.codec[:len(info.codec)-1], string(cstring(&file_info.codec_name[0])))
+		copy(info.format_name[:len(info.format_name)-1], string(cstring(&file_info.format_name[0])))
 		info.samplerate = dec.samplerate
 		info.channels = dec.channels
 	}

@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "ffmpeg.h"
 
 extern "C" {
@@ -57,6 +59,7 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	const AVCodec *codec;
 	const AVStream *stream;
 	const AVCodecParameters *codecpar;
+	const AVInputFormat *input_format;
 	int64_t duration;
 
 	if (!ff) return false;
@@ -83,6 +86,7 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	}
 
 	stream = ff->demuxer->streams[ff->stream_index];
+	input_format = ff->demuxer->iformat;
 	codecpar = stream->codecpar;
 	codec = avcodec_find_decoder(codecpar->codec_id);
 
@@ -111,6 +115,13 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	duration = (ff->demuxer->duration / AV_TIME_BASE);
 	info_out->spec = ff->input_spec;
 	info_out->total_frames = duration * ff->input_spec.samplerate;
+	strncpy(info_out->codec_name, codec->long_name, sizeof(info_out->codec_name));
+	if (input_format && input_format->long_name) {
+		strncpy(info_out->format_name, input_format->long_name, sizeof(info_out->format_name));
+	}
+	else {
+		strncpy(info_out->format_name, "Unknown", sizeof(info_out->format_name));
+	}
 
 	ff->frame = av_frame_alloc();
 	ff->packet = av_packet_alloc();

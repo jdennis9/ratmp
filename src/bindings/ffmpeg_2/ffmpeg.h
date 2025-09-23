@@ -19,6 +19,8 @@ struct Audio_Spec {
 };
 
 struct File_Info {
+	char codec_name[64];
+	char format_name[64];
 	Audio_Spec spec;
 	int64_t total_frames;
 };

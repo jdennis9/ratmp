@@ -759,6 +759,8 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 		if button(state.title[:]) {_go_to_album(cl, state.metadata)}
 		imgui.SetItemTooltip("Track title")
 		imgui.Separator()
+		imx.text_unformatted(string(cstring(&info.format_name[0])))
+		imgui.Separator()
 		imx.text_unformatted(string(cstring(&info.codec[0])))
 		imgui.Separator()
 		imx.text(16, info.samplerate, "Hz")
