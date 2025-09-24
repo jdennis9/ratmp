@@ -165,7 +165,6 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 		imgui.EndPopup()
 	}
 
-
 	string_row :: proc(name: cstring, value: string) -> (clicked: bool) {
 		if value == "" {return}
 		imgui.TableNextRow()
@@ -239,13 +238,12 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 		path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_else ""
 		string_row("File path", path)
 
-		// File size
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {
 			imx.text_unformatted("Size")
 		}
 		if imgui.TableSetColumnIndex(1) {
-			imx.textf(16, "%.2f MiB", f32(state.file_info.size) / (1024*1024))
+			imx.textf(16, "%M", state.file_info.size)
 		}
 
 		imgui.EndTable()
@@ -271,9 +269,7 @@ _Metadata_Editor :: struct {
 	write_to_file: bool,
 }
 
-_show_metadata_editor :: proc(/*cl: ^Client, sv: ^Server*/state: ^_Metadata_Editor, library: ^server.Library) {
-	//state := &cl.windows.metadata_editor
-
+_show_metadata_editor :: proc(state: ^_Metadata_Editor, library: ^server.Library) {
 	if len(state.tracks) == 0 {
 		imgui.TextDisabled("No tracks selected for editing")
 		return
@@ -320,8 +316,6 @@ _show_metadata_editor :: proc(/*cl: ^Client, sv: ^Server*/state: ^_Metadata_Edit
 
 		_track_table_update(&state.track_table, state.serial, library^, state.tracks[:], {}, "")
 		table_result := _track_table_show(state.track_table, "##tracks", context_id, 0)
-		//context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoEditMetadata}, sv^)
-		//_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 
 		if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize}) {
 			if imgui.MenuItem("Remove") {
