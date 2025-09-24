@@ -107,17 +107,19 @@ plugins_init_all :: proc(mgr: ^Plugin_Manager) {
 }
 
 plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Server, delta: f32) {
-	if imgui.Begin("Plugin Manager", &mgr.open_ui) {
-		for &plugin in mgr.plugins {
-			info := plugin.info
-			imx.text(256, "Name:", info.name)
-			imx.text(256, "By:", info.author)
-			imx.text(2048, "Description:", info.description)
-			imgui.Checkbox("Enable", &plugin.enabled)
-			imgui.Separator()
+	if mgr.open_ui {
+		if imgui.Begin("Plugin Manager", &mgr.open_ui) {
+			for &plugin in mgr.plugins {
+				info := plugin.info
+				imx.text(256, "Name:", info.name)
+				imx.text(256, "By:", info.author)
+				imx.text(2048, "Description:", info.description)
+				imgui.Checkbox("Enable", &plugin.enabled)
+				imgui.Separator()
+			}
 		}
+		imgui.End()
 	}
-	imgui.End()
 
 	// Analysis
 	if cl.analysis.channels != 0 {

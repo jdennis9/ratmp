@@ -123,6 +123,13 @@ _show_playlist_list_window :: proc(
 		context_result := _track_table_show_context(state.track_table, result, context_menu_id, context_flags, sv^)
 		_track_table_process_context(state.track_table, result, context_result, cl, sv)
 
+		if allow_edit {
+			if payload, have_payload := _track_table_accept_drag_drop(result, context.allocator); have_payload {
+				server.playlist_add_tracks(list, sv.library, payload)
+				delete(payload)
+			}
+		}
+
 		if context_result.remove {
 			selection := _track_table_get_selection(state.track_table)
 			defer delete(selection)

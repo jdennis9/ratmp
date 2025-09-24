@@ -18,6 +18,8 @@
 #+private
 package client
 
+import "base:runtime"
+import "core:slice"
 import "core:time"
 import "core:strings"
 import "core:fmt"
@@ -74,6 +76,8 @@ _Track_Table_Result :: struct {
 	sort_spec: Maybe(server.Track_Sort_Spec),
 	play_selection: bool,
 	add_selection_to_queue: bool,
+	pick_up_drag_drop_payload: []Track_ID,
+	bounding_box: imgui.Rect,
 }
 
 _free_track_table :: proc(table: ^_Track_Table_2) {
@@ -215,6 +219,9 @@ _track_table_show :: proc(
 	if !imgui.BeginTable(str_id, len(Metadata_Component), table_flags) {return}
 	defer imgui.EndTable()
 
+	result.bounding_box.Min = imgui.GetWindowPos();
+	result.bounding_box.Max = result.bounding_box.Min + imgui.GetWindowSize();
+
 	for component in Metadata_Component {
 		imgui.TableSetupColumn(server.METADATA_COMPONENT_NAMES[component], column_flags[component])
 	}
@@ -321,6 +328,13 @@ _track_table_show :: proc(
 				keep_selection: bool
 
 				select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
+				
+				if imgui.BeginDragDropSource() {
+					tracks := _track_table_get_selection(table)
+					_set_track_drag_drop_payload(tracks)
+					delete(tracks)
+					imgui.EndDragDropSource()
+				}
 
 				if _play_track_input_pressed() {
 					result.play = row.id
@@ -417,6 +431,13 @@ _track_table_process_results :: proc(
 		defer delete(selection)
 		server.append_to_queue(sv, selection, table.playlist_id)
 	}
+}
+
+_track_table_accept_drag_drop :: proc(result: _Track_Table_Result, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
+	imgui.BeginDragDropTargetCustom(result.bounding_box, imgui.GetID("foo")) or_return
+	defer imgui.EndDragDropTarget()
+
+	return _get_track_drag_drop_payload(allocator)
 }
 
 _Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}

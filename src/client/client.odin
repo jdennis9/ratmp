@@ -325,6 +325,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 		//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
 		_track_table_process_results(state.table, table_result, cl, sv, {.SetQueuePos})
+
+		if payload, have_payload := _track_table_accept_drag_drop(table_result, context.allocator); have_payload {
+			server.append_to_queue(sv, payload, {})
+			delete(payload)
+		}
 		
 		context_result := _track_table_show_context(state.table, table_result, context_id, {}, sv^)
 		_track_table_process_context(state.table, table_result, context_result, cl, sv)
@@ -929,16 +934,22 @@ _imgui_settings_write_proc :: proc "c" (
 }
 
 @private
-_set_track_drag_drop_payload :: proc(cl: ^Client, tracks: []Track_ID) {
+_set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
 	log.debug("Set payload")
-	delete(cl.track_drag_drop_payload)
-	cl.track_drag_drop_payload = slice.clone(tracks)
-	imgui.SetDragDropPayload("TRACKS", nil, 0)
+	imgui.SetDragDropPayload("TRACKS", raw_data(tracks), auto_cast(size_of(Track_ID) * len(tracks)), .Once)
 	imgui.SetTooltip("%d tracks", i32(len(tracks)))
 }
 
 @private
-_get_track_drag_drop_payload :: proc(cl: ^Client) -> (tracks: []Track_ID, have_payload: bool) {
+_get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []Track_ID, have_payload: bool) {
 	payload := imgui.AcceptDragDropPayload("TRACKS")
-	return cl.track_drag_drop_payload, payload != nil
+	if payload == nil {return}
+
+	assert(payload.DataSize % size_of(Track_ID) == 0)
+	length := payload.DataSize / size_of(Track_ID)
+
+	tracks = slice.clone((cast([^]Track_ID) payload.Data)[:length])
+	have_payload = true
+
+	return
 }
