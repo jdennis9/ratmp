@@ -13,6 +13,7 @@ Prerequisites:
 
 Clone the repository and set up submodules:
 `git clone https://github.com/jdennis9/ratmp.git && cd ratmp`
+
 `git submodule update --init --recursive`
 
 #### [Windows] Setting up dependencies
@@ -24,13 +25,17 @@ Make sure these packages are installed via vcpkg in your desired triplet:
 - taglib [with tag_c]
 
 Run the `import_dependencies_from_vcpkg.py` script.
+
 Usage:
+
 `import_dependencies_from_vcpkg.py [--dry-run, --dynamic] <path-to-vcpkg-triplet-root>`
 
 Example importing headers and dynamic libraries from x64-windows-release triplet:
+
 `import_dependencies_from_vcpkg.py --dynamic C:\vcpkg\installed\x64-windows-release`
 
 Or importing static libraries:
+
 `import_dependencies_from_vcpkg.py C:\vcpkg\installed\x64-windows-static-release`
 
 #### Building ImGui
@@ -45,7 +50,9 @@ Then run the script.
 
 #### Building bindings
 Go back to the root directory.
+
 **[Windows]** Run `build_bindings.bat`.
+
 **[Linux]** Run `build_bindings.sh`
 
 If all dependencies were installed properly, this should just work.
@@ -53,13 +60,15 @@ If all dependencies were installed properly, this should just work.
 #### Compiling executable
 Create directory `out/debug`
 
-**[Windows]** Run `build.bat`. 
+**[Windows]** Run `build.bat`.
+
 **[Linux]** Run `build.sh`.
 
 All arguments passed to the script will be passed to the Odin compiler.
 If no arguments are passed, a debug build is produced.
 
 For example, to produce a release build on Windows:
+
 `build.bat -o:speed -subsystem:windows`
 
 
