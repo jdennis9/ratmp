@@ -267,10 +267,12 @@ _Metadata_Editor :: struct {
 	library_serial: uint,
 	tracks: [dynamic]Track_ID,
 	track_table: _Track_Table_2,
+
+	write_to_file: bool,
 }
 
-_show_metadata_editor :: proc(cl: ^Client, sv: ^Server) {
-	state := &cl.windows.metadata_editor
+_show_metadata_editor :: proc(/*cl: ^Client, sv: ^Server*/state: ^_Metadata_Editor, library: ^server.Library) {
+	//state := &cl.windows.metadata_editor
 
 	if len(state.tracks) == 0 {
 		imgui.TextDisabled("No tracks selected for editing")
@@ -294,6 +296,9 @@ _show_metadata_editor :: proc(cl: ^Client, sv: ^Server) {
 	string_row("Album", state.album[:], &state.enable_album)
 	string_row("Genre", state.genre[:], &state.enable_genre)
 
+	imgui.Checkbox("Write to file", &state.write_to_file)
+	imgui.SetItemTooltip("Save metadata changes to drive. Cannot be undone.")
+
 	if imgui.Button("Apply") {
 		alter: server.Library_Track_Metadata_Alteration
 		alter.tracks = state.tracks[:]
@@ -301,35 +306,39 @@ _show_metadata_editor :: proc(cl: ^Client, sv: ^Server) {
 		alter.values[.Artist] = state.enable_artist ? string(cstring(&state.artist[0])) : nil
 		alter.values[.Album] = state.enable_album ? string(cstring(&state.album[0])) : nil
 		alter.values[.Genre] = state.enable_genre ? string(cstring(&state.genre[0])) : nil
-		server.library_alter_metadata(&sv.library, alter)
+		alter.write_to_file = state.write_to_file
+		server.library_alter_metadata(library, alter)
 	}
 
 	if imgui.CollapsingHeader("View tracks") {
-		if state.library_serial != sv.library.serial {
-			state.library_serial = sv.library.serial
+		if state.library_serial != library.serial {
+			state.library_serial = library.serial
 			state.serial += 1
 		}
 
 		context_id := imgui.GetID("##track_context")
 
-		_track_table_update(&state.track_table, state.serial, sv.library, state.tracks[:], {}, "")
-		table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
-		context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoEditMetadata}, sv^)
-		_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		_track_table_update(&state.track_table, state.serial, library^, state.tracks[:], {}, "")
+		table_result := _track_table_show(state.track_table, "##tracks", context_id, 0)
+		//context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoEditMetadata}, sv^)
+		//_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 
-		if context_result.remove {
-			sel := _track_table_get_selection(state.track_table)
-			defer delete(sel)
+		if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize}) {
+			if imgui.MenuItem("Remove") {
+				sel := _track_table_get_selection(state.track_table)
+				defer delete(sel)
 
-			log.debug(sel)
-			log.debug(state.tracks[:])
+				log.debug(sel)
+				log.debug(state.tracks[:])
 
-			for id in sel {
-				index := slice.linear_search(state.tracks[:], id) or_continue
-				ordered_remove(&state.tracks, index)
+				for id in sel {
+					index := slice.linear_search(state.tracks[:], id) or_continue
+					ordered_remove(&state.tracks, index)
+				}
+
+				state.serial += 1
 			}
-
-			state.serial += 1
+			imgui.EndPopup()
 		}
 	}
 

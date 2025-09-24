@@ -410,7 +410,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	}
 
 	if _begin_window(cl, .MetadataEditor) {
-		_show_metadata_editor(cl, sv)
+		_show_metadata_editor(&cl.windows.metadata_editor, &sv.library)
 		imgui.End()
 	}
 

@@ -120,6 +120,7 @@ Library :: struct {
 Library_Track_Metadata_Alteration :: struct {
 	values: [Metadata_Component]Maybe(Metadata_Value),
 	tracks: []Track_ID,
+	write_to_file: bool,
 }
 
 library_init :: proc(lib: ^Library, user_playlist_dir: string) -> (ok: bool) {
@@ -459,6 +460,39 @@ library_add_folder_cover_art :: proc {
 	library_add_folder_cover_art_from_hash,
 }
 
+library_save_track_metadata_to_file :: proc(lib: Library, track_index: int) -> bool {
+	assert(track_index <= len(lib.track_metadata))
+	path_buf: [512]u8
+
+	md_cstring :: proc(md: Track_Metadata, component: Metadata_Component) -> cstring {
+		return strings.unsafe_string_to_cstring(md.values[component].(string) or_else string(cstring("")))
+	}
+
+	md := lib.track_metadata[track_index]
+	path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[track_index], path_buf[:])
+
+	log.debug("Save metadata for", path)
+
+	file := taglib.file_new(path)
+	if file == nil {return false}
+	defer taglib.file_free(file)
+
+	tag := taglib.file_tag(file)
+	if tag == nil {return false}
+	defer taglib.tag_free_strings()
+
+	taglib.tag_set_year(tag, auto_cast(md.values[.Year].(i64) or_else 0))
+	taglib.tag_set_track(tag, auto_cast(md.values[.TrackNumber].(i64) or_else 0))
+	taglib.tag_set_title(tag, md_cstring(md, .Title))
+	taglib.tag_set_artist(tag, md_cstring(md, .Artist))
+	taglib.tag_set_album(tag, md_cstring(md, .Album))
+	taglib.tag_set_genre(tag, md_cstring(md, .Genre))
+
+	taglib.file_save(file)
+
+	return true
+}
+
 library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alteration) {
 	alter_track :: proc(lib: ^Library, md: ^Track_Metadata, component: Metadata_Component, value: Metadata_Value) {
 		switch v in value {
@@ -477,6 +511,10 @@ library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alte
 			index := library_lookup_track(lib^, track) or_continue
 			md := &lib.track_metadata[index]
 			alter_track(lib, md, component, alter.values[component].?)
+
+			if alter.write_to_file {
+				library_save_track_metadata_to_file(lib^, index)
+			}
 		}
 	}
 
