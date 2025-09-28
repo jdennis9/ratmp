@@ -14,7 +14,7 @@ ABOUT_TEXT :: `
 RAT MP - A cross-platform, extensible music player
 `
 
-_show_license_window :: proc() {
+show_license_window :: proc() {
 	ratmp := licenses.get_license()
 	tp := licenses.get_third_party_licenses()
 
@@ -33,7 +33,7 @@ _show_license_window :: proc() {
 	}
 }
 
-_show_about_window :: proc() {
+show_about_window :: proc() {
 	compile_time_buf: [256]u8
 	compile_time := time.unix(0, ODIN_COMPILE_TIMESTAMP)
 	compile_time_string := time.to_string_yyyy_mm_dd(compile_time, compile_time_buf[:])

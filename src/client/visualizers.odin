@@ -38,14 +38,14 @@ MAX_SPECTRUM_BAND_COUNT :: 80
 MAX_OSCILLOSCOPE_SAMPLES :: 4096
 
 @private
-_Spectrum_Display_Mode :: enum {
+Spectrum_Display_Mode :: enum {
 	Bars,
 	Alpha,
 	Line,
 }
 
 @private
-_Analysis_State :: struct {
+Analysis_State :: struct {
 	channels, samplerate: int,
 
 	peaks: [server.MAX_OUTPUT_CHANNELS]f32,
@@ -110,7 +110,7 @@ _osc_window :: proc(output: []f32) {
 }
 
 @private
-_analysis_init :: proc(state: ^_Analysis_State) {
+analysis_init :: proc(state: ^Analysis_State) {
 	window_sum: f32
 	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
 
@@ -121,13 +121,13 @@ _analysis_init :: proc(state: ^_Analysis_State) {
 }
 
 @private
-_analysis_destroy :: proc(state: ^_Analysis_State) {
+analysis_destroy :: proc(state: ^Analysis_State) {
 	analysis.spectrum_analyser_destroy(&state.spectrum_analyzer)
 	delete(state.osc_window)
 }
 
 @private
-_update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
+update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	state := &cl.analysis
 	settings := &cl.settings
 	tick := cl.tick_last_frame
@@ -213,7 +213,7 @@ _update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 }
 
 @private
-_Waveform_Window :: struct {
+Waveform_Window :: struct {
 	calc_thread: ^thread.Thread,
 	calc_state: analysis.Calc_Peaks_State,
 	dec: decoder.Decoder,
@@ -223,12 +223,12 @@ _Waveform_Window :: struct {
 }
 
 _calc_wave_thread_proc :: proc(thread_data: ^thread.Thread) {
-	state := cast(^_Waveform_Window) thread_data.data
+	state := cast(^Waveform_Window) thread_data.data
 	analysis.calc_peaks_over_time(&state.dec, state.output[:], &state.calc_state)
 }
 
 @private
-_show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: bool) {
+waveform_window_show :: proc(sv: ^Server, state: ^Waveform_Window) -> (ok: bool) {
 	track_id := sv.current_track_id
 
 	if state.calc_thread != nil && thread.is_done(state.calc_thread) {
@@ -281,7 +281,7 @@ _show_waveform_window :: proc(sv: ^Server, state: ^_Waveform_Window) -> (ok: boo
 }
 
 @private
-_show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
+show_spectrum_window :: proc(client: ^Client, state: ^Analysis_State) {
 	band_colors: [MAX_SPECTRUM_BAND_COUNT]imgui.Vec4
 
 	state.need_update_spectrum = true
@@ -437,7 +437,7 @@ _show_spectrum_window :: proc(client: ^Client, state: ^_Analysis_State) {
 }
 
 @private
-_show_oscilloscope_window :: proc(client: ^Client) {
+show_oscilloscope_window :: proc(client: ^Client) {
 	state := &client.analysis
 	state.need_update_osc = true
 	if state.osc_length == 0 || len(state.osc_window) != state.osc_length {return}

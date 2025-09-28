@@ -29,13 +29,13 @@ Track_ID :: server.Track_ID
 Track_Metadata :: server.Track_Metadata
 Metadata_Component :: server.Metadata_Component
 
-_Window_Flag :: enum {
+Window_Flag :: enum {
 	AlwaysShow,
 	DontSaveState,
 }
-_Window_Flags :: bit_set[_Window_Flag]
+Window_Flags :: bit_set[Window_Flag]
 
-_Window :: enum {
+Window_ID :: enum {
 	Library,
 	Queue,
 	Playlists,
@@ -52,14 +52,14 @@ _Window :: enum {
 	MetadataEditor,
 }
 
-_Window_Info :: struct {
+Window_Info :: struct {
 	display_name: cstring,
 	internal_name: cstring,
 	imgui_flags: imgui.WindowFlags,
-	flags: _Window_Flags,
+	flags: Window_Flags,
 }
 
-_WINDOW_INFO := [_Window]_Window_Info {
+WINDOW_INFO := [Window_ID]Window_Info {
 	.Library = {"Library", "library", {}, {.AlwaysShow}},
 	.Queue = {"Queue", "queue", {}, {.AlwaysShow}},
 	.Playlists = {"Playlists", "playlists", {}, {.AlwaysShow}},
@@ -76,10 +76,18 @@ _WINDOW_INFO := [_Window]_Window_Info {
 	.MetadataEditor = {"Metadata Editor", "metadata_editor", {}, {}}
 }
 
-_Window_State :: struct {
+Window_State :: struct {
 	show: bool,
 	bring_to_front: bool,
 	flags: imgui.WindowFlags,
 }
 
 //_Window_Proc :: #type proc(cl: ^Client, sv: ^Server, delta: f32, window: ^_Window_State)
+
+is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
+	return imgui.IsKeyChordPressed(auto_cast(mods | key))
+}
+
+is_play_track_input_pressed :: proc() -> bool {
+	return imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))
+}

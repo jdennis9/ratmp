@@ -28,7 +28,7 @@ import "src:util"
 
 import "imx"
 
-_Playlist_Row :: struct {
+Playlist_Row :: struct {
 	id: Playlist_ID,
 	serial: uint,
 	name: cstring,
@@ -38,8 +38,8 @@ _Playlist_Row :: struct {
 	duration_len: int,
 }
 
-_Playlist_Table_2 :: struct {
-	rows: [dynamic]_Playlist_Row,
+Playlist_Table :: struct {
+	rows: [dynamic]Playlist_Row,
 	filter_hash: u32,
 	serial: uint,
 	viewing: Playlist_ID,
@@ -47,7 +47,7 @@ _Playlist_Table_2 :: struct {
 	editing: Playlist_ID,
 }
 
-_Playlist_Table_Result :: struct {
+Playlist_Table_Result :: struct {
 	play: Maybe(Playlist_ID),
 	select: Maybe(Playlist_ID),
 	sort_spec: Maybe(server.Playlist_Sort_Spec),
@@ -55,8 +55,8 @@ _Playlist_Table_Result :: struct {
 	context_menu: Maybe(Playlist_ID),
 }
 
-_update_playlist_table :: proc(
-	table: ^_Playlist_Table_2, list: ^server.Playlist_List,
+playlist_table_update :: proc(
+	table: ^Playlist_Table, list: ^server.Playlist_List,
 	filter: string, viewing: Playlist_ID, playing: Playlist_ID, editing: Playlist_ID,
 ) {
 	filter_hash := xxhash.XXH32(transmute([]u8) string(filter))
@@ -69,11 +69,11 @@ _update_playlist_table :: proc(
 	table.serial = list.serial
 	table.filter_hash = filter_hash
 
-	playlist_to_row :: proc(playlist: Playlist) -> _Playlist_Row {
+	playlist_to_row :: proc(playlist: Playlist) -> Playlist_Row {
 		// @FixMe: If hours is more than 24, it comes up as 0
 		h, m, s := util.clock_from_seconds(auto_cast playlist.duration)
 		
-		row := _Playlist_Row {
+		row := Playlist_Row {
 			id = playlist.id,
 			serial = playlist.serial,
 			name = playlist.name,
@@ -107,9 +107,9 @@ _update_playlist_table :: proc(
 	}
 }
 
-_display_playlist_table :: proc(
-	theme: Theme, table: _Playlist_Table_2, str_id: cstring, context_menu_id: imgui.ID
-) -> (result: _Playlist_Table_Result) {
+playlist_table_show :: proc(
+	theme: Theme, table: Playlist_Table, str_id: cstring, context_menu_id: imgui.ID
+) -> (result: Playlist_Table_Result) {
 	list_clipper: imgui.ListClipper
 	table_flags := 
 		imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate|
@@ -175,7 +175,7 @@ _display_playlist_table :: proc(
 				}
 				if row.name == nil {imgui.PopStyleColor()}
 
-				if _play_track_input_pressed() {
+				if is_play_track_input_pressed() {
 					result.play = row.id
 				}
 

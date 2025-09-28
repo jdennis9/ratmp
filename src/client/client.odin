@@ -53,9 +53,9 @@ Client :: struct {
 	tick_last_frame: time.Tick,
 	frame_count: int,
 	library_sort_spec: server.Track_Sort_Spec,
-	metadata_window: _Metadata_Window,
-	waveform_window: _Waveform_Window,
-	window_state: [_Window]_Window_State,
+	metadata_window: Metadata_Window,
+	waveform_window: Waveform_Window,
+	window_state: [Window_ID]Window_State,
 	background: struct {
 		texture: imgui.TextureID,
 		width, height: int,
@@ -80,27 +80,27 @@ Client :: struct {
 	
 	loaded_fonts: []Load_Font,
 	
-	analysis: _Analysis_State,
+	analysis: Analysis_State,
 	
 	windows: struct {
-		theme_editor: _Theme_Editor_State,
-		user_playlists: _Playlist_List_Window,
+		theme_editor: Theme_Editor_State,
+		user_playlists: Playlist_List_Window,
 		categories: struct {
-			artists: _Playlist_List_Window,
-			albums: _Playlist_List_Window,
-			genres: _Playlist_List_Window,
-			folders: _Playlist_List_Window,
+			artists: Playlist_List_Window,
+			albums: Playlist_List_Window,
+			genres: Playlist_List_Window,
+			folders: Playlist_List_Window,
 		},
 		settings: Settings_Editor,
 		library: struct {
-			table: _Track_Table_2,
+			table: Track_Table,
 			filter: [128]u8,
 		},
 		queue: struct {
-			table: _Track_Table_2,
+			table: Track_Table,
 		},
-		folders: _Folders_Window,
-		metadata_editor: _Metadata_Editor,
+		folders: Folders_Window,
+		metadata_editor: Metadata_Editor,
 		status_bar: struct {
 			displayed_track_id: Track_ID,
 			metadata: Track_Metadata,
@@ -121,7 +121,7 @@ Client :: struct {
 		enabled: bool,
 	},
 
-	layouts: _Layout_State,
+	layouts: Layout_Manager,
 
 	track_drag_drop_payload: []Track_ID,
 
@@ -144,7 +144,7 @@ init :: proc(
 
 	io := imgui.GetIO()
 
-	for info, window in _WINDOW_INFO {
+	for info, window in WINDOW_INFO {
 		client.window_state[window].show = .AlwaysShow in info.flags
 	}
 
@@ -164,7 +164,7 @@ init :: proc(
 			imgui.LoadIniSettingsFromDisk(io.IniFilename)
 		}
 		else {
-			_load_layout_from_memory(&client.layouts, DEFAULT_LAYOUT_INI, false)
+			load_layout_from_memory(&client.layouts, DEFAULT_LAYOUT_INI, false)
 		}
 	}
 
@@ -176,12 +176,12 @@ init :: proc(
 	client.paths.layout_folder = filepath.join({data_dir, "Layouts"}, context.allocator)
 	client.paths.settings = filepath.join({config_dir, "settings.ini"}, context.allocator)
 
-	_themes_init(client)
+	themes_init(client)
 	theme_set_defaults(&global_theme)
-	_layouts_init(&client.layouts, data_dir)
+	layouts_init(&client.layouts, data_dir)
 
 	// Analysis
-	_analysis_init(&client.analysis)
+	analysis_init(&client.analysis)
 
 	// Set defaults
 	client.enable_media_controls = true
@@ -198,13 +198,13 @@ destroy :: proc(client: ^Client) {
 	delete(client.paths.persistent_state)
 	delete(client.paths.theme_folder)
 	sys.async_dialog_destroy(&client.dialogs.remove_missing_files)
-	_themes_destroy(client)
-	_layouts_destroy(&client.layouts)
-	_analysis_destroy(&client.analysis)
+	themes_destroy(client)
+	layouts_destroy(&client.layouts)
+	analysis_destroy(&client.analysis)
 }
 
 handle_events :: proc(client: ^Client, sv: ^Server) {
-	_update_layout(&client.layouts, &client.window_state)
+	update_layout(&client.layouts, &client.window_state)
 
 	if client.media_controls.enabled {
 		if client.media_controls.display_track != sv.current_track_id {
@@ -269,7 +269,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	server.library_update_categories(&sv.library)
-	_update_analysis(cl, sv, delta)
+	update_analysis(cl, sv, delta)
 
 	if result, have_result := sys.async_dialog_get_result(&cl.dialogs.remove_missing_files); have_result && result {
 		server.library_remove_missing_tracks(&sv.library)
@@ -303,114 +303,114 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 		imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
 
-		_track_table_update(&state.table, sv.library.serial, sv.library, sv.library.track_ids[:], {}, string(filter_cstring))
-		table_result := _track_table_show(state.table, "##library_table", context_id, sv.current_track_id)
+		track_table_update(&state.table, sv.library.serial, sv.library, sv.library.track_ids[:], {}, string(filter_cstring))
+		table_result := track_table_show(state.table, "##library_table", context_id, sv.current_track_id)
 
 		if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
-		_track_table_process_results(state.table, table_result, cl, sv, {})
+		track_table_process_result(state.table, table_result, cl, sv, {})
 
-		context_result := _track_table_show_context(state.table, table_result, context_id, {.NoRemove}, sv^)
-		_track_table_process_context(state.table, table_result, context_result, cl, sv)
+		context_result := track_table_show_context(state.table, table_result, context_id, {.NoRemove}, sv^)
+		track_table_process_context(state.table, table_result, context_result, cl, sv)
 
 		imgui.End()
-	} else {_free_track_table(&cl.windows.library.table)}
+	} else {track_table_free(&cl.windows.library.table)}
 
 	// Queue
 	if _begin_window(cl, .Queue) {
 		state := &cl.windows.queue
 		context_id := imgui.GetID("##track_context")
 
-		_track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
-		table_result := _track_table_show(state.table, "##queue", context_id, sv.current_track_id)
+		track_table_update(&state.table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
+		table_result := track_table_show(state.table, "##queue", context_id, sv.current_track_id)
 
 		//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
-		_track_table_process_results(state.table, table_result, cl, sv, {.SetQueuePos})
+		track_table_process_result(state.table, table_result, cl, sv, {.SetQueuePos})
 
-		if payload, have_payload := _track_table_accept_drag_drop(table_result, context.allocator); have_payload {
+		if payload, have_payload := track_table_accept_drag_drop(table_result, context.allocator); have_payload {
 			server.append_to_queue(sv, payload, {})
 			delete(payload)
 		}
 		
-		context_result := _track_table_show_context(state.table, table_result, context_id, {}, sv^)
-		_track_table_process_context(state.table, table_result, context_result, cl, sv)
+		context_result := track_table_show_context(state.table, table_result, context_id, {}, sv^)
+		track_table_process_context(state.table, table_result, context_result, cl, sv)
 
 		if context_result.remove {
-			selection := _track_table_get_selection(state.table)
+			selection := track_table_get_selection(state.table)
 			defer delete(selection)
 			server.remove_tracks_from_queue(sv, selection)
 		}
 		
 		imgui.End()
-	} else {_free_track_table(&cl.windows.queue.table)}
+	} else {track_table_free(&cl.windows.queue.table)}
 
 	// Playlists
 	if _begin_window(cl, .Playlists) {
-		_show_playlist_list_window(cl, sv, &cl.windows.user_playlists, &sv.library.user_playlists, allow_edit=true)
+		playlist_list_window_show(cl, sv, &cl.windows.user_playlists, &sv.library.user_playlists, allow_edit=true)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.windows.user_playlists.track_table)}
+	else {track_table_free(&cl.windows.user_playlists.track_table)}
 
 	// Folders
 	if _begin_window(cl, .Folders) {
 		//_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
-		_folders_window_show(cl, sv)
+		folders_window_show(cl, sv)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.windows.categories.folders.track_table)}
+	else {track_table_free(&cl.windows.categories.folders.track_table)}
 
 	// Artists
 	if _begin_window(cl, .Artists) {
-		_show_playlist_list_window(cl, sv, &cl.windows.categories.artists, &sv.library.categories.artists)
+		playlist_list_window_show(cl, sv, &cl.windows.categories.artists, &sv.library.categories.artists)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.windows.categories.artists.track_table)}
+	else {track_table_free(&cl.windows.categories.artists.track_table)}
 
 	// Albums
 	if _begin_window(cl, .Albums) {
-		_show_playlist_list_window(cl, sv, &cl.windows.categories.albums, &sv.library.categories.albums)
+		playlist_list_window_show(cl, sv, &cl.windows.categories.albums, &sv.library.categories.albums)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.windows.categories.albums.track_table)}
+	else {track_table_free(&cl.windows.categories.albums.track_table)}
 
 	// Genres
 	if _begin_window(cl, .Genres) {
-		_show_playlist_list_window(cl, sv, &cl.windows.categories.genres, &sv.library.categories.genres)
+		playlist_list_window_show(cl, sv, &cl.windows.categories.genres, &sv.library.categories.genres)
 		imgui.End()
 	}
-	else {_free_track_table(&cl.windows.categories.genres.track_table)}
+	else {track_table_free(&cl.windows.categories.genres.track_table)}
 
 	// Metadata
 	if _begin_window(cl, .Metadata) {
-		_show_metadata_details(cl, sv, sv.current_track_id, &cl.metadata_window)
+		metadata_window_show(cl, sv, sv.current_track_id, &cl.metadata_window)
 		imgui.End()
 	}
 
 	// Waveform
 	if _begin_window(cl, .WaveformSeek) {
-		_show_waveform_window(sv, &cl.waveform_window)
+		waveform_window_show(sv, &cl.waveform_window)
 		imgui.End()
 	}
 
 	// Spectrum
 	if _begin_window(cl, .Spectrum) {
-		_show_spectrum_window(cl, &cl.analysis)
+		show_spectrum_window(cl, &cl.analysis)
 		imgui.End()
 	}
 
 	// Oscilloscope
 	if _begin_window(cl, .Oscilloscope) {
-		_show_oscilloscope_window(cl)
+		show_oscilloscope_window(cl)
 		imgui.End()
 	}
 
 	// Theme editor
 	if _begin_window(cl, .ThemeEditor) {
-		_show_theme_editor(cl, &cl.windows.theme_editor)
+		theme_editor_show(cl, &cl.windows.theme_editor)
 		imgui.End()
 	}
 
 	if _begin_window(cl, .MetadataEditor) {
-		_show_metadata_editor(&cl.windows.metadata_editor, &sv.library)
+		metadata_editor_show(&cl.windows.metadata_editor, &sv.library)
 		imgui.End()
 	}
 
@@ -428,14 +428,14 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	if cl.windows.licenses.show {
 		if imgui.Begin("Licenses", &cl.windows.licenses.show) {
-			_show_license_window()
+			show_license_window()
 		}
 		imgui.End()
 	}
 
 	if cl.windows.about.show {
 		if imgui.Begin("About", &cl.windows.about.show) {
-			_show_about_window()
+			show_about_window()
 		}
 		imgui.End()
 	}
@@ -507,21 +507,21 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 _go_to_artist :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Artist].(string) or_else "")
 	client.windows.categories.artists.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
-	_bring_window_to_front(client, .Artists)
+	bring_window_to_front(client, .Artists)
 }
 
 @private
 _go_to_album :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Album].(string) or_else "")
 	client.windows.categories.albums.viewing_id = {serial=auto_cast Metadata_Component.Album, pool=id}
-	_bring_window_to_front(client, .Albums)
+	bring_window_to_front(client, .Albums)
 }
 
 @private
 _go_to_genre :: proc(client: ^Client, md: Track_Metadata) {
 	id := server.library_hash_string(md.values[.Genre].(string) or_else "")
 	client.windows.categories.genres.viewing_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
-	_bring_window_to_front(client, .Genres)
+	bring_window_to_front(client, .Genres)
 }
 
 @private
@@ -540,7 +540,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	defer imgui.EndMainMenuBar()
 
 	save_layout_popup_id := imgui.GetID("save_layout")
-	_show_save_layout_popup(&client.layouts, save_layout_popup_id)
+	show_save_layout_popup(&client.layouts, save_layout_popup_id)
 
 	// Menus
 	if imgui.BeginMenu("File") {
@@ -581,19 +581,19 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	}
 
 	if imgui.BeginMenu("View") {
-		if imgui.MenuItem("Folders") {_bring_window_to_front(client, .Folders)}
-		if imgui.MenuItem("Artists") {_bring_window_to_front(client, .Artists)}
-		if imgui.MenuItem("Albums") {_bring_window_to_front(client, .Albums)}
-		if imgui.MenuItem("Genres") {_bring_window_to_front(client, .Genres)}
+		if imgui.MenuItem("Folders") {bring_window_to_front(client, .Folders)}
+		if imgui.MenuItem("Artists") {bring_window_to_front(client, .Artists)}
+		if imgui.MenuItem("Albums") {bring_window_to_front(client, .Albums)}
+		if imgui.MenuItem("Genres") {bring_window_to_front(client, .Genres)}
 
 		imgui.SeparatorText("Visualizers")
-		if imgui.MenuItem("Wave bar") {_bring_window_to_front(client, .WaveformSeek)}
-		if imgui.MenuItem("Spectrum") {_bring_window_to_front(client, .Spectrum)}
-		if imgui.MenuItem("Oscilloscope") {_bring_window_to_front(client, .Oscilloscope)}
+		if imgui.MenuItem("Wave bar") {bring_window_to_front(client, .WaveformSeek)}
+		if imgui.MenuItem("Spectrum") {bring_window_to_front(client, .Spectrum)}
+		if imgui.MenuItem("Oscilloscope") {bring_window_to_front(client, .Oscilloscope)}
 
 		imgui.Separator()
 		if imgui.MenuItem("Edit theme") {
-			_bring_window_to_front(client, .ThemeEditor)
+			bring_window_to_front(client, .ThemeEditor)
 		}
 
 		if imgui.MenuItem("Change background") {
@@ -604,7 +604,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	}
 
 	if imgui.BeginMenu("Layout") {
-		_show_layout_menu_items(&client.layouts, save_layout_popup_id)
+		show_layout_menu_items(&client.layouts, save_layout_popup_id)
 		imgui.EndMenu()
 	}
 
@@ -797,9 +797,9 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 }
 
 @private
-_begin_window :: proc(client: ^Client, window: _Window) -> bool {
+_begin_window :: proc(client: ^Client, window: Window_ID) -> bool {
 	name_buf: [128]u8
-	info := _WINDOW_INFO[window]
+	info := WINDOW_INFO[window]
 	state := &client.window_state[window]
 
 	if !state.show && .AlwaysShow not_in info.flags {return false}
@@ -828,7 +828,7 @@ _begin_window :: proc(client: ^Client, window: _Window) -> bool {
 }
 
 @private
-_bring_window_to_front :: proc(client: ^Client, window: _Window) {
+bring_window_to_front :: proc(client: ^Client, window: Window_ID) {
 	client.window_state[window].show = true
 	client.window_state[window].bring_to_front = true
 }
@@ -889,7 +889,7 @@ _imgui_settings_open_proc :: proc "c" (
 	context = client.ctx
 	name_str := string(name)
 	fmt.println(name)
-	for window, i in _WINDOW_INFO {
+	for window, i in WINDOW_INFO {
 		if string(window.internal_name) == name_str {
 			return cast(rawptr) (cast(uintptr) i + 1)
 		}
@@ -906,9 +906,9 @@ _imgui_settings_read_line_proc :: proc "c" (
 	context = client.ctx
 	if entry == nil || len(line) == 0 {return}
 
-	window: _Window = cast(_Window) (uintptr(entry) - 1)
-	if window < min(_Window) || window > max(_Window) {return}
-	if .DontSaveState in _WINDOW_INFO[window].flags {return}
+	window: Window_ID = cast(Window_ID) (uintptr(entry) - 1)
+	if window < min(Window_ID) || window > max(Window_ID) {return}
+	if .DontSaveState in WINDOW_INFO[window].flags {return}
 
 	line_parts := strings.split(string(line), "=")
 	if len(line_parts) < 2 {return}
@@ -926,7 +926,7 @@ _imgui_settings_write_proc :: proc "c" (
 	client := cast(^Client) handler.UserData
 	context = client.ctx
 
-	for window, window_id in _WINDOW_INFO {
+	for window, window_id in WINDOW_INFO {
 		if .DontSaveState in window.flags {continue}
 		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
 		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)client.window_state[window_id].show)
@@ -941,7 +941,7 @@ _set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
 }
 
 @private
-_get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []Track_ID, have_payload: bool) {
+get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []Track_ID, have_payload: bool) {
 	payload := imgui.AcceptDragDropPayload("TRACKS")
 	if payload == nil {return}
 

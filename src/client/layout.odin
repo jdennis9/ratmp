@@ -25,7 +25,7 @@ import "core:fmt"
 
 import imgui "src:thirdparty/odin-imgui"
 
-_Layout_State :: struct {
+Layout_Manager :: struct {
 	layout_to_load: []u8,
 	free_layout_after_load: bool,
 	layout_names: [dynamic]cstring,
@@ -38,19 +38,19 @@ _Layout_State :: struct {
 	want_save_layout_name: string,
 }
 
-_load_layout_from_memory :: proc(state: ^_Layout_State, data: []u8, free_after_load: bool) {
+load_layout_from_memory :: proc(state: ^Layout_Manager, data: []u8, free_after_load: bool) {
 	state.layout_to_load = data
 	state.free_layout_after_load = free_after_load
 }
 
-_get_layout_path_from_name :: proc(state: ^_Layout_State, name: string, allocator := context.allocator) -> string {
+get_layout_path_from_name :: proc(state: ^Layout_Manager, name: string, allocator := context.allocator) -> string {
 	filename := fmt.aprint(name, ".ini", sep="")
 	defer delete(filename)
 	return filepath.join({state.layouts_folder, filename}, allocator)
 }
 
-_load_layout_from_name :: proc(state: ^_Layout_State, name: string) {
-	path := _get_layout_path_from_name(state, name)
+load_layout_from_name :: proc(state: ^Layout_Manager, name: string) {
+	path := get_layout_path_from_name(state, name)
 	data, read_error := os2.read_entire_file_from_path(path, context.allocator)
 	if read_error != nil {return}
 
@@ -58,7 +58,7 @@ _load_layout_from_name :: proc(state: ^_Layout_State, name: string) {
 	state.free_layout_after_load = true
 }
 
-_scan_layouts_folder :: proc(state: ^_Layout_State) {
+scan_layouts_folder :: proc(state: ^Layout_Manager) {
 	if !os2.exists(state.layouts_folder) {
 		os2.make_directory_all(state.layouts_folder)
 	}
@@ -78,12 +78,12 @@ _scan_layouts_folder :: proc(state: ^_Layout_State) {
 	}
 }
 
-_layouts_init :: proc(state: ^_Layout_State, data_dir: string) {
+layouts_init :: proc(state: ^Layout_Manager, data_dir: string) {
 	state.layouts_folder = filepath.join({data_dir, "Layouts"})
-	_scan_layouts_folder(state)
+	scan_layouts_folder(state)
 }
 
-_layouts_destroy :: proc(state: ^_Layout_State) {
+layouts_destroy :: proc(state: ^Layout_Manager) {
 	for name in state.layout_names {
 		delete(name)
 	}
@@ -94,7 +94,7 @@ _layouts_destroy :: proc(state: ^_Layout_State) {
 	delete(state.layouts_folder)
 }
 
-_update_layout :: proc(state: ^_Layout_State, window_state: ^[_Window]_Window_State) {
+update_layout :: proc(state: ^Layout_Manager, window_state: ^[Window_ID]Window_State) {
 	if state.layout_to_load != nil {
 		for &window in window_state {
 			window.show = false
@@ -114,39 +114,39 @@ _update_layout :: proc(state: ^_Layout_State, window_state: ^[_Window]_Window_St
 	if state.want_save_layout && state.want_save_layout_name != "" {
 		state.want_save_layout = false
 
-		path := _get_layout_path_from_name(state, state.want_save_layout_name)
+		path := get_layout_path_from_name(state, state.want_save_layout_name)
 		defer delete(path)
 		path_cstring := strings.clone_to_cstring(path)
 		defer delete(path_cstring)
 
 		imgui.SaveIniSettingsToDisk(path_cstring)
 
-		_scan_layouts_folder(state)
+		scan_layouts_folder(state)
 		delete(state.want_save_layout_name)
 		state.want_save_layout_name = ""
 	}
 }
 
-_layout_exists :: proc(state: ^_Layout_State, name: string) -> bool {
+layout_exists :: proc(state: ^Layout_Manager, name: string) -> bool {
 	for layout in state.layout_names {
 		if string(layout) == name {return true}
 	}
 	return false
 }
 
-_save_layout :: proc(state: ^_Layout_State, name: string) {
+save_layout :: proc(state: ^Layout_Manager, name: string) {
 	state.want_save_layout = true
 	state.want_save_layout_name = strings.clone(name)
 }
 
-_show_layout_menu_items :: proc(state: ^_Layout_State, save_layout_popup_id: imgui.ID) {
+show_layout_menu_items :: proc(state: ^Layout_Manager, save_layout_popup_id: imgui.ID) {
 	if imgui.MenuItem("Reset layout") {
-		_load_layout_from_memory(state, DEFAULT_LAYOUT_INI, false)
+		load_layout_from_memory(state, DEFAULT_LAYOUT_INI, false)
 	}
 	imgui.SeparatorText("Load layout")
 	for layout_name in state.layout_names {
 		if imgui.MenuItem(layout_name) {
-			_load_layout_from_name(state, string(layout_name))
+			load_layout_from_name(state, string(layout_name))
 		}
 	}
 	imgui.Separator()
@@ -154,11 +154,11 @@ _show_layout_menu_items :: proc(state: ^_Layout_State, save_layout_popup_id: img
 		imgui.OpenPopupEx(save_layout_popup_id, 0)
 	}
 	if imgui.MenuItem("Refresh layouts") {
-		_scan_layouts_folder(state)
+		scan_layouts_folder(state)
 	}
 }
 
-_show_save_layout_popup :: proc(state: ^_Layout_State, id: imgui.ID) {
+show_save_layout_popup :: proc(state: ^Layout_Manager, id: imgui.ID) {
 	save := false
 	name := cstring(&state.save_layout_name[0])
 
@@ -172,7 +172,7 @@ _show_save_layout_popup :: proc(state: ^_Layout_State, id: imgui.ID) {
 			imgui.Button("Save")
 			imgui.EndDisabled()
 		}
-		else if !_layout_exists(state, string(name)) {
+		else if !layout_exists(state, string(name)) {
 			save |= imgui.Button("Save")
 		}
 		else {
@@ -186,7 +186,7 @@ _show_save_layout_popup :: proc(state: ^_Layout_State, id: imgui.ID) {
 		}
 
 		if save {
-			_save_layout(state, string(name))
+			save_layout(state, string(name))
 			imgui.CloseCurrentPopup()
 		}
 

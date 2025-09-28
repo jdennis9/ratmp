@@ -226,7 +226,7 @@ theme_delete_from_name :: proc(client: ^Client, name: string) {
 }
 
 @private
-_theme_scan_folder :: proc(client: ^Client) {
+theme_scan_folder :: proc(client: ^Client) {
 	if !os2.exists(client.paths.theme_folder) {
 		os2.make_directory_all(client.paths.theme_folder)
 	}
@@ -250,17 +250,17 @@ _theme_scan_folder :: proc(client: ^Client) {
 }
 
 @private
-_themes_init :: proc(client: ^Client) {
-	_theme_scan_folder(client)
+themes_init :: proc(client: ^Client) {
+	theme_scan_folder(client)
 }
 
 @private
-_themes_destroy :: proc(client: ^Client) {
+themes_destroy :: proc(client: ^Client) {
 	for name in client.theme_names {delete(name)}
 	delete(client.theme_names)
 }
 
-_Theme_Editor_State :: struct {
+Theme_Editor_State :: struct {
 	new_theme_name: [64]u8,
 	name_error: [64]u8,
 }
@@ -268,7 +268,7 @@ _Theme_Editor_State :: struct {
 global_theme: Theme
 
 @private
-_show_theme_editor :: proc(client: ^Client, state: ^_Theme_Editor_State) -> (changes: bool) {
+theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (changes: bool) {
 	popup_name: cstring = "New theme name"
 	popup_id := imgui.GetID(popup_name)
 	style := imgui.GetStyle()
@@ -313,7 +313,7 @@ _show_theme_editor :: proc(client: ^Client, state: ^_Theme_Editor_State) -> (cha
 			else {
 				theme_save_from_name(client^, theme^, string(name))
 				set_theme(client, theme^, string(name))
-				_themes_init(client)
+				themes_init(client)
 				imgui.CloseCurrentPopup()
 				for &s in state.name_error {s = 0}
 				for &s in state.new_theme_name {s = 0}
@@ -325,7 +325,7 @@ _show_theme_editor :: proc(client: ^Client, state: ^_Theme_Editor_State) -> (cha
 
 	imgui.SameLine()
 	if imgui.Button("Refresh themes") {
-		_themes_init(client)
+		themes_init(client)
 	}
 
 	if imgui.Button("New") {
@@ -348,7 +348,7 @@ _show_theme_editor :: proc(client: ^Client, state: ^_Theme_Editor_State) -> (cha
 	imgui.SameLine()
 	if imgui.Button("Delete") {
 		theme_delete_from_name(client, string(current_theme_name))
-		_theme_scan_folder(client)
+		theme_scan_folder(client)
 		if len(client.theme_names) > 0 {
 			theme_load_from_name(client^, theme, string(client.theme_names[0]))
 			set_theme(client, theme^, string(client.theme_names[0]))

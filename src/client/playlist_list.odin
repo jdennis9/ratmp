@@ -23,19 +23,19 @@ import "core:slice"
 
 import "src:server"
 
-_Playlist_List_Window :: struct {
+Playlist_List_Window :: struct {
 	viewing_id: Playlist_ID,
 	editing_id: Playlist_ID,
 	new_playlist_name: [128]u8,
-	playlist_table: _Playlist_Table_2,
-	track_table: _Track_Table_2,
+	playlist_table: Playlist_Table,
+	track_table: Track_Table,
 	track_filter: [128]u8,
 	playlist_filter: [128]u8,
 }
 
-_show_playlist_list_window :: proc(
+playlist_list_window_show :: proc(
 	cl: ^Client, sv: ^Server,
-	state: ^_Playlist_List_Window, cat: ^server.Playlist_List,
+	state: ^Playlist_List_Window, cat: ^server.Playlist_List,
 	allow_edit := false
 ) {
 	root_table_flags := imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|
@@ -77,8 +77,8 @@ _show_playlist_list_window :: proc(
 		filter_cstring := cstring(&state.playlist_filter[0])
 
 		imgui.InputTextWithHint("##playlist_filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
-		_update_playlist_table(&state.playlist_table, cat, string(filter_cstring), state.viewing_id, sv.current_playlist_id, state.editing_id)
-		result := _display_playlist_table(global_theme, state.playlist_table, "##playlists", context_id)
+		playlist_table_update(&state.playlist_table, cat, string(filter_cstring), state.viewing_id, sv.current_playlist_id, state.editing_id)
+		result := playlist_table_show(global_theme, state.playlist_table, "##playlists", context_id)
 
 		if result.play != nil {
 			playlist, found := server.playlist_list_get(cat^, result.play.?)
@@ -111,27 +111,27 @@ _show_playlist_list_window :: proc(
 		list := &cat.lists[list_index]
 		context_menu_id := imgui.GetID("##track_context")
 		filter_cstring := cstring(&state.track_filter[0])
-		context_flags := allow_edit ? _Track_Context_Flags{} : _Track_Context_Flags{.NoRemove}
+		context_flags := allow_edit ? Track_Context_Flags{} : Track_Context_Flags{.NoRemove}
 
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
-		_track_table_update(&state.track_table, list.serial, sv.library, list.tracks[:], list.id, string(filter_cstring))
-		result := _track_table_show(state.track_table, "##tracks", context_menu_id, sv.current_track_id)
+		track_table_update(&state.track_table, list.serial, sv.library, list.tracks[:], list.id, string(filter_cstring))
+		result := track_table_show(state.track_table, "##tracks", context_menu_id, sv.current_track_id)
 
-		_track_table_process_results(state.track_table, result, cl, sv, {})
+		track_table_process_result(state.track_table, result, cl, sv, {})
 		if result.sort_spec != nil {server.playlist_sort(list, sv.library, result.sort_spec.?)}
 
-		context_result := _track_table_show_context(state.track_table, result, context_menu_id, context_flags, sv^)
-		_track_table_process_context(state.track_table, result, context_result, cl, sv)
+		context_result := track_table_show_context(state.track_table, result, context_menu_id, context_flags, sv^)
+		track_table_process_context(state.track_table, result, context_result, cl, sv)
 
 		if allow_edit {
-			if payload, have_payload := _track_table_accept_drag_drop(result, context.allocator); have_payload {
+			if payload, have_payload := track_table_accept_drag_drop(result, context.allocator); have_payload {
 				server.playlist_add_tracks(list, sv.library, payload)
 				delete(payload)
 			}
 		}
 
 		if context_result.remove {
-			selection := _track_table_get_selection(state.track_table)
+			selection := track_table_get_selection(state.track_table)
 			defer delete(selection)
 			server.playlist_remove_tracks(list, sv.library, selection)
 			cat.serial += 1
@@ -139,7 +139,7 @@ _show_playlist_list_window :: proc(
 	}
 }
 
-_show_playlist_selector :: proc(name: cstring, from: server.Playlist_List) -> (id: Playlist_ID, clicked: bool) {
+show_playlist_selector :: proc(name: cstring, from: server.Playlist_List) -> (id: Playlist_ID, clicked: bool) {
 	imgui.BeginMenu(name) or_return
 	defer imgui.EndMenu()
 

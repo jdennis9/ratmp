@@ -15,7 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-#+private
+#+private file
 package client
 
 import "core:mem"
@@ -40,7 +40,8 @@ _Folder_Node :: struct {
 	duration_str: [10]u8,
 }
 
-_Folders_Window :: struct {
+@private
+Folders_Window :: struct {
 	track_filter: [128]u8,
 	serial: uint,
 	node_arena: mem.Dynamic_Arena,
@@ -48,14 +49,13 @@ _Folders_Window :: struct {
 	node_allocator: mem.Allocator,
 	string_allocator: mem.Allocator,
 	sel_folder_id: u32,
-	track_table: _Track_Table_2,
+	track_table: Track_Table,
 	track_table_serial: uint,
 	root: _Folder_Node,
 	viewing_tracks: []Track_ID,
 	viewing_tracks_serial: uint,
 }
 
-@(private="file")
 _rebuild_nodes :: proc(cl: ^Client, sv: ^Server) {
 	state := &cl.windows.folders
 	tree := &sv.library.folder_tree
@@ -101,12 +101,10 @@ _rebuild_nodes :: proc(cl: ^Client, sv: ^Server) {
 	)
 }
 
-@(private="file")
 _folder_id_to_playlist_id :: proc(id: u32) -> Playlist_ID {
 	return {serial = id, pool = auto_cast len(Metadata_Component)}
 }
 
-@(private="file")
 _set_viewing_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
 	state := &cl.windows.folders
 	delete(state.viewing_tracks)
@@ -114,7 +112,8 @@ _set_viewing_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
 	state.viewing_tracks_serial = 0
 }
 
-_folders_window_show :: proc(cl: ^Client, sv: ^Server) {
+@private
+folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	state := &cl.windows.folders
 
 	select_folder :: proc(cl: ^Client, sv: ^Server, node: _Folder_Node) -> bool {
@@ -181,7 +180,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 						select_folder(cl, sv, node^)
 					}
 
-					if _play_track_input_pressed() {
+					if is_play_track_input_pressed() {
 						select_folder(cl, sv, node^)
 						play_folder(sv, node^)
 					}
@@ -196,7 +195,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			
 					imgui.TreePop()
 				}
-				else if _play_track_input_pressed() {
+				else if is_play_track_input_pressed() {
 					select_folder(cl, sv, node^)
 					play_folder(sv, node^)
 				}
@@ -212,7 +211,7 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 					select_folder(cl, sv, node^)
 				}
 
-				if _play_track_input_pressed() {
+				if is_play_track_input_pressed() {
 					if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
 						server.play_playlist(sv, folder.tracks[:], playlist_id)
 					}
@@ -247,20 +246,20 @@ _folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
-		_track_table_update(
+		track_table_update(
 			&state.track_table, sv.library.serial + state.track_table_serial, sv.library, state.viewing_tracks[:], playlist_id,
 			string(filter_cstring)
 		)
 
-		table_result := _track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
-		_track_table_process_results(state.track_table, table_result, cl, sv, {})
+		table_result := track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
+		track_table_process_result(state.track_table, table_result, cl, sv, {})
 		if table_result.sort_spec != nil {
 			server.library_sort_tracks(sv.library, state.viewing_tracks[:], table_result.sort_spec.?)
 			state.track_table_serial += 1
 		}
 
-		context_result := _track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
-		_track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		context_result := track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
+		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 		
 	}
 }

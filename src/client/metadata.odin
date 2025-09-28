@@ -35,14 +35,14 @@ import "src:decoder"
 
 import "imx"
 
-_Metadata_Window :: struct {
+Metadata_Window :: struct {
 	current_track_id: Track_ID,
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
 	file_info: os2.File_Info,
 }
 
-_load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
+_load_track_album_art :: proc(lib: server.Library, str_path: string) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
 	if data, w, h, image_found_in_file := decoder.load_thumbnail(str_path);
 	image_found_in_file {
 		defer decoder.delete_thumbnail(data)
@@ -57,7 +57,7 @@ _load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (
 	folder := filepath.dir(str_path)
 	defer delete(folder)
 
-	if cover, found := server.library_find_folder_cover_art(sv.library, folder); found {
+	if cover, found := server.library_find_folder_cover_art(lib, folder); found {
 		cover_cstring := strings.clone_to_cstring(cover, context.allocator)
 		defer delete(cover_cstring)
 
@@ -75,7 +75,11 @@ _load_track_album_art :: proc(client: Client, sv: Server, str_path: string) -> (
 	return
 }
 
-_show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state: ^_Metadata_Window) -> (ok: bool) {
+Metadata_Window_Result :: struct {
+	album_art_context: Track_Context_Result,
+}
+
+metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state: ^Metadata_Window) -> (ok: bool) {
 	if state.current_track_id != track_id {
 		width, height: int
 		have_art: bool
@@ -91,7 +95,7 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 
 		path_buf: Path
 		track_path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_return
-		width, height, state.album_art, have_art = _load_track_album_art(cl^, sv^, track_path)
+		width, height, state.album_art, have_art = _load_track_album_art(sv.library, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
 		}
@@ -157,10 +161,10 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 	metadata := server.library_get_track_metadata(sv.library, track_id) or_return
 
 	if imgui.BeginPopupContextItem() {
-		result: _Track_Context_Result
+		result: Track_Context_Result
 		result.single_track = track_id
-		_track_show_context_items(track_id, &result, sv^)
-		_track_process_context(track_id, result, cl, sv, {}, true)
+		show_track_context_items(track_id, &result, sv^)
+		process_track_context(track_id, result, cl, sv, {}, true)
 		imgui.MenuItemBoolPtr("Crop image", nil, &cl.settings.crop_album_art)
 		imgui.EndPopup()
 	}
@@ -252,7 +256,7 @@ _show_metadata_details :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, sta
 	return
 }
 
-_Metadata_Editor :: struct {
+Metadata_Editor :: struct {
 	artist: [128]u8,
 	title: [128]u8,
 	album: [128]u8,
@@ -264,12 +268,12 @@ _Metadata_Editor :: struct {
 	serial: uint,
 	library_serial: uint,
 	tracks: [dynamic]Track_ID,
-	track_table: _Track_Table_2,
+	track_table: Track_Table,
 
 	write_to_file: bool,
 }
 
-_show_metadata_editor :: proc(state: ^_Metadata_Editor, library: ^server.Library) {
+metadata_editor_show :: proc(state: ^Metadata_Editor, library: ^server.Library) {
 	if len(state.tracks) == 0 {
 		imgui.TextDisabled("No tracks selected for editing")
 		return
@@ -314,12 +318,12 @@ _show_metadata_editor :: proc(state: ^_Metadata_Editor, library: ^server.Library
 
 		context_id := imgui.GetID("##track_context")
 
-		_track_table_update(&state.track_table, state.serial, library^, state.tracks[:], {}, "")
-		table_result := _track_table_show(state.track_table, "##tracks", context_id, 0)
+		track_table_update(&state.track_table, state.serial, library^, state.tracks[:], {}, "")
+		table_result := track_table_show(state.track_table, "##tracks", context_id, 0)
 
 		if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize}) {
 			if imgui.MenuItem("Remove") {
-				sel := _track_table_get_selection(state.track_table)
+				sel := track_table_get_selection(state.track_table)
 				defer delete(sel)
 
 				log.debug(sel)
@@ -338,11 +342,11 @@ _show_metadata_editor :: proc(state: ^_Metadata_Editor, library: ^server.Library
 
 }
 
-_metadata_editor_select_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
+metadata_editor_select_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
 	state := &cl.windows.metadata_editor
 	resize(&state.tracks, len(tracks))
 	copy(state.tracks[:], tracks)
 	state.serial += 1
 
-	_bring_window_to_front(cl, .MetadataEditor)
+	bring_window_to_front(cl, .MetadataEditor)
 }

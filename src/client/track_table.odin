@@ -33,15 +33,7 @@ import "src:util"
 
 import "imx"
 
-_is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
-	return imgui.IsKeyChordPressed(auto_cast(mods | key))
-}
-
-_play_track_input_pressed :: proc() -> bool {
-	return imgui.IsItemClicked(.Middle) || (imgui.IsItemClicked(.Left) && imgui.IsMouseDoubleClicked(.Left))
-}
-
-_Track_Row :: struct {
+Track_Row :: struct {
 	genre, artist, album: string,
 	title: cstring,
 	duration_str: [9]u8,
@@ -55,19 +47,19 @@ _Track_Row :: struct {
 	selected: bool,
 }
 
-_Track_Table_Flag :: enum {NoSort,}
-_Track_Table_Flags :: bit_set[_Track_Table_Flag]
+Track_Table_Flag :: enum {NoSort,}
+Track_Table_Flags :: bit_set[Track_Table_Flag]
 
-_Track_Table_2 :: struct {
-	rows: [dynamic]_Track_Row,
+Track_Table :: struct {
+	rows: [dynamic]Track_Row,
 	serial: uint,
 	playlist_id: Playlist_ID,
 	filter_hash: u32,
-	flags: _Track_Table_Flags,
+	flags: Track_Table_Flags,
 	jump_to_track: Maybe(int),
 }
 
-_Track_Table_Result :: struct {
+Track_Table_Result :: struct {
 	play: Maybe(Track_ID),
 	select: Maybe(Track_ID),
 	context_menu: Maybe(Track_ID),
@@ -80,13 +72,13 @@ _Track_Table_Result :: struct {
 	bounding_box: imgui.Rect,
 }
 
-_free_track_table :: proc(table: ^_Track_Table_2) {
+track_table_free :: proc(table: ^Track_Table) {
 	delete(table.rows)
 	table.rows = nil
 	table.serial = 0
 }
 
-_track_table_get_selection :: proc(table: _Track_Table_2, allocator := context.allocator) -> (ids: []Track_ID) {
+track_table_get_selection :: proc(table: Track_Table, allocator := context.allocator) -> (ids: []Track_ID) {
 	count := 0
 	for row in table.rows {
 		if row.selected {count += 1}
@@ -101,7 +93,7 @@ _track_table_get_selection :: proc(table: _Track_Table_2, allocator := context.a
 	return
 }
 
-_track_table_get_tracks :: proc(table: _Track_Table_2, allocator := context.allocator) -> (ids: []Track_ID) {
+track_table_get_tracks :: proc(table: Track_Table, allocator := context.allocator) -> (ids: []Track_ID) {
 	ids = make([]Track_ID, len(table.rows), allocator)
 	for row, i in table.rows {
 		ids[i] = row.id
@@ -109,14 +101,14 @@ _track_table_get_tracks :: proc(table: _Track_Table_2, allocator := context.allo
 	return
 }
 
-_track_table_update :: proc(
-	table: ^_Track_Table_2,
+track_table_update :: proc(
+	table: ^Track_Table,
 	serial: uint,
 	lib: server.Library,
 	tracks: []Track_ID,
 	playlist_id: Playlist_ID,
 	filter: string,
-	flags: _Track_Table_Flags = {},
+	flags: Track_Table_Flags = {},
 ) {
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
 	table.flags = flags
@@ -128,7 +120,7 @@ _track_table_update :: proc(
 	table.serial = serial
 	table.filter_hash = filter_hash
 
-	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: _Track_Row, ok: bool) {
+	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: Track_Row, ok: bool) {
 		md := server.library_get_track_metadata(lib, id) or_return
 
 		row.id = id
@@ -178,12 +170,12 @@ _track_table_update :: proc(
 	}
 }
 
-_track_table_show :: proc(
-	table: _Track_Table_2,
+track_table_show :: proc(
+	table: Track_Table,
 	str_id: cstring,
 	context_menu_id: imgui.ID,
 	playing: Track_ID,
-) -> (result: _Track_Table_Result) {
+) -> (result: Track_Table_Result) {
 	list_clipper: imgui.ListClipper
 	first_selected_row: Maybe(int)
 	jump_to_track: Maybe(int)
@@ -247,7 +239,7 @@ _track_table_show :: proc(
 	// Handle hotkeys
 	if window_focused {
 		// Jump to track on Ctrl + Space
-		if _is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
+		if is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
 			for row, index in table.rows {
 				if row.id == playing {
 					jump_to_track = index
@@ -256,14 +248,14 @@ _track_table_show :: proc(
 			}
 		}
 
-		if _is_key_chord_pressed(.ImGuiMod_Ctrl, .A) {
+		if is_key_chord_pressed(.ImGuiMod_Ctrl, .A) {
 			for &row in table.rows {
 				row.selected = true
 			}
 		}
 
-		result.play_selection |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .P)
-		result.add_selection_to_queue |= _is_key_chord_pressed(.ImGuiMod_Ctrl, .Q)
+		result.play_selection |= is_key_chord_pressed(.ImGuiMod_Ctrl, .P)
+		result.add_selection_to_queue |= is_key_chord_pressed(.ImGuiMod_Ctrl, .Q)
 	}
 
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows))
@@ -330,13 +322,13 @@ _track_table_show :: proc(
 				select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
 				
 				if imgui.BeginDragDropSource() {
-					tracks := _track_table_get_selection(table)
+					tracks := track_table_get_selection(table)
 					_set_track_drag_drop_payload(tracks)
 					delete(tracks)
 					imgui.EndDragDropSource()
 				}
 
-				if _play_track_input_pressed() {
+				if is_play_track_input_pressed() {
 					result.play = row.id
 					select = true
 				}
@@ -398,51 +390,51 @@ _track_table_show :: proc(
 	return
 }
 
-_Track_Table_Result_Process_Flag :: enum {
+Track_Table_Result_Process_Flag :: enum {
 	// Tells proc to try set the queue position to a track when trying to play it, 
 	// rather than queueing the entire playlist
 	SetQueuePos,
 }
-_Track_Table_Result_Process_Flags :: bit_set[_Track_Table_Result_Process_Flag]
+Track_Table_Result_Process_Flags :: bit_set[Track_Table_Result_Process_Flag]
 
-_track_table_process_results :: proc(
-	table: _Track_Table_2, result: _Track_Table_Result,
-	cl: ^Client, sv: ^Server, flags: _Track_Table_Result_Process_Flags,
+track_table_process_result :: proc(
+	table: Track_Table, result: Track_Table_Result,
+	cl: ^Client, sv: ^Server, flags: Track_Table_Result_Process_Flags,
 ) {
 	if result.play != nil {
 		if .SetQueuePos in flags {
 			server.set_queue_track(sv, result.play.?)
 		}
 		else {
-			tracks := _track_table_get_tracks(table)
+			tracks := track_table_get_tracks(table)
 			defer delete(tracks)
 			server.play_playlist(sv, tracks, table.playlist_id, result.play.?)
 		}
 	}
 
 	if result.play_selection {
-		selection := _track_table_get_selection(table)
+		selection := track_table_get_selection(table)
 		defer delete(selection)
 		server.play_playlist(sv, selection, table.playlist_id)
 	}
 	
 	if result.add_selection_to_queue {
-		selection := _track_table_get_selection(table)
+		selection := track_table_get_selection(table)
 		defer delete(selection)
 		server.append_to_queue(sv, selection, table.playlist_id)
 	}
 }
 
-_track_table_accept_drag_drop :: proc(result: _Track_Table_Result, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
+track_table_accept_drag_drop :: proc(result: Track_Table_Result, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
 	imgui.BeginDragDropTargetCustom(result.bounding_box, imgui.GetID("foo")) or_return
 	defer imgui.EndDragDropTarget()
 
-	return _get_track_drag_drop_payload(allocator)
+	return get_track_drag_drop_payload(allocator)
 }
 
-_Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
-_Track_Context_Flags :: bit_set[_Track_Context_Flag]
-_Track_Context_Result :: struct {
+Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
+Track_Context_Flags :: bit_set[Track_Context_Flag]
+Track_Context_Result :: struct {
 	single_track: Maybe(Track_ID),
 	go_to_album: bool,
 	go_to_artist: bool,
@@ -454,7 +446,7 @@ _Track_Context_Result :: struct {
 	add_to_playlist: Maybe(Playlist_ID),
 }
 
-_show_add_to_playlist_menu :: proc(sv: Server, result: ^_Track_Context_Result) {
+show_add_to_playlist_menu :: proc(sv: Server, result: ^Track_Context_Result) {
 	if imgui.BeginMenu("Add to playlist") {
 		for playlist, i in sv.library.user_playlists.lists {
 			if imgui.MenuItem(playlist.name) {
@@ -465,10 +457,10 @@ _show_add_to_playlist_menu :: proc(sv: Server, result: ^_Track_Context_Result) {
 	}
 }
 
-_track_table_show_context :: proc(
-	table: _Track_Table_2, table_result: _Track_Table_Result,
-	context_id: imgui.ID, flags: _Track_Context_Flags, sv: Server,
-) -> (result: _Track_Context_Result, shown: bool) #optional_ok {
+track_table_show_context :: proc(
+	table: Track_Table, table_result: Track_Table_Result,
+	context_id: imgui.ID, flags: Track_Context_Flags, sv: Server,
+) -> (result: Track_Context_Result, shown: bool) #optional_ok {
 	if table_result.selection_count == 0 {return}
 	imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) or_return
 	defer imgui.EndPopup()
@@ -477,7 +469,7 @@ _track_table_show_context :: proc(
 	if table_result.selection_count == 1 {
 		track_id := table.rows[table_result.lowest_selection_index].id
 		result.single_track = track_id
-		_track_show_context_items(track_id, &result, sv)
+		show_track_context_items(track_id, &result, sv)
 	}
 	
 	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
@@ -496,9 +488,9 @@ _track_table_show_context :: proc(
 	return
 }
 
-_track_show_context_items :: proc(
+show_track_context_items :: proc(
 	track_id: Track_ID,
-	result: ^_Track_Context_Result,
+	result: ^Track_Context_Result,
 	sv: Server,
 ) {
 	if imgui.BeginMenu("Go to") {
@@ -507,25 +499,25 @@ _track_show_context_items :: proc(
 		if imgui.MenuItem("Genre") {result.go_to_genre = true}
 		imgui.EndMenu()
 	}
-	_show_add_to_playlist_menu(sv, result)
+	show_add_to_playlist_menu(sv, result)
 }
 
-_track_show_context :: proc(
+show_track_context :: proc(
 	track_id: Track_ID,
 	context_id: imgui.ID,
 	sv: Server,
-) -> (result: _Track_Context_Result) {
+) -> (result: Track_Context_Result) {
 	result.single_track = track_id
 	if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) {
-		_track_show_context_items(track_id, &result, sv)
+		show_track_context_items(track_id, &result, sv)
 		imgui.EndPopup()
 	}
 	return
 }
 
-_track_process_context :: proc(
+process_track_context :: proc(
 	track_id: Track_ID,
-	result: _Track_Context_Result,
+	result: Track_Context_Result,
 	cl: ^Client,
 	sv: ^Server,
 	from_playlist: Playlist_ID,
@@ -542,7 +534,7 @@ _track_process_context :: proc(
 		}
 
 		if result.edit_metadata {
-			_metadata_editor_select_tracks(cl, {result.single_track.?})
+			metadata_editor_select_tracks(cl, {result.single_track.?})
 		}
 
 		if result.play {
@@ -564,35 +556,35 @@ _track_process_context :: proc(
 	}
 }
 
-_track_table_process_context :: proc(
-	table: _Track_Table_2, table_result: _Track_Table_Result,
-	result: _Track_Context_Result, cl: ^Client, sv: ^Server,
+track_table_process_context :: proc(
+	table: Track_Table, table_result: Track_Table_Result,
+	result: Track_Context_Result, cl: ^Client, sv: ^Server,
 ) {
 	if result.single_track != nil {
-		_track_process_context(result.single_track.?, result, cl, sv, table.playlist_id, false)
+		process_track_context(result.single_track.?, result, cl, sv, table.playlist_id, false)
 	}
 	else {
 		if result.play {
-			selection := _track_table_get_selection(table)
+			selection := track_table_get_selection(table)
 			defer delete(selection)
 			server.play_playlist(sv, selection, table.playlist_id)
 		}
 		if result.add_to_queue {
-			selection := _track_table_get_selection(table)
+			selection := track_table_get_selection(table)
 			defer delete(selection)
 			server.append_to_queue(sv, selection, table.playlist_id)
 		}
 		if result.edit_metadata {
-			selection := _track_table_get_selection(table)
+			selection := track_table_get_selection(table)
 			defer delete(selection)
-			_metadata_editor_select_tracks(cl, selection)
+			metadata_editor_select_tracks(cl, selection)
 		}
 	}
 
 	if result.add_to_playlist != nil {
 		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
 		if playlist_found {
-			selection := _track_table_get_selection(table)
+			selection := track_table_get_selection(table)
 			defer delete(selection)
 			server.playlist_add_tracks(playlist, sv.library, selection)
 			sv.library.user_playlists.serial += 1
