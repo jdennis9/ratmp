@@ -53,7 +53,6 @@ Client :: struct {
 	tick_last_frame: time.Tick,
 	frame_count: int,
 	library_sort_spec: server.Track_Sort_Spec,
-	metadata_window: Metadata_Window,
 	waveform_window: Waveform_Window,
 	window_state: [Window_ID]Window_State,
 	background: struct {
@@ -101,6 +100,13 @@ Client :: struct {
 		},
 		folders: Folders_Window,
 		metadata_editor: Metadata_Editor,
+
+		metadata_popup: Metadata_Window,
+		metadata_popup_track: Track_ID,
+		metadata_popup_show: bool,
+
+		current_metadata: Metadata_Window,
+
 		status_bar: struct {
 			displayed_track_id: Track_ID,
 			metadata: Track_Metadata,
@@ -381,9 +387,21 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	// Metadata
 	if _begin_window(cl, .Metadata) {
-		metadata_window_show(cl, sv, sv.current_track_id, &cl.metadata_window)
+		result, _ := metadata_window_show(&cl.windows.current_metadata, sv.library, sv.current_track_id)
+		metadata_window_process_result(result, cl, sv)
 		imgui.End()
 	}
+	else {metadata_window_free(&cl.windows.current_metadata)}
+
+	if cl.windows.metadata_popup_show {
+		defer imgui.End()
+		if imgui.Begin("Selected Metadata", &cl.windows.metadata_popup_show, {.NoDocking}) {
+			result, _ := metadata_window_show(&cl.windows.metadata_popup, sv.library, cl.windows.metadata_popup_track)
+			metadata_window_process_result(result, cl, sv)
+		}
+		else {metadata_window_free(&cl.windows.metadata_popup)}
+	}
+	else {metadata_window_free(&cl.windows.metadata_popup)}
 
 	// Waveform
 	if _begin_window(cl, .WaveformSeek) {

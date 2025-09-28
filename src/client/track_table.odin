@@ -436,6 +436,7 @@ Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
 Track_Context_Flags :: bit_set[Track_Context_Flag]
 Track_Context_Result :: struct {
 	single_track: Maybe(Track_ID),
+	add_to_playlist: Maybe(Playlist_ID),
 	go_to_album: bool,
 	go_to_artist: bool,
 	go_to_genre: bool,
@@ -443,14 +444,14 @@ Track_Context_Result :: struct {
 	play: bool,
 	edit_metadata: bool,
 	add_to_queue: bool,
-	add_to_playlist: Maybe(Playlist_ID),
+	more_info: bool,
 }
 
-show_add_to_playlist_menu :: proc(sv: Server, result: ^Track_Context_Result) {
+show_add_to_playlist_menu :: proc(lib: Library, result: ^Track_Context_Result) {
 	if imgui.BeginMenu("Add to playlist") {
-		for playlist, i in sv.library.user_playlists.lists {
+		for playlist, i in lib.user_playlists.lists {
 			if imgui.MenuItem(playlist.name) {
-				result.add_to_playlist = sv.library.user_playlists.list_ids[i]
+				result.add_to_playlist = lib.user_playlists.list_ids[i]
 			}
 		}
 		imgui.EndMenu()
@@ -469,7 +470,7 @@ track_table_show_context :: proc(
 	if table_result.selection_count == 1 {
 		track_id := table.rows[table_result.lowest_selection_index].id
 		result.single_track = track_id
-		show_track_context_items(track_id, &result, sv)
+		show_track_context_items(track_id, &result, sv.library)
 	}
 	
 	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
@@ -491,7 +492,7 @@ track_table_show_context :: proc(
 show_track_context_items :: proc(
 	track_id: Track_ID,
 	result: ^Track_Context_Result,
-	sv: Server,
+	lib: Library,
 ) {
 	if imgui.BeginMenu("Go to") {
 		if imgui.MenuItem("Album") {result.go_to_album = true}
@@ -499,17 +500,21 @@ show_track_context_items :: proc(
 		if imgui.MenuItem("Genre") {result.go_to_genre = true}
 		imgui.EndMenu()
 	}
-	show_add_to_playlist_menu(sv, result)
+	show_add_to_playlist_menu(lib, result)
+	imgui.Separator()
+	if imgui.MenuItem("More info...") {
+		result.more_info = true
+	}
 }
 
 show_track_context :: proc(
 	track_id: Track_ID,
 	context_id: imgui.ID,
-	sv: Server,
+	lib: Library,
 ) -> (result: Track_Context_Result) {
 	result.single_track = track_id
 	if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) {
-		show_track_context_items(track_id, &result, sv)
+		show_track_context_items(track_id, &result, lib)
 		imgui.EndPopup()
 	}
 	return
@@ -553,6 +558,11 @@ process_track_context :: proc(
 			server.playlist_add_track(playlist, track_id, md)
 			sv.library.user_playlists.serial += 1
 		}
+	}
+
+	if result.more_info {
+		cl.windows.metadata_popup_track = track_id
+		cl.windows.metadata_popup_show = true
 	}
 }
 

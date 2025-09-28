@@ -23,6 +23,7 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:server"
 
 Server :: server.Server
+Library :: server.Library
 Playlist :: server.Playlist
 Playlist_ID :: server.Playlist_ID
 Track_ID :: server.Track_ID

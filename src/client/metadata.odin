@@ -76,10 +76,19 @@ _load_track_album_art :: proc(lib: server.Library, str_path: string) -> (width, 
 }
 
 Metadata_Window_Result :: struct {
+	track_id: Track_ID,
 	album_art_context: Track_Context_Result,
+	go_to_artist: bool,
+	go_to_album: bool,
+	go_to_genre: bool,
 }
 
-metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state: ^Metadata_Window) -> (ok: bool) {
+@require_results
+metadata_window_show :: proc(
+	state: ^Metadata_Window, lib: Library, track_id: Track_ID
+) -> (result: Metadata_Window_Result, ok: bool) {
+	result.track_id = track_id
+
 	if state.current_track_id != track_id {
 		width, height: int
 		have_art: bool
@@ -94,8 +103,8 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 		}
 
 		path_buf: Path
-		track_path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_return
-		width, height, state.album_art, have_art = _load_track_album_art(sv.library, track_path)
+		track_path := server.library_get_track_path(lib, path_buf[:], track_id) or_return
+		width, height, state.album_art, have_art = _load_track_album_art(lib, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
 		}
@@ -109,7 +118,7 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 	
 	if state.current_track_id == 0 {
 		imgui.TextDisabled("No track")
-		return true
+		return {}, true
 	}
 
 	// Album art
@@ -120,7 +129,7 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 		imgui.PushStyleVarImVec2(.FramePadding, {})
 		width := min(imgui.GetContentRegionAvail().x, 512)
 		if state.album_art != 0 {
-			if cl.settings.crop_album_art {
+			if true {
 				ratio := state.album_art_ratio
 				uv0: [2]f32
 				uv1: [2]f32
@@ -158,14 +167,11 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 		imgui.PopStyleColor(3)
 	}
 
-	metadata := server.library_get_track_metadata(sv.library, track_id) or_return
+	metadata := server.library_get_track_metadata(lib, track_id) or_return
 
 	if imgui.BeginPopupContextItem() {
-		result: Track_Context_Result
-		result.single_track = track_id
-		show_track_context_items(track_id, &result, sv^)
-		process_track_context(track_id, result, cl, sv, {}, true)
-		imgui.MenuItemBoolPtr("Crop image", nil, &cl.settings.crop_album_art)
+		show_track_context_items(track_id, &result.album_art_context, lib)
+		//imgui.MenuItemBoolPtr("Crop image", nil, &cl.settings.crop_album_art)
 		imgui.EndPopup()
 	}
 
@@ -218,9 +224,9 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 		imgui.TableSetupColumn("value", {}, 0.88)
 
 		metadata_string_row("Title", metadata, .Title)
-		if metadata_string_row("Artist", metadata, .Artist) {_go_to_artist(cl, metadata)}
-		if metadata_string_row("Album", metadata, .Album) {_go_to_album(cl, metadata)}
-		if metadata_string_row("Genre", metadata, .Genre) {_go_to_genre(cl, metadata)}
+		if metadata_string_row("Artist", metadata, .Artist) {result.go_to_artist = true}
+		if metadata_string_row("Album", metadata, .Album) {result.go_to_album = true}
+		if metadata_string_row("Genre", metadata, .Genre) {result.go_to_genre = true}
 
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Duration")}
@@ -239,7 +245,7 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 		imgui.TableSetupColumn("name", {}, 0.12)
 		imgui.TableSetupColumn("value", {}, 0.88)
 
-		path := server.library_get_track_path(sv.library, path_buf[:], track_id) or_else ""
+		path := server.library_get_track_path(lib, path_buf[:], track_id) or_else ""
 		string_row("File path", path)
 
 		imgui.TableNextRow()
@@ -254,6 +260,30 @@ metadata_window_show :: proc(cl: ^Client, sv: ^Server, track_id: Track_ID, state
 	}
 
 	return
+}
+
+metadata_window_free :: proc(window: ^Metadata_Window) {
+	os2.file_info_delete(window.file_info, context.allocator)
+	sys.imgui_destroy_texture(window.album_art)
+	window^ = {}
+}
+
+metadata_window_process_result :: proc(result: Metadata_Window_Result, cl: ^Client, sv: ^Server) -> bool {
+	process_track_context(result.track_id, result.album_art_context, cl, sv, {}, true)
+	if result.go_to_artist {
+		md := server.library_get_track_metadata(sv.library, result.track_id) or_return
+		_go_to_artist(cl, md)
+	}
+	else if result.go_to_album {
+		md := server.library_get_track_metadata(sv.library, result.track_id) or_return
+		_go_to_album(cl, md)
+	}
+	else if result.go_to_genre {
+		md := server.library_get_track_metadata(sv.library, result.track_id) or_return
+		_go_to_genre(cl, md)
+	}
+
+	return true
 }
 
 Metadata_Editor :: struct {
