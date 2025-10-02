@@ -89,13 +89,6 @@ Client :: struct {
 		theme_editor: Theme_Editor_State,
 		settings: Settings_Editor,
 		folders: Folders_Window,
-		metadata_editor: Metadata_Editor,
-
-		metadata_popup: Metadata_Window,
-		metadata_popup_track: Track_ID,
-		metadata_popup_show: bool,
-
-		current_metadata: Metadata_Window,
 
 		status_bar: struct {
 			displayed_track_id: Track_ID,
@@ -142,6 +135,8 @@ init :: proc(
 
 	add_window_archetype(client, LIBRARY_WINDOW_ARCHETYPE)
 	add_window_archetype(client, QUEUE_WINDOW_ARCHETYPE)
+	add_window_archetype(client, METADATA_WINDOW_ARCHETYPE)
+	add_window_archetype(client, METADATA_EDITOR_WINDOW_ARCHETYPE)
 	add_window_archetype(client, PLAYLISTS_WINDOW_ARCHETYPE)
 	add_window_archetype(client, ARTISTS_WINDOW_ARCHETYPE)
 	add_window_archetype(client, ALBUMS_WINDOW_ARCHETYPE)
@@ -269,6 +264,12 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		log.debug("Disabling media controls...")
 		media_controls.disable()
 	}
+
+	if current_metadata, ok := add_window_instance(cl, WINDOW_METADATA, 0); ok {
+		state := cast(^Metadata_Window) current_metadata
+		state.track_id = sv.current_track_id
+	}
+	else {log.error("Failed to update metadata window")}
 
 	sys.async_file_dialog_get_results(&cl.dialogs.add_folders, &sv.scan_queue)
 	server.library_update_categories(&sv.library)

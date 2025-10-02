@@ -539,7 +539,9 @@ process_track_context :: proc(
 		}
 
 		if result.edit_metadata {
-			metadata_editor_select_tracks(cl, {result.single_track.?})
+			if editor, ok := bring_window_to_front(cl, WINDOW_METADATA_EDITOR); ok {
+				metadata_editor_window_select_tracks(auto_cast editor, {result.single_track.?})
+			}
 		}
 
 		if result.play {
@@ -561,8 +563,9 @@ process_track_context :: proc(
 	}
 
 	if result.more_info {
-		cl.windows.metadata_popup_track = track_id
-		cl.windows.metadata_popup_show = true
+		// @TODO
+		//cl.windows.metadata_popup_track = track_id
+		//cl.windows.metadata_popup_show = true
 	}
 }
 
@@ -587,7 +590,9 @@ track_table_process_context :: proc(
 		if result.edit_metadata {
 			selection := track_table_get_selection(table)
 			defer delete(selection)
-			metadata_editor_select_tracks(cl, selection)
+			if editor, ok := bring_window_to_front(cl, WINDOW_METADATA_EDITOR); ok {
+				metadata_editor_window_select_tracks(auto_cast editor, selection)
+			}
 		}
 	}
 
