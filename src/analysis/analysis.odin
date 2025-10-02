@@ -150,7 +150,7 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		d := glm.dot(complex, complex)
 		if d < 1 {continue}
 		// @TODO: Figure out good scaling for this
-		state.real_buffer[i] = log10(d) * scale_factor * 1500
+		state.real_buffer[i] = clamp(log10(d) * scale_factor * 1400, 0, 1)
 	}
 }
 
