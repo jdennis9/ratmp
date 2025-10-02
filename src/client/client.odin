@@ -27,6 +27,7 @@ import "core:path/filepath"
 import "core:strings"
 import "core:strconv"
 import "core:slice"
+import "core:hash/xxhash"
 
 import stbi "vendor:stb/image"
 
@@ -45,6 +46,7 @@ Path :: sys.Path
 
 Client :: struct {
 	ctx: runtime.Context,
+	delta: f32,
 
 	want_quit: bool,
 
@@ -53,8 +55,8 @@ Client :: struct {
 	tick_last_frame: time.Tick,
 	frame_count: int,
 	library_sort_spec: server.Track_Sort_Spec,
-	waveform_window: Waveform_Window,
-	window_state: [Window_ID]Window_State,
+	waveform_window: Wavebar_Window,
+
 	background: struct {
 		texture: imgui.TextureID,
 		width, height: int,
@@ -81,15 +83,31 @@ Client :: struct {
 	
 	analysis: Analysis_State,
 	
+	base_windows: struct {
+		playlists: Playlists_Window,
+		artists: Playlists_Window,
+		albums: Playlists_Window,
+		genres: Playlists_Window,
+		library: Library_Window,
+		queue: Queue_Window,
+		wavebar: Wavebar_Window,
+		spectrum: Spectrum_Window,
+	},
+
+	window_state: map[Window_ID]^Window_Base,
+	window_instance_count: map[u32]u32,
+
+	window_archetypes: map[Window_Archetype_ID]Window_Archetype,
+
 	windows: struct {
 		theme_editor: Theme_Editor_State,
-		user_playlists: Playlist_List_Window,
+		/*user_playlists: Playlist_List_Window,
 		categories: struct {
 			artists: Playlist_List_Window,
 			albums: Playlist_List_Window,
 			genres: Playlist_List_Window,
 			folders: Playlist_List_Window,
-		},
+		},*/
 		settings: Settings_Editor,
 		library: struct {
 			table: Track_Table,
@@ -119,6 +137,8 @@ Client :: struct {
 			show: bool,
 		},
 	},
+
+	saved_windows: map[Window_ID]Saved_Window,
 
 	enable_media_controls: bool,
 	media_controls: struct {
@@ -150,9 +170,15 @@ init :: proc(
 
 	io := imgui.GetIO()
 
-	for info, window in WINDOW_INFO {
-		client.window_state[window].show = .AlwaysShow in info.flags
-	}
+	add_window_archetype(client, LIBRARY_WINDOW_ARCHETYPE)
+	add_window_archetype(client, QUEUE_WINDOW_ARCHETYPE)
+	add_window_archetype(client, PLAYLISTS_WINDOW_ARCHETYPE)
+	add_window_archetype(client, ARTISTS_WINDOW_ARCHETYPE)
+	add_window_archetype(client, ALBUMS_WINDOW_ARCHETYPE)
+	add_window_archetype(client, GENRES_WINDOW_ARCHETYPE)
+	add_window_archetype(client, WAVEBAR_WINDOW_ARCHETYPE)
+	add_window_archetype(client, SPECTRUM_WINDOW_ARCHETYPE)
+	add_window_archetype(client, OSCILLOSCOPE_WINDOW_ARCHETYPE)
 
 	// Imgui settings handler
 	{
@@ -210,7 +236,7 @@ destroy :: proc(client: ^Client) {
 }
 
 handle_events :: proc(client: ^Client, sv: ^Server) {
-	update_layout(&client.layouts, &client.window_state)
+	update_layout(&client.layouts, &client.saved_windows)
 
 	if client.media_controls.enabled {
 		if client.media_controls.display_track != sv.current_track_id {
@@ -260,6 +286,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	cl.frame_count += 1
 	cl.tick_last_frame = prev_frame_start
+	cl.delta = delta
 
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {
@@ -301,8 +328,14 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		imgui.ShowDemoWindow()
 	}
 
+	/*for _, window in cl.window_state {
+		window_show(window, cl, sv)
+	}*/
+
+	show_all_windows(cl, sv)
+
 	// Library
-	if _begin_window(cl, .Library) {
+	/*if begin_saved_window(cl, "Library", "library", {.DefaultShow}) {
 		state := &cl.windows.library
 		filter_cstring := cstring(&state.filter[0])
 		context_id := imgui.GetID("##library_track_context")
@@ -318,11 +351,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		context_result := track_table_show_context(state.table, table_result, context_id, {.NoRemove}, sv^)
 		track_table_process_context(state.table, table_result, context_result, cl, sv)
 
-		imgui.End()
+		end_saved_window()
 	} else {track_table_free(&cl.windows.library.table)}
 
 	// Queue
-	if _begin_window(cl, .Queue) {
+	if begin_saved_window(cl, "Queue", "queue", {.DefaultShow}) {
 		state := &cl.windows.queue
 		context_id := imgui.GetID("##track_context")
 
@@ -345,51 +378,50 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 			defer delete(selection)
 			server.remove_tracks_from_queue(sv, selection)
 		}
-		
-		imgui.End()
-	} else {track_table_free(&cl.windows.queue.table)}
+
+		end_saved_window()
+	} else {track_table_free(&cl.windows.queue.table)}*/
 
 	// Playlists
-	if _begin_window(cl, .Playlists) {
+	/*if begin_saved_window(cl, "Playlists", "playlists", {.DefaultShow}) {
 		playlist_list_window_show(cl, sv, &cl.windows.user_playlists, &sv.library.user_playlists, allow_edit=true)
-		imgui.End()
+		end_saved_window()
 	}
-	else {track_table_free(&cl.windows.user_playlists.track_table)}
+	else {track_table_free(&cl.windows.user_playlists.track_table)}*/
 
 	// Folders
-	if _begin_window(cl, .Folders) {
-		//_show_playlist_list_window(cl, sv, &cl.windows.categories.folders, &sv.library.categories.folders)
+	/*if begin_saved_window(cl, "Folders", "folders") {
 		folders_window_show(cl, sv)
-		imgui.End()
+		end_saved_window()
 	}
-	else {track_table_free(&cl.windows.categories.folders.track_table)}
+	else {track_table_free(&cl.windows.categories.folders.track_table)}*/
 
 	// Artists
-	if _begin_window(cl, .Artists) {
+	/*if begin_saved_window(cl, "Artists", "artists") {
 		playlist_list_window_show(cl, sv, &cl.windows.categories.artists, &sv.library.categories.artists)
-		imgui.End()
+		end_saved_window()
 	}
 	else {track_table_free(&cl.windows.categories.artists.track_table)}
 
 	// Albums
-	if _begin_window(cl, .Albums) {
+	if begin_saved_window(cl, "Albums", "albums") {
 		playlist_list_window_show(cl, sv, &cl.windows.categories.albums, &sv.library.categories.albums)
-		imgui.End()
+		end_saved_window()
 	}
 	else {track_table_free(&cl.windows.categories.albums.track_table)}
 
 	// Genres
-	if _begin_window(cl, .Genres) {
+	if begin_saved_window(cl, "Genres", "genres") {
 		playlist_list_window_show(cl, sv, &cl.windows.categories.genres, &sv.library.categories.genres)
-		imgui.End()
+		end_saved_window()
 	}
-	else {track_table_free(&cl.windows.categories.genres.track_table)}
+	else {track_table_free(&cl.windows.categories.genres.track_table)}*/
 
 	// Metadata
-	if _begin_window(cl, .Metadata) {
+	/*if begin_saved_window(cl, "Metadata", "metadata") {
 		result, _ := metadata_window_show(&cl.windows.current_metadata, sv.library, sv.current_track_id)
 		metadata_window_process_result(result, cl, sv)
-		imgui.End()
+		end_saved_window()
 	}
 	else {metadata_window_free(&cl.windows.current_metadata)}
 
@@ -404,33 +436,33 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	else {metadata_window_free(&cl.windows.metadata_popup)}
 
 	// Waveform
-	if _begin_window(cl, .WaveformSeek) {
+	if begin_saved_window(cl, "Wave Bar", "wavebar") {
 		waveform_window_show(sv, &cl.waveform_window)
-		imgui.End()
+		end_saved_window()
 	}
 
 	// Spectrum
-	if _begin_window(cl, .Spectrum) {
+	if begin_saved_window(cl, "Spectrum", "spectrum") {
 		show_spectrum_window(cl, &cl.analysis)
-		imgui.End()
+		end_saved_window()
 	}
 
 	// Oscilloscope
-	if _begin_window(cl, .Oscilloscope) {
+	if begin_saved_window(cl, "Oscilloscope", "oscilloscope") {
 		show_oscilloscope_window(cl)
-		imgui.End()
+		end_saved_window()
 	}
 
 	// Theme editor
-	if _begin_window(cl, .ThemeEditor) {
+	if begin_saved_window(cl, "Edit Theme", "theme_editor") {
 		theme_editor_show(cl, &cl.windows.theme_editor)
-		imgui.End()
+		end_saved_window()
 	}
 
-	if _begin_window(cl, .MetadataEditor) {
+	if begin_saved_window(cl, "Metadata Editor", "metadata_editor") {
 		metadata_editor_show(&cl.windows.metadata_editor, &sv.library)
-		imgui.End()
-	}
+		end_saved_window()
+	}*/
 
 	// Settings
 	if cl.show_settings_window {
@@ -471,6 +503,53 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	return
 }
+
+/*window_show :: proc(window: ^Window_Base, cl: ^Client, sv: ^Server) {
+	name_buf: [512]u8
+	window_flags: imgui.WindowFlags = {}
+	show_menu := imgui.IsKeyDown(.ImGuiMod_Alt) && window.new_instance != nil
+
+	imgui.PushIDInt(auto_cast window.instance)
+	defer imgui.PopID()
+
+	if window.instance == 0 {
+		fmt.bprint(name_buf[:511], window.title, "###", window.internal_name, "")
+	}
+	else {
+		fmt.bprintf(name_buf[:511], "%s (%d)###%s@d",
+			window.title, window.instance, window.internal_name, window.instance
+		)
+	}
+
+	if show_menu {
+		window_flags |= {.MenuBar}
+	}
+
+	if window.want_bring_to_front {
+		window.open = true
+		window.want_bring_to_front = false
+		imgui.SetNextWindowFocus()
+	}
+	else if !window.open {return}
+
+	if !imgui.Begin(cstring(&name_buf[0]), &window.open, window_flags) {
+		if window.free != nil {
+			window->free(cl, sv)
+		}
+		imgui.End()
+		return
+	}
+
+	if show_menu && imgui.BeginMenuBar() {
+		if imgui.MenuItem("Create new instance") {
+			add_window_instance(cl, window)
+		}
+		imgui.EndMenuBar()
+	}
+
+	window->show(cl, sv)
+	imgui.End()
+}*/
 
 set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	width, height: i32
@@ -522,24 +601,18 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 }
 
 @private
-_go_to_artist :: proc(client: ^Client, md: Track_Metadata) {
-	id := server.library_hash_string(md.values[.Artist].(string) or_else "")
-	client.windows.categories.artists.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
-	bring_window_to_front(client, .Artists)
+_go_to_artist :: proc(cl: ^Client, md: Track_Metadata) {
+	playlists_window_set_view_by_name(&cl.base_windows.artists, md.values[.Artist].(string) or_else "")
 }
 
 @private
-_go_to_album :: proc(client: ^Client, md: Track_Metadata) {
-	id := server.library_hash_string(md.values[.Album].(string) or_else "")
-	client.windows.categories.albums.viewing_id = {serial=auto_cast Metadata_Component.Album, pool=id}
-	bring_window_to_front(client, .Albums)
+_go_to_album :: proc(cl: ^Client, md: Track_Metadata) {
+	playlists_window_set_view_by_name(&cl.base_windows.albums, md.values[.Album].(string) or_else "")
 }
 
 @private
-_go_to_genre :: proc(client: ^Client, md: Track_Metadata) {
-	id := server.library_hash_string(md.values[.Genre].(string) or_else "")
-	client.windows.categories.genres.viewing_id = {serial=auto_cast Metadata_Component.Genre, pool=id}
-	bring_window_to_front(client, .Genres)
+_go_to_genre :: proc(cl: ^Client, md: Track_Metadata) {
+	playlists_window_set_view_by_name(&cl.base_windows.genres, md.values[.Genre].(string) or_else "")
 }
 
 @private
@@ -599,19 +672,20 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	}
 
 	if imgui.BeginMenu("View") {
-		if imgui.MenuItem("Folders") {bring_window_to_front(client, .Folders)}
-		if imgui.MenuItem("Artists") {bring_window_to_front(client, .Artists)}
-		if imgui.MenuItem("Albums") {bring_window_to_front(client, .Albums)}
-		if imgui.MenuItem("Genres") {bring_window_to_front(client, .Genres)}
+		/*for _, window in client.window_state {
+			if .DontShowInSelector in window.flags {continue}
 
-		imgui.SeparatorText("Visualizers")
-		if imgui.MenuItem("Wave bar") {bring_window_to_front(client, .WaveformSeek)}
-		if imgui.MenuItem("Spectrum") {bring_window_to_front(client, .Spectrum)}
-		if imgui.MenuItem("Oscilloscope") {bring_window_to_front(client, .Oscilloscope)}
+			if imgui.MenuItem(window.title) {
+				window.want_bring_to_front = true
+			}
+		}*/
+
+		window := show_window_selector(client)
+		if window != nil {window.want_bring_to_front = true}
 
 		imgui.Separator()
 		if imgui.MenuItem("Edit theme") {
-			bring_window_to_front(client, .ThemeEditor)
+			bring_window_to_front(client, WINDOW_THEME_EDITOR)
 		}
 
 		if imgui.MenuItem("Change background") {
@@ -814,11 +888,11 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 	return true
 }
 
-@private
+/*@private
 _begin_window :: proc(client: ^Client, window: Window_ID) -> bool {
 	name_buf: [128]u8
 	info := WINDOW_INFO[window]
-	state := &client.window_state[window]
+	state := &client.base_windows[window]
 
 	if !state.show && .AlwaysShow not_in info.flags {return false}
 
@@ -843,13 +917,8 @@ _begin_window :: proc(client: ^Client, window: Window_ID) -> bool {
 	}
 
 	return true
-}
+}*/
 
-@private
-bring_window_to_front :: proc(client: ^Client, window: Window_ID) {
-	client.window_state[window].show = true
-	client.window_state[window].bring_to_front = true
-}
 
 @private
 _draw_background :: proc(client: Client) {
@@ -903,52 +972,78 @@ _show_memory_usage :: proc(client: ^Client, sv: Server) {
 _imgui_settings_open_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, name: cstring
 ) -> rawptr {
-	client := cast(^Client) handler.UserData
-	context = client.ctx
-	name_str := string(name)
+	archetype_name: string
+	instance_number: int
+
+	cl := cast(^Client) handler.UserData
+	context = cl.ctx
+
 	fmt.println(name)
-	for window, i in WINDOW_INFO {
-		if string(window.internal_name) == name_str {
-			return cast(rawptr) (cast(uintptr) i + 1)
-		}
+	name_parts := strings.split_n(string(name), "@", 2)
+	defer delete(name_parts)
+
+	if len(name_parts) == 0 {return nil}
+
+	archetype_name = name_parts[0]
+
+	if len(name_parts) >= 2 {
+		instance_number = strconv.parse_int(name_parts[1]) or_else 0
 	}
 
-	return nil
+	return add_window_instance_from_name(cl, archetype_name, instance_number) or_else nil
 }
 
 @private
 _imgui_settings_read_line_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, entry: rawptr, line: cstring
 ) {
-	client := cast(^Client) handler.UserData
-	context = client.ctx
+	cl := cast(^Client) handler.UserData
+	context = cl.ctx
+
 	if entry == nil || len(line) == 0 {return}
 
-	window: Window_ID = cast(Window_ID) (uintptr(entry) - 1)
-	if window < min(Window_ID) || window > max(Window_ID) {return}
-	if .DontSaveState in WINDOW_INFO[window].flags {return}
-
-	line_parts := strings.split(string(line), "=")
-	if len(line_parts) < 2 {return}
+	window := cast(^Window_Base) entry
+	line_parts := strings.split_n(string(line), "=", 2)
 	defer delete(line_parts)
+	if len(line_parts) < 2 {return}
 
-	parsed, parse_ok := strconv.parse_int(line_parts[1])
-	if !parse_ok {client.window_state[window].show = true}
-	else {client.window_state[window].show = parsed >= 1}
+	archetype, archetype_found := cl.window_archetypes[window.archetype]
+	if !archetype_found {return}
+
+	if line_parts[0] == "Open" {
+		if parsed, parse_ok := strconv.parse_int(line_parts[1]); parse_ok {
+			window.open = parsed >= 1
+		}
+	}
+	else if archetype.configure != nil {
+		archetype.configure(window, line_parts[0], line_parts[1])
+	}
 }
 
 @private
 _imgui_settings_write_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, out_buf: ^imgui.TextBuffer
 ) {
-	client := cast(^Client) handler.UserData
-	context = client.ctx
+	cl := cast(^Client) handler.UserData
+	context = cl.ctx
 
-	for window, window_id in WINDOW_INFO {
-		if .DontSaveState in window.flags {continue}
-		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s]\n", window.internal_name)
-		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", cast(u32)client.window_state[window_id].show)
+	for _, archetype in cl.window_archetypes {
+		for instance, instance_number in archetype.instances {
+			if instance == nil {continue}
+			imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s@%d]\n", archetype.internal_name, i32(instance_number))
+			imgui.TextBuffer_appendf(out_buf, "Open=%d\n", i32(instance.open))
+			if archetype.save_config != nil {
+				archetype.save_config(instance, out_buf)
+			}
+		}
 	}
+
+	/*for window_id, window in cl.window_state {
+		if .DontSaveState in window.flags {continue}
+		imgui.TextBuffer_appendf(out_buf, "[RAT MP][%s@%d]\n", window.internal_name, window.instance)
+		imgui.TextBuffer_appendf(out_buf, "Open=%u\n", window.open)
+		if window.save_config != nil {window->save_config(out_buf)}
+	}*/
 }
 
 @private

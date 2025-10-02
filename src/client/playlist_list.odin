@@ -23,19 +23,9 @@ import "core:slice"
 
 import "src:server"
 
-Playlist_List_Window :: struct {
-	viewing_id: Playlist_ID,
-	editing_id: Playlist_ID,
-	new_playlist_name: [128]u8,
-	playlist_table: Playlist_Table,
-	track_table: Track_Table,
-	track_filter: [128]u8,
-	playlist_filter: [128]u8,
-}
-
 playlist_list_window_show :: proc(
 	cl: ^Client, sv: ^Server,
-	state: ^Playlist_List_Window, cat: ^server.Playlist_List,
+	state: ^Playlists_Window, cat: ^server.Playlist_List,
 	allow_edit := false
 ) {
 	root_table_flags := imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|

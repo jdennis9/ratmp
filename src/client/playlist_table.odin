@@ -189,3 +189,8 @@ playlist_table_show :: proc(
 
 	return
 }
+
+playlist_table_free :: proc(table: ^Playlist_Table) {
+	delete(table.rows)
+	table^ = {}
+}

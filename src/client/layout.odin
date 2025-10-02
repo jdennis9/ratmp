@@ -94,11 +94,11 @@ layouts_destroy :: proc(state: ^Layout_Manager) {
 	delete(state.layouts_folder)
 }
 
-update_layout :: proc(state: ^Layout_Manager, window_state: ^[Window_ID]Window_State) {
+update_layout :: proc(state: ^Layout_Manager, window_state: ^map[Window_ID]Saved_Window) {
 	if state.layout_to_load != nil {
-		for &window in window_state {
-			window.show = false
-			window.bring_to_front = false
+		for _, &window in window_state {
+			window.open = false
+			//window.bring_to_front = false
 		}
 
 		imgui.LoadIniSettingsFromMemory(cstring(raw_data(state.layout_to_load)), auto_cast len(state.layout_to_load))

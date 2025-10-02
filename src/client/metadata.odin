@@ -36,6 +36,7 @@ import "src:decoder"
 import "imx"
 
 Metadata_Window :: struct {
+	using base: Window_Base,
 	current_track_id: Track_ID,
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
@@ -378,5 +379,5 @@ metadata_editor_select_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
 	copy(state.tracks[:], tracks)
 	state.serial += 1
 
-	bring_window_to_front(cl, .MetadataEditor)
+	//bring_window_to_front(cl, .MetadataEditor)
 }
