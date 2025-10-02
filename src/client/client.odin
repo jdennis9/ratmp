@@ -84,6 +84,7 @@ Client :: struct {
 	analysis: Analysis_State,
 
 	window_archetypes: map[Window_Archetype_ID]Window_Archetype,
+	sorted_window_archetypes: [dynamic]Window_Archetype_ID,
 
 	windows: struct {
 		theme_editor: Theme_Editor_State,

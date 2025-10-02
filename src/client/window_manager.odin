@@ -1,6 +1,8 @@
 #+private
 package client
 
+import "core:strings"
+import "core:sort"
 import "core:log"
 import "core:hash/xxhash"
 import "core:fmt"
@@ -55,6 +57,39 @@ add_window_archetype :: proc(cl: ^Client, archetype: Window_Archetype) -> Window
 
 	if .NoInitialInstance not_in archetype.flags {
 		add_window_instance_direct(cl, &cl.window_archetypes[id])
+	}
+
+	{
+		iface: sort.Interface
+
+		clear(&cl.sorted_window_archetypes)
+		for key, _ in cl.window_archetypes {append(&cl.sorted_window_archetypes, key)}
+
+		less_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
+			cl := cast(^Client) iface.collection
+			A := cl.window_archetypes[cl.sorted_window_archetypes[a]]
+			B := cl.window_archetypes[cl.sorted_window_archetypes[b]]
+
+			return strings.compare(string(A.title), string(B.title)) < 0
+		}
+
+		swap_proc :: proc(iface: sort.Interface, a, b: int) {
+			cl := cast(^Client) iface.collection
+			temp := cl.sorted_window_archetypes[a]
+			cl.sorted_window_archetypes[a] = cl.sorted_window_archetypes[b]
+			cl.sorted_window_archetypes[b] = temp
+		}
+
+		len_proc :: proc(iface: sort.Interface) -> int {
+			return len((cast(^Client) iface.collection).sorted_window_archetypes)
+		}
+
+		iface.collection = cl
+		iface.less = less_proc
+		iface.swap = swap_proc
+		iface.len = len_proc
+
+		sort.sort(iface)
 	}
 
 	return id
@@ -121,7 +156,8 @@ show_all_windows :: proc(cl: ^Client, sv: ^Server) {
 }
 
 show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
-	for _, &at in cl.window_archetypes {
+	for archetype_id in cl.sorted_window_archetypes {
+		at := cl.window_archetypes[archetype_id] or_continue
 		for inst, i in at.instances {
 			name_buf: [64]u8
 			title: cstring
