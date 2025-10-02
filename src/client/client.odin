@@ -421,21 +421,21 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 @private
 _go_to_artist :: proc(cl: ^Client, md: Track_Metadata) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Artist].(string) or_else "")
+	playlists_window_set_view_by_name(state, md.values[.Artist].(string) or_else "", .Artist)
 	return true
 }
 
 @private
 _go_to_album :: proc(cl: ^Client, md: Track_Metadata) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Album].(string) or_else "")
+	playlists_window_set_view_by_name(state, md.values[.Album].(string) or_else "", .Album)
 	return true
 }
 
 @private
 _go_to_genre :: proc(cl: ^Client, md: Track_Metadata) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Genre].(string) or_else "")
+	playlists_window_set_view_by_name(state, md.values[.Genre].(string) or_else "", .Genre)
 	return true
 }
 

@@ -147,9 +147,9 @@ playlists_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 // Artists, albums, genres
 // =============================================================================
 
-playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string) {
+playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string, component: Metadata_Component) {
 	id := server.library_hash_string(name)
-	window.viewing_id = {serial=auto_cast Metadata_Component.Artist, pool=id}
+	window.viewing_id = {serial=auto_cast component, pool=id}
 	window.want_bring_to_front = true
 }
 
