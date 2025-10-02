@@ -122,9 +122,21 @@ show_all_windows :: proc(cl: ^Client, sv: ^Server) {
 
 show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 	for _, &at in cl.window_archetypes {
-		for inst in at.instances {
-			if inst != nil && imgui.MenuItem(at.title) {
-				window, _ = add_window_instance_direct(cl, &at, 0)
+		for inst, i in at.instances {
+			name_buf: [64]u8
+			title: cstring
+
+			if i != 0 {
+				title = cstring(&name_buf[0])
+				fmt.bprintf(name_buf[:len(name_buf)-1], "%s (%d)", at.title, i)
+			}
+			else {
+				title = at.title
+			}
+
+			if inst != nil && imgui.MenuItem(title) {
+				window, _ = add_window_instance_direct(cl, &at, i)
+				if window != nil {window.want_bring_to_front = true}
 			}
 		}
 	}
