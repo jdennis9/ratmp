@@ -135,8 +135,7 @@ show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 			}
 
 			if inst != nil && imgui.MenuItem(title) {
-				window, _ = add_window_instance_direct(cl, &at, i)
-				if window != nil {window.want_bring_to_front = true}
+				inst.want_bring_to_front = true
 			}
 		}
 	}

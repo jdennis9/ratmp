@@ -15,7 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-#+private file
+#+private
 package client
 
 import "core:math/linalg"
@@ -35,14 +35,11 @@ import "src:server"
 
 import "imx"
 
-PEAK_ROUGHNESS :: 20
-SECONDARY_PEAK_ROUGHNESS :: 1
+@(private="file")
 WINDOW_SIZE :: 8192
 SPECTRUM_MAX_BANDS :: 100
 MAX_OSCILLOSCOPE_SAMPLES :: 4096
 
-
-@private
 Analysis_State :: struct {
 	channels, samplerate: int,
 
@@ -56,6 +53,7 @@ Analysis_State :: struct {
 	fft: analysis.FFT_State,
 }
 
+@(private="file")
 _hann_window :: proc(output: []f32) {
 	N := f32(len(output))
 	for i in 0..<len(output) {
@@ -64,6 +62,7 @@ _hann_window :: proc(output: []f32) {
 	}
 }
 
+@(private="file")
 _welch_window :: proc(output: []f32) {
 	N := f32(len(output))
 	N_2 := N/2
@@ -75,6 +74,7 @@ _welch_window :: proc(output: []f32) {
 	}
 }
 
+@(private="file")
 _osc_window :: proc(output: []f32) {
 	N: f32
 	margin := len(output)/10
@@ -96,7 +96,6 @@ _osc_window :: proc(output: []f32) {
 	}
 }
 
-@private
 analysis_init :: proc(state: ^Analysis_State) {
 	// Hann window
 	_hann_window(state.window_w[:])
@@ -104,12 +103,10 @@ analysis_init :: proc(state: ^Analysis_State) {
 	analysis.fft_init(&state.fft, WINDOW_SIZE)
 }
 
-@private
 analysis_destroy :: proc(state: ^Analysis_State) {
 	analysis.fft_destroy(&state.fft)
 }
 
-@private
 update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	state := &cl.analysis
 	settings := &cl.settings
@@ -120,7 +117,7 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	state.samplerate, state.channels = server.audio_time_frame_from_playback(sv, state.window_data[:], tick, delta) or_return
 	state.raw_window_data = state.window_data
 
-	t := clamp(PEAK_ROUGHNESS*delta, 0, 1)
+	t := clamp(30*delta, 0, 1)
 
 	// Peak
 	if state.need_update_peaks {
@@ -143,7 +140,6 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	return true
 }
 
-@private
 Wavebar_Window :: struct {
 	using base: Window_Base,
 	calc_thread: ^thread.Thread,
@@ -154,12 +150,12 @@ Wavebar_Window :: struct {
 	track_id: Track_ID,
 }
 
+@(private="file")
 _calc_wave_thread_proc :: proc(thread_data: ^thread.Thread) {
 	state := cast(^Wavebar_Window) thread_data.data
 	analysis.calc_peaks_over_time(&state.dec, state.output[:], &state.calc_state)
 }
 
-@private
 WAVEBAR_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Wave Bar",
 	internal_name = WINDOW_WAVEBAR,
@@ -168,21 +164,17 @@ WAVEBAR_WINDOW_ARCHETYPE := Window_Archetype {
 	free = wavebar_window_free_proc,
 }
 
-@private
 wavebar_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
 	return new(Wavebar_Window, allocator)
 }
 
-@private
 wavebar_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	wavebar_window_show(sv, auto_cast self)
 }
 
-@private
 wavebar_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 }
 
-@private
 wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
 	track_id := sv.current_track_id
 
@@ -235,14 +227,12 @@ wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
 	return true
 }
 
-@private
 Oscilloscope_Channel_Mode :: enum {
 	Mono,
 	Separate,
 	Overlapped,
 }
 
-@private
 Oscilloscope_Window :: struct {
 	using base: Window_Base,
 	sample_count: int,
@@ -250,7 +240,6 @@ Oscilloscope_Window :: struct {
 	channel_mode: Oscilloscope_Channel_Mode,
 }
 
-@private
 OSCILLOSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Oscilloscope",
 	internal_name = WINDOW_OSCILLOSCOPE,
@@ -262,12 +251,10 @@ OSCILLOSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
 	flags = {.MultiInstance},
 }
 
-@private
 oscilloscope_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
 	return new(Oscilloscope_Window, allocator)
 }
 
-@private
 oscilloscope_window_configure_proc :: proc(self: ^Window_Base, key, value: string) {
 	state := cast(^Oscilloscope_Window) self
 
@@ -281,7 +268,6 @@ oscilloscope_window_configure_proc :: proc(self: ^Window_Base, key, value: strin
 	}
 }
 
-@private
 oscilloscope_window_save_config_proc :: proc(self: ^Window_Base, out_buf: ^imgui.TextBuffer) {
 	state := cast(^Oscilloscope_Window) self
 	channel_mode_buf: [64]u8
@@ -291,7 +277,6 @@ oscilloscope_window_save_config_proc :: proc(self: ^Window_Base, out_buf: ^imgui
 	imgui.TextBuffer_appendf(out_buf, "ChannelMode=%s\n", cstring(&channel_mode_buf[0]))
 }
 
-@private
 oscilloscope_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Oscilloscope_Window) self
 	input := cl.analysis.raw_window_data[:]
@@ -368,14 +353,12 @@ oscilloscope_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Serv
 	}
 }
 
-@private
 oscilloscope_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Oscilloscope_Window) self
 	delete(state.window_w)
 	state.window_w = nil
 }
 
-@private
 Spectrum_Display_Mode :: enum {
 	Bars,
 	Alpha,
@@ -387,7 +370,6 @@ Spectrum_Band_Distribution :: enum {
 	Natural,
 }
 
-@private
 Spectrum_Window :: struct {
 	using base: Window_Base,
 	band_freqs: [SPECTRUM_MAX_BANDS]f32,
@@ -401,7 +383,6 @@ Spectrum_Window :: struct {
 	should_interpolate: bool,
 }
 
-@private
 SPECTRUM_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Spectrum",
 	internal_name = WINDOW_SPECTRUM,
@@ -413,7 +394,6 @@ SPECTRUM_WINDOW_ARCHETYPE := Window_Archetype {
 	flags = {.MultiInstance},
 }
 
-@private
 spectrum_window_configure_proc :: proc(self: ^Window_Base, key: string, value: string) {
 	state := cast(^Spectrum_Window) self
 
@@ -440,7 +420,6 @@ spectrum_window_configure_proc :: proc(self: ^Window_Base, key: string, value: s
 	}
 }
 
-@private
 spectrum_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
 	ret := new(Spectrum_Window, allocator)
 	ret.band_scaling_factor = 2.5
@@ -448,7 +427,6 @@ spectrum_window_make_instance_proc :: proc(allocator := context.allocator) -> ^W
 	return ret
 }
 
-@private
 spectrum_window_save_config_proc :: proc(self: ^Window_Base, out_buf: ^imgui.TextBuffer) {
 	state := cast(^Spectrum_Window) self
 	enum_name_buf: [32]u8
@@ -461,7 +439,6 @@ spectrum_window_save_config_proc :: proc(self: ^Window_Base, out_buf: ^imgui.Tex
 	imgui.TextBuffer_appendf(out_buf, "NaturalScalingFactor=%f\n", state.band_scaling_factor)
 }
 
-@private
 spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Spectrum_Window) self
 	real_band_heights: [SPECTRUM_MAX_BANDS]f32
@@ -639,7 +616,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 	}
 }
 
-@private
 spectrum_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 }
 
