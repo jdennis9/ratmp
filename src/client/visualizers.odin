@@ -54,20 +54,6 @@ Analysis_State :: struct {
 	raw_window_data: [server.MAX_OUTPUT_CHANNELS][WINDOW_SIZE]f32,
 	
 	fft: analysis.FFT_State,
-
-	spectrum_analyzer: analysis.Spectrum_Analyser,
-	spectrum_frequencies: [SPECTRUM_MAX_BANDS]f32,
-	spectrum_frequency_strings: [SPECTRUM_MAX_BANDS][6]u8,
-	spectrum_frequency_string_lengths: [SPECTRUM_MAX_BANDS]int,
-	spectrum_frequency_bands_calculated: int,
-	spectrum: [SPECTRUM_MAX_BANDS]f32,
-	spectrum_smooth: [SPECTRUM_MAX_BANDS]f32,
-	need_update_spectrum: bool,
-
-	need_update_osc: bool,
-	osc_input: [server.MAX_OUTPUT_CHANNELS][MAX_OSCILLOSCOPE_SAMPLES]f32,
-	osc_window: [dynamic]f32,
-	osc_length: int,
 }
 
 _hann_window :: proc(output: []f32) {
@@ -112,20 +98,15 @@ _osc_window :: proc(output: []f32) {
 
 @private
 analysis_init :: proc(state: ^Analysis_State) {
-	window_sum: f32
-	state.osc_length = MAX_OSCILLOSCOPE_SAMPLES
-
 	// Hann window
 	_hann_window(state.window_w[:])
 
-	analysis.spectrum_analyser_init(&state.spectrum_analyzer, WINDOW_SIZE, 1/window_sum)
 	analysis.fft_init(&state.fft, WINDOW_SIZE)
 }
 
 @private
 analysis_destroy :: proc(state: ^Analysis_State) {
-	analysis.spectrum_analyser_destroy(&state.spectrum_analyzer)
-	delete(state.osc_window)
+	analysis.fft_destroy(&state.fft)
 }
 
 @private
@@ -141,7 +122,6 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 
 	t := clamp(PEAK_ROUGHNESS*delta, 0, 1)
 
-	
 	// Peak
 	if state.need_update_peaks {
 		state.need_update_peaks = false
@@ -151,17 +131,6 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		}
 	}
 	
-	// Oscilloscope
-	/*if state.need_update_osc {
-		if state.osc_length == 0 {state.osc_length = 4096}
-		if len(state.osc_window) != state.osc_length {
-			resize(&state.osc_window, state.osc_length)
-			_osc_window(state.osc_window[:])
-		}
-		state.need_update_osc = false
-		state.samplerate, state.channels, _ = server.audio_time_frame_from_playback(sv, state.osc_input[:], tick, 0)
-	}*/
-	
 	// Apply window multipliers
 	for ch in 0..<1 {
 		for &f, i in state.window_data[ch] {
@@ -170,54 +139,6 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	}
 	
 	analysis.fft_process(&state.fft, state.window_data[0][:])
-
-	// Spectrum
-	spectrum: [SPECTRUM_MAX_BANDS]f32
-	if state.need_update_spectrum {
-		if settings.spectrum_bands == 0 || settings.spectrum_bands != state.spectrum_frequency_bands_calculated {
-			state.spectrum_frequency_bands_calculated = settings.spectrum_bands
-			analysis.calc_spectrum_frequencies(state.spectrum_frequencies[:settings.spectrum_bands])
-			
-			// Pre-format frequency strings
-			for band, index in state.spectrum_frequencies[:settings.spectrum_bands] {
-				name: string
-
-				buf := state.spectrum_frequency_strings[index][:]
-				for &r in buf {r = 0}
-
-				if band > 10000 {
-					name = fmt.bprintf(buf[:len(buf)-1], "%dK", int(f32(math.round(band))/1000))
-				}
-				else if band > 1000 {
-					name = fmt.bprintf(buf[:len(buf)-1], "%1.1fK", f32(math.round(band))/1000)
-				}
-				else {
-					name = fmt.bprintf(buf[:len(buf)-1], "%g", math.round(band))
-				}
-
-				state.spectrum_frequency_string_lengths[index] = len(name)
-			}
-		}
-
-		state.need_update_spectrum = false
-		/*analysis.spectrum_analyser_calc(
-			&state.spectrum_analyzer,
-			state.window_data[0][:],
-			state.spectrum_frequencies[:],
-			spectrum[:],
-			f32(state.samplerate)
-		)*/
-		analysis.fft_extract_bands(state.fft,
-			state.spectrum_frequencies[:settings.spectrum_bands],
-			f32(state.samplerate), state.spectrum[:settings.spectrum_bands]
-		)
-
-		for f, i in spectrum {
-			state.spectrum[i] = clamp(0, 1, math.lerp(state.spectrum[i], f, t))
-			state.spectrum_smooth[i] = clamp(0, 1, math.lerp(state.spectrum_smooth[i], f, t*0.1))
-			state.spectrum_smooth[i] = max(state.spectrum_smooth[i], state.spectrum[i])
-		}
-	}
 
 	return true
 }
@@ -312,162 +233,6 @@ wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
 	}
 
 	return true
-}
-
-@private
-show_spectrum_window :: proc(client: ^Client, state: ^Analysis_State) {
-	band_colors: [SPECTRUM_MAX_BANDS]imgui.Vec4
-
-	state.need_update_spectrum = true
-	settings := &client.settings
-
-	if settings.spectrum_bands == 0 {settings.spectrum_bands = 10}
-
-	if imgui.BeginPopupContextWindow() {
-		imgui.SeparatorText("Band count")
-		if imgui.MenuItem("10", nil, settings.spectrum_bands == 10) {settings.spectrum_bands = 10}
-		if imgui.MenuItem("20", nil, settings.spectrum_bands == 20) {settings.spectrum_bands = 20}
-		if imgui.MenuItem("40", nil, settings.spectrum_bands == 40) {settings.spectrum_bands = 40}
-		if imgui.MenuItem("60", nil, settings.spectrum_bands == 60) {settings.spectrum_bands = 60}
-		if imgui.MenuItem("80", nil, settings.spectrum_bands == 80) {settings.spectrum_bands = 80}
-
-		imgui.SeparatorText("Display mode")
-		if imgui.MenuItem("Bars", nil, settings.spectrum_mode == .Bars) {
-			settings.spectrum_mode = .Bars
-		}
-		if imgui.MenuItem("Alpha", nil, settings.spectrum_mode == .Alpha) {
-			settings.spectrum_mode = .Alpha
-		}
-		if imgui.MenuItem("Line", nil, settings.spectrum_mode == .Line) {
-			settings.spectrum_mode = .Line
-		}
-
-		imgui.SeparatorText("Display settings")
-		imgui.MenuItemBoolPtr("Show slow peaks", nil, &settings.spectrum_show_slow_peaks)
-
-		imgui.EndPopup()
-	}
-
-
-	spectrum := state.spectrum[:settings.spectrum_bands]
-
-	drawlist := imgui.GetWindowDrawList()
-	theme := &global_theme
-
-	// Calculate band colors
-	{
-		quiet_color := theme.custom_colors[.PeakQuiet]
-		loud_color := theme.custom_colors[.PeakLoud]
-
-		for band, index in spectrum {
-			band_colors[index] = glm.lerp(quiet_color, loud_color, band)
-		}
-	}
-
-	if settings.spectrum_mode != .Line {
-		imgui.PushStyleColor(.TableHeaderBg, 0)
-		defer imgui.PopStyleColor()
-
-		imgui.PushStyleVarImVec2(.CellPadding, {})
-		defer imgui.PopStyleVar()
-
-		imgui.PushStyleVar(.TableAngledHeadersAngle, math.to_radians_f32(20))
-		defer imgui.PopStyleVar()
-
-		imgui.PushStyleVarImVec2(.TableAngledHeadersTextAlign, {0.5, 0.5})
-		defer imgui.PopStyleVar()
-		
-		color_negative :: proc(color: imgui.Vec4) -> imgui.Vec4 {
-			return {1, 1, 1, 1} - color
-		}
-
-		table_flags := imgui.TableFlags_BordersInner
-		if imgui.BeginTable("##spectrum_table", auto_cast settings.spectrum_bands, table_flags) {
-			for &str in state.spectrum_frequency_strings[:settings.spectrum_bands] {
-				imgui.TableSetupColumn(cstring(&str[0]), {.AngledHeader})
-			}
-			
-			imgui.TableAngledHeadersRow()
-			
-			imgui.TableNextRow()
-			for band, band_index in spectrum {
-				if imgui.TableNextColumn() {
-					size := imgui.GetContentRegionAvail()
-					cursor := imgui.GetCursorScreenPos()
-					color := band_colors[band_index]
-					
-					if settings.spectrum_mode == .Bars {
-						imgui.DrawList_AddRectFilled(drawlist, 
-							{cursor.x, cursor.y + size.y}, 
-							{cursor.x + size.x, cursor.y + size.y * (1 - band)},
-							imgui.GetColorU32ImVec4(color),
-						)
-					}
-					else if settings.spectrum_mode == .Alpha {
-						color.a *= band
-						imgui.DrawList_AddRectFilled(drawlist, 
-							cursor,
-							cursor + size,
-							imgui.GetColorU32ImVec4(color),
-						)
-					}
-				}
-			}
-
-			// Slow peaks
-			if settings.spectrum_show_slow_peaks && imgui.TableSetColumnIndex(0) {
-				for band, band_index in state.spectrum_smooth[:settings.spectrum_bands] {
-					color := color_negative(band_colors[band_index])
-					color.a = 1
-
-					cursor := imgui.GetCursorScreenPos()
-					size := imgui.GetContentRegionAvail()
-					y := cursor.y + (size.y * (1 - band))
-
-					imgui.DrawList_AddLine(drawlist, 
-						{cursor.x, y}, 
-						{cursor.x + size.x, y},
-						imgui.GetColorU32ImVec4(color),
-						2
-					)
-
-					if !imgui.TableNextColumn() {break}
-				}
-			}
-
-			imgui.EndTable()
-		}
-	}
-	else {
-		band_positions: [SPECTRUM_MAX_BANDS]imgui.Vec2
-		cursor := imgui.GetCursorScreenPos()
-		size := imgui.GetContentRegionAvail()
-		gap := size.x / f32(settings.spectrum_bands)
-
-		cursor.y += size.y
-
-		band_positions[0] = {
-			cursor.x,
-			cursor.y - (state.spectrum[0] * size.y),
-		}
-
-		for index in 1..<settings.spectrum_bands {
-			band := state.spectrum[index]
-			band_positions[index] = {
-				cursor.x + (gap * f32(index)),
-				cursor.y - (band * size.y),
-			}
-
-			imgui.DrawList_AddLine(
-				drawlist,
-				band_positions[index-1],
-				band_positions[index],
-				imgui.GetColorU32ImVec4(band_colors[index])
-			)
-		}
-
-		
-	}
 }
 
 @private
@@ -608,39 +373,6 @@ oscilloscope_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Serv
 	state := cast(^Oscilloscope_Window) self
 	delete(state.window_w)
 	state.window_w = nil
-}
-
-@private
-show_oscilloscope_window :: proc(client: ^Client) {
-	state := &client.analysis
-	state.need_update_osc = true
-	if state.osc_length == 0 || len(state.osc_window) != state.osc_length {return}
-	size := imgui.GetContentRegionAvail()
-
-	color := imgui.GetColorU32(.PlotLines)
-	drawlist := imgui.GetWindowDrawList()
-	gap := size.x / f32(state.osc_length)
-	y_off := size.y * 0.5
-	cursor := imgui.GetCursorScreenPos()
-
-	for i in 0..<(state.osc_length-1) {
-		a := clamp(state.osc_input[0][i] * state.osc_window[i], -1, 1)*0.5
-		b := clamp(state.osc_input[0][i+1] * state.osc_window[i+1], -1, 1)*0.5
-		p1 := cursor + {f32(i) * gap, y_off + size.y * a}
-		p2 := cursor + {f32(i+1) * gap, y_off + size.y * b}
-		imgui.DrawList_AddLine(drawlist, p1, p2, color)
-	}
-
-	if imgui.BeginPopupContextWindow() {
-		imgui.SeparatorText("Samples")
-		if imgui.MenuItem("128") {state.osc_length = 128}
-		if imgui.MenuItem("256") {state.osc_length = 256}
-		if imgui.MenuItem("512") {state.osc_length = 512}
-		if imgui.MenuItem("1024") {state.osc_length = 1024}
-		if imgui.MenuItem("2048") {state.osc_length = 2048}
-		if imgui.MenuItem("4096") {state.osc_length = 4096}
-		imgui.EndPopup()
-	}
 }
 
 @private
