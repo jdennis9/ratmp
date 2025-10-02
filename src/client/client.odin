@@ -82,40 +82,12 @@ Client :: struct {
 	loaded_fonts: []Load_Font,
 	
 	analysis: Analysis_State,
-	
-	base_windows: struct {
-		playlists: Playlists_Window,
-		artists: Playlists_Window,
-		albums: Playlists_Window,
-		genres: Playlists_Window,
-		library: Library_Window,
-		queue: Queue_Window,
-		wavebar: Wavebar_Window,
-		spectrum: Spectrum_Window,
-	},
-
-	window_state: map[Window_ID]^Window_Base,
-	window_instance_count: map[u32]u32,
 
 	window_archetypes: map[Window_Archetype_ID]Window_Archetype,
 
 	windows: struct {
 		theme_editor: Theme_Editor_State,
-		/*user_playlists: Playlist_List_Window,
-		categories: struct {
-			artists: Playlist_List_Window,
-			albums: Playlist_List_Window,
-			genres: Playlist_List_Window,
-			folders: Playlist_List_Window,
-		},*/
 		settings: Settings_Editor,
-		library: struct {
-			table: Track_Table,
-			filter: [128]u8,
-		},
-		queue: struct {
-			table: Track_Table,
-		},
 		folders: Folders_Window,
 		metadata_editor: Metadata_Editor,
 
@@ -137,8 +109,6 @@ Client :: struct {
 			show: bool,
 		},
 	},
-
-	saved_windows: map[Window_ID]Saved_Window,
 
 	enable_media_controls: bool,
 	media_controls: struct {
@@ -236,7 +206,7 @@ destroy :: proc(client: ^Client) {
 }
 
 handle_events :: proc(client: ^Client, sv: ^Server) {
-	update_layout(&client.layouts, &client.saved_windows)
+	update_layout(&client.layouts, &client.window_archetypes)
 
 	if client.media_controls.enabled {
 		if client.media_controls.display_track != sv.current_track_id {
@@ -601,18 +571,24 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 }
 
 @private
-_go_to_artist :: proc(cl: ^Client, md: Track_Metadata) {
-	playlists_window_set_view_by_name(&cl.base_windows.artists, md.values[.Artist].(string) or_else "")
+_go_to_artist :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
+	playlists_window_set_view_by_name(state, md.values[.Artist].(string) or_else "")
+	return true
 }
 
 @private
-_go_to_album :: proc(cl: ^Client, md: Track_Metadata) {
-	playlists_window_set_view_by_name(&cl.base_windows.albums, md.values[.Album].(string) or_else "")
+_go_to_album :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
+	playlists_window_set_view_by_name(state, md.values[.Album].(string) or_else "")
+	return true
 }
 
 @private
-_go_to_genre :: proc(cl: ^Client, md: Track_Metadata) {
-	playlists_window_set_view_by_name(&cl.base_windows.genres, md.values[.Genre].(string) or_else "")
+_go_to_genre :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
+	playlists_window_set_view_by_name(state, md.values[.Genre].(string) or_else "")
+	return true
 }
 
 @private

@@ -196,9 +196,10 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 }
 
 
-bring_window_to_front :: proc(cl: ^Client, archetype_name: string, instance := 0) -> bool {
-	state := add_window_instance_from_name(cl, archetype_name, instance) or_return
+bring_window_to_front :: proc(cl: ^Client, archetype_name: string, instance := 0) -> (state: ^Window_Base, ok: bool) {
+	state = add_window_instance_from_name(cl, archetype_name, instance) or_return
 	state.want_bring_to_front = true
 	state.open = true
-	return true
+	ok = true
+	return
 }
