@@ -53,11 +53,7 @@ Close_Policy :: enum {
 Settings :: struct {
 	theme: Settings_String,
 	background: Settings_Path,
-	crop_album_art: bool,
 	fonts: [sys.Font_Language]Settings_Font,
-	spectrum_bands: int,
-	spectrum_mode: Spectrum_Display_Mode,
-	spectrum_show_slow_peaks: bool,
 	close_policy: Close_Policy,
 }
 
