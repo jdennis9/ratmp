@@ -119,6 +119,9 @@ Client :: struct {
 	bring_settings_window_to_front: bool,
 	want_apply_settings: bool,
 
+	show_window_manager: bool,
+	bring_window_manager_to_front: bool,
+
 	wake_proc: proc(),
 }
 
@@ -302,35 +305,17 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 
 	show_all_windows(cl, sv)
 
-	// Metadata
-	/*if begin_saved_window(cl, "Metadata", "metadata") {
-		result, _ := metadata_window_show(&cl.windows.current_metadata, sv.library, sv.current_track_id)
-		metadata_window_process_result(result, cl, sv)
-		end_saved_window()
-	}
-	else {metadata_window_free(&cl.windows.current_metadata)}
-
-	if cl.windows.metadata_popup_show {
-		defer imgui.End()
-		if imgui.Begin("Selected Metadata", &cl.windows.metadata_popup_show, {.NoDocking}) {
-			result, _ := metadata_window_show(&cl.windows.metadata_popup, sv.library, cl.windows.metadata_popup_track)
-			metadata_window_process_result(result, cl, sv)
+	if cl.show_window_manager {
+		if cl.bring_window_manager_to_front {
+			cl.bring_window_manager_to_front = false
+			imgui.SetNextWindowFocus()
 		}
-		else {metadata_window_free(&cl.windows.metadata_popup)}
+		if imgui.Begin("Window Manager", &cl.show_window_manager) {
+			show_window_manager_window(cl)
+		}
+		imgui.End()
 	}
-	else {metadata_window_free(&cl.windows.metadata_popup)}
-
-	// Theme editor
-	if begin_saved_window(cl, "Edit Theme", "theme_editor") {
-		theme_editor_show(cl, &cl.windows.theme_editor)
-		end_saved_window()
-	}
-
-	if begin_saved_window(cl, "Metadata Editor", "metadata_editor") {
-		metadata_editor_show(&cl.windows.metadata_editor, &sv.library)
-		end_saved_window()
-	}*/
-
+	
 	// Settings
 	if cl.show_settings_window {
 		if cl.bring_settings_window_to_front {
@@ -500,6 +485,12 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	if imgui.BeginMenu("View") {
 		window := show_window_selector(client)
 		if window != nil {window.want_bring_to_front = true}
+
+		imgui.Separator()
+		if imgui.MenuItem("Manage windows") {
+			client.show_window_manager = true
+			client.bring_window_manager_to_front = true
+		}
 
 		imgui.Separator()
 		if imgui.MenuItem("Edit theme") {

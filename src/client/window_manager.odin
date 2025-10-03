@@ -245,11 +245,71 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 	return
 }
 
-
 bring_window_to_front :: proc(cl: ^Client, archetype_name: string, instance := 0) -> (state: ^Window_Base, ok: bool) {
 	state = add_window_instance_from_name(cl, archetype_name, instance) or_return
 	state.want_bring_to_front = true
 	state.open = true
 	ok = true
 	return
+}
+
+show_window_manager_window :: proc(cl: ^Client) {
+	for id in cl.sorted_window_archetypes {
+		at := (&cl.window_archetypes[id]) or_continue
+
+		if imgui.TreeNode(at.title) {
+			defer imgui.TreePop()
+
+			want_remove_instance := -1
+
+			imgui.BeginDisabled(.MultiInstance not_in at.flags)
+			if imgui.Button("Add instance") {
+				new_instance, _ := add_window_instance(at)
+				if new_instance != nil {new_instance.open = true}
+			}
+			imgui.EndDisabled()
+			imgui.SameLine()
+			imgui.BeginDisabled(.MultiInstance not_in at.flags && .NoInitialInstance not_in at.flags)
+			if imgui.Button("Remove extra instances") {
+				if .NoInitialInstance in at.flags {
+					remove_window_instance(at, 0)
+				}
+
+				for i in 1..<len(at.instances) {
+					remove_window_instance(at, i)
+				}
+			}
+			imgui.EndDisabled()
+
+			imgui.BeginTable("##instances", 3, imgui.TableFlags_BordersInnerV) or_continue
+			defer imgui.EndTable()
+
+			for instance, i in at.instances {
+				if instance == nil {continue}
+				imgui.TableNextRow()
+				imgui.PushIDInt(auto_cast i)
+				defer imgui.PopID()
+
+				if imgui.TableSetColumnIndex(0) {
+					imgui.Text("%d", i32(i))
+				}
+
+				if imgui.TableSetColumnIndex(1) {
+					if (.MultiInstance in at.flags && i > 0) || .NoInitialInstance in at.flags {
+						if imgui.Selectable("Remove") {
+							want_remove_instance = i
+						}
+					}
+				}
+
+				if imgui.TableSetColumnIndex(2) {
+					if imgui.Selectable("Bring forward") {
+						instance.want_bring_to_front = true
+					}
+				}
+			}
+
+			if want_remove_instance != -1 {remove_window_instance(at, want_remove_instance)}
+		}
+	}
 }
