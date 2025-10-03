@@ -644,10 +644,9 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		x_accum := min_spacing
 		
 		pos := [2]f32{window_pos.x, window_pos.y + window_size.y - text_height}
-		imgui.DrawList_AddText(drawlist, pos, imgui.GetColorU32(.Text), "0")
 		imgui.DrawList_AddText(drawlist, pos + {window_size.x - 20, 0}, imgui.GetColorU32(.Text), "20K")
 
-		pos.x += min_spacing
+		//pos.x += min_spacing
 
 		for &guide, i in state.band_freq_guides[0:state.band_count] {
 			width := band_width[i]

@@ -118,7 +118,6 @@ FOLDERS_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = folders_window_make_instance,
 	show = folders_window_show,
 	hide = folders_window_hide,
-	flags = {.NoInitialInstance},
 }
 
 @private
