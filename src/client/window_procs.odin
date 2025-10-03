@@ -159,6 +159,7 @@ ARTISTS_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = playlists_window_make_instance,
 	show = artists_window_show,
 	hide = playlists_window_hide,
+	flags = {.NoInitialInstance},
 }
 
 ALBUMS_WINDOW_ARCHETYPE := Window_Archetype {
@@ -167,6 +168,7 @@ ALBUMS_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = playlists_window_make_instance,
 	show = albums_window_show,
 	hide = playlists_window_hide,
+	flags = {.NoInitialInstance},
 }
 
 GENRES_WINDOW_ARCHETYPE := Window_Archetype {
@@ -175,6 +177,7 @@ GENRES_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = playlists_window_make_instance,
 	show = genres_window_show,
 	hide = playlists_window_hide,
+	flags = {.NoInitialInstance},
 }
 
 artists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {

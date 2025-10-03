@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+#+private
 package client
 
 import "base:runtime"
@@ -249,37 +250,51 @@ theme_scan_folder :: proc(client: ^Client) {
 	}
 }
 
-@private
 themes_init :: proc(client: ^Client) {
 	theme_scan_folder(client)
 }
 
-@private
 themes_destroy :: proc(client: ^Client) {
 	for name in client.theme_names {delete(name)}
 	delete(client.theme_names)
 }
 
-Theme_Editor_State :: struct {
+Theme_Editor_Window :: struct {
+	using base: Window_Base,
 	new_theme_name: [64]u8,
 	name_error: [64]u8,
 }
 
 global_theme: Theme
 
-@private
-theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (changes: bool) {
+THEME_EDITOR_WINDOW_ARCHETYPE := Window_Archetype {
+	title = "Theme Editor",
+	internal_name = WINDOW_THEME_EDITOR,
+	make_instance = theme_editor_window_make_instance,
+	show = theme_editor_window_show,
+	flags = {.NoInitialInstance},
+}
+
+theme_editor_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
+	return new(Theme_Editor_Window, allocator)
+}
+
+theme_editor_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	theme_editor_show(auto_cast self, cl)
+}
+
+theme_editor_show :: proc(state: ^Theme_Editor_Window, cl: ^Client) -> (changes: bool) {
 	popup_name: cstring = "New theme name"
 	popup_id := imgui.GetID(popup_name)
 	style := imgui.GetStyle()
-	current_theme_name := cstring(&client.settings.theme[0])
+	current_theme_name := cstring(&cl.settings.theme[0])
 	theme := &global_theme
 
 	if imgui.BeginCombo("##select_theme", current_theme_name) {
-		for theme_name in client.theme_names {
+		for theme_name in cl.theme_names {
 			if imgui.MenuItem(theme_name) {
-				theme_load_from_name(client^, theme, string(theme_name))
-				set_theme(client, theme^, string(theme_name))
+				theme_load_from_name(cl^, theme, string(theme_name))
+				set_theme(cl, theme^, string(theme_name))
 				changes = true
 			}
 		}
@@ -311,9 +326,9 @@ theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (chang
 				util.copy_string_to_buf(state.name_error[:], "Name cannot be empty")
 			}
 			else {
-				theme_save_from_name(client^, theme^, string(name))
-				set_theme(client, theme^, string(name))
-				themes_init(client)
+				theme_save_from_name(cl^, theme^, string(name))
+				set_theme(cl, theme^, string(name))
+				themes_init(cl)
 				imgui.CloseCurrentPopup()
 				for &s in state.name_error {s = 0}
 				for &s in state.new_theme_name {s = 0}
@@ -325,7 +340,7 @@ theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (chang
 
 	imgui.SameLine()
 	if imgui.Button("Refresh themes") {
-		themes_init(client)
+		themes_init(cl)
 	}
 
 	if imgui.Button("New") {
@@ -335,26 +350,26 @@ theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (chang
 
 	imgui.BeginDisabled(len(current_theme_name) == 0)
 	if imgui.Button("Save") {
-		theme_save_from_name(client^, theme^, string(current_theme_name))
+		theme_save_from_name(cl^, theme^, string(current_theme_name))
 	}
 	imgui.EndDisabled()
 
 	imgui.SameLine()
 	if imgui.Button("Load") {
-		theme_load_from_name(client^, theme, string(current_theme_name))
-		set_theme(client, theme^, string(current_theme_name))
+		theme_load_from_name(cl^, theme, string(current_theme_name))
+		set_theme(cl, theme^, string(current_theme_name))
 	}
 
 	imgui.SameLine()
 	if imgui.Button("Delete") {
-		theme_delete_from_name(client, string(current_theme_name))
-		theme_scan_folder(client)
-		if len(client.theme_names) > 0 {
-			theme_load_from_name(client^, theme, string(client.theme_names[0]))
-			set_theme(client, theme^, string(client.theme_names[0]))
+		theme_delete_from_name(cl, string(current_theme_name))
+		theme_scan_folder(cl)
+		if len(cl.theme_names) > 0 {
+			theme_load_from_name(cl^, theme, string(cl.theme_names[0]))
+			set_theme(cl, theme^, string(cl.theme_names[0]))
 		}
 		else {
-			for &c in client.settings.theme {c = 0}
+			for &c in cl.settings.theme {c = 0}
 		}
 	}
 
@@ -380,6 +395,8 @@ theme_editor_show :: proc(client: ^Client, state: ^Theme_Editor_State) -> (chang
 	}
 
 	if imgui.CollapsingHeader("Fine Tune") {
+		imgui.PushID("fine_tune")
+		defer imgui.PopID()
 		for &col, index in style.Colors {
 			if imgui.ColorEdit4(imgui.GetStyleColorName(auto_cast index), &col) {
 				theme.imgui_colors[auto_cast index] = col

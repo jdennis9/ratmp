@@ -9,7 +9,6 @@ import "core:fmt"
 import "base:runtime"
 import sa "core:container/small_array"
 
-
 import imgui "src:thirdparty/odin-imgui"
 
 Window_Archetype_ID :: distinct u32

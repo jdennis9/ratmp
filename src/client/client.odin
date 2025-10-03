@@ -87,7 +87,6 @@ Client :: struct {
 	sorted_window_archetypes: [dynamic]Window_Archetype_ID,
 
 	windows: struct {
-		theme_editor: Theme_Editor_State,
 		settings: Settings_Editor,
 
 		status_bar: struct {
@@ -145,6 +144,7 @@ init :: proc(
 	add_window_archetype(client, SPECTRUM_WINDOW_ARCHETYPE)
 	add_window_archetype(client, OSCILLOSCOPE_WINDOW_ARCHETYPE)
 	add_window_archetype(client, FOLDERS_WINDOW_ARCHETYPE)
+	add_window_archetype(client, THEME_EDITOR_WINDOW_ARCHETYPE)
 
 	// Imgui settings handler
 	{
