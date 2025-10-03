@@ -18,6 +18,7 @@
 #+private
 package client
 
+import "core:strconv"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
@@ -75,6 +76,7 @@ Metadata_Window :: struct {
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
 	file_info: os2.File_Info,
+	crop_album_art: bool,
 }
 
 METADATA_WINDOW_ARCHETYPE := Window_Archetype {
@@ -83,11 +85,29 @@ METADATA_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = metadata_window_make_instance_proc,
 	show = metadata_window_show_proc,
 	hide = metadata_window_hide_proc,
+	configure = metadata_window_configure_proc,
+	save_config = metadata_window_save_config_proc,
 	flags = {.DefaultShow},
 }
 
+
 metadata_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
 	return new(Metadata_Window, allocator)
+}
+
+metadata_window_configure_proc :: proc(self: ^Window_Base, key, value: string) {
+	state := cast(^Metadata_Window) self
+
+	if key == "CropAlbumArt" {
+		if parsed, ok := strconv.parse_int(value); ok {
+			state.crop_album_art = parsed > 0
+		}
+	}
+}
+
+metadata_window_save_config_proc :: proc(self: ^Window_Base, out_buf: ^imgui.TextBuffer) {
+	state := cast(^Metadata_Window) self
+	imgui.TextBuffer_appendf(out_buf, "CropAlbumArt=%d\n", i32(state.crop_album_art))
 }
 
 metadata_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
@@ -139,7 +159,7 @@ metadata_window_show :: proc(
 		imgui.PushStyleVarImVec2(.FramePadding, {})
 		width := min(imgui.GetContentRegionAvail().x, 512)
 		if state.album_art != 0 {
-			if true {
+			if state.crop_album_art {
 				ratio := state.album_art_ratio
 				uv0: [2]f32
 				uv1: [2]f32
@@ -183,7 +203,7 @@ metadata_window_show :: proc(
 		result: Track_Context_Result
 		show_track_context_items(state.displayed_track_id, &result, sv.library)
 		process_track_context(state.displayed_track_id, result, cl, sv, {}, true)
-		//imgui.MenuItemBoolPtr("Crop image", nil, &cl.settings.crop_album_art)
+		imgui.MenuItemBoolPtr("Crop image", nil, &state.crop_album_art)
 		imgui.EndPopup()
 	}
 
