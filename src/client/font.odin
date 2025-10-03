@@ -61,6 +61,9 @@ ICON_RANGES := []imgui.Wchar {
 	0
 }
 
+@(private="file")
+_BUILTIN_FONT := #load("data/NotoSans-SemiBold.ttf")
+
 get_font_language_ranges :: proc(lang: sys.Font_Languages, allocator := context.temp_allocator) -> []imgui.Wchar {
 	builder: imgui.FontGlyphRangesBuilder
 	vector: imgui.Vector_Wchar
@@ -199,6 +202,11 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 		cfg.MergeMode = true
 	}
 
+	cfg.MergeMode = false
+	cfg.FontDataOwnedByAtlas = false
+	client.mini_font = imgui.FontAtlas_AddFontFromMemoryTTF(
+		atlas, raw_data(_BUILTIN_FONT), auto_cast len(_BUILTIN_FONT), 12, &cfg
+	)
 
 	imgui.FontAtlas_Build(atlas)
 }
@@ -238,7 +246,7 @@ load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
 		append(&fonts, Load_Font {
 			languages = {.English},
 			size = 16 * scale,
-			data = #load("data/NotoSans-SemiBold.ttf"),
+			data = _BUILTIN_FONT,
 		})
 	}
 

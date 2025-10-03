@@ -362,7 +362,6 @@ oscilloscope_window_hide_proc :: proc(self: ^Window_Base) {
 Spectrum_Display_Mode :: enum {
 	Bars,
 	Alpha,
-	Line,
 }
 
 Spectrum_Band_Distribution :: enum {
@@ -373,6 +372,7 @@ Spectrum_Band_Distribution :: enum {
 Spectrum_Window :: struct {
 	using base: Window_Base,
 	band_freqs: [SPECTRUM_MAX_BANDS]f32,
+	band_freq_guides: [SPECTRUM_MAX_BANDS][8]u8,
 	band_heights: [SPECTRUM_MAX_BANDS]f32,
 	band_freqs_calculated: int,
 	band_count: int,
@@ -450,7 +450,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		imgui.SeparatorText("Display mode")
 		if imgui.MenuItem("Bar graph", nil, state.display_mode == .Bars) {state.display_mode = .Bars}
 		if imgui.MenuItem("Alpha", nil, state.display_mode == .Alpha) {state.display_mode = .Alpha}
-		//if imgui.MenuItem("Line", nil, state.display_mode == .Line) {state.display_mode = .Line}
 		imgui.SeparatorText("No. bands")
 		if imgui.MenuItem("20", nil, state.band_count == 20) {state.band_count = 20}
 		if imgui.MenuItem("40", nil, state.band_count == 40) {state.band_count = 40}
@@ -476,6 +475,19 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 	if state.band_freqs_calculated != state.band_count {
 		state.band_freqs_calculated = state.band_count
 		analysis.calc_spectrum_frequencies(state.band_freqs[:state.band_count])
+
+		// Frequency guides
+		for freq_raw, i in state.band_freqs[:state.band_count] {
+			freq := math.floor(freq_raw)
+			guide := &state.band_freq_guides[i]
+			for &c in guide {c = 0}
+			if freq > 1_000 {
+				fmt.bprintf(guide[:len(guide)-1], "%.1fK", freq/1_000)
+			}
+			else {
+				fmt.bprintf(guide[:len(guide)-1], "%.0f", freq)
+			}
+		}
 	}
 
 	analysis.fft_extract_bands(
@@ -539,14 +551,32 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 	draw_spectrum_bar_graph :: proc(
 		drawlist: ^imgui.DrawList,
 		pos: imgui.Vec2, size: imgui.Vec2, bands: []f32,
+		band_width: []f32,
 		band_colors: []u32,
-		band_distribution: Spectrum_Band_Distribution,
-		band_scaling_factor: f32,
+		guide_font: ^imgui.Font,
 	) {
-		band_width: [SPECTRUM_MAX_BANDS]f32
 		x_offset: f32 = 0
 
-		distribute_band_widths(size.x, band_width[:len(bands)], band_distribution, band_scaling_factor)
+		imgui.PushFont(guide_font)
+		defer imgui.PopFont()
+
+		db_guides := []cstring {
+			"0db",
+			"-10db",
+			"-20db",
+			"-30db",
+			"-40db",
+			"-50db",
+		}
+		guide_spacing := size.y / f32(len(db_guides))
+		for _, i in db_guides {
+			y := guide_spacing * f32(i)
+			imgui.DrawList_AddLine(drawlist,
+				{pos.x, pos.y + y},
+				{pos.x, pos.y + y} + {size.x, 0},
+				imgui.GetColorU32(.TableBorderLight),
+			)
+		}
 
 		for band, i in bands {
 			width := band_width[i]
@@ -559,21 +589,22 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 				band_colors[i],
 			)
 			x_offset += width
-			assert(i >= 0)
+		}
+
+		for guide, i in db_guides {
+			y := guide_spacing * f32(i)
+			str_size := imgui.CalcTextSize(guide) + {4, 0}
+			imgui.DrawList_AddText(drawlist, {pos.x + size.x - str_size.x, pos.y + y + 4}, imgui.GetColorU32(.Text), guide)
 		}
 	}
 
 	draw_spectrum_fading_bars :: proc(
 		drawlist: ^imgui.DrawList,
 		pos: imgui.Vec2, size: imgui.Vec2, bands: []f32,
+		band_width: []f32,
 		band_colors: []u32,
-		band_distribution: Spectrum_Band_Distribution,
-		band_scaling_factor: f32,
 	) {
-		band_width: [SPECTRUM_MAX_BANDS]f32
 		x_offset: f32 = 0
-
-		distribute_band_widths(size.x, band_width[:len(bands)], band_distribution, band_scaling_factor)
 
 		for band, i in bands {
 			width := band_width[i]
@@ -586,7 +617,48 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 				imgui.GetColorU32ImU32(band_colors[i], band),
 			)
 			x_offset += width
-			assert(i >= 0)
+		}
+	}
+	
+	band_width: [SPECTRUM_MAX_BANDS]f32
+
+	window_pos := imgui.GetCursorScreenPos()
+	window_size := imgui.GetContentRegionAvail()
+	graph_size := window_size
+
+	graph_size.y -= 16
+	if graph_size.x < 20 || graph_size.y < 20 {return}
+	
+	distribute_band_widths(
+		graph_size.x, band_width[:state.band_count],
+		state.band_distribution, state.band_scaling_factor
+	)
+
+	// Draw frequency guides
+	{
+		imgui.PushFont(cl.mini_font)
+		defer imgui.PopFont()
+
+		text_height := imgui.GetTextLineHeight()
+		min_spacing: f32 = 30
+		x_accum := min_spacing
+		
+		pos := [2]f32{window_pos.x, window_pos.y + window_size.y - text_height}
+		imgui.DrawList_AddText(drawlist, pos, imgui.GetColorU32(.Text), "0")
+		imgui.DrawList_AddText(drawlist, pos + {window_size.x - 20, 0}, imgui.GetColorU32(.Text), "20K")
+
+		pos.x += min_spacing
+
+		for &guide, i in state.band_freq_guides[0:state.band_count] {
+			width := band_width[i]
+			x_accum += width
+			
+			if x_accum >= min_spacing {
+				x_accum = 0
+				imgui.DrawList_AddText(drawlist, pos, imgui.GetColorU32(.Text), cstring(&guide[0]))
+			}
+			pos.x += width
+			if pos.x > (window_pos.x + window_size.x - min_spacing*1.5) {break}
 		}
 	}
 
@@ -594,24 +666,21 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		case .Bars: {
 			draw_spectrum_bar_graph(
 				drawlist, imgui.GetCursorScreenPos(),
-				imgui.GetContentRegionAvail(),
+				graph_size,
 				state.band_heights[:state.band_count],
+				band_width[:state.band_count],
 				band_colors[:state.band_count],
-				state.band_distribution,
-				state.band_scaling_factor,
+				cl.mini_font,
 			)
 		}
 		case .Alpha: {
 			draw_spectrum_fading_bars(
 				drawlist, imgui.GetCursorScreenPos(),
-				imgui.GetContentRegionAvail(),
+				graph_size,
 				state.band_heights[:state.band_count],
+				band_width[:state.band_count],
 				band_colors[:state.band_count],
-				state.band_distribution,
-				state.band_scaling_factor,
 			)
-		}
-		case .Line: {
 		}
 	}
 }

@@ -46,6 +46,7 @@ Path :: sys.Path
 
 Client :: struct {
 	ctx: runtime.Context,
+	mini_font: ^imgui.Font,
 	delta: f32,
 
 	want_quit: bool,
