@@ -117,7 +117,7 @@ FOLDERS_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_FOLDERS,
 	make_instance = folders_window_make_instance,
 	show = folders_window_show,
-	free = folders_window_free,
+	hide = folders_window_hide,
 }
 
 @private
@@ -276,8 +276,15 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	}
 }
 
+folders_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	state := cast(^Folders_Window) self
+	
+	track_table_free(&state.track_table)
+}
+
 folders_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Folders_Window) self
+
 	mem.dynamic_arena_destroy(&state.node_arena)
 	mem.dynamic_arena_destroy(&state.string_arena)
 	delete(state.viewing_tracks)
@@ -285,5 +292,4 @@ folders_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state.viewing_tracks_serial = 0
 	state.serial = 0
 	state.root = {}
-	track_table_free(&state.track_table)
 }

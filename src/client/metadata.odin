@@ -82,7 +82,7 @@ METADATA_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_METADATA,
 	make_instance = metadata_window_make_instance_proc,
 	show = metadata_window_show_proc,
-	free = metadata_window_free_proc,
+	hide = metadata_window_hide_proc,
 	flags = {.DefaultShow},
 }
 
@@ -274,7 +274,7 @@ metadata_window_show :: proc(
 	return
 }
 
-metadata_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+metadata_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Metadata_Window) self
 	os2.file_info_delete(state.file_info, context.allocator)
 	sys.imgui_destroy_texture(state.album_art)
@@ -306,7 +306,7 @@ METADATA_EDITOR_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_METADATA_EDITOR,
 	make_instance = metadata_editor_window_make_instance_proc,
 	show = metadata_editor_window_show_proc,
-	free = metadata_editor_window_free_proc,
+	hide = metadata_editor_window_hide_proc,
 	flags = {.NoInitialInstance},
 }
 
@@ -314,7 +314,7 @@ metadata_editor_window_make_instance_proc :: proc(allocator := context.allocator
 	return new(Metadata_Editor_Window, allocator)
 }
 
-metadata_editor_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+metadata_editor_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Metadata_Editor_Window) self
 	track_table_free(&state.track_table)
 }

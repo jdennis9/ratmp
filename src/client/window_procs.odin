@@ -21,7 +21,7 @@ LIBRARY_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_LIBRARY,
 	make_instance = library_window_make_instance,
 	show = library_window_show,
-	free = library_window_free,
+	hide = library_window_hide,
 	flags = {.DefaultShow},
 }
 
@@ -46,7 +46,7 @@ library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 }
 
-library_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+library_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Library_Window) self
 	track_table_free(&state.track_table)
 }
@@ -66,7 +66,7 @@ QUEUE_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_QUEUE,
 	make_instance = queue_window_make_instance,
 	show = queue_window_show,
-	free = queue_window_free,
+	hide = queue_window_hide,
 	flags = {.DefaultShow},
 }
 
@@ -100,7 +100,7 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	}
 }
 
-queue_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+queue_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Queue_Window) self
 	track_table_free(&state.track_table)
 }
@@ -125,7 +125,7 @@ PLAYLISTS_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_PLAYLISTS,
 	make_instance = playlists_window_make_instance,
 	show = playlists_window_show,
-	free = playlists_window_free,
+	hide = playlists_window_hide,
 	flags = {.MultiInstance, .DefaultShow},
 }
 
@@ -138,7 +138,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	playlist_list_window_show(cl, sv, state, &sv.library.user_playlists, allow_edit = true)
 }
 
-playlists_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+playlists_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
 	playlist_table_free(&state.playlist_table)
 }
@@ -158,7 +158,7 @@ ARTISTS_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_ARTIST,
 	make_instance = playlists_window_make_instance,
 	show = artists_window_show,
-	free = playlists_window_free,
+	hide = playlists_window_hide,
 }
 
 ALBUMS_WINDOW_ARCHETYPE := Window_Archetype {
@@ -166,7 +166,7 @@ ALBUMS_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_ALBUMS,
 	make_instance = playlists_window_make_instance,
 	show = albums_window_show,
-	free = playlists_window_free,
+	hide = playlists_window_hide,
 }
 
 GENRES_WINDOW_ARCHETYPE := Window_Archetype {
@@ -174,7 +174,7 @@ GENRES_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_GENRES,
 	make_instance = playlists_window_make_instance,
 	show = genres_window_show,
-	free = playlists_window_free,
+	hide = playlists_window_hide,
 }
 
 artists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {

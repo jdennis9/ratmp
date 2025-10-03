@@ -40,7 +40,8 @@ Window_Archetype :: struct {
 	save_config: proc(self: ^Window_Base, text_buf: ^imgui.TextBuffer),
 	make_instance: proc(allocator: runtime.Allocator) -> ^Window_Base,
 	show: proc(self: ^Window_Base, cl: ^Client, sv: ^Server),
-	free: proc(self: ^Window_Base, cl: ^Client, sv: ^Server),
+	// Called every frame where the window isn't visible
+	hide: proc(self: ^Window_Base, cl: ^Client, sv: ^Server),
 }
 
 Window_Manager :: struct {
@@ -187,8 +188,8 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 	imgui.PushIDInt(auto_cast window.instance)
 	defer imgui.PopID()
 
-	defer if !shown && arch.free != nil {
-		arch.free(window, cl, sv)
+	defer if !shown && arch.hide != nil {
+		arch.hide(window, cl, sv)
 	}
 
 	if window.instance == 0 {

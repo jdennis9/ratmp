@@ -161,7 +161,7 @@ WAVEBAR_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_WAVEBAR,
 	make_instance = wavebar_window_make_instance_proc,
 	show = wavebar_window_show_proc,
-	free = wavebar_window_free_proc,
+	hide = wavebar_window_hide_proc,
 }
 
 wavebar_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
@@ -172,7 +172,7 @@ wavebar_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	wavebar_window_show(sv, auto_cast self)
 }
 
-wavebar_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+wavebar_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 }
 
 wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
@@ -247,7 +247,7 @@ OSCILLOSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
 	save_config = oscilloscope_window_save_config_proc,
 	configure = oscilloscope_window_configure_proc,
 	show = oscilloscope_window_show_proc,
-	free = oscilloscope_window_free_proc,
+	hide = oscilloscope_window_hide_proc,
 	flags = {.MultiInstance},
 }
 
@@ -353,7 +353,7 @@ oscilloscope_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Serv
 	}
 }
 
-oscilloscope_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+oscilloscope_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Oscilloscope_Window) self
 	delete(state.window_w)
 	state.window_w = nil
@@ -390,7 +390,7 @@ SPECTRUM_WINDOW_ARCHETYPE := Window_Archetype {
 	save_config = spectrum_window_save_config_proc,
 	make_instance = spectrum_window_make_instance_proc,
 	show = spectrum_window_show_proc,
-	free = spectrum_window_free_proc,
+	hide = spectrum_window_hide_proc,
 	flags = {.MultiInstance},
 }
 
@@ -616,6 +616,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 	}
 }
 
-spectrum_window_free_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+spectrum_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 }
 
