@@ -160,7 +160,7 @@ fft_extract_bands :: proc(fft: FFT_State, frequencies: []f32, samplerate: f32, o
 	freq := freq_step
 	band := 0
 
-	for frame in fft.real_buffer[1:] {
+	for frame in fft.real_buffer[:] {
 		defer freq += freq_step
 		if freq > frequencies[band] {band = min(band + 1, len(output)-1)}
 		output[band] = max(frame, output[band])
