@@ -172,7 +172,7 @@ wavebar_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	wavebar_window_show(sv, auto_cast self)
 }
 
-wavebar_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+wavebar_window_hide_proc :: proc(self: ^Window_Base) {
 }
 
 wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
@@ -248,7 +248,7 @@ OSCILLOSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
 	configure = oscilloscope_window_configure_proc,
 	show = oscilloscope_window_show_proc,
 	hide = oscilloscope_window_hide_proc,
-	flags = {.MultiInstance},
+	flags = {.MultiInstance, .NoInitialInstance},
 }
 
 oscilloscope_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
@@ -353,7 +353,7 @@ oscilloscope_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Serv
 	}
 }
 
-oscilloscope_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+oscilloscope_window_hide_proc :: proc(self: ^Window_Base) {
 	state := cast(^Oscilloscope_Window) self
 	delete(state.window_w)
 	state.window_w = nil
@@ -391,7 +391,7 @@ SPECTRUM_WINDOW_ARCHETYPE := Window_Archetype {
 	make_instance = spectrum_window_make_instance_proc,
 	show = spectrum_window_show_proc,
 	hide = spectrum_window_hide_proc,
-	flags = {.MultiInstance},
+	flags = {.MultiInstance, .NoInitialInstance},
 }
 
 spectrum_window_configure_proc :: proc(self: ^Window_Base, key: string, value: string) {
@@ -616,6 +616,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 	}
 }
 
-spectrum_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+spectrum_window_hide_proc :: proc(self: ^Window_Base) {
 }
 

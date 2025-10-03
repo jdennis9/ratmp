@@ -46,7 +46,7 @@ library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 }
 
-library_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+library_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Library_Window) self
 	track_table_free(&state.track_table)
 }
@@ -100,7 +100,7 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	}
 }
 
-queue_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+queue_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Queue_Window) self
 	track_table_free(&state.track_table)
 }
@@ -138,7 +138,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	playlist_list_window_show(cl, sv, state, &sv.library.user_playlists, allow_edit = true)
 }
 
-playlists_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+playlists_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Playlists_Window) self
 	playlist_table_free(&state.playlist_table)
 }

@@ -40,7 +40,7 @@ Window_Archetype :: struct {
 	make_instance: proc(allocator: runtime.Allocator) -> ^Window_Base,
 	show: proc(self: ^Window_Base, cl: ^Client, sv: ^Server),
 	// Called every frame where the window isn't visible
-	hide: proc(self: ^Window_Base, cl: ^Client, sv: ^Server),
+	hide: proc(self: ^Window_Base),
 }
 
 Window_Manager :: struct {
@@ -56,7 +56,7 @@ add_window_archetype :: proc(cl: ^Client, archetype: Window_Archetype) -> Window
 	cl.window_archetypes[id] = archetype
 
 	if .NoInitialInstance not_in archetype.flags {
-		add_window_instance_direct(cl, &cl.window_archetypes[id])
+		add_window_instance_direct(&cl.window_archetypes[id])
 	}
 
 	{
@@ -96,7 +96,7 @@ add_window_archetype :: proc(cl: ^Client, archetype: Window_Archetype) -> Window
 }
 
 add_window_instance_direct :: proc(
-	cl: ^Client, archetype: ^Window_Archetype, want_index := -1
+	archetype: ^Window_Archetype, want_index := -1
 ) -> (instance: ^Window_Base, ok: bool) {
 	if want_index >= len(archetype.instances) {return}
 
@@ -131,7 +131,7 @@ add_window_instance_indirect :: proc(
 	cl: ^Client, id: Window_Archetype_ID, want_index := -1
 ) -> (instance: ^Window_Base, ok: bool) {
 	arch := (&cl.window_archetypes[id]) or_return
-	return add_window_instance_direct(cl, arch, want_index)
+	return add_window_instance_direct(arch, want_index)
 }
 
 add_window_instance_from_name :: proc(
@@ -144,6 +144,14 @@ add_window_instance :: proc {
 	add_window_instance_direct,
 	add_window_instance_indirect,
 	add_window_instance_from_name,
+}
+
+remove_window_instance :: proc(archetype: ^Window_Archetype, instance: int) {
+	window := archetype.instances[instance]
+	if window == nil {return}
+	if archetype.hide != nil {archetype.hide(window)}
+	free(window)
+	archetype.instances[instance] = nil
 }
 
 show_all_windows :: proc(cl: ^Client, sv: ^Server) {
@@ -182,13 +190,14 @@ show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: ^Client, sv: ^Server) -> (shown: bool) {
 	name_buf: [512]u8
 	window_flags: imgui.WindowFlags = {}
-	show_menu := imgui.IsKeyDown(.ImGuiMod_Alt) && (.MultiInstance in arch.flags)
+	show_menu := imgui.IsKeyDown(.ImGuiMod_Alt) && 
+		(.MultiInstance in arch.flags || .NoInitialInstance in arch.flags)
 
 	imgui.PushIDInt(auto_cast window.instance)
 	defer imgui.PopID()
 
 	defer if !shown && arch.hide != nil {
-		arch.hide(window, cl, sv)
+		arch.hide(window)
 	}
 
 	if window.instance == 0 {
@@ -215,18 +224,23 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 		imgui.End()
 		return
 	}
+	defer imgui.End()
 
 	if show_menu && imgui.BeginMenuBar() {
-		if imgui.MenuItem("Create new instance") {
-			child, _ := add_window_instance(cl, arch)
+		defer imgui.EndMenuBar()
+
+		if .MultiInstance in arch.flags && imgui.MenuItem("Create new instance") {
+			child, _ := add_window_instance(arch)
 			if child != nil {child.open = true}
 		}
-		imgui.EndMenuBar()
+		if .NoInitialInstance in arch.flags && imgui.MenuItem("Delete instance") {
+			remove_window_instance(arch, auto_cast window.instance)
+			return
+		}
 	}
 
 	shown = true
 	arch.show(window, cl, sv)
-	imgui.End()
 
 	return
 }

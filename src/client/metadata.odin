@@ -274,7 +274,7 @@ metadata_window_show :: proc(
 	return
 }
 
-metadata_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+metadata_window_hide_proc :: proc(self: ^Window_Base) {
 	state := cast(^Metadata_Window) self
 	os2.file_info_delete(state.file_info, context.allocator)
 	sys.imgui_destroy_texture(state.album_art)
@@ -314,7 +314,7 @@ metadata_editor_window_make_instance_proc :: proc(allocator := context.allocator
 	return new(Metadata_Editor_Window, allocator)
 }
 
-metadata_editor_window_hide_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+metadata_editor_window_hide_proc :: proc(self: ^Window_Base) {
 	state := cast(^Metadata_Editor_Window) self
 	track_table_free(&state.track_table)
 }

@@ -277,7 +277,7 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	}
 }
 
-folders_window_hide :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+folders_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Folders_Window) self
 	
 	track_table_free(&state.track_table)
