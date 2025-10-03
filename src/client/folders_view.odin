@@ -130,11 +130,17 @@ folders_window_make_instance :: proc(allocator := context.allocator) -> ^Window_
 folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Folders_Window) self
 
-	select_folder :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server, node: _Folder_Node) -> bool {
-		folder := server.library_find_folder(sv.library, node.id) or_return
+	_Node_Result :: struct {
+		play: ^_Folder_Node,
+		select: ^_Folder_Node,
+		remove: ^_Folder_Node,
+	}
+
+	select_folder :: proc(state: ^Folders_Window, lib: Library, node: _Folder_Node) -> bool {
+		folder := server.library_find_folder(lib, node.id) or_return
 		delete(state.viewing_tracks)
 		log.debug(folder)
-		state.viewing_tracks = server.library_folder_tree_recurse_tracks(sv.library, folder^, context.allocator)
+		state.viewing_tracks = server.library_folder_tree_recurse_tracks(lib, folder^, context.allocator)
 		state.sel_folder_id = node.id
 		return true
 	}
@@ -144,6 +150,94 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			tracks := server.library_folder_tree_recurse_tracks(sv.library, folder^, context.allocator)
 			server.play_playlist(sv, tracks, _folder_id_to_playlist_id(node.id))
 			delete(tracks)
+		}
+	}
+
+	show_node :: proc(
+		state: ^Folders_Window,
+		cl: ^Client, sv: ^Server,
+		node: ^_Folder_Node,
+		depth: int,
+		result: ^_Node_Result,
+	) {
+		playlist_id := _folder_id_to_playlist_id(node.id)
+		imgui.TableNextRow()
+		
+		if playlist_id == sv.current_playlist_id {
+			imgui.TableSetBgColor(
+				.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
+			)
+		}
+
+		if node.track_count == 0 {
+			if !imgui.TableSetColumnIndex(0) {return}
+			tree_node_flags := imgui.TreeNodeFlags{.SpanAllColumns}
+
+			if state.sel_folder_id == node.id {tree_node_flags |= {.Selected}}
+			if depth == 0 {tree_node_flags |= {.DefaultOpen}}
+
+			if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
+				if imgui.IsItemToggledOpen() {
+					result.select = node
+				}
+
+				if imgui.BeginPopupContextItem() {
+					if imgui.MenuItem("Remove from library") {
+						result.remove = node
+					}
+					imgui.EndPopup()
+				}
+
+				if is_play_track_input_pressed() {
+					result.select = node
+					result.play = node
+				}
+
+				for &child in node.children {
+					if child.track_count == 0 {show_node(state, cl, sv, &child, depth + 1, result)}
+				}
+		
+				for &child in node.children {
+					if child.track_count != 0 {show_node(state, cl, sv, &child, depth + 1, result)}
+				}
+		
+				imgui.TreePop()
+			}
+			else if is_play_track_input_pressed() {
+				result.select = node
+				result.play = node
+			}
+		}
+		else {
+			if !imgui.TableSetColumnIndex(0) {return}
+
+			if imgui.Selectable(
+				strings.unsafe_string_to_cstring(node.name),
+				node.id == state.sel_folder_id,
+				{.SpanAllColumns}
+			) {
+				result.select = node
+			}
+
+			if imgui.BeginPopupContextItem() {
+				if imgui.MenuItem("Remove from library") {}
+				imgui.EndPopup()
+			}
+
+			if is_play_track_input_pressed() {
+				if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
+					server.play_playlist(sv, folder.tracks[:], playlist_id)
+				}
+				result.select = node
+			}
+
+			if imgui.TableSetColumnIndex(1) {
+				imx.text_unformatted(string(node.duration_str[:node.duration_str_len]))
+			}
+
+			if imgui.TableSetColumnIndex(2) {
+				imx.text(8, node.track_count)
+			}
 		}
 	}
 
@@ -170,83 +264,23 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			root = &root.children[0]
 		}
 
-		show_node :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server, node: ^_Folder_Node, depth: int) {
-			playlist_id := _folder_id_to_playlist_id(node.id)
-			imgui.TableNextRow()
-			
-			if playlist_id == sv.current_playlist_id {
-				imgui.TableSetBgColor(
-					.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
-				)
-			}
-
-			if node.track_count == 0 {
-				if !imgui.TableSetColumnIndex(0) {return}
-				tree_node_flags := imgui.TreeNodeFlags{.SpanAllColumns}
-
-				if state.sel_folder_id == node.id {tree_node_flags |= {.Selected}}
-				if depth == 0 {tree_node_flags |= {.DefaultOpen}}
-
-				if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
-					if imgui.IsItemToggledOpen() {
-						select_folder(state, cl, sv, node^)
-					}
-
-					if is_play_track_input_pressed() {
-						select_folder(state, cl, sv, node^)
-						play_folder(sv, node^)
-					}
-
-					for &child in node.children {
-						if child.track_count == 0 {show_node(state, cl, sv, &child, depth + 1)}
-					}
-			
-					for &child in node.children {
-						if child.track_count != 0 {show_node(state, cl, sv, &child, depth + 1)}
-					}
-			
-					imgui.TreePop()
-				}
-				else if is_play_track_input_pressed() {
-					select_folder(state, cl, sv, node^)
-					play_folder(sv, node^)
-				}
-			}
-			else {
-				if !imgui.TableSetColumnIndex(0) {return}
-
-				if imgui.Selectable(
-					strings.unsafe_string_to_cstring(node.name),
-					node.id == state.sel_folder_id,
-					{.SpanAllColumns}
-				) {
-					select_folder(state, cl, sv, node^)
-				}
-
-				if is_play_track_input_pressed() {
-					if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
-						server.play_playlist(sv, folder.tracks[:], playlist_id)
-					}
-					select_folder(state, cl, sv, node^)
-				}
-
-				if imgui.TableSetColumnIndex(1) {
-					imx.text_unformatted(string(node.duration_str[:node.duration_str_len]))
-				}
-
-				if imgui.TableSetColumnIndex(2) {
-					imx.text(8, node.track_count)
-				}
-			}
-		}
-
 		if imgui.BeginTable("##folders", 3, imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner) {
+			result: _Node_Result
 			imgui.TableSetupColumn("Folder")
 			imgui.TableSetupColumn("Duration")
 			imgui.TableSetupColumn("No. Tracks")
 			imgui.TableSetupScrollFreeze(1, 1)
 			imgui.TableHeadersRow()
-			show_node(state, cl, sv, root, 0)
+			show_node(state, cl, sv, root, 0, &result)
+			if result.select != nil {
+				select_folder(state, sv.library, result.select^)
+			}
+			if result.play != nil {
+				play_folder(sv, result.play^)
+			}
+			if result.remove != nil {
+				server.library_remove_folder(&sv.library, result.remove.id)
+			}
 			imgui.EndTable()
 		}
 	}
@@ -273,7 +307,6 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 		context_result := track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
 		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
-		
 	}
 }
 

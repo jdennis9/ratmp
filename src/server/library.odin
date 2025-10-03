@@ -99,10 +99,12 @@ Library :: struct {
 	string_allocator: runtime.Allocator,
 	path_allocator: path_pool.Pool,
 	last_track_id: Track_ID,
+
 	track_ids: [dynamic]Track_ID,
 	track_path_hashes: [dynamic]u64,
 	track_paths: [dynamic]path_pool.Path,
 	track_metadata: [dynamic]Track_Metadata,
+
 	dir_cover_files: map[u64]string,
 	next_playlist_id: u32,
 	user_playlists: Playlist_List,
@@ -298,6 +300,16 @@ library_get_missing_tracks :: proc(lib: Library, output: ^[dynamic]Track_ID) {
 	}
 }
 
+library_remove_track :: proc(lib: ^Library, id: Track_ID) -> bool {
+	index := library_lookup_track(lib^, id) or_return
+	ordered_remove(&lib.track_ids, index)
+	ordered_remove(&lib.track_metadata, index)
+	ordered_remove(&lib.track_paths, index)
+	ordered_remove(&lib.track_path_hashes, index)
+	lib.serial += 1
+	return true
+}
+
 library_remove_missing_tracks :: proc(lib: ^Library) {
 	to_remove: [dynamic]Track_ID
 	defer delete(to_remove)
@@ -305,13 +317,8 @@ library_remove_missing_tracks :: proc(lib: ^Library) {
 	library_get_missing_tracks(lib^, &to_remove)
 
 	for track in to_remove {
-		index := library_lookup_track(lib^, track) or_continue
-		ordered_remove(&lib.track_ids, index)
-		ordered_remove(&lib.track_metadata, index)
-		ordered_remove(&lib.track_paths, index)
-	}
-	
-	lib.serial += 1
+		library_remove_track(lib, track)
+	}	
 }
 
 library_update_categories :: proc(lib: ^Library) {

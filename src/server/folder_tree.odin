@@ -146,6 +146,18 @@ library_find_folder :: proc(lib: Library, id: u32) -> (ptr: ^Library_Folder, fou
 	return lib.folder_tree.folder_ptrs[id]
 }
 
+library_remove_folder :: proc(lib: ^Library, id: u32) -> bool {
+	folder := library_find_folder(lib^, id) or_return
+	tracks := library_folder_tree_recurse_tracks(lib^, folder^, context.allocator)
+	defer delete(tracks)
+
+	for track in tracks {
+		library_remove_track(lib, track)
+	}
+
+	return true
+}
+
 library_folder_tree_count_tracks_recursively :: proc(lib: Library, folder: Library_Folder) -> int {
 	count := len(folder.tracks)
 	for child in folder.children {

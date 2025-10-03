@@ -42,8 +42,16 @@ library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
 	track_table_process_result(state.track_table, table_result, cl, sv, {})
 
-	context_result := track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
+	context_result := track_table_show_context(state.track_table, table_result, context_id, {}, sv^)
 	track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+
+	if context_result.remove {
+		selection := track_table_get_selection(state.track_table)
+		defer delete(selection)
+		for track in selection {
+			server.library_remove_track(&sv.library, track)
+		}
+	}
 }
 
 library_window_hide :: proc(self: ^Window_Base) {
