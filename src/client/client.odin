@@ -89,7 +89,6 @@ Client :: struct {
 	windows: struct {
 		theme_editor: Theme_Editor_State,
 		settings: Settings_Editor,
-		folders: Folders_Window,
 
 		status_bar: struct {
 			displayed_track_id: Track_ID,
@@ -145,6 +144,7 @@ init :: proc(
 	add_window_archetype(client, WAVEBAR_WINDOW_ARCHETYPE)
 	add_window_archetype(client, SPECTRUM_WINDOW_ARCHETYPE)
 	add_window_archetype(client, OSCILLOSCOPE_WINDOW_ARCHETYPE)
+	add_window_archetype(client, FOLDERS_WINDOW_ARCHETYPE)
 
 	// Imgui settings handler
 	{

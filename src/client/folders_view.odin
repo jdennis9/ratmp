@@ -42,6 +42,7 @@ _Folder_Node :: struct {
 
 @private
 Folders_Window :: struct {
+	using base: Window_Base,
 	track_filter: [128]u8,
 	serial: uint,
 	node_arena: mem.Dynamic_Arena,
@@ -56,8 +57,7 @@ Folders_Window :: struct {
 	viewing_tracks_serial: uint,
 }
 
-_rebuild_nodes :: proc(cl: ^Client, sv: ^Server) {
-	state := &cl.windows.folders
+_rebuild_nodes :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server) {
 	tree := &sv.library.folder_tree
 
 	delete(state.viewing_tracks)
@@ -105,19 +105,31 @@ _folder_id_to_playlist_id :: proc(id: u32) -> Playlist_ID {
 	return {serial = id, pool = auto_cast len(Metadata_Component)}
 }
 
-_set_viewing_tracks :: proc(cl: ^Client, tracks: []Track_ID) {
-	state := &cl.windows.folders
+_set_viewing_tracks :: proc(state: ^Folders_Window, cl: ^Client, tracks: []Track_ID) {
 	delete(state.viewing_tracks)
 	state.viewing_tracks = slice.clone(tracks)
 	state.viewing_tracks_serial = 0
 }
 
 @private
-folders_window_show :: proc(cl: ^Client, sv: ^Server) {
-	state := &cl.windows.folders
+FOLDERS_WINDOW_ARCHETYPE := Window_Archetype {
+	title = "Folders",
+	internal_name = WINDOW_FOLDERS,
+	make_instance = folders_window_make_instance,
+	show = folders_window_show,
+	free = folders_window_free,
+}
 
-	select_folder :: proc(cl: ^Client, sv: ^Server, node: _Folder_Node) -> bool {
-		state := &cl.windows.folders
+@private
+folders_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
+	return new(Folders_Window, allocator)
+}
+
+@private
+folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	state := cast(^Folders_Window) self
+
+	select_folder :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server, node: _Folder_Node) -> bool {
 		folder := server.library_find_folder(sv.library, node.id) or_return
 		delete(state.viewing_tracks)
 		log.debug(folder)
@@ -131,13 +143,13 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			tracks := server.library_folder_tree_recurse_tracks(sv.library, folder^, context.allocator)
 			server.play_playlist(sv, tracks, _folder_id_to_playlist_id(node.id))
 			delete(tracks)
-		} else {log.error("FUUUU")}
+		}
 	}
 
 	if state.serial != sv.library.serial {
 		log.debug("Rebuilding folder tree...")
 		state.serial = sv.library.serial
-		_rebuild_nodes(cl, sv)
+		_rebuild_nodes(state, cl, sv)
 	}
 
 	root_table_flags := imgui.TableFlags_BordersInnerV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
@@ -157,8 +169,7 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			root = &root.children[0]
 		}
 
-		show_node :: proc(cl: ^Client, sv: ^Server, node: ^_Folder_Node, depth: int) {
-			state := &cl.windows.folders
+		show_node :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server, node: ^_Folder_Node, depth: int) {
 			playlist_id := _folder_id_to_playlist_id(node.id)
 			imgui.TableNextRow()
 			
@@ -177,26 +188,26 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 
 				if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
 					if imgui.IsItemToggledOpen() {
-						select_folder(cl, sv, node^)
+						select_folder(state, cl, sv, node^)
 					}
 
 					if is_play_track_input_pressed() {
-						select_folder(cl, sv, node^)
+						select_folder(state, cl, sv, node^)
 						play_folder(sv, node^)
 					}
 
 					for &child in node.children {
-						if child.track_count == 0 {show_node(cl, sv, &child, depth + 1)}
+						if child.track_count == 0 {show_node(state, cl, sv, &child, depth + 1)}
 					}
 			
 					for &child in node.children {
-						if child.track_count != 0 {show_node(cl, sv, &child, depth + 1)}
+						if child.track_count != 0 {show_node(state, cl, sv, &child, depth + 1)}
 					}
 			
 					imgui.TreePop()
 				}
 				else if is_play_track_input_pressed() {
-					select_folder(cl, sv, node^)
+					select_folder(state, cl, sv, node^)
 					play_folder(sv, node^)
 				}
 			}
@@ -208,14 +219,14 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 					node.id == state.sel_folder_id,
 					{.SpanAllColumns}
 				) {
-					select_folder(cl, sv, node^)
+					select_folder(state, cl, sv, node^)
 				}
 
 				if is_play_track_input_pressed() {
 					if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
 						server.play_playlist(sv, folder.tracks[:], playlist_id)
 					}
-					select_folder(cl, sv, node^)
+					select_folder(state, cl, sv, node^)
 				}
 
 				if imgui.TableSetColumnIndex(1) {
@@ -234,7 +245,7 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 			imgui.TableSetupColumn("No. Tracks")
 			imgui.TableSetupScrollFreeze(1, 1)
 			imgui.TableHeadersRow()
-			show_node(cl, sv, root, 0)
+			show_node(state, cl, sv, root, 0)
 			imgui.EndTable()
 		}
 	}
@@ -247,7 +258,8 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
 		track_table_update(
-			&state.track_table, sv.library.serial + state.track_table_serial, sv.library, state.viewing_tracks[:], playlist_id,
+			&state.track_table, sv.library.serial + state.track_table_serial,
+			sv.library, state.viewing_tracks[:], playlist_id,
 			string(filter_cstring)
 		)
 
@@ -264,7 +276,14 @@ folders_window_show :: proc(cl: ^Client, sv: ^Server) {
 	}
 }
 
-_folders_window_destroy :: proc(cl: ^Client) {
-	state := &cl.windows.folders
+folders_window_free :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	state := cast(^Folders_Window) self
 	mem.dynamic_arena_destroy(&state.node_arena)
+	mem.dynamic_arena_destroy(&state.string_arena)
+	delete(state.viewing_tracks)
+	state.viewing_tracks = nil
+	state.viewing_tracks_serial = 0
+	state.serial = 0
+	state.root = {}
+	track_table_free(&state.track_table)
 }
