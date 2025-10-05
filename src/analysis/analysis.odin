@@ -17,6 +17,7 @@
 */
 package analysis
 
+import "core:log"
 import "core:math"
 import "core:math/bits"
 import glm "core:math/linalg/glsl"
@@ -134,7 +135,10 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 	}
 
 	if state.plan == nil {
-		state.plan = fftw.plan_dft_r2c_1d(auto_cast frame_count, raw_data(input), raw_data(state.complex_buffer), 0)
+		state.plan = fftw.plan_dft_r2c_1d(
+			auto_cast frame_count, raw_data(input), raw_data(state.complex_buffer), 0
+		)
+
 		if state.plan == nil {return}
 		fftw.execute(state.plan)
 	}
@@ -142,15 +146,10 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		fftw.execute_dft_r2c(state.plan, raw_data(input), raw_data(state.complex_buffer))
 	}
 
-	scale_factor := 1 / f32(state.window_size)
-
-	// Scale and convert complex values to real in 0-1 range
-	for complex, i in state.complex_buffer[1:] {	
-		state.real_buffer[i] = 0
-		d := glm.dot(complex, complex)
-		if d < 1 {continue}
-		// @TODO: Figure out good scaling for this
-		state.real_buffer[i] = clamp(log10(d) * scale_factor * 1400, 0, 1)
+	for complex, i in state.complex_buffer {
+		m := glm.length(complex)
+		state.real_buffer[i] = log10(m) / math.PI
+		state.real_buffer[i] = clamp(state.real_buffer[i], 0, 1)
 	}
 }
 
