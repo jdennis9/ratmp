@@ -32,11 +32,11 @@ _wrap :: proc(i, N: int) -> int {
 
 rb_init :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
 	buf.consumer_index = 0
-	buf.consumer_index = 0
 }
 
 rb_reset :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
 	rb_init(buf)
+	buf.data = {}
 	buf.producer_index = 0
 }
 

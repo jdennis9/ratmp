@@ -22,7 +22,6 @@ import "core:thread"
 import "core:log"
 import "core:sync"
 import "core:time"
-//import "core:fmt"
 
 import "src:bindings/wasapi"
 
@@ -259,8 +258,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 				stream.event_callback(stream.callback_data, .DropBuffer)
 				audio_client->Stop()
 				audio_client->Reset()
-				audio_client->Start()
-				
+				audio_client->Start()				
 			}
 			else if obj == win.WAIT_OBJECT_0+2 {
 				win.ResetEvent(stream.request_pause_event)
