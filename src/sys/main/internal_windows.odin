@@ -110,6 +110,13 @@ _win_proc :: proc "stdcall" (hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, 
 			return 0
 		}
 
+		case win.WM_SYSKEYUP, win.WM_SYSKEYDOWN: {
+			vk := wparam
+			if vk == win.VK_MENU || vk == win.VK_F10 {
+				return 1
+			}
+		}
+
 	}
 
 	return win.DefWindowProcW(hwnd, msg, wparam, lparam)
