@@ -646,8 +646,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		pos := [2]f32{window_pos.x, window_pos.y + window_size.y - text_height}
 		imgui.DrawList_AddText(drawlist, pos + {window_size.x - 20, 0}, imgui.GetColorU32(.Text), "20K")
 
-		//pos.x += min_spacing
-
 		for &guide, i in state.band_freq_guides[0:state.band_count] {
 			width := band_width[i]
 			x_accum += width
@@ -687,3 +685,160 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 spectrum_window_hide_proc :: proc(self: ^Window_Base) {
 }
 
+VECTORSCOPE_MAX_SAMPLES :: 1024
+
+Vectorscope_Display_Mode :: enum {
+	Sprite,
+	Mirage,
+}
+
+Vectorscope_Window :: struct {
+	using base: Window_Base,
+	samples: [VECTORSCOPE_MAX_SAMPLES][2]f32,
+	sample_count: int,
+	display_mode: Vectorscope_Display_Mode,
+}
+
+VECTORSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
+	title = "Vectorscope",
+	internal_name = WINDOW_VECTORSCOPE,
+	make_instance = vectorscope_window_make_instance,
+	show = vectorscope_window_show,
+	save_config = vectorscope_window_save_config,
+	configure = vectorscope_window_configure,
+}
+
+vectorscope_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
+	win := new(Vectorscope_Window, allocator)
+	win.sample_count = 256
+	return win
+}
+
+vectorscope_window_configure :: proc(self: ^Window_Base, key, value: string) {
+	state := cast(^Vectorscope_Window) self
+
+	if key == "Samples" {
+		state.sample_count = strconv.parse_int(value) or_else state.sample_count
+	}
+	else if key == "Mode" {
+		state.display_mode = reflect.enum_from_name(Vectorscope_Display_Mode, value) or_else state.display_mode
+	}
+}
+
+vectorscope_window_save_config :: proc(self: ^Window_Base, out_buf: ^imgui.TextBuffer) {
+	state := cast(^Vectorscope_Window) self
+	b: [64]u8
+
+	imgui.TextBuffer_appendf(out_buf, "Samples=%d\n", i32(state.sample_count))
+	imgui.TextBuffer_appendf(out_buf, "Mode=%s\n", enum_cstring(b[:], state.display_mode))
+}
+
+vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	state := cast(^Vectorscope_Window) self
+	window: [2][]f32
+	padding := [2]f32{30, 30}
+	size := imgui.GetContentRegionAvail() - (padding * 2)
+
+	if size.x < 10 || size.y < 10 {
+		return
+	}
+
+	if cl.analysis.channels != 2 {
+		imgui.TextDisabled(
+			"Vectorscope is designed for stereo output (your output is %d channels)",
+			i32(cl.analysis.channels)
+		)
+		return
+	}
+
+	if imgui.BeginPopupContextWindow() {
+		imgui.SeparatorText("Mode")
+		if imgui.MenuItem("Mirage", nil, state.display_mode == .Mirage) {state.display_mode = .Mirage}
+		if imgui.MenuItem("Sprite", nil, state.display_mode == .Sprite) {state.display_mode = .Sprite}
+		imgui.SeparatorText("Sample count")
+		if imgui.MenuItem("256", nil, state.sample_count == 256) {state.sample_count = 256}
+		if imgui.MenuItem("512", nil, state.sample_count == 512) {state.sample_count = 512}
+		if imgui.MenuItem("1024", nil, state.sample_count == 1024) {state.sample_count = 1024}
+		imgui.EndPopup()
+	}
+
+	state.sample_count = clamp(state.sample_count, 1, VECTORSCOPE_MAX_SAMPLES)
+
+	for ch in 0..<2 {
+		window[ch] = cl.analysis.raw_window_data[ch][:state.sample_count]
+	}
+
+	for ch_data, ch in window {
+		for f, i in ch_data {
+			state.samples[i][ch] = f
+		}
+	}
+
+	project_sample_to_screen_mirage :: proc(
+		center: imgui.Vec2,
+		size: imgui.Vec2,
+		sample: [2]f32
+	) -> [2]f32 {
+		v1: [2]f32
+		n := glm.normalize(sample)
+		v1.x = (n[1] - n[0]) * size.x * 0.5
+		if abs(sample[1]) > abs(sample[0]) {
+			v1.y = sample[1] * size.y * 0.5
+		}
+		else {
+			v1.y = sample[0] * size.y * 0.5
+		}
+		
+		return center + v1
+	}
+
+	project_sample_to_screen_cross :: proc(
+		center: imgui.Vec2,
+		size: imgui.Vec2,
+		sample: [2]f32
+	) -> [2]f32 {
+		s: f32 = 0.70710678119 // cos(pi/4), sin(pi/4)
+		v := [2]f32 {
+			sample[0] * s - sample[1] * s,
+			sample[0] * s + sample[1] * s,
+		}
+		return center + (v * size * 0.5)
+	}
+
+	draw_vectorscope :: proc(
+		drawlist: ^imgui.DrawList,
+		pos: imgui.Vec2,
+		size: imgui.Vec2,
+		samples: [][2]f32,
+		mode: Vectorscope_Display_Mode,
+	) {
+		bb := imgui.Rect{pos, pos + size}
+		win_center := imgui.Rect_GetCenter(&bb)
+
+		switch mode {
+			case .Sprite:
+			for p, i in samples {
+				alpha := 1 - (f32(i) / f32(len(samples)))
+				alpha = clamp(alpha, 0, 1)
+				v := project_sample_to_screen_cross(win_center, size, p)
+				imgui.DrawList_AddRectFilled(drawlist, v, v + {2, 2}, imgui.GetColorU32(.PlotLines, alpha))
+			}
+			case .Mirage:
+			for p, i in samples {
+				alpha := 1 - (f32(i) / f32(len(samples)))
+				alpha = clamp(alpha, 0, 1)
+				v := project_sample_to_screen_mirage(win_center, size, p)
+				imgui.DrawList_AddRectFilled(drawlist, v, v + {2, 2}, imgui.GetColorU32(.PlotLines, alpha))
+			}
+		}
+	}
+
+	drawlist := imgui.GetWindowDrawList()
+	
+	draw_vectorscope(
+		drawlist, imgui.GetCursorScreenPos() + padding,
+		size,
+		state.samples[:state.sample_count],
+		state.display_mode,
+	)
+}

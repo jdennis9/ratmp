@@ -98,6 +98,7 @@ WINDOW_OSCILLOSCOPE :: "ratmp_oscilloscope"
 WINDOW_SETTINGS :: "ratmp_settings"
 WINDOW_METADATA_EDITOR :: "ratmp_metadata_editor"
 WINDOW_WINDOW_MANAGER :: "ratmp_window_manager"
+WINDOW_VECTORSCOPE :: "ratmp_vectorscope"
 
 Window_State :: struct {
 	show: bool,
