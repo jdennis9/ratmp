@@ -779,17 +779,17 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		size: imgui.Vec2,
 		sample: [2]f32
 	) -> [2]f32 {
-		v1: [2]f32
+		v: [2]f32
 		n := glm.normalize(sample)
-		v1.x = (n[1] - n[0]) * size.x * 0.5
+		v.x = (n[1] - n[0]) * 0.75
 		if abs(sample[1]) > abs(sample[0]) {
-			v1.y = sample[1] * size.y * 0.5
+			v.y = sample[1]
 		}
 		else {
-			v1.y = sample[0] * size.y * 0.5
+			v.y = sample[0]
 		}
 		
-		return center + v1
+		return center + (v * size * 0.5)
 	}
 
 	project_sample_to_screen_cross :: proc(
@@ -802,6 +802,8 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			sample[0] * s - sample[1] * s,
 			sample[0] * s + sample[1] * s,
 		}
+		v.x = clamp(v.x * 0.7, -1, 1)
+		v.y = clamp(v.y * 0.7, -1, 1)
 		return center + (v * size * 0.5)
 	}
 
@@ -835,9 +837,59 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 	drawlist := imgui.GetWindowDrawList()
 	
+	pos := imgui.GetCursorScreenPos() + padding
+
+	if state.display_mode == .Sprite {
+		bb: [2]imgui.Vec2 = {
+			pos,
+			pos + size
+		}
+
+		imgui.DrawList_AddLine(
+			drawlist,
+			bb[0],
+			bb[1],
+			imgui.GetColorU32(.TableBorderLight, 0.5),
+		)
+
+		imgui.DrawList_AddLine(
+			drawlist,
+			{bb[1].x, bb[0].y},
+			{bb[0].x, bb[1].y},
+			imgui.GetColorU32(.TableBorderLight, 0.5),
+		)
+
+		imgui.PushFont(cl.mini_font)
+		defer imgui.PopFont()
+
+		imgui.DrawList_AddText(
+			drawlist,
+			bb[0], imgui.GetColorU32(.Text),
+			"-L"
+		)
+
+		imgui.DrawList_AddText(
+			drawlist,
+			bb[1], imgui.GetColorU32(.Text),
+			"+L"
+		)
+
+		imgui.DrawList_AddText(
+			drawlist,
+			{bb[0].x, bb[1].y}, imgui.GetColorU32(.Text),
+			"-R"
+		)
+
+		imgui.DrawList_AddText(
+			drawlist,
+			{bb[1].x, bb[0].y}, imgui.GetColorU32(.Text),
+			"+R"
+		)
+	}
+
 	draw_vectorscope(
-		drawlist, imgui.GetCursorScreenPos() + padding,
-		size,
+		drawlist,
+		pos, size,
 		state.samples[:state.sample_count],
 		state.display_mode,
 	)
