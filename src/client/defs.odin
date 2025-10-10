@@ -99,6 +99,7 @@ WINDOW_SETTINGS :: "ratmp_settings"
 WINDOW_METADATA_EDITOR :: "ratmp_metadata_editor"
 WINDOW_WINDOW_MANAGER :: "ratmp_window_manager"
 WINDOW_VECTORSCOPE :: "ratmp_vectorscope"
+WINDOW_SPECTOGRAM :: "ratmp_spectogram"
 
 Window_State :: struct {
 	show: bool,

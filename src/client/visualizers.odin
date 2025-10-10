@@ -32,6 +32,7 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:analysis"
 import "src:decoder"
 import "src:server"
+import "src:sys"
 
 import "imx"
 
@@ -893,4 +894,102 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		state.samples[:state.sample_count],
 		state.display_mode,
 	)
+}
+
+SPECTOGRAM_BANDS :: 256
+
+Spectogram_Window :: struct {
+	using base: Window_Base,
+	view_start: int,
+	resolution: int,
+	band_count: int,
+	band_frequencies: [SPECTOGRAM_BANDS]f32,
+	band_frequencies_calculated: int,
+	buffer: imgui.TextureID,
+}
+
+SPECTOGRAM_WINDOW_ARCHETYPE := Window_Archetype {
+	title = "Spectogram",
+	internal_name = WINDOW_SPECTOGRAM,
+	make_instance = spectogram_window_make_instance,
+	show = spectogram_window_show,
+}
+
+spectogram_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
+	return new(Spectogram_Window, allocator)
+}
+
+spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
+	state := cast(^Spectogram_Window) self
+	cursor := imgui.GetCursorScreenPos()
+	size := imgui.GetContentRegionAvail()
+	drawlist := imgui.GetWindowDrawList()
+	column: [SPECTOGRAM_BANDS]u32
+
+	defer {
+		state.view_start += 1
+		if state.view_start >= state.resolution {
+			state.view_start = 0
+		}
+	}
+
+	state.resolution = clamp(state.resolution, 1024, 2048)
+	state.band_count = SPECTOGRAM_BANDS
+	
+	if state.buffer == 0 {
+		ok: bool
+		state.buffer, ok = sys.imgui_create_dynamic_texture(state.band_count, state.resolution)
+		if !ok {return}
+	}
+
+	if state.band_frequencies_calculated != SPECTOGRAM_BANDS {
+		analysis.calc_spectrum_frequencies(state.band_frequencies[:])
+		state.band_frequencies_calculated = SPECTOGRAM_BANDS
+	}
+
+	
+	frequencies := state.band_frequencies
+	bands: [SPECTOGRAM_BANDS]f32
+
+	analysis.fft_extract_bands(cl.analysis.fft, frequencies[:], f32(cl.analysis.samplerate), bands[:])
+
+	for b, i in bands {
+		column[i] = imgui.GetColorU32ImU32(max(u32), b)
+	}
+
+	sys.imgui_update_dynamic_texture(
+		state.buffer, {0, state.view_start}, {SPECTOGRAM_BANDS, 1}, raw_data(column[:])
+	)
+
+	ratio := f32(state.view_start) / f32(state.resolution)
+
+	draw_partial_quad :: proc(
+		drawlist: ^imgui.DrawList,
+		texture: imgui.TextureID,
+		pos: [2]f32,
+		size: [2]f32,
+		ratio: f32,
+		offset: f32,
+	) {
+		midpoint := pos.x + (size.x * ratio)
+		imgui.DrawList_AddImageQuad(
+			drawlist, texture,
+			pos,
+			{pos.x + size.x, pos.y},
+			{pos.x + size.x, pos.y + size.y},
+			{pos.x, pos.y + size.y},
+			{1, ratio - 0.5}, {1, ratio}, {0, ratio}, {0, ratio - 0.5}
+		)
+		/*imgui.DrawList_AddImageQuad(
+			drawlist, texture,
+			{midpoint, pos.y},
+			{pos.x + size.x, pos.y},
+			{pos.x + size.x, pos.y + size.y},
+			{midpoint, pos.y + size.y},
+			{1, ratio}, {1, 1}, {0, 1}, {0, ratio},
+			0xff0000ff
+		)*/
+	}
+
+	draw_partial_quad(drawlist, state.buffer, cursor, size, ratio, 0)
 }

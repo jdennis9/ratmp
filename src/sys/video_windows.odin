@@ -17,6 +17,8 @@
 */
 package sys
 
+import "core:slice"
+import "core:mem"
 import win "core:sys/windows"
 import dx11 "vendor:directx/d3d11"
 import dxgi "vendor:directx/dxgi"
@@ -131,6 +133,83 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: i
 	texture_id = auto_cast uintptr(view)
 	ok = true
 	return
+}
+
+imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
+	texture: ^dx11.ITexture2D
+	view: ^dx11.IShaderResourceView
+
+	desc := dx11.TEXTURE2D_DESC {
+		Width = auto_cast width,
+		Height = auto_cast height,
+		MipLevels = 1,
+		ArraySize = 1,
+		Format = .R8G8B8A8_UNORM,
+		SampleDesc = {
+			Count = 1,
+		},
+		Usage = .DYNAMIC,
+		BindFlags = {.SHADER_RESOURCE},
+		CPUAccessFlags = {.WRITE},
+	}
+
+	win32_check(d3d.device->CreateTexture2D(&desc, nil, &texture)) or_return
+	defer texture->Release()
+
+	sr := dx11.SHADER_RESOURCE_VIEW_DESC {
+		Format = desc.Format,
+		ViewDimension = .TEXTURE2D,
+		Texture2D = {
+			MipLevels = 1,
+		},
+	}
+
+	win32_check(d3d.device->CreateShaderResourceView(texture, &sr, &view)) or_return
+	id = auto_cast(uintptr(view))
+	ok = true
+
+	return
+}
+
+imgui_update_dynamic_texture :: proc(tex: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
+	if tex == 0 {return false}
+
+	resource: ^dx11.IResource
+	view: ^dx11.IShaderResourceView = auto_cast uintptr(tex)
+	mapped: dx11.MAPPED_SUBRESOURCE
+
+	dst_box := dx11.BOX {
+		left = auto_cast offset.x,
+		right = auto_cast (offset.x + size.x),
+		top = auto_cast offset.y,
+		bottom = auto_cast (offset.y + size.y),
+		front = 0,
+		back = 1,
+	}
+
+	view->GetResource(&resource)
+	if resource == nil {
+		return false
+	}
+
+	subresource := dx11.CalcSubresource(0, 0, 0)
+
+	win32_check(d3d.ctx->Map(resource, subresource, .WRITE_DISCARD, {}, &mapped)) or_return
+	defer d3d.ctx->Unmap(resource, subresource)
+
+	row_count := u32(size.y)
+	y_offset := u32(offset.y)
+	x_offset := u32(offset.x) * 4
+	in_row_pitch := u32(size.x * 4)
+
+	for i in 0..<row_count {
+		row_out := (cast([^]u8)mapped.pData)[mapped.RowPitch * (y_offset + i) + x_offset:][:in_row_pitch]
+		row_in := (cast([^]u8)data)[in_row_pitch * i:][:in_row_pitch]
+
+		mem.copy(raw_data(row_out), raw_data(row_in), int(in_row_pitch))
+	}
+
+	return true
 }
 
 imgui_destroy_texture :: proc(texture: imgui.TextureID) {

@@ -150,6 +150,7 @@ init :: proc(
 	add_window_archetype(client, FOLDERS_WINDOW_ARCHETYPE)
 	add_window_archetype(client, THEME_EDITOR_WINDOW_ARCHETYPE)
 	add_window_archetype(client, VECTORSCOPE_WINDOW_ARCHETYPE)
+	add_window_archetype(client, SPECTOGRAM_WINDOW_ARCHETYPE)
 
 	// Imgui settings handler
 	{
