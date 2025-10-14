@@ -52,6 +52,19 @@ imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID
 }
 
 imgui_update_dynamic_texture :: proc(handle: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
+	h := u32(uintptr(handle))
+
+	assert(data != nil)
+
+	if size[0] <= 0 || size[1] <= 0 {return false}
+
+	gl.BindTexture(gl.TEXTURE_2D, h)
+	gl.TexSubImage2D(
+		gl.TEXTURE_2D, 0, auto_cast offset.x, auto_cast offset.y,
+		auto_cast size.x, auto_cast size.y, gl.RGBA, gl.UNSIGNED_BYTE, data
+	)
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+
 	return true
 }
 
