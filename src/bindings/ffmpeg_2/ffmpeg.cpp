@@ -251,7 +251,7 @@ void ffmpeg_close_input(FFMPEG_Context *ff) {
 	}
 
 	if (ff->decoder) {
-		avcodec_close(ff->decoder);
+		//avcodec_close(ff->decoder);
 		avcodec_free_context(&ff->decoder);
 		ff->decoder = NULL;
 	}
@@ -313,7 +313,7 @@ bool ffmpeg_load_thumbnail(const char *filename, void **data, int32_t *w, int32_
 	avcodec_parameters_to_context(decoder, codecpar);
 	if (avcodec_open2(decoder, codec, NULL))
 		return false;
-	defer(avcodec_close(decoder));
+	defer(avcodec_free_context(&decoder));
 
 	if (avcodec_send_packet(decoder, pkt))
 		return false;

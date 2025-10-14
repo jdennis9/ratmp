@@ -47,6 +47,14 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (imgui.Texture
 	return cast(imgui.TextureID) uintptr(h), true
 }
 
+imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
+	return imgui_create_texture(nil, width, height)
+}
+
+imgui_update_dynamic_texture :: proc(handle: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
+	return true
+}
+
 imgui_render_draw_data :: proc(dd: ^imgui.DrawData) {
 	imgui_gl.RenderDrawData(dd)
 }
