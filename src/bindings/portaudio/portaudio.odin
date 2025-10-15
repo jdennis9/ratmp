@@ -2,7 +2,12 @@ package portaudio
 
 import "core:c"
 
-foreign import lib "system:portaudio"
+when ODIN_OS == .Linux {
+	foreign import lib "system:portaudio"
+}
+else {
+	foreign import lib "portaudio.lib"
+}
 
 ErrorCode :: enum c.int {
 	NoError = 0,

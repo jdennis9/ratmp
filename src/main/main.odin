@@ -51,6 +51,12 @@ run :: proc() -> bool {
 	prev_frame_start: time.Tick
 	enable_plugins := true
 
+	when ODIN_OS == .Windows {
+	}
+	else {
+		sys.audio_use_backend(.PortAudio)
+	}
+
 	for arg in os.args {
 		if arg == "-h" || arg == "--help" || arg == "/?" || arg == "-help" {
 			fmt.println(USAGE)
@@ -76,6 +82,9 @@ run :: proc() -> bool {
 	data_dir, config_dir := sys_main.init(&g.sv, &g.cl) or_return
 	defer sys_main.shutdown()
 	sys_main.create_window() or_return
+
+	sys.audio_init() or_return
+	defer sys.audio_shutdown()
 
 	server.init(&g.sv, sys_main.post_empty_event, data_dir, config_dir) or_return
 	defer server.clean_up(&g.sv)
