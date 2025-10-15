@@ -33,14 +33,19 @@ _win32: struct {
 	cl: ^client.Client,
 }
 
-init :: proc(sv: ^server.Server, cl: ^client.Client) -> bool {
+init :: proc(sv: ^server.Server, cl: ^client.Client) -> (data_dir, config_dir: string, ok: bool) {
 	_win32.sv = sv
 	_win32.cl = cl
 	_win32.ctx = context
 	_win32.hinstance = auto_cast win.GetModuleHandleW(nil)
 	_win32.icon = win.LoadIconA(_win32.hinstance, "WindowIconLight")
 	misc.ole_initialize()
-	return true
+
+	data_dir = "."
+	config_dir = "."
+
+	ok = true
+	return
 }
 
 create_window :: proc() -> bool {

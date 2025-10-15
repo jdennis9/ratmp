@@ -4,6 +4,8 @@ import "base:runtime"
 
 import "core:thread"
 import "core:log"
+import "core:path/filepath"
+import "core:os/os2"
 
 import "vendor:glfw"
 import stbi "vendor:stb/image"
@@ -18,7 +20,7 @@ import "src:server"
 import "src:client"
 import "src:sys"
 
-ICON_PNG_DATA := #load("../../resources/32x32_light.png")
+ICON_PNG_DATA := #load("../../resources/ratmp.png")
 
 @private
 _linux: struct {
@@ -58,14 +60,36 @@ _systray_event_handler :: proc "c" (event: linux_misc.Systray_Event) {
 	}
 }
 
-init :: proc(sv: ^server.Server, cl: ^client.Client) -> bool {
+init :: proc(sv: ^server.Server, cl: ^client.Client) -> (data_dir, config_dir: string, ok: bool) {
 	_linux.sv = sv
 	_linux.cl = cl
 	_linux.ctx = context
 	linux_misc.init()
 	linux_misc.systray_init(_systray_event_handler)
 
-	return true
+
+	when ODIN_DEBUG {
+		data_dir = "."
+		config_dir = "."
+	}
+	else {
+		home := os2.get_env_alloc("HOME", context.allocator)
+		defer delete(home)
+
+		if home != "" {
+			data_dir = filepath.join({home, ".local/share/ratmp"})
+			config_dir = filepath.join({home, ".config/ratmp"})
+
+			if !os2.exists(data_dir) {os2.mkdir(data_dir)}
+			if !os2.exists(config_dir) {os2.mkdir(config_dir)}
+		}
+		else {
+			return
+		}
+	}
+
+	ok = true
+	return
 }
 
 create_window :: proc() -> bool {

@@ -73,13 +73,13 @@ run :: proc() -> bool {
 		io.ConfigFlags |= {.DockingEnable}
 	}
 
-	sys_main.init(&g.sv, &g.cl) or_return
+	data_dir, config_dir := sys_main.init(&g.sv, &g.cl) or_return
 	defer sys_main.shutdown()
 	sys_main.create_window() or_return
 
-	server.init(&g.sv, sys_main.post_empty_event, ".", ".") or_return
+	server.init(&g.sv, sys_main.post_empty_event, data_dir, config_dir) or_return
 	defer server.clean_up(&g.sv)
-	client.init(&g.cl, &g.sv, ".", ".", sys_main.post_empty_event) or_return
+	client.init(&g.cl, &g.sv, data_dir, config_dir, sys_main.post_empty_event) or_return
 	defer client.destroy(&g.cl)
 
 	// Set SDK proc addresses
