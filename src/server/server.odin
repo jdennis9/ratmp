@@ -112,7 +112,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	state.paths.library = filepath.join({data_dir, "library.sqlite"})
 
 	library_init(&state.library, state.paths.playlists_folder) or_return
-	state.stream = sys.audio_create_stream(_audio_stream_callback, _audio_event_callback, state) or_return
+	sys.audio_create_stream(&state.stream, _audio_stream_callback, _audio_event_callback, state) or_return
 	set_paused(state, true)
 	
 	library_load_from_file(&state.library, state.paths.library)

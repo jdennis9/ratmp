@@ -63,10 +63,11 @@ _Session_Status :: enum {
 _device_enumerator: ^wasapi.IMMDeviceEnumerator
 
 audio_create_stream :: proc(
+	stream: ^Audio_Stream,
 	stream_callback: Audio_Stream_Callback,
 	event_callback: Audio_Event_Callback,
 	callback_data: rawptr
-) -> (stream: Audio_Stream, ok: bool) {
+) -> (ok: bool) {
 	if _device_enumerator == nil {
 		win32_check(
 			win.CoCreateInstance(
@@ -96,12 +97,7 @@ audio_create_stream :: proc(
 	stream.channels = stream._wasapi.channels
 	stream.samplerate = stream._wasapi.samplerate
 	
-	if stream._wasapi.status == .Ok {
-		ok = true
-		return
-	}
-
-	return {}, false
+	return stream._wasapi.status == .Ok
 }
 
 audio_drop_buffer :: proc(stream: ^Audio_Stream) {

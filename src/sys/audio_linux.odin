@@ -19,22 +19,19 @@ package sys
 
 import "base:runtime"
 
+import "core:log"
 import "core:c"
 import "core:time"
 import pa "src:bindings/portaudio"
 
-@(private="file")
-_Stream_Info :: struct {
+Audio_Stream :: struct {
+	using common: Audio_Stream_Common,
+	stream: pa.Stream,
+	volume: f32,
 	callback_data: rawptr,
 	stream_callback: Audio_Stream_Callback,
 	event_callback: Audio_Event_Callback,
 	ctx: runtime.Context,
-}
-
-Audio_Stream :: struct {
-	using common: Audio_Stream_Common,
-	stream: pa.Stream,
-	info: ^_Stream_Info,
 }
 
 @private
@@ -45,7 +42,7 @@ _callback_wrapper :: proc "c" (
     status_flags: pa.StreamCallbackFlags,
     user_data: rawptr,
 ) -> pa.StreamCallbackResult {
-	stream := cast(^_Stream_Info) user_data
+	stream := cast(^Audio_Stream) user_data
 
 	context = stream.ctx
 	output_buf: []f32 = (cast([^]f32)output)[:frame_count*2]
@@ -55,55 +52,70 @@ _callback_wrapper :: proc "c" (
 		stream.event_callback(stream.callback_data, .Finish)
 	}
 
+	for &f in output_buf {
+		f *= stream.volume
+	}
+
 	return .Continue
 }
 
 audio_create_stream :: proc(
+	stream: ^Audio_Stream,
 	stream_callback: Audio_Stream_Callback,
 	event_callback: Audio_Event_Callback,
 	callback_data: rawptr
-) -> (stream: Audio_Stream, ok: bool) {
+) -> (ok: bool) {
 	@static initialized: bool
 	if !initialized {
 		if pa.Initialize() != .NoError {
-			return {}, false
+			return false
 		}
 		initialized = true
 	}
 
-	free(stream.info)
-	stream.info = new(_Stream_Info)
-	stream.info.callback_data = callback_data
-	stream.info.stream_callback = stream_callback
-	stream.info.event_callback = event_callback
-	stream.info.ctx = context
+	stream.callback_data = callback_data
+	stream.stream_callback = stream_callback
+	stream.event_callback = event_callback
+	stream.ctx = context
+	stream.volume = 1
 
-	pa.OpenDefaultStream(&stream.stream, 0, 2, pa.SampleFormat_Float32, 48000, 24000, _callback_wrapper, stream.info)
+	pa.OpenDefaultStream(&stream.stream, 0, 2, pa.SampleFormat_Float32, 48000, 24000, _callback_wrapper, stream)
 	pa.StartStream(stream.stream)
 
-	return stream, true
+	return true
 }
 
-audio_drop_buffer :: proc(stream: ^Audio_Stream) {
-	// @TODO
-	// This can't be done with PortAudio for some reason
+audio_drop_buffer :: proc(stream: ^Audio_Stream, loc := #caller_location) {
+	log.debug(loc)
+	if stream.stream == nil {return}
+	pa.AbortStream(stream.stream)
+	if stream.event_callback != nil {
+		//stream.event_callback(stream.callback_data, .DropBuffer)
+	}
+	pa.StartStream(stream.stream)
 }
 
 audio_pause :: proc(stream: ^Audio_Stream) {
 	if stream.stream == nil {return}
+	if stream.event_callback != nil {
+		stream.event_callback(stream.callback_data, .Pause)
+	}
 	pa.StopStream(stream.stream)
 }
 
 audio_resume :: proc(stream: ^Audio_Stream) {
-	if stream.stream == nil {return}
+	if stream.event_callback != nil {
+		stream.event_callback(stream.callback_data, .Resume)
+	}
 	pa.StartStream(stream.stream)
 }
 
 audio_set_volume :: proc(stream: ^Audio_Stream, volume: f32) {
+	stream.volume = volume
 }
 
 audio_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
-	return 1
+	return stream.volume
 }
 
 audio_get_buffer_timestamp :: proc(stream: ^Audio_Stream) -> (time.Tick, bool) {
