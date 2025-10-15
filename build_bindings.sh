@@ -6,7 +6,7 @@ cd .build
 
 input=../src/bindings
 
-g++ -c -O2 $input/fontconfig/*.cpp $input/linux_misc/*.cpp $input/ffmpeg_2/*.cpp \
+g++ -c -g $input/fontconfig/*.cpp $input/linux_misc/*.cpp $input/ffmpeg_2/*.cpp \
 	$(pkgconf --libs --cflags gtk+-3.0) \
     $(pkgconf --libs --cflags gdk-3.0) \
     $(pkgconf --libs --cflags atk) \
