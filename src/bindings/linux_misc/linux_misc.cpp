@@ -92,7 +92,7 @@ static void tray_menu_callback(GtkMenuItem *item, gpointer data) {
 
 extern "C" void linux_misc_systray_init(void (*event_handler)(int event)) {
 	GtkWidget *item;
-	const char *icon = "music-note-16th";
+	const char *icon = "ratmp";
 
 	systray_event_handler = event_handler;
 

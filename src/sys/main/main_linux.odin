@@ -2,7 +2,11 @@ package sys_main
 
 import "base:runtime"
 
+import "core:thread"
+import "core:log"
+
 import "vendor:glfw"
+import stbi "vendor:stb/image"
 
 import imgui_glfw "src:thirdparty/odin-imgui/imgui_impl_glfw"
 import imgui_gl "src:thirdparty/odin-imgui/imgui_impl_opengl3"
@@ -14,10 +18,13 @@ import "src:server"
 import "src:client"
 import "src:sys"
 
+ICON_PNG_DATA := #load("../../resources/32x32_light.png")
+
 @private
 _linux: struct {
 	ctx: runtime.Context,
 	window: glfw.WindowHandle,
+	window_visible: bool,
 	running: bool,
 	sv: ^server.Server,
 	cl: ^client.Client,
@@ -57,6 +64,7 @@ init :: proc(sv: ^server.Server, cl: ^client.Client) -> bool {
 	_linux.ctx = context
 	linux_misc.init()
 	linux_misc.systray_init(_systray_event_handler)
+
 	return true
 }
 
@@ -66,6 +74,30 @@ create_window :: proc() -> bool {
 	_linux.window = glfw.CreateWindow(1600, 900, build.PROGRAM_NAME_AND_VERSION, nil, nil)
 	if _linux.window == nil {return false}
 	glfw.MakeContextCurrent(_linux.window)
+
+	load_icon :: proc() -> bool {
+		w, h: i32
+
+		icon_pixels := stbi.load_from_memory(
+			raw_data(ICON_PNG_DATA), auto_cast len(ICON_PNG_DATA),
+			&w, &h, nil, 4
+		)
+
+		if icon_pixels == nil {return false}
+		defer stbi.image_free(icon_pixels)
+
+		icon_image: glfw.Image = {
+			pixels = icon_pixels
+		}
+
+		glfw.SetWindowIcon(_linux.window, {icon_image})
+
+		log.debug("Loaded window icon")
+
+		return true
+	}
+
+	load_icon()
 
 	sys._gl_init(_linux.window)
 
@@ -80,7 +112,9 @@ create_window :: proc() -> bool {
 }
 
 present :: proc() {
-	glfw.SwapBuffers(_linux.window)
+	if _linux.window_visible {
+		glfw.SwapBuffers(_linux.window)
+	}
 }
 
 shutdown :: proc() {
@@ -98,7 +132,8 @@ new_frame :: proc() {
 
 // Return false to terminate program
 handle_events :: proc() -> bool {
-	glfw.PollEvents()
+	if _linux.window_visible {glfw.PollEvents()}
+	else {glfw.WaitEventsTimeout(0.05)}
 	linux_misc.update()
 
 	if result, have_result := sys.async_dialog_get_result(&_linux.minimize_to_tray_dialog); have_result {
@@ -116,6 +151,8 @@ handle_events :: proc() -> bool {
 }
 
 show_window :: proc "contextless" (show: bool) {
+	_linux.window_visible = show
+
 	if show {
 		glfw.ShowWindow(_linux.window)
 	}

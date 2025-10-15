@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=0.5.0
+Name=RAT MP
+Comment=Extensible music player
+Path=/home/jamie/Projects/ratmp/out/debug/ratmp
+Exec=ratmp
+Icon=ratmp
+Terminal=false
+Categories=Media
