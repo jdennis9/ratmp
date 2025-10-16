@@ -57,12 +57,15 @@ Audio_Stream_Config :: struct {
 
 Audio_Backend :: enum {
 	PortAudio,
+	Pulse,
 }
 
 audio_use_backend :: proc(backend: Audio_Backend) {
 	switch backend {
 		case .PortAudio:
 			audio_use_portaudio_backend()
+		case .Pulse:
+			audio_use_pulse_backend()
 	}
 }
 

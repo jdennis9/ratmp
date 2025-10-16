@@ -89,6 +89,7 @@ Server :: struct {
 
 	event_handlers: [dynamic]Event_Handler,
 	event_queue: [dynamic]Event,
+	event_queue_lock: sync.Mutex,
 	wake_proc: proc(), // Called whenever an event is sent
 
 	background_scan: _Background_Scan,
@@ -216,9 +217,9 @@ play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_dr
 
 seek_to_second :: proc(state: ^Server, second: int) {
 	sync.lock(&state.playback_lock)
-	defer sync.unlock(&state.playback_lock)
-
 	decoder.seek(&state.decoder, second)
+	sync.unlock(&state.playback_lock)
+
 	sys.audio_stream_drop_buffer(state.stream)
 }
 

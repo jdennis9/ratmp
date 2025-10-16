@@ -54,7 +54,7 @@ run :: proc() -> bool {
 	when ODIN_OS == .Windows {
 	}
 	else {
-		sys.audio_use_backend(.PortAudio)
+		sys.audio_use_backend(.Pulse)
 	}
 
 	for arg in os.args {

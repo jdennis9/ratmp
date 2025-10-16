@@ -17,6 +17,7 @@
 */
 package server
 
+import "core:sync"
 Current_Track_Changed_Event :: struct {
 	track_id: Track_ID,
 }
@@ -45,11 +46,16 @@ add_event_handler :: proc(state: ^Server, handler: Event_Handler_Proc, data: raw
 }
 
 send_event :: proc(state: ^Server, event: Event) {
+	sync.lock(&state.event_queue_lock)
+	defer sync.unlock(&state.event_queue_lock)
 	if state.wake_proc != nil {state.wake_proc()}
 	append(&state.event_queue, event)
 }
 
 handle_events :: proc(state: ^Server) {
+	sync.lock(&state.event_queue_lock)
+	defer sync.unlock(&state.event_queue_lock)
+
 	for handler in state.event_handlers {
 		for event in state.event_queue {
 			handler.handler_proc(state^, handler.data, event)
