@@ -123,7 +123,7 @@ run :: proc() -> bool {
 		imgui.Render()
 		draw_data := imgui.GetDrawData()
 		if draw_data != nil {
-			sys.imgui_render_draw_data(draw_data)
+			sys.video_render_imgui_draw_data(draw_data)
 		}
 		sys_main.present()
 

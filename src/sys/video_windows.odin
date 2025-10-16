@@ -17,6 +17,7 @@
 */
 package sys
 
+import "core:log"
 import "core:slice"
 import "core:mem"
 import win "core:sys/windows"
@@ -32,42 +33,13 @@ d3d: struct {
 	ctx: ^dx11.IDeviceContext,
 	render_target: ^dx11.IRenderTargetView,
 	swapchain: ^dxgi.ISwapChain,
+	repeat_sampler: ^dx11.ISamplerState,
 }
 
-imgui_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: imgui.TextureID, ok: bool) {
+video_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: imgui.TextureID, ok: bool) {
 	staging: ^dx11.ITexture2D
 	texture: ^dx11.ITexture2D
 	view: ^dx11.IShaderResourceView
-
-	/*desc := dx11.TEXTURE2D_DESC {
-		Width = auto_cast width,
-		Height = auto_cast height,
-		MipLevels = 1,
-		ArraySize = 1,
-		Format = .R8G8B8A8_UNORM,
-		SampleDesc = {
-			Count = 1,
-		},
-		Usage = .DEFAULT,
-		BindFlags = {.SHADER_RESOURCE},
-		CPUAccessFlags = {.WRITE},
-	}
-
-	sr := dx11.SHADER_RESOURCE_VIEW_DESC {
-		Format = desc.Format,
-		ViewDimension = .TEXTURE2D,
-		Texture2D = {
-			MipLevels = 1,
-		},
-	}
-
-	init_data: dx11.SUBRESOURCE_DATA
-	init_data.pSysMem = data
-	init_data.SysMemPitch = auto_cast width * 4
-
-	win32_check(_win32.d3d.device->CreateTexture2D(&desc, &init_data, &texture)) or_return
-	win32_check(_win32.d3d.device->CreateShaderResourceView(texture, &sr, &view)) or_return
-	return auto_cast view, true*/
 
 	desc := dx11.TEXTURE2D_DESC {
 		Width = auto_cast width,
@@ -95,7 +67,7 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: i
 	win32_check(d3d.ctx->Map(staging, 0, .WRITE_DISCARD, {}, &mapped)) or_return
 
 	// If the target pitch is not the same we need to manually
-	// copy each pixel
+	// copy each row
 	pitch := 4 * width
 	if mapped.RowPitch != u32(pitch) {
 		out := cast([^]u8) mapped.pData
@@ -135,7 +107,7 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (texture_id: i
 	return
 }
 
-imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
+video_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
 	texture: ^dx11.ITexture2D
 	view: ^dx11.IShaderResourceView
 
@@ -148,7 +120,7 @@ imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID
 		SampleDesc = {
 			Count = 1,
 		},
-		Usage = .DYNAMIC,
+		Usage = .DEFAULT,
 		BindFlags = {.SHADER_RESOURCE},
 		CPUAccessFlags = {.WRITE},
 	}
@@ -171,64 +143,48 @@ imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID
 	return
 }
 
-imgui_update_dynamic_texture :: proc(tex: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
+video_update_dynamic_texture :: proc(tex: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
 	if tex == 0 {return false}
 
 	resource: ^dx11.IResource
 	view: ^dx11.IShaderResourceView = auto_cast uintptr(tex)
-	mapped: dx11.MAPPED_SUBRESOURCE
-
-	dst_box := dx11.BOX {
-		left = auto_cast offset.x,
-		right = auto_cast (offset.x + size.x),
-		top = auto_cast offset.y,
-		bottom = auto_cast (offset.y + size.y),
-		front = 0,
-		back = 1,
-	}
 
 	view->GetResource(&resource)
-	if resource == nil {
-		return false
+	box := dx11.BOX {
+		top = auto_cast offset.y,
+		right = auto_cast(offset.x + size.x),
+		left = auto_cast offset.x,
+		bottom = auto_cast(offset.y + size.y),
+		back = 1,
 	}
-
-	subresource := dx11.CalcSubresource(0, 0, 0)
-
-	win32_check(d3d.ctx->Map(resource, subresource, .WRITE_DISCARD, {}, &mapped)) or_return
-	defer d3d.ctx->Unmap(resource, subresource)
-
-	row_count := u32(size.y)
-	y_offset := u32(offset.y)
-	x_offset := u32(offset.x) * 4
-	in_row_pitch := u32(size.x * 4)
-
-	for i in 0..<row_count {
-		row_out := (cast([^]u8)mapped.pData)[mapped.RowPitch * (y_offset + i) + x_offset:][:in_row_pitch]
-		row_in := (cast([^]u8)data)[in_row_pitch * i:][:in_row_pitch]
-
-		mem.copy(raw_data(row_out), raw_data(row_in), int(in_row_pitch))
-	}
+	d3d.ctx->UpdateSubresource(resource, 0, &box, data, auto_cast size.x * 4, 0)
 
 	return true
 }
 
-imgui_destroy_texture :: proc(texture: imgui.TextureID) {
+video_destroy_texture :: proc(texture: imgui.TextureID) {
 	if texture != 0 {
 		view := cast(^dx11.IShaderResourceView) uintptr(texture)
 		view->Release()
 	}
 }
 
-imgui_render_draw_data :: proc(draw_data: ^imgui.DrawData) {
+video_render_imgui_draw_data :: proc(draw_data: ^imgui.DrawData) {
 	imgui_dx11.RenderDrawData(draw_data)
 }
 
-imgui_invalidate_objects :: proc() {
+video_invalidate_imgui_objects :: proc() {
 	imgui_dx11.InvalidateDeviceObjects()
 }
 
-imgui_create_objects :: proc() {
+video_create_imgui_objects :: proc() {
 	imgui_dx11.CreateDeviceObjects()
+}
+
+video_imgui_callback_override_sampler :: proc "c" (drawlist: ^imgui.DrawList, cmd: ^imgui.DrawCmd) {
+	render_state := cast(^imgui_dx11.RenderState) imgui.GetPlatformIO().Renderer_RenderState
+	//render_state.SamplerDefault = d3d.repeat_sampler
+	render_state.DeviceContext->PSSetSamplers(0, 1, &d3d.repeat_sampler)
 }
 
 _dx11_init :: proc(hwnd: win.HWND) -> bool {
@@ -266,6 +222,16 @@ _dx11_init :: proc(hwnd: win.HWND) -> bool {
 
 	imgui_dx11.Init(d3d.device, d3d.ctx) or_return
 	_dx11_create_render_target()
+
+	sampler_desc := dx11.SAMPLER_DESC {
+		Filter = .COMPARISON_MIN_MAG_MIP_LINEAR,
+		AddressW = .WRAP,
+		AddressV = .WRAP,
+		AddressU = .WRAP,
+		ComparisonFunc = .ALWAYS,
+	}
+
+	win32_check(d3d.device->CreateSamplerState(&sampler_desc, &d3d.repeat_sampler)) or_return
 
 	return true
 }

@@ -31,7 +31,7 @@ _gl_clear_buffer :: proc() {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-imgui_create_texture :: proc(data: rawptr, width, height: int) -> (imgui.TextureID, bool) {
+video_create_texture :: proc(data: rawptr, width, height: int) -> (imgui.TextureID, bool) {
 	h: u32
 	if gl.GenTextures == nil {return 0, false}
 	gl.GenTextures(1, &h)
@@ -47,11 +47,11 @@ imgui_create_texture :: proc(data: rawptr, width, height: int) -> (imgui.Texture
 	return cast(imgui.TextureID) uintptr(h), true
 }
 
-imgui_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
+video_create_dynamic_texture :: proc(width, height: int) -> (id: imgui.TextureID, ok: bool) {
 	return imgui_create_texture(nil, width, height)
 }
 
-imgui_update_dynamic_texture :: proc(handle: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
+video_update_dynamic_texture :: proc(handle: imgui.TextureID, offset: [2]int, size: [2]int, data: rawptr) -> bool {
 	h := u32(uintptr(handle))
 
 	assert(data != nil)
@@ -68,19 +68,23 @@ imgui_update_dynamic_texture :: proc(handle: imgui.TextureID, offset: [2]int, si
 	return true
 }
 
-imgui_render_draw_data :: proc(dd: ^imgui.DrawData) {
+video_render_imgui_draw_data :: proc(dd: ^imgui.DrawData) {
 	imgui_gl.RenderDrawData(dd)
 }
 
-imgui_destroy_texture :: proc(tex: imgui.TextureID) {
+video_destroy_texture :: proc(tex: imgui.TextureID) {
 	h := cast(u32) uintptr(tex)
 	if h != 0 {gl.DeleteTextures(1, &h)}
 }
 
-imgui_invalidate_objects :: proc () {
+video_invalidate_imgui_objects :: proc () {
 	imgui_gl.DestroyDeviceObjects()
 }
 
-imgui_create_objects :: proc() {
+video_create_imgui_objects :: proc() {
 	imgui_gl.CreateDeviceObjects()
 }
+
+video_imgui_callback_override_sampler :: proc "c" (drawlist: ^imgui.DrawList, cmd: ^imgui.DrawCmd) {
+}
+

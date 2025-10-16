@@ -938,7 +938,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	
 	if state.buffer == 0 {
 		ok: bool
-		state.buffer, ok = sys.imgui_create_dynamic_texture(state.band_count, state.resolution)
+		state.buffer, ok = sys.video_create_dynamic_texture(state.band_count, state.resolution)
 		if !ok {return}
 	}
 
@@ -957,7 +957,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		column[i] = imgui.GetColorU32ImU32(max(u32), b)
 	}
 
-	sys.imgui_update_dynamic_texture(
+	sys.video_update_dynamic_texture(
 		state.buffer, {0, state.view_start}, {SPECTOGRAM_BANDS, 1}, raw_data(column[:])
 	)
 
@@ -972,14 +972,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		offset: f32,
 	) {
 		midpoint := pos.x + (size.x * ratio)
-		imgui.DrawList_AddImageQuad(
-			drawlist, texture,
-			pos,
-			{pos.x + size.x, pos.y},
-			{pos.x + size.x, pos.y + size.y},
-			{pos.x, pos.y + size.y},
-			{1, ratio - 0.5}, {1, ratio}, {0, ratio}, {0, ratio - 0.5}
-		)
+
 		/*imgui.DrawList_AddImageQuad(
 			drawlist, texture,
 			{midpoint, pos.y},
@@ -989,6 +982,22 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			{1, ratio}, {1, 1}, {0, 1}, {0, ratio},
 			0xff0000ff
 		)*/
+		
+		imgui.DrawList_AddCallback(
+			drawlist,
+			sys.video_imgui_callback_override_sampler,
+			nil, 0,
+		)
+		
+		imgui.DrawList_AddImageQuad(
+			drawlist, texture,
+			pos,
+			{pos.x + size.x, pos.y},
+			{pos.x + size.x, pos.y + size.y},
+			{pos.x, pos.y + size.y},
+			{1, ratio - 0.5}, {1, ratio}, {0, ratio}, {0, ratio - 0.5}
+		)
+
 	}
 
 	draw_partial_quad(drawlist, state.buffer, cursor, size, ratio, 0)

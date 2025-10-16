@@ -362,7 +362,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	width, height: i32
 
-	sys.imgui_destroy_texture(client.background.texture)
+	sys.video_destroy_texture(client.background.texture)
 	client.background.texture = 0
 	
 	file_data, file_error := os2.read_entire_file_from_path(path, context.allocator)
@@ -373,7 +373,7 @@ set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 	if image_data == nil {return}
 	defer stbi.image_free(image_data)
 	
-	client.background.texture = sys.imgui_create_texture(image_data, int(width), int(height)) or_return
+	client.background.texture = sys.video_create_texture(image_data, int(width), int(height)) or_return
 	client.background.width = int(width)
 	client.background.height = int(height)
 

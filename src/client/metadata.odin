@@ -40,7 +40,7 @@ _load_track_album_art :: proc(lib: server.Library, str_path: string) -> (width, 
 	if data, w, h, image_found_in_file := decoder.load_thumbnail(str_path);
 	image_found_in_file {
 		defer decoder.delete_thumbnail(data)
-		texture = sys.imgui_create_texture(data, w, h) or_return
+		texture = sys.video_create_texture(data, w, h) or_return
 		width = w
 		height = h
 		ok = true
@@ -61,7 +61,7 @@ _load_track_album_art :: proc(lib: server.Library, str_path: string) -> (width, 
 		defer stbi.image_free(image_data)
 		width = auto_cast w
 		height = auto_cast h
-		texture = sys.imgui_create_texture(image_data, width, height) or_return
+		texture = sys.video_create_texture(image_data, width, height) or_return
 		ok = true
 		return
 	}
@@ -124,7 +124,7 @@ metadata_window_show :: proc(
 
 		state.displayed_track_id = state.track_id
 
-		sys.imgui_destroy_texture(state.album_art)
+		sys.video_destroy_texture(state.album_art)
 		state.album_art = 0
 		
 		if state.track_id == 0 {
@@ -297,7 +297,7 @@ metadata_window_show :: proc(
 metadata_window_hide_proc :: proc(self: ^Window_Base) {
 	state := cast(^Metadata_Window) self
 	os2.file_info_delete(state.file_info, context.allocator)
-	sys.imgui_destroy_texture(state.album_art)
+	sys.video_destroy_texture(state.album_art)
 	state.album_art = 0
 	state.file_info = {}
 	state.displayed_track_id = 0

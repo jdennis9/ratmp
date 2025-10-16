@@ -158,8 +158,8 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 	if mem.scratch_allocator_init(&scratch, 256<<10) != nil {return}
 	defer mem.scratch_allocator_destroy(&scratch)
 
-	sys.imgui_invalidate_objects()
-	defer sys.imgui_create_objects()
+	sys.video_invalidate_imgui_objects()
+	defer sys.video_create_imgui_objects()
 
 	io := imgui.GetIO()
 	atlas := io.Fonts
