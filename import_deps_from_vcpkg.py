@@ -77,6 +77,8 @@ def main():
 		["tag.lib", "src\\bindings\\taglib"],
 		["tag_c.lib", "src\\bindings\\taglib"],
 
+		["portaudio.lib", "src\\bindings\\portaudio"],
+
 		["freetype.lib", "lib"],
 		["brotlienc.lib", "lib"],
 		["brotlidec.lib", "lib"],

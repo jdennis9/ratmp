@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+#+private file
 package sys
 
 import win "core:sys/windows"
@@ -27,9 +28,8 @@ import "src:bindings/wasapi"
 
 MAX_OUTPUT_CHANNELS :: 2
 
-@(private="file")
 _WASAPI_Stream :: struct {
-	channels, samplerate: i32,
+	using base: Audio_Stream,
 	volume_controller: ^wasapi.ISimpleAudioVolume,
 	ready_event: win.HANDLE,
 	request_stop_event: win.HANDLE,
@@ -38,19 +38,10 @@ _WASAPI_Stream :: struct {
 	request_resume_event: win.HANDLE,
 	is_paused: bool,
 	status: _Session_Status,
-	stream_callback: Audio_Stream_Callback,
-	event_callback: Audio_Event_Callback,
-	callback_data: rawptr,
 	callback_status: Audio_Callback_Status,
-	buffer_timestamp: time.Tick,
 	volume: f32,
-}
-
-Audio_Stream :: struct {
-	using common: Audio_Stream_Common,
 	thread: ^thread.Thread,
 	lock: sync.Mutex,
-	_wasapi: ^_WASAPI_Stream,
 }
 
 _Session_Status :: enum {
@@ -59,115 +50,126 @@ _Session_Status :: enum {
 	BufferError,
 }
 
-@(private="file")
 _device_enumerator: ^wasapi.IMMDeviceEnumerator
 
-audio_create_stream :: proc(
-	stream: ^Audio_Stream,
-	stream_callback: Audio_Stream_Callback,
-	event_callback: Audio_Event_Callback,
-	callback_data: rawptr
-) -> (ok: bool) {
-	if _device_enumerator == nil {
-		win32_check(
-			win.CoCreateInstance(
-				&wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL,
-				wasapi.IMMDeviceEnumerator_UUID, auto_cast &_device_enumerator
-			)
-		) or_return
-	}
+@private
+audio_use_wasapi_backend :: proc() {
+	_audio_impl_init = _init
+	_audio_impl_shutdown = _shutdown
+	_audio_impl_create_stream = _create_stream
+	_audio_impl_destroy_stream = _destroy_stream
+	_audio_impl_stream_drop_buffer = _stream_drop_buffer
+	_audio_impl_stream_set_volume = _stream_set_volume
+	_audio_impl_stream_get_volume = _stream_get_volume
+	_audio_impl_stream_pause = _stream_pause
+	_audio_impl_stream_resume = _stream_resume
+}
 
-	stream._wasapi = new(_WASAPI_Stream)
-	defer if !ok {free(stream._wasapi)}
+_init :: proc() -> bool {
+	win32_check(
+		win.CoCreateInstance(
+			&wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL,
+			wasapi.IMMDeviceEnumerator_UUID, auto_cast &_device_enumerator
+		)
+	) or_return
+
+	return true
+}
+
+_shutdown :: proc() {
+
+}
+
+_create_stream :: proc(
+	config: Audio_Stream_Config,
+) -> (handle: ^Audio_Stream, ok: bool) {
+
+	stream := new(_WASAPI_Stream)
+	defer if !ok {free(stream)}
+
 	stream.thread = thread.create(_audio_thread_proc)
-	stream.thread.data = stream._wasapi
+	stream.thread.data = stream
 	stream.thread.init_context = context
-	stream._wasapi.ready_event = win.CreateEventW(nil, true, false, nil)
-	stream._wasapi.request_stop_event = win.CreateEventW(nil, true, false, nil)
-	stream._wasapi.request_drop_buffer_event = win.CreateEventW(nil, true, false, nil)
-	stream._wasapi.request_pause_event = win.CreateEventW(nil, true, false, nil)
-	stream._wasapi.request_resume_event = win.CreateEventW(nil, true, false, nil)
-	stream._wasapi.stream_callback = stream_callback
-	stream._wasapi.event_callback = event_callback
-	stream._wasapi.callback_data = callback_data
+	stream.ready_event = win.CreateEventW(nil, true, false, nil)
+	stream.request_stop_event = win.CreateEventW(nil, true, false, nil)
+	stream.request_drop_buffer_event = win.CreateEventW(nil, true, false, nil)
+	stream.request_pause_event = win.CreateEventW(nil, true, false, nil)
+	stream.request_resume_event = win.CreateEventW(nil, true, false, nil)
 
 	thread.start(stream.thread)
-	win.WaitForSingleObject(stream._wasapi.ready_event, win.INFINITE)
-
-	stream.channels = stream._wasapi.channels
-	stream.samplerate = stream._wasapi.samplerate
+	win.WaitForSingleObject(stream.ready_event, win.INFINITE)
 	
-	return stream._wasapi.status == .Ok
+	return stream, stream.status == .Ok
 }
 
-audio_drop_buffer :: proc(stream: ^Audio_Stream) {
+_stream_drop_buffer :: proc(self: ^Audio_Stream) {
+	stream := cast(^_WASAPI_Stream) self
 	sync.lock(&stream.lock)
 	defer sync.unlock(&stream.lock)
 
-	if stream.thread != nil && stream._wasapi != nil {
-		win.SetEvent(stream._wasapi.request_drop_buffer_event)
+	if stream.thread != nil {
+		win.SetEvent(stream.request_drop_buffer_event)
 	}
 }
 
-audio_pause :: proc(stream: ^Audio_Stream) {
+_stream_pause :: proc(self: ^Audio_Stream) {
+	stream := cast(^_WASAPI_Stream) self
+
 	sync.lock(&stream.lock)
 	defer sync.unlock(&stream.lock)
 
-	if stream._wasapi == nil {return}
-
-	if !stream._wasapi.is_paused {
-		win.SetEvent(stream._wasapi.request_pause_event)
+	if !stream.is_paused {
+		win.SetEvent(stream.request_pause_event)
 	}
 }
 
-audio_resume :: proc(stream: ^Audio_Stream) {
+_stream_resume :: proc(self: ^Audio_Stream) {
+	stream := cast(^_WASAPI_Stream) self
+
 	sync.lock(&stream.lock)
 	defer sync.unlock(&stream.lock)
 
-	if stream._wasapi == nil {return}
-
-	if stream._wasapi.is_paused {
-		win.SetEvent(stream._wasapi.request_resume_event)
+	if stream.is_paused {
+		win.SetEvent(stream.request_resume_event)
 	}
 }
 
-audio_set_volume :: proc(stream: ^Audio_Stream, volume: f32) {
+_stream_set_volume :: proc(self: ^Audio_Stream, volume: f32) {
+	stream := cast(^_WASAPI_Stream) self
+
 	sync.lock(&stream.lock)
 	defer sync.unlock(&stream.lock)
 
-	if stream._wasapi == nil || stream._wasapi.volume_controller == nil {return}
-	stream._wasapi.volume_controller->SetMasterVolume(volume, nil)
-	sync.atomic_store(&stream._wasapi.volume, volume)
+	if stream.volume_controller == nil {return}
+	stream.volume_controller->SetMasterVolume(volume, nil)
+	sync.atomic_store(&stream.volume, volume)
 }
 
-audio_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
-	if stream._wasapi == nil || stream._wasapi.volume_controller == nil {return 0}
-	return sync.atomic_load(&stream._wasapi.volume)
+_stream_get_volume :: proc(self: ^Audio_Stream) -> (volume: f32) {
+	stream := cast(^_WASAPI_Stream) self
+
+	if stream.volume_controller == nil {return 1}
+	return sync.atomic_load(&stream.volume)
 }
 
-audio_get_buffer_timestamp :: proc(stream: ^Audio_Stream) -> (time.Tick, bool) {
+_destroy_stream :: proc(self: ^Audio_Stream) {
+	stream := cast(^_WASAPI_Stream) self
+
 	sync.lock(&stream.lock)
 	defer sync.unlock(&stream.lock)
 
-	if stream._wasapi == nil {return {}, false}
-	return stream._wasapi.buffer_timestamp, true
-}
-
-audio_destroy_stream :: proc(stream: ^Audio_Stream) {
-	sync.lock(&stream.lock)
-	defer sync.unlock(&stream.lock)
-
-	if stream.thread != nil && stream._wasapi != nil {
-		win.SetEvent(stream._wasapi.request_resume_event)
-		win.SetEvent(stream._wasapi.request_stop_event)
+	if stream.thread != nil {
+		win.SetEvent(stream.request_resume_event)
+		win.SetEvent(stream.request_stop_event)
 		if !thread.is_done(stream.thread) {thread.join(stream.thread)}
 		thread.destroy(stream.thread)
-		win.CloseHandle(stream._wasapi.ready_event)
-		win.CloseHandle(stream._wasapi.request_stop_event)
-		win.CloseHandle(stream._wasapi.request_drop_buffer_event)
-		win.CloseHandle(stream._wasapi.request_pause_event)
-		free(stream._wasapi)
+		win.CloseHandle(stream.ready_event)
+		win.CloseHandle(stream.request_stop_event)
+		win.CloseHandle(stream.request_drop_buffer_event)
+		win.CloseHandle(stream.request_pause_event)
 	}
+
+	free(stream)
 }
 
 @(private="file")
@@ -221,8 +223,8 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 
 	// Fill and release first buffer right now
 	render_client->GetBuffer(buffer_frame_count, &buffer)
-	status = stream.stream_callback(
-		stream.callback_data, (cast([^]f32)buffer)[:i32(buffer_frame_count)*stream.channels],
+	status = stream.config.stream_callback(
+		stream.config.callback_data, (cast([^]f32)buffer)[:i32(buffer_frame_count)*stream.channels],
 		stream.channels, stream.samplerate
 	)
 	render_client->ReleaseBuffer(buffer_frame_count, 0)
@@ -251,7 +253,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 			}
 			else if obj == win.WAIT_OBJECT_0+1 {
 				win.ResetEvent(stream.request_drop_buffer_event)
-				stream.event_callback(stream.callback_data, .DropBuffer)
+				stream.config.event_callback(stream.config.callback_data, .DropBuffer)
 				audio_client->Stop()
 				audio_client->Reset()
 				audio_client->Start()				
@@ -261,12 +263,12 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 				stream.is_paused = true
 				audio_client->Stop()
 				
-				stream.event_callback(stream.callback_data, .Pause)
+				stream.config.event_callback(stream.config.callback_data, .Pause)
 
 				win.WaitForSingleObject(stream.request_resume_event, win.INFINITE)
 				stream.is_paused = false
 
-				stream.event_callback(stream.callback_data, .Resume)
+				stream.config.event_callback(stream.config.callback_data, .Resume)
 				
 				win.ResetEvent(stream.request_resume_event)
 				audio_client->Start()
@@ -276,18 +278,19 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 		if status == .Finish {
 			// Wait for buffer to finish before we call the event callback
 			win.Sleep(buffer_duration_ms/2)
-			stream.event_callback(stream.callback_data, .Finish)
+			if stream.config.event_callback != nil {
+				stream.config.event_callback(stream.config.callback_data, .Finish)
+			}
 		}
 		
 		audio_client->GetCurrentPadding(&frame_padding)
 		avail_frames = buffer_frame_count - frame_padding
 		
 		if win32_check(render_client->GetBuffer(avail_frames, &buffer)) {
-			status = stream.stream_callback(
-				stream.callback_data, (cast([^]f32)buffer)[:i32(avail_frames)*stream.channels],
+			status = stream.config.stream_callback(
+				stream.config.callback_data, (cast([^]f32)buffer)[:i32(avail_frames)*stream.channels],
 				stream.channels, stream.samplerate
 			)
-			stream.buffer_timestamp = time.tick_now()
 		}
 		else {
 			stream.status = .BufferError

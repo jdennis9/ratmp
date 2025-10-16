@@ -58,14 +58,25 @@ Audio_Stream_Config :: struct {
 Audio_Backend :: enum {
 	PortAudio,
 	Pulse,
+	Wasapi,
 }
 
 audio_use_backend :: proc(backend: Audio_Backend) {
-	switch backend {
-		case .PortAudio:
-			audio_use_portaudio_backend()
-		case .Pulse:
-			audio_use_pulse_backend()
+	when ODIN_OS == .Linux {
+		#partial switch backend {
+			case .PortAudio:
+				audio_use_portaudio_backend()
+			case .Pulse:
+				audio_use_pulse_backend()
+			case: log.error("Backend", backend, "not supported on this platform")
+		}
+	}
+	else when ODIN_OS == .Windows {
+		#partial switch backend {
+			case .Wasapi:
+				audio_use_wasapi_backend()
+			case: log.error("Backend", backend, "not supported on this platform")
+		}
 	}
 }
 

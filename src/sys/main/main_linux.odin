@@ -61,12 +61,12 @@ _systray_event_handler :: proc "c" (event: linux_misc.Systray_Event) {
 }
 
 init :: proc(sv: ^server.Server, cl: ^client.Client) -> (data_dir, config_dir: string, ok: bool) {
+	sys.audio_use_backend(.Pulse)
 	_linux.sv = sv
 	_linux.cl = cl
 	_linux.ctx = context
 	linux_misc.init()
 	linux_misc.systray_init(_systray_event_handler)
-
 
 	when ODIN_DEBUG {
 		data_dir = "."

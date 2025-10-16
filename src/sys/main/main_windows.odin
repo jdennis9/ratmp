@@ -34,6 +34,8 @@ _win32: struct {
 }
 
 init :: proc(sv: ^server.Server, cl: ^client.Client) -> (data_dir, config_dir: string, ok: bool) {
+	sys.audio_use_backend(.Wasapi)
+	
 	_win32.sv = sv
 	_win32.cl = cl
 	_win32.ctx = context
