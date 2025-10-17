@@ -22,7 +22,6 @@ import "base:runtime"
 
 import "core:log"
 import "core:c"
-import "core:time"
 import pa "src:bindings/portaudio"
 
 _Portaudio_Stream :: struct {

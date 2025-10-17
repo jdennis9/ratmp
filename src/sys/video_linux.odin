@@ -85,6 +85,7 @@ video_create_imgui_objects :: proc() {
 	imgui_gl.CreateDeviceObjects()
 }
 
+// For ImGui backends that use clamp address mode on samplers, this overrides them with repeat (used by spectogram)
 video_imgui_callback_override_sampler :: proc "c" (drawlist: ^imgui.DrawList, cmd: ^imgui.DrawCmd) {
 }
 

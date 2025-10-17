@@ -8,6 +8,7 @@ CHANNELS_MAX :: 32
 
 context_ :: struct {}
 threaded_mainloop :: struct {}
+mainloop :: struct {}
 mainloop_api :: struct {}
 stream :: struct {}
 operation :: struct {}
@@ -142,6 +143,7 @@ stream_flags_t :: c.int
 stream_success_cb_t :: #type proc "c" (s: ^stream, success: c.int, userdata: rawptr)
 stream_request_cb_t :: #type proc "c" (s: ^stream, nbytes: c.size_t, userdata: rawptr)
 stream_notify_cb_t :: #type proc "c" (s: ^stream, userdata: rawptr)
+context_notify_cb_t :: #type proc "c" (c: ^context_, userdata: rawptr)
 
 @(link_prefix="pa_")
 foreign lib {
@@ -159,6 +161,16 @@ foreign lib {
 
 	mainloop_api_once :: proc(m: ^mainloop_api, callback: proc(m: ^mainloop_api, userdata: rawptr), userdata: rawptr) ---
 
+	mainloop_new :: proc() -> ^mainloop ---
+	mainloop_free :: proc(m: ^mainloop) ---
+	mainloop_iterate :: proc(m: ^mainloop, blocking: b32, retval: ^c.int) -> c.int ---
+	mainloop_wakeup :: proc(m: ^mainloop) ---
+	mainloop_prepare :: proc(m: ^mainloop, timeout: c.int) -> c.int ---
+	mainloop_poll :: proc(m: ^mainloop) -> c.int ---
+	mainloop_dispatch :: proc(m: ^mainloop) -> c.int ---
+	mainloop_quit :: proc(m: ^mainloop, retval: c.int) ---
+	mainloop_get_api :: proc(m: ^mainloop) -> ^mainloop_api ---
+
 	context_new :: proc(m: ^mainloop_api, name: cstring) -> ^context_ ---
 	context_unref :: proc(c: ^context_) ---
 	context_ref :: proc(c: ^context_) -> ^context_ ---
@@ -170,6 +182,7 @@ foreign lib {
 	) -> c.int ---
 	context_disconnect :: proc(c: ^context_) ---
 	context_get_state :: proc(c: ^context_) -> context_state_t ---
+	context_set_state_callback :: proc(c: ^context_, cb: context_notify_cb_t, userdata: rawptr) ---
 
 	stream_new :: proc(
 		ctx: ^context_, name: cstring, ss: ^sample_spec, ch_map: ^channel_map

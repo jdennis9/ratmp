@@ -1,38 +1,62 @@
+/*
+    RAT MP - A cross-platform, extensible music player
+	Copyright (C) 2025 Jamie Dennis
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 #+private file
 package sys
 
-import "core:c"
-import "core:log"
-import "base:runtime"
-
 import "core:thread"
 import "core:sync"
-import "core:time"
+import "base:runtime"
 
+import "core:log"
+import "core:c"
 import pa "src:bindings/pulse"
 
-SAMPLERATE :: 48000
-BUFFER_DURATION :: 1000
 CHANNELS :: 2
-BUFFER_SAMPLES :: SAMPLERATE * CHANNELS
+SAMPLERATE :: 48000
 
-_Message :: enum {
+_Stream_Error :: enum {
+	None,
+	ConnectionFailed,
+	CreateStreamFailed,
+}
+
+_Stream_Message :: enum {
 	DropBuffer,
-	Terminate,
+	Pause,
+	Resume,
 }
 
 _Pulse_Stream :: struct {
 	using base: Audio_Stream,
-
-	stream: ^pa.stream,
-	mainloop: ^pa.threaded_mainloop,
-	mainloop_api: ^pa.mainloop_api,
-	pa_context: ^pa.context_,
-	is_active, is_stopped: b32,
-
-	volume: f32,
-
 	ctx: runtime.Context,
+
+	pa_context: ^pa.context_,
+	stream: ^pa.stream,
+	mainloop: ^pa.mainloop,
+	mainloop_api: ^pa.mainloop_api,
+
+	interrupt_sem: sync.Sema,
+	ready_sem: sync.Sema,
+	error: _Stream_Error,
+
+	session_thread: ^thread.Thread,
+
+	messages: bit_set[_Stream_Message],
 }
 
 @private
@@ -48,16 +72,18 @@ audio_use_pulse_backend :: proc() {
 	_audio_impl_stream_resume = _stream_resume
 }
 
-_init :: proc() -> bool {
+_check :: proc(error: c.int, expr := #caller_expression) -> bool {
+	if error != 0 {
+		log.error(expr, ": ", pa.strerror(error), sep="")
+		return false
+	}
 	return true
 }
 
-_shutdown :: proc() {
-}
-
-_write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userdata: rawptr) {
+_stream_write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userdata: rawptr) {
 	s := cast(^_Pulse_Stream) userdata
 	context = s.ctx
+
 	nbytes := length
 	out_ptr: rawptr
 	out_buf: []f32
@@ -67,124 +93,168 @@ _write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userdata: raw
 	out_buf = (cast([^]f32) out_ptr)[:nbytes/size_of(f32)]
 	for &f in out_buf {f = 0}
 
-	s.config.stream_callback(s.config.callback_data, out_buf, CHANNELS, SAMPLERATE)
+	status := s.config.stream_callback(s.config.callback_data, out_buf, CHANNELS, SAMPLERATE)
+
+	if status == .Finish && s.config.event_callback != nil {
+		s.config.event_callback(s.config.callback_data, .Finish)
+	}
 
 	pa.stream_write(stream, out_ptr, nbytes, nil, 0, .RELATIVE)
-
-	pa.threaded_mainloop_signal(s.mainloop, false)
 }
 
-_drop_buffer_callback :: proc "c" (api: ^pa.mainloop_api, userdata: rawptr) {
+_send_message :: proc(s: ^_Pulse_Stream, message: _Stream_Message) {
+	b := sync.atomic_load(&s.messages)
+	b |= {message}
+	sync.atomic_store(&s.messages, b)
+	pa.mainloop_wakeup(s.mainloop)
+}
+
+_stream_session_thread :: proc(t: ^thread.Thread) {
+	s := cast(^_Pulse_Stream) t.data
+	context = s.ctx
+
+	for {
+		pa.mainloop_iterate(s.mainloop, true, nil)
+		messages := sync.atomic_load(&s.messages)
+		defer sync.atomic_store(&s.messages, {})
+
+		if .DropBuffer in messages {
+			pa.stream_flush(s.stream, nil, nil)
+			if s.config.event_callback != nil {
+				s.config.event_callback(s.config.callback_data, .DropBuffer)
+			}
+		}
+
+		if .Pause in messages {
+			pa.stream_cork(s.stream, 1, nil, nil)
+			if s.config.event_callback != nil {
+				s.config.event_callback(s.config.callback_data, .Pause)
+			}
+		}
+
+		if .Resume in messages {
+			pa.stream_cork(s.stream, 0, nil, nil)
+			if s.config.event_callback != nil {
+				s.config.event_callback(s.config.callback_data, .Resume)
+			}
+		}
+	}
+
+	pa.mainloop_quit(s.mainloop, 0)
+}
+
+_stream_state_callback :: proc "c" (stream: ^pa.stream, userdata: rawptr) {
 	s := cast(^_Pulse_Stream) userdata
 	context = s.ctx
 
-	if s.config.event_callback != nil {
-		s.config.event_callback(s.config.callback_data, .DropBuffer)
+	state := pa.stream_get_state(stream)
+	#partial switch state {
+		case .READY: {
+			thread.start(s.session_thread)
+			return
+		}
 	}
 }
 
-_check :: proc(code: c.int, expr := #caller_expression) -> bool {
-	if code != 0 {
-		log.error(expr, pa.strerror(code))
-		return false
+_begin_stream_session :: proc(s: ^_Pulse_Stream) -> (ok: bool) {
+	sample_spec := pa.sample_spec {
+		channels = 2,
+		rate = 48000,
+		format =.FLOAT32LE,
+	}
+	
+	defer if !ok {
+		sync.sema_post(&s.ready_sem)
 	}
 
+	s.stream = pa.stream_new(s.pa_context, "RAT MP Playback", &sample_spec, nil)
+	if s.stream == nil {return}
+	_check(pa.stream_connect_playback(s.stream, nil, nil, 0, nil, nil)) or_return
+	pa.stream_set_write_callback(s.stream, _stream_write_callback, s)
+	pa.stream_set_state_callback(s.stream, _stream_state_callback, s)
+
+	sync.sema_post(&s.ready_sem)
+
 	return true
+}
+
+_context_state_proc :: proc "c" (pa_ctx: ^pa.context_, userdata: rawptr) {
+	s := cast(^_Pulse_Stream) userdata
+	context = s.ctx
+
+	state := pa.context_get_state(pa_ctx)
+
+	log.debug("Context state:", state)
+
+	#partial switch state {
+		case .READY: {
+			s.error = _begin_stream_session(s) ? .None : .CreateStreamFailed
+			return
+		}
+		case .FAILED: {
+			s.error = .ConnectionFailed
+			sync.sema_post(&s.ready_sem)
+		}
+	}
+
+}
+
+_init :: proc() -> bool {
+	return true
+}
+
+_shutdown :: proc() {
 }
 
 _create_stream :: proc(
 	config: Audio_Stream_Config,
 ) -> (handle: ^Audio_Stream, ok: bool) {
-	stream := new(_Pulse_Stream)
-	defer if !ok {free(stream)}
-
-	stream.samplerate = SAMPLERATE
-	stream.channels = CHANNELS
-	stream.ctx = context
-	stream.volume = 1
-
-	ss := pa.sample_spec {
-		channels = CHANNELS,
-		format = .FLOAT32LE,
-		rate = SAMPLERATE,
+	s := new(_Pulse_Stream)
+	defer if !ok {
+		_destroy_stream(s)
 	}
 
-	stream.mainloop = pa.threaded_mainloop_new()
-	defer if !ok {pa.threaded_mainloop_free(stream.mainloop)}
-	_check(pa.threaded_mainloop_start(stream.mainloop))
-	
-	stream.mainloop_api = pa.threaded_mainloop_get_api(stream.mainloop)
-	stream.pa_context = pa.context_new(pa.threaded_mainloop_get_api(stream.mainloop), "RAT MP")
-	_check(pa.context_connect(stream.pa_context, nil, 0, nil))
-	
-	for pa.context_get_state(stream.pa_context) != .READY {}
+	s.samplerate = SAMPLERATE
+	s.channels = CHANNELS
+	s.ctx = context
 
-	stream.stream = pa.stream_new(
-		stream.pa_context,
-		"RAT MP",
-		&ss, nil,
-	)
-	
-	if stream.stream == nil {return}
-	defer if !ok {pa.stream_unref(stream.stream); stream.stream = nil}
-	
-	_check(pa.stream_connect_playback(stream.stream, nil, nil, 0, nil, nil)) or_return
-	pa.stream_set_write_callback(stream.stream, _write_callback, stream)
+	s.mainloop = pa.mainloop_new()
+	s.mainloop_api = pa.mainloop_get_api(s.mainloop)
+	s.pa_context = pa.context_new(s.mainloop_api, "RAT MP")
+	s.session_thread = thread.create(_stream_session_thread)
+	s.session_thread.data = s
+	thread.start(s.session_thread)
+	_check(pa.context_connect(s.pa_context, nil, 0, nil)) or_return
+	pa.context_set_state_callback(s.pa_context, _context_state_proc, s)
 
-	return stream, true
+	sync.sema_wait(&s.ready_sem)
+
+	return s, s.error == .None
 }
 
-_destroy_stream :: proc(handle: ^Audio_Stream) {
-	stream := cast(^_Pulse_Stream) handle
-	
-	pa.context_disconnect(stream.pa_context)
-	pa.context_unref(stream.pa_context)
-	
-	pa.stream_unref(stream.stream)
-
-	pa.threaded_mainloop_stop(stream.mainloop)
-	pa.threaded_mainloop_free(stream.mainloop)
-
-	free(stream)
+_stream_drop_buffer :: proc(stream: ^Audio_Stream) {
+	s := cast(^_Pulse_Stream) stream
+	_send_message(s, .DropBuffer)
 }
 
-_stream_drop_buffer :: proc(handle: ^Audio_Stream) {
-	stream := cast(^_Pulse_Stream) handle
-
-	if stream.stream == nil {return}
-	pa.threaded_mainloop_lock(stream.mainloop)
-	pa.stream_flush(stream.stream, nil, nil)
-	pa.mainloop_api_once(stream.mainloop_api, _drop_buffer_callback, stream)
-	pa.threaded_mainloop_unlock(stream.mainloop)
+_stream_pause :: proc(stream: ^Audio_Stream) {
+	s := cast(^_Pulse_Stream) stream
+	_send_message(s, .Pause)
 }
 
-_stream_pause :: proc(handle: ^Audio_Stream) {
-	stream := cast(^_Pulse_Stream) handle
-
-	if stream.stream == nil {return}
-
-	if stream.config.event_callback != nil {
-		stream.config.event_callback(stream.config.callback_data, .Pause)
-	}
+_stream_resume :: proc(stream: ^Audio_Stream) {
+	s := cast(^_Pulse_Stream) stream
+	_send_message(s, .Resume)
 }
 
-_stream_resume :: proc(handle: ^Audio_Stream) {
-	stream := cast(^_Pulse_Stream) handle
-
-	if stream.stream == nil {return}
-
-	if stream.config.event_callback != nil {
-		stream.config.event_callback(stream.config.callback_data, .Resume)
-	}
+_stream_set_volume :: proc(stream: ^Audio_Stream, volume: f32) {
+	s := cast(^_Pulse_Stream) stream
 }
 
-_stream_set_volume :: proc(handle: ^Audio_Stream, volume: f32) {
-	stream := cast(^_Pulse_Stream) handle
-	stream.volume = volume
+_stream_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
+	return 1
 }
 
-_stream_get_volume :: proc(handle: ^Audio_Stream) -> (volume: f32) {
-	stream := cast(^_Pulse_Stream) handle
-	return stream.volume
+_destroy_stream :: proc(stream: ^Audio_Stream) {
+	s := cast(^_Pulse_Stream) stream
 }
-
