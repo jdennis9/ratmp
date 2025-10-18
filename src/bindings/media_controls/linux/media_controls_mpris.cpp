@@ -279,35 +279,6 @@ static bool check(GError **error, const char *message = NULL) {
 	return true;
 }
 
-#if 0
-static void signal_player_property_change(const char *name) {
-	GError *error = NULL;
-
-	for (int i = 0; i < ARRAY_LENGTH(player_props_map); ++i) {
-		const Mapped_Property& prop = player_props_map[i];
-
-		if (!strcmp(prop.name, name)) {
-			GVariantBuilder *builder;
-			GVariant *value = mapped_property_to_variant(prop);
-
-			builder = g_variant_builder_new(G_VARIANT_TYPE_ARRAY);
-			g_variant_builder_add(builder, "{sv}", name, value);
-			g_dbus_connection_emit_signal(mc.conn, NULL,
-				"/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties", "PropertiesChanged",
-				g_variant_new(
-					"(sa{sv}as)",
-					INTERFACE_MPRIS_MEDIAPLAYER2_PLAYER,
-					builder,
-					NULL
-				),
-				&error
-			);
-
-			check(&error);
-		}
-	}
-}
-#else
 static void signal_player_property_change(const char **names, int count) {
 	GError *error = NULL;
 	GVariantBuilder *builder;
@@ -339,7 +310,6 @@ static void signal_player_property_change(const char **names, int count) {
 
 	check(&error);
 }
-#endif
 
 static void on_bus_acquired(GDBusConnection *conn, const char *name, void *userdata) {
 	guint id;
@@ -472,7 +442,7 @@ void set_state(int32_t state) {
 	};
 
 	player_props.playback_status = value;
-	
+
 	signal_player_property_change(prop_names, ARRAY_LENGTH(prop_names));
 }
 
