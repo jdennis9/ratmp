@@ -39,6 +39,7 @@ _Stream_Message :: enum {
 	DropBuffer,
 	Pause,
 	Resume,
+	Quit,
 }
 
 _Pulse_Stream :: struct {
@@ -50,13 +51,16 @@ _Pulse_Stream :: struct {
 	mainloop: ^pa.mainloop,
 	mainloop_api: ^pa.mainloop_api,
 
-	interrupt_sem: sync.Sema,
 	ready_sem: sync.Sema,
+	//done_sem: sync.Sema,
 	error: _Stream_Error,
 
 	session_thread: ^thread.Thread,
 
 	messages: bit_set[_Stream_Message],
+
+	volume: f32,
+	index: u32,
 }
 
 @private
@@ -139,6 +143,10 @@ _stream_session_thread :: proc(t: ^thread.Thread) {
 				s.config.event_callback(s.config.callback_data, .Resume)
 			}
 		}
+
+		if .Quit in messages {
+			break
+		}
 	}
 
 	pa.mainloop_quit(s.mainloop, 0)
@@ -149,12 +157,41 @@ _stream_state_callback :: proc "c" (stream: ^pa.stream, userdata: rawptr) {
 	context = s.ctx
 
 	state := pa.stream_get_state(stream)
+	
 	#partial switch state {
 		case .READY: {
+			index := pa.stream_get_index(stream)
 			pa.stream_set_write_callback(s.stream, _stream_write_callback, s)
+			pa.context_get_sink_input_info(s.pa_context, index, _stream_info_callback, s)
+			pa.context_subscribe(s.pa_context, pa.SUBSCRIPTION_MASK_SINK_INPUT)
+			pa.context_set_subscribe_callback(s.pa_context, _context_subscribe_callback, s)
+			sync.sema_post(&s.ready_sem)
 			return
 		}
 	}
+}
+
+_stream_info_callback :: proc "c" (ctx: ^pa.context_, i: ^pa.sink_input_info, eol: c.int, userdata: rawptr) {
+	s := cast(^_Pulse_Stream) userdata
+
+	if i == nil {return}
+
+	if i.has_volume != 0 {
+		s.volume = f32(pa.cvolume_avg(&i.volume)) / pa.VOLUME_NORM
+	}
+	else {
+		s.volume = 1
+	}
+}
+
+_context_subscribe_callback :: proc "c" (
+	ctx: ^pa.context_, t: pa.subscription_event_type_t, idx: u32, userdata: rawptr
+) {
+	s := cast(^_Pulse_Stream) userdata
+
+	if idx != pa.stream_get_index(s.stream) {return}
+
+	pa.context_get_sink_input_info(ctx, idx, _stream_info_callback, s)
 }
 
 _begin_stream_session :: proc(s: ^_Pulse_Stream) -> (ok: bool) {
@@ -250,12 +287,30 @@ _stream_resume :: proc(stream: ^Audio_Stream) {
 
 _stream_set_volume :: proc(stream: ^Audio_Stream, volume: f32) {
 	s := cast(^_Pulse_Stream) stream
+	cv: pa.cvolume
+	index := pa.stream_get_index(s.stream)
+
+	pa.cvolume_set(&cv, CHANNELS, cast(pa.volume_t) (pa.VOLUME_NORM * volume))
+	pa.context_set_sink_input_volume(s.pa_context, index, &cv, nil, nil)
+	s.volume = volume
 }
 
 _stream_get_volume :: proc(stream: ^Audio_Stream) -> (volume: f32) {
-	return 1
+	s := cast(^_Pulse_Stream) stream
+	index := pa.stream_get_index(s.stream)
+	return s.volume
 }
 
 _destroy_stream :: proc(stream: ^Audio_Stream) {
 	s := cast(^_Pulse_Stream) stream
+
+	_send_message(s, .Quit)
+	thread.join(s.session_thread)
+
+	pa.stream_unref(s.stream)
+	pa.context_unref(s.pa_context)
+	pa.mainloop_free(s.mainloop)
+	thread.destroy(s.session_thread)
+
+	free(s)
 }

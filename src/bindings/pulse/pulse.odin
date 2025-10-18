@@ -15,6 +15,13 @@ operation :: struct {}
 spawn_api :: struct {}
 
 context_flags_t :: c.int
+volume_t :: u32
+stream_flags_t :: c.int
+usec_t :: u64
+
+VOLUME_NORM :: 0x10000
+VOLUME_MUTED :: 0
+VOLUME_MAX :: max(u32)/2
 
 sample_format_t :: enum c.int {
 	U8,
@@ -87,6 +94,37 @@ channel_position_t :: enum c.int {
 	TOP_REAR_CENTER,
 }
 
+subscription_mask_t :: c.int
+SUBSCRIPTION_MASK_NULL :: 0x0000
+SUBSCRIPTION_MASK_SINK :: 0x0001
+SUBSCRIPTION_MASK_SOURCE :: 0x0002
+SUBSCRIPTION_MASK_SINK_INPUT :: 0x0004
+SUBSCRIPTION_MASK_SOURCE_OUTPUT :: 0x0008
+SUBSCRIPTION_MASK_MODULE :: 0x0010
+SUBSCRIPTION_MASK_CLIENT :: 0x0020
+SUBSCRIPTION_MASK_SAMPLE_CACHE :: 0x0040
+SUBSCRIPTION_MASK_SERVER :: 0x0080
+SUBSCRIPTION_MASK_AUTOLOAD :: 0x0100
+SUBSCRIPTION_MASK_CARD :: 0x0200
+SUBSCRIPTION_MASK_ALL::  0x02ff
+
+subscription_event_type_t :: enum c.int {
+	SINK = 0x0000,
+	SOURCE = 0x0001,
+	SINK_INPUT = 0x0002,
+	SOURCE_OUTPUT = 0x0003,
+	MODULE = 0x0004,
+	CLIENT = 0x0005,
+	SAMPLE_CACHE = 0x0006,
+	SERVER = 0x0007,
+	AUTOLOAD = 0x0008,
+	CARD = 0x0009,
+	FACILITY_MASK = 0x000F,
+	NEW = 0x0000,
+	CHANGE = 0x0010,
+	REMOVE = 0x0020,
+}
+
 seek_mode_t :: enum c.int {
 	RELATIVE,
 	ABSOLUTE,
@@ -131,19 +169,38 @@ buffer_attr :: struct {
 	fragsize: u32,
 }
 
-volume_t :: u32
 
 cvolume :: struct {
 	channels: u8,
 	values: [CHANNELS_MAX]volume_t,
 }
 
-stream_flags_t :: c.int
+sink_input_info :: struct {
+	index: u32,
+	name: cstring,
+	owner_module: u32,
+	client: u32,
+	sink: u32,
+	sample_spec: sample_spec,
+	channel_map: channel_map,
+	volume: cvolume,
+	buffer_usec: usec_t,
+	sink_usec: usec_t,
+	resample_method: cstring,
+	driver: cstring,
+	mute: c.int,
+	proplist: rawptr,
+	corked: c.int,
+	has_volume: c.int,
+	volume_writable: c.int,
+}
 
 stream_success_cb_t :: #type proc "c" (s: ^stream, success: c.int, userdata: rawptr)
 stream_request_cb_t :: #type proc "c" (s: ^stream, nbytes: c.size_t, userdata: rawptr)
 stream_notify_cb_t :: #type proc "c" (s: ^stream, userdata: rawptr)
 context_notify_cb_t :: #type proc "c" (c: ^context_, userdata: rawptr)
+sink_input_info_cb_t :: #type proc "c" (ctx: ^context_, i: ^sink_input_info, eol: c.int, userdata: rawptr)
+context_subscribe_cb_t :: #type proc "c" (ctx: ^context_, event_type: subscription_event_type_t, idx: u32, userdata: rawptr)
 
 @(link_prefix="pa_")
 foreign lib {
@@ -225,4 +282,29 @@ foreign lib {
 		s: ^stream, data: rawptr, nbytes: c.size_t,
 		free_cb: rawptr, offset: i64, seek: seek_mode_t,
 	) -> c.int ---
+
+	cvolume_init :: proc(a: ^cvolume) -> ^cvolume ---
+	cvolume_set :: proc(a: ^cvolume, channels: c.uint, v: volume_t) -> ^cvolume ---
+	cvolume_avg :: proc(a: ^cvolume) -> volume_t ---
+
+	context_set_sink_input_volume :: proc(
+		ctx: ^context_, idx: u32, v: ^cvolume, cb: rawptr = nil, userdata: rawptr = nil
+	) -> ^operation ---
+
+	context_get_sink_input_info :: proc(
+		ctx: ^context_, idx: u32, cb: sink_input_info_cb_t, userdata: rawptr
+	) -> ^operation ---
+
+	context_subscribe :: proc(
+		ctx: ^context_,
+		mask: subscription_mask_t,
+		cb: rawptr = nil,
+		userdata: rawptr = nil,
+	) -> ^operation ---
+
+	context_set_subscribe_callback :: proc(
+		ctx: ^context_,
+		cb: context_subscribe_cb_t,
+		userdata: rawptr,
+	) ---
 }
