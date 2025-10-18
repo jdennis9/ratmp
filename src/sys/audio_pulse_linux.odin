@@ -52,7 +52,6 @@ _Pulse_Stream :: struct {
 	mainloop_api: ^pa.mainloop_api,
 
 	ready_sem: sync.Sema,
-	//done_sem: sync.Sema,
 	error: _Stream_Error,
 
 	session_thread: ^thread.Thread,
