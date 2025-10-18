@@ -265,6 +265,11 @@ library_get_track_path :: proc(library: Library, buf: []u8, track_id: Track_ID) 
 	return path_pool.retrieve(library.path_allocator, library.track_paths[index], buf), true
 }
 
+library_get_track_path_cstring :: proc(library: Library, buf: []u8, track_id: Track_ID) -> (path: cstring, found: bool) {
+	index := library_lookup_track(library, track_id) or_return
+	return path_pool.retrieve_cstring(library.path_allocator, library.track_paths[index], buf), true
+}
+
 library_get_track_metadata :: proc(library: Library, track_id: Track_ID) -> (track: Track_Metadata, found: bool) {
 	index := library_lookup_track(library, track_id) or_return
 	return library.track_metadata[index], true

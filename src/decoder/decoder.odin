@@ -58,7 +58,7 @@ open :: proc(dec: ^Decoder, filename_native: string, info: ^File_Info) -> (ok: b
 		dec.ff = ffmpeg.create_context()
 	}
 
-	ffmpeg.open_input(dec.ff, filename, &file_info)
+	ffmpeg.open_input(dec.ff, filename, &file_info) or_return
 
 	dec.samplerate = auto_cast file_info.spec.samplerate
 	dec.channels = auto_cast file_info.spec.channels

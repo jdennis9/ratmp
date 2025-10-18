@@ -49,6 +49,10 @@ Defer_Holder_<F> create_defer_(F f) {
 #define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define CONCAT(a, b) a##b
 #define WIDE_STRING(str) CONCAT(L, str)
+#ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef MAX
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 //-

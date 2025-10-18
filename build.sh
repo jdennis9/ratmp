@@ -16,6 +16,8 @@ odin build src/main -vet-shadowing $collections -out:out/debug/ratmp $args -show
 	$(pkgconf --libs libavutil) \
 	$(pkgconf --libs libswresample) \
 	$(pkgconf --libs libswscale) \
+	$(pkgconf --libs dbus-1) \
+	$(pkgconf --libs dbus-glib-1) \
 	$(pkgconf --libs appindicator3-0.1)
 	"
 

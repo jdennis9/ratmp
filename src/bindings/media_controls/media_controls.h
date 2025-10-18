@@ -17,6 +17,14 @@ enum {
 	STATE_STOPPED,
 };
 
+struct Track_Info {
+	const char *path;
+	const char *artist;
+	const char *album;
+	const char *title;
+	const char *genre;
+};
+
 typedef void Handler(void *data, int32_t signal);
 
 extern "C" {
@@ -24,6 +32,7 @@ extern "C" {
 	void disable();
 	void set_state(int32_t state);
 	void set_metadata(const char *artist, const char *album, const char *title);
+	void set_track_info(const Track_Info *info);
 };
 
 #endif

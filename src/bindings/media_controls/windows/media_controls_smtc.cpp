@@ -8,7 +8,7 @@
 #include <winrt/windows.foundation.collections.h>
 #include <windows.h>
 
-#include "media_controls.h"
+#include "../media_controls.h"
 
 using namespace winrt::Windows::Media;
 using namespace winrt::Windows::Foundation;

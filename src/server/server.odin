@@ -152,12 +152,18 @@ save_state :: proc(state: ^Server) {
 	state.saved_state.playback_mode = state.playback_mode
 
 	data, marshal_error := json.marshal(state.saved_state)
-	if marshal_error != nil {return}
+	if marshal_error != nil {
+		log.error(marshal_error)
+		return
+	}
 	defer delete(data)
 
 	os2.remove(state.paths.state)
 	file, file_error := os2.create(state.paths.state)
-	if file_error != nil {return}
+	if file_error != nil {
+		log.error(file_error)
+		return
+	}
 	defer os2.close(file)
 
 	os2.write(file, data)
@@ -167,7 +173,10 @@ load_state :: proc(state: ^Server) {
 	ss: _Saved_State
 
 	data, read_error := os2.read_entire_file_from_path(state.paths.state, context.allocator)
-	if read_error != nil {return}
+	if read_error != nil {
+		log.error(read_error)
+		return
+	}
 	if json.unmarshal(data, &ss) != nil {return}
 
 	set_shuffle_enabled(state, ss.enable_shuffle)

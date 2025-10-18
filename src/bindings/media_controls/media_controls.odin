@@ -23,11 +23,19 @@ State :: enum c.int {
 	Stopped,
 }
 
+Track_Info :: struct {
+	path: cstring,
+	artist: cstring,
+	album: cstring,
+	title: cstring,
+	genre: cstring,
+}
+
 Handler :: #type proc "c" (data: rawptr, signal: Signal)
 
 foreign lib {
 	enable :: proc(handler: Handler, data: rawptr) ---
 	disable :: proc() ---
 	set_state :: proc(state: State) ---
-	set_metadata :: proc(artist: cstring, album: cstring, title: cstring) ---
+	set_track_info :: proc(info: ^Track_Info) ---
 }

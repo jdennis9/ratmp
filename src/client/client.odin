@@ -211,16 +211,28 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 	update_layout(&client.layouts, &client.window_archetypes)
 
 	if client.media_controls.enabled {
+		track_info: media_controls.Track_Info
+
 		if client.media_controls.display_track != sv.current_track_id {
 			track_id := sv.current_track_id
 			client.media_controls.display_track = track_id
 
 			if md, track_found := server.library_get_track_metadata(sv.library, track_id); track_found {
-				media_controls.set_metadata(
+				/*media_controls.set_metadata(
 					strings.unsafe_string_to_cstring(md.values[.Artist].(string) or_else string(cstring(""))),
 					strings.unsafe_string_to_cstring(md.values[.Album].(string) or_else string(cstring(""))),
 					strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else string(cstring(""))),
-				)
+				)*/
+				path_buf: [512]u8
+				es := string(cstring(""))
+
+				track_info.album = strings.unsafe_string_to_cstring(md.values[.Album].(string) or_else "")
+				track_info.artist = strings.unsafe_string_to_cstring(md.values[.Artist].(string) or_else "")
+				track_info.title = strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else "")
+				track_info.genre = strings.unsafe_string_to_cstring(md.values[.Genre].(string) or_else "")
+				track_info.path = server.library_get_track_path_cstring(sv.library, path_buf[:], track_id) or_else nil
+
+				media_controls.set_track_info(&track_info)
 			}
 		}
 
