@@ -86,18 +86,18 @@ static void utf8_to_wchar(const char *str, wchar_t *buf, int buf_size) {
     MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, buf_size);
 }
 
-void set_metadata(const char *artist, const char *album, const char *title) {
+void set_track_info(const Track_Info *info) {
 	wchar_t str_buf[128];
 
 	if (!mc) return;
 
 	auto du = mc->smtc.DisplayUpdater();
 	du.Type(MediaPlaybackType::Music);
-    utf8_to_wchar(artist, str_buf, 128);
+    utf8_to_wchar(info->artist, str_buf, 128);
     du.MusicProperties().Artist(str_buf);
-    utf8_to_wchar(album, str_buf, 128);
+    utf8_to_wchar(info->album, str_buf, 128);
     du.MusicProperties().AlbumTitle(str_buf);
-    utf8_to_wchar(title, str_buf, 128);
+    utf8_to_wchar(info->title, str_buf, 128);
     du.MusicProperties().Title(str_buf);
     du.Update();
 }
