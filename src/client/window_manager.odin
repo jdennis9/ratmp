@@ -165,7 +165,21 @@ show_all_windows :: proc(cl: ^Client, sv: ^Server) {
 
 show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 	for archetype_id in cl.sorted_window_archetypes {
-		at := cl.window_archetypes[archetype_id] or_continue
+		have_instance: bool
+
+		at := (&cl.window_archetypes[archetype_id]) or_continue
+
+		for inst in at.instances {
+			if inst != nil {
+				have_instance = true
+				break
+			}
+		}
+
+		if !have_instance && imgui.MenuItem(at.title) {
+			return add_window_instance(at) or_else nil
+		}
+
 		for inst, i in at.instances {
 			name_buf: [64]u8
 			title: cstring
