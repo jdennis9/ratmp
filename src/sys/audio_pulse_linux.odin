@@ -112,9 +112,10 @@ _send_message :: proc(s: ^_Pulse_Stream, message: _Stream_Message) {
 _stream_session_thread :: proc(t: ^thread.Thread) {
 	s := cast(^_Pulse_Stream) t.data
 	context = s.ctx
-
+	
 	for {
 		pa.mainloop_iterate(s.mainloop, true, nil)
+
 		messages := sync.atomic_load(&s.messages)
 		defer sync.atomic_store(&s.messages, {})
 
@@ -150,7 +151,7 @@ _stream_state_callback :: proc "c" (stream: ^pa.stream, userdata: rawptr) {
 	state := pa.stream_get_state(stream)
 	#partial switch state {
 		case .READY: {
-			thread.start(s.session_thread)
+			pa.stream_set_write_callback(s.stream, _stream_write_callback, s)
 			return
 		}
 	}
@@ -170,7 +171,6 @@ _begin_stream_session :: proc(s: ^_Pulse_Stream) -> (ok: bool) {
 	s.stream = pa.stream_new(s.pa_context, "RAT MP Playback", &sample_spec, nil)
 	if s.stream == nil {return}
 	_check(pa.stream_connect_playback(s.stream, nil, nil, 0, nil, nil)) or_return
-	pa.stream_set_write_callback(s.stream, _stream_write_callback, s)
 	pa.stream_set_state_callback(s.stream, _stream_state_callback, s)
 
 	sync.sema_post(&s.ready_sem)
@@ -223,9 +223,10 @@ _create_stream :: proc(
 	s.pa_context = pa.context_new(s.mainloop_api, "RAT MP")
 	s.session_thread = thread.create(_stream_session_thread)
 	s.session_thread.data = s
-	thread.start(s.session_thread)
 	_check(pa.context_connect(s.pa_context, nil, 0, nil)) or_return
 	pa.context_set_state_callback(s.pa_context, _context_state_proc, s)
+
+	thread.start(s.session_thread)
 
 	sync.sema_wait(&s.ready_sem)
 

@@ -168,6 +168,7 @@ foreign lib {
 	mainloop_prepare :: proc(m: ^mainloop, timeout: c.int) -> c.int ---
 	mainloop_poll :: proc(m: ^mainloop) -> c.int ---
 	mainloop_dispatch :: proc(m: ^mainloop) -> c.int ---
+	mainloop_run :: proc(m: ^mainloop, retval: ^c.int) -> c.int ---
 	mainloop_quit :: proc(m: ^mainloop, retval: c.int) ---
 	mainloop_get_api :: proc(m: ^mainloop) -> ^mainloop_api ---
 
