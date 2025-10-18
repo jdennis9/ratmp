@@ -63,8 +63,6 @@ const char *server_introspection_xml =
 	"    </method>\n"
 	"    <method name='Stop'>\n"
 	"    </method>\n"
-	"    <method name='Play'>\n"
-	"    </method>\n"
 	"    <method name='Seek'>\n"
 	"		<arg name='Offset' type='x' direction='in'/>"
 	"    </method>\n"
