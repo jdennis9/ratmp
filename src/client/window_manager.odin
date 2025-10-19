@@ -218,7 +218,7 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 		fmt.bprint(name_buf[:511], arch.title, "###", arch.internal_name, "")
 	}
 	else {
-		fmt.bprintf(name_buf[:511], "%s (%d)###%s@d",
+		fmt.bprintf(name_buf[:511], "%s (%d)###%s@%d",
 			arch.title, window.instance, arch.internal_name, window.instance
 		)
 	}

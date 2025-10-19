@@ -309,10 +309,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	_main_menu_bar(cl, sv)
 	_status_bar(cl, sv)
 
-	if ODIN_DEBUG {
-		imgui.ShowDemoWindow()
-	}
-
 	show_all_windows(cl, sv)
 
 	if cl.show_window_manager {
