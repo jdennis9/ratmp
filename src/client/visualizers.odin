@@ -707,6 +707,7 @@ VECTORSCOPE_WINDOW_ARCHETYPE := Window_Archetype {
 	show = vectorscope_window_show,
 	save_config = vectorscope_window_save_config,
 	configure = vectorscope_window_configure,
+	flags = {.NoInitialInstance},
 }
 
 vectorscope_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
@@ -913,6 +914,7 @@ SPECTOGRAM_WINDOW_ARCHETYPE := Window_Archetype {
 	internal_name = WINDOW_SPECTOGRAM,
 	make_instance = spectogram_window_make_instance,
 	show = spectogram_window_show,
+	flags = {.NoInitialInstance},
 }
 
 spectogram_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
