@@ -260,18 +260,6 @@ library_find_track_path_cstring :: proc(lib: Library, buf: []u8, track_id: Track
 	return library_get_track_path_cstring(lib, buf, index)
 }
 
-/*library_get_track_array_metadata :: proc(lib: Library, tracks: []Track_ID, allocator: mem.Allocator) -> []Track_Metadata {
-	output := make([dynamic]Track_Metadata, allocator)
-	reserve(&output, len(tracks))
-
-	for track in tracks {
-		index := library_find_track_index(lib, track) or_continue
-		append(&output, lib.track_metadata[index])
-	}
-
-	return output[:]
-}*/
-
 library_get_missing_tracks :: proc(lib: Library, output: ^[dynamic]Track_ID) {
 	for track in lib.tracks {
 		path_buf: [512]u8
