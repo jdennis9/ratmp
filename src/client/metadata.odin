@@ -143,7 +143,6 @@ metadata_window_show :: proc(
 		
 		os2.file_info_delete(state.file_info, context.allocator)
 		state.file_info = os2.stat(track_path, context.allocator) or_else {}
-
 	}
 	
 	if state.displayed_track_id == 0 {
@@ -250,6 +249,24 @@ metadata_window_show :: proc(
 		return string_row(name, v)
 	}
 
+	metadata_date_row :: proc(name: string, md: Track_Properties, component: Metadata_Component) -> bool {
+		value := md[component].(i64) or_return
+		imgui.TableNextRow()
+
+		if imgui.TableSetColumnIndex(0) {
+			imx.text_unformatted(name)
+		}
+
+		if imgui.TableSetColumnIndex(1) {
+			buf: [16]u8
+			ts := time.unix(value, 0)
+			str := time.to_string_yyyy_mm_dd(ts, buf[:])
+			imx.text_unformatted(str)
+		}
+
+		return false
+	}
+
 	// Tags
 	imgui.SeparatorText("Metadata")
 	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
@@ -261,6 +278,9 @@ metadata_window_show :: proc(
 		if metadata_string_row("Album", metadata, .Album) {_go_to_album(cl, metadata)}
 		if metadata_string_row("Genre", metadata, .Genre) {_go_to_genre(cl, metadata)}
 
+		number_row("Track no.", metadata[.TrackNumber].(i64) or_else 0)
+		number_row("Year", metadata[.Year].(i64) or_else 0)
+
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Duration")}
 		if imgui.TableSetColumnIndex(1) {
@@ -268,19 +288,21 @@ metadata_window_show :: proc(
 			imgui.Text("%02d:%02d:%02d", i32(h), i32(m), i32(s))
 		}
 
+		metadata_date_row("Date added", metadata, .DateAdded)
+		
 		imgui.EndTable()
 	}
-
+	
 	imgui.SeparatorText("File properties")
 	if imgui.BeginTable("##file_properies", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
 		path_buf: [512]u8
-
+		
 		imgui.TableSetupColumn("name", {}, 0.12)
 		imgui.TableSetupColumn("value", {}, 0.88)
-
+		
 		path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_else ""
 		string_row("File path", path)
-
+		
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {
 			imx.text_unformatted("Size")
@@ -288,6 +310,8 @@ metadata_window_show :: proc(
 		if imgui.TableSetColumnIndex(1) {
 			imx.textf(16, "%M", state.file_info.size)
 		}
+
+		metadata_date_row("Date created", metadata, .FileDate)
 
 		imgui.EndTable()
 	}
