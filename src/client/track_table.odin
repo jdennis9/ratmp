@@ -121,25 +121,26 @@ track_table_update :: proc(
 	table.filter_hash = filter_hash
 
 	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: Track_Row, ok: bool) {
-		md := server.library_get_track_metadata(lib, id) or_return
+		track := server.library_find_track(lib, id) or_return
+		md := track.properties
 
 		row.id = id
-		row.genre = md.values[.Genre].(string) or_else ""
-		row.artist = md.values[.Artist].(string) or_else ""
-		row.album = md.values[.Album].(string) or_else ""
-		row.title = strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else string(cstring("")))
+		row.genre = md[.Genre].(string) or_else ""
+		row.artist = md[.Artist].(string) or_else ""
+		row.album = md[.Album].(string) or_else ""
+		row.title = strings.unsafe_string_to_cstring(md[.Title].(string) or_else string(cstring("")))
 		//row.year = auto_cast(md.values[.Year].(i64) or_else 0)
-		row.track_num = auto_cast(md.values[.TrackNumber].(i64) or_else 0)
-		row.bitrate = auto_cast(md.values[.Bitrate].(i64) or_else 0)
+		row.track_num = auto_cast(md[.TrackNumber].(i64) or_else 0)
+		row.bitrate = auto_cast(md[.Bitrate].(i64) or_else 0)
 
-		duration := md.values[.Duration].(i64) or_else 0
+		duration := md[.Duration].(i64) or_else 0
 		h, m, s := util.clock_from_seconds(auto_cast duration)
 		row.duration_len = len(fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s))
-		fmt.bprintf(row.year_str[:], "%4d", md.values[.Year].(i64) or_else 0)
+		fmt.bprintf(row.year_str[:], "%4d", md[.Year].(i64) or_else 0)
 
-		year, month, day := time.date(time.unix(md.values[.DateAdded].(i64) or_else 0, 0))
+		year, month, day := time.date(time.unix(md[.DateAdded].(i64) or_else 0, 0))
 		fmt.bprintf(row.date_added_str[:], "%4d-%2d-%2d", year, month, day)
-		year, month, day = time.date(time.unix(md.values[.FileDate].(i64) or_else 0, 0))
+		year, month, day = time.date(time.unix(md[.FileDate].(i64) or_else 0, 0))
 		fmt.bprintf(row.file_date_str[:], "%4d-%2d-%2d", year, month, day)
 
 		ok = true
@@ -215,7 +216,7 @@ track_table_show :: proc(
 	result.bounding_box.Max = result.bounding_box.Min + imgui.GetWindowSize();
 
 	for component in Metadata_Component {
-		imgui.TableSetupColumn(server.METADATA_COMPONENT_NAMES[component], column_flags[component])
+		imgui.TableSetupColumn(server.TRACK_PROPERTY_NAMES[component], column_flags[component])
 	}
 
 	imgui.TableSetupScrollFreeze(1, 1)
@@ -530,11 +531,11 @@ process_track_context :: proc(
 ) {
 	if result.single_track != nil {
 		if (result.go_to_album || result.go_to_genre || result.go_to_artist) {
-			md, found := server.library_get_track_metadata(sv.library, result.single_track.?)
+			track, found := server.library_find_track(sv.library, result.single_track.?)
 			if found {
-				if result.go_to_album {_go_to_album(cl, md)}
-				if result.go_to_artist {_go_to_artist(cl, md)}
-				if result.go_to_genre {_go_to_genre(cl, md)}
+				if result.go_to_album {_go_to_album(cl, track.properties)}
+				if result.go_to_artist {_go_to_artist(cl, track.properties)}
+				if result.go_to_genre {_go_to_genre(cl, track.properties)}
 			}
 		}
 
@@ -554,10 +555,10 @@ process_track_context :: proc(
 	}
 
 	if allow_add_to_playlist && result.add_to_playlist != nil {
-		md, track_found := server.library_get_track_metadata(sv.library, track_id)
+		track, track_found := server.library_find_track(sv.library, track_id)
 		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
 		if track_found && playlist_found {
-			server.playlist_add_track(playlist, track_id, md)
+			server.playlist_add_track(playlist, track)
 			sv.library.user_playlists.serial += 1
 		}
 	}

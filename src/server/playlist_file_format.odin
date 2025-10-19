@@ -96,7 +96,7 @@ playlist_file_save_m3u :: proc(lib: Library, input: Playlist, output: os.Handle)
 
 	for track_id in input.tracks {
 		path_buf: [512]u8
-		path := library_get_track_path(lib, path_buf[:], track_id) or_continue
+		path := library_find_track_path(lib, path_buf[:], track_id) or_continue
 		fp(output, path)
 	}
 
@@ -138,9 +138,9 @@ playlist_file_parse_m3u :: proc(lib: Library, input: string, output: ^Playlist) 
 
 	for track_path in track_paths {
 		path_hash := library_hash_path(track_path)
-		track_id := library_track_id_from_path_hash(lib, path_hash) or_continue
-		md := library_get_track_metadata(lib, track_id) or_continue
-		playlist_add_track(output, track_id, md, assume_unique=true)
+		track_index := library_find_track_by_path_hash(lib, path_hash) or_continue
+		track := lib.tracks[track_index]
+		playlist_add_track(output, track, assume_unique=true)
 	}
 
 	playlist_set_name(output, playlist_name)

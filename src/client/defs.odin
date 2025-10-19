@@ -32,8 +32,8 @@ Library :: server.Library
 Playlist :: server.Playlist
 Playlist_ID :: server.Playlist_ID
 Track_ID :: server.Track_ID
-Track_Metadata :: server.Track_Metadata
-Metadata_Component :: server.Metadata_Component
+Track_Properties :: server.Track_Properties
+Metadata_Component :: server.Track_Property_ID
 
 Window_Flag :: enum {
 	AlwaysShow,

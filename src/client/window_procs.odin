@@ -36,8 +36,13 @@ library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 	imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
 
-	track_table_update(&state.track_table, sv.library.serial, sv.library, sv.library.track_ids[:], {}, string(filter_cstring))
-	table_result := track_table_show(state.track_table, "##library_table", context_id, sv.current_track_id)
+	track_table_update(
+		&state.track_table, sv.library.serial, sv.library,
+		server.library_get_all_track_ids(sv.library), {}, string(filter_cstring)
+	)
+	table_result := track_table_show(
+		state.track_table, "##library_table", context_id, sv.current_track_id
+	)
 
 	if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
 	track_table_process_result(state.track_table, table_result, cl, sv, {})

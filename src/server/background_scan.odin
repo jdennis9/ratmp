@@ -128,7 +128,7 @@ _background_scan_output_results :: proc(library: ^Library, scan: ^_Background_Sc
 
 		thread.destroy(scan.thread)
 		delete(scan.folders)
-		delete_track_set(&scan.output)
+		track_set_delete(&scan.output)
 		scan^ = {}
 
 		return true

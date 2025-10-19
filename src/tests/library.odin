@@ -61,7 +61,7 @@ test_library_scan :: proc(t: ^testing.T) {
 	set: server.Track_Set
 
 	server.library_init(&lib)
-	defer server.delete_track_set(&set)
+	defer server.track_set_delete(&set)
 	defer server.library_destroy(&lib)
 
 	server.scan_directory_tracks("D:\\Media\\Music\\Anime", &set)

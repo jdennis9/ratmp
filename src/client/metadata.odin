@@ -132,7 +132,7 @@ metadata_window_show :: proc(
 		}
 		
 		path_buf: Path
-		track_path := server.library_get_track_path(sv.library, path_buf[:], state.track_id) or_return
+		track_path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_return
 		width, height, state.album_art, have_art = _load_track_album_art(sv.library, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
@@ -197,7 +197,8 @@ metadata_window_show :: proc(
 		imgui.PopStyleColor(3)
 	}
 
-	metadata := server.library_get_track_metadata(sv.library, state.track_id) or_return
+	track := server.library_find_track(sv.library, state.track_id) or_return
+	metadata := track.properties
 
 	if imgui.BeginPopupContextItem() {
 		result: Track_Context_Result
@@ -243,8 +244,8 @@ metadata_window_show :: proc(
 		}
 	}
 
-	metadata_string_row :: proc(name: cstring, md: Track_Metadata, component: Metadata_Component) -> (clicked: bool) {
-		v := md.values[component].(string) or_return
+	metadata_string_row :: proc(name: cstring, md: Track_Properties, component: Metadata_Component) -> (clicked: bool) {
+		v := md[component].(string) or_return
 		if v == "" {return}
 		return string_row(name, v)
 	}
@@ -263,7 +264,7 @@ metadata_window_show :: proc(
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Duration")}
 		if imgui.TableSetColumnIndex(1) {
-			h, m, s := time.clock_from_seconds(auto_cast (metadata.values[.Duration].(i64) or_else 0))
+			h, m, s := time.clock_from_seconds(auto_cast (metadata[.Duration].(i64) or_else 0))
 			imgui.Text("%02d:%02d:%02d", i32(h), i32(m), i32(s))
 		}
 
@@ -277,7 +278,7 @@ metadata_window_show :: proc(
 		imgui.TableSetupColumn("name", {}, 0.12)
 		imgui.TableSetupColumn("value", {}, 0.88)
 
-		path := server.library_get_track_path(sv.library, path_buf[:], state.track_id) or_else ""
+		path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_else ""
 		string_row("File path", path)
 
 		imgui.TableNextRow()

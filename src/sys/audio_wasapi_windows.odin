@@ -256,7 +256,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 				stream.config.event_callback(stream.config.callback_data, .DropBuffer)
 				audio_client->Stop()
 				audio_client->Reset()
-				audio_client->Start()				
+				audio_client->Start()
 			}
 			else if obj == win.WAIT_OBJECT_0+2 {
 				win.ResetEvent(stream.request_pause_event)

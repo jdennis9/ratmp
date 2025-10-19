@@ -97,11 +97,10 @@ library_build_folder_tree :: proc(lib: ^Library) {
 	library_folder_tree_destroy(tree)
 	library_folder_tree_init(tree)
 
-	for track_id, track_index in lib.track_ids {
+	for track, track_index in lib.tracks {
 		path_buf: [512]u8
-		md := lib.track_metadata[track_index]
-		path := library_get_track_path(lib^, path_buf[:], track_id) or_continue
-		library_folder_tree_add_track(tree, path, track_id, md)
+		path := library_get_track_path(lib^, path_buf[:], track_index) or_continue
+		library_folder_tree_add_track(tree, path, track)
 	}
 
 	_create_folder_lookup(&tree.folder_ptrs, &tree.root_folder)
@@ -114,7 +113,7 @@ library_folder_tree_init :: proc(tree: ^Library_Folder_Tree) {
 	tree.string_allocator = mem.dynamic_arena_allocator(&tree.string_arena)
 }
 
-library_folder_tree_add_track :: proc(tree: ^Library_Folder_Tree, path: string, track_id: Track_ID, track_metadata: Track_Metadata) {
+library_folder_tree_add_track :: proc(tree: ^Library_Folder_Tree, path: string, track: Track) {
 	parts := strings.split(path, filepath.SEPARATOR_STRING)
 	defer delete(parts)
 	parent := &tree.root_folder
@@ -128,8 +127,8 @@ library_folder_tree_add_track :: proc(tree: ^Library_Folder_Tree, path: string, 
 	}
 
 	if parent.tracks == nil {parent.tracks = make([dynamic]Track_ID, tree.node_allocator)}
-	append(&parent.tracks, track_id)
-	parent.duration += int(track_metadata.values[.Duration].(i64) or_else 0)
+	append(&parent.tracks, track.id)
+	parent.duration += int(track.properties[.Duration].(i64) or_else 0)
 }
 
 library_folder_tree_destroy :: proc(tree: ^Library_Folder_Tree) {
@@ -205,12 +204,11 @@ test_library_folder_tree :: proc(t: ^testing.T) {
 
 	defer library_folder_tree_destroy(&tree)
 
-	for track_id, track_index in lib.track_ids {
+	for track, track_index in lib.tracks {
 		path_buf: [512]u8
-		md := lib.track_metadata[track_index]
-		path := library_get_track_path(lib, path_buf[:], track_id) or_continue
+		path := library_get_track_path(lib, path_buf[:], track_index) or_continue
 		log.debug(path)
-		library_folder_tree_add_track(&tree, path, track_id, md)
+		library_folder_tree_add_track(&tree, path, track)
 	}
 
 	library_folder_print("<root>", tree.root_folder, 1)

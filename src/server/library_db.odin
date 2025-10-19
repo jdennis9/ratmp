@@ -89,10 +89,12 @@ library_save_to_file :: proc(lib: Library, path: string) {
 	sqlite.exec(db, "BEGIN TRANSACTION", nil, nil, nil)
 
 	// Tracks
-	for md, index in lib.track_metadata {
+	for track, index in lib.tracks {
 		path_buf: [512]u8
-		path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[index], path_buf[:])
-		path_hash := xxhash.XXH3_64_default(transmute([]u8) string(path))
+		//path := path_pool.retrieve_cstring(lib.path_allocator, track.path, path_buf[:])
+		path := library_get_track_path_cstring(lib, path_buf[:], index) or_continue
+		path_hash := library_hash_path(string(path))
+		md := track.properties
 
 		sqlite.prepare_v2(db, "INSERT INTO tracks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", -1, &stmt, nil)
 		defer sqlite.finalize(stmt)
@@ -101,16 +103,16 @@ library_save_to_file :: proc(lib: Library, path: string) {
 
 		sqlite.bind_int64(stmt, 1, auto_cast path_hash)
 		sqlite.bind_text(stmt, 2, path, -1, nil)
-		sqlite.bind_text(stmt, 3, strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else es), -1, nil)
-		sqlite.bind_text(stmt, 4, strings.unsafe_string_to_cstring(md.values[.Artist].(string) or_else es), -1, nil)
-		sqlite.bind_text(stmt, 5, strings.unsafe_string_to_cstring(md.values[.Album].(string) or_else es), -1, nil)
-		sqlite.bind_text(stmt, 6, strings.unsafe_string_to_cstring(md.values[.Genre].(string) or_else es), -1, nil)
-		sqlite.bind_int(stmt, 7, auto_cast(md.values[.Duration].(i64) or_else 0))
-		sqlite.bind_int(stmt, 8, auto_cast(md.values[.Bitrate].(i64) or_else 0))
-		sqlite.bind_int(stmt, 9, auto_cast(md.values[.TrackNumber].(i64) or_else 0))
-		sqlite.bind_int(stmt, 10, auto_cast(md.values[.Year].(i64) or_else 0))
-		sqlite.bind_int64(stmt, 11, md.values[.DateAdded].(i64) or_else 0)
-		sqlite.bind_int64(stmt, 12, md.values[.FileDate].(i64) or_else 0)
+		sqlite.bind_text(stmt, 3, strings.unsafe_string_to_cstring(md[.Title].(string) or_else es), -1, nil)
+		sqlite.bind_text(stmt, 4, strings.unsafe_string_to_cstring(md[.Artist].(string) or_else es), -1, nil)
+		sqlite.bind_text(stmt, 5, strings.unsafe_string_to_cstring(md[.Album].(string) or_else es), -1, nil)
+		sqlite.bind_text(stmt, 6, strings.unsafe_string_to_cstring(md[.Genre].(string) or_else es), -1, nil)
+		sqlite.bind_int(stmt, 7, auto_cast(md[.Duration].(i64) or_else 0))
+		sqlite.bind_int(stmt, 8, auto_cast(md[.Bitrate].(i64) or_else 0))
+		sqlite.bind_int(stmt, 9, auto_cast(md[.TrackNumber].(i64) or_else 0))
+		sqlite.bind_int(stmt, 10, auto_cast(md[.Year].(i64) or_else 0))
+		sqlite.bind_int64(stmt, 11, md[.DateAdded].(i64) or_else 0)
+		sqlite.bind_int64(stmt, 12, md[.FileDate].(i64) or_else 0)
 		sqlite.step(stmt)
 	}
 
@@ -174,29 +176,29 @@ library_load_from_file :: proc(lib: ^Library, path: string) -> (loaded_version: 
 		defer sqlite.finalize(stmt)
 
 		for {
-			track: Track_Metadata
+			props: Track_Properties
 			result = sqlite.step(stmt)
 			if result != .Row {break}
 
 			path := sqlite.column_text(stmt, 1)
 			if path == nil {continue}
-			track_set_cstring(&track, .Title, sqlite.column_text(stmt, 2), lib.string_allocator)
-			track_set_cstring(&track, .Artist, sqlite.column_text(stmt, 3), lib.string_allocator)
-			track_set_cstring(&track, .Album, sqlite.column_text(stmt, 4), lib.string_allocator)
-			track_set_cstring(&track, .Genre, sqlite.column_text(stmt, 5), lib.string_allocator)
-			track.values[.Duration] = i64(sqlite.column_int(stmt, 6))
-			track.values[.Bitrate] = i64(sqlite.column_int(stmt, 7))
-			track.values[.TrackNumber] = i64(sqlite.column_int(stmt, 8))
-			track.values[.Year] = i64(sqlite.column_int(stmt, 9))
-			track.values[.DateAdded] = i64(sqlite.column_int64(stmt, 10))
+			track_set_cstring(&props, .Title, sqlite.column_text(stmt, 2), lib.string_allocator)
+			track_set_cstring(&props, .Artist, sqlite.column_text(stmt, 3), lib.string_allocator)
+			track_set_cstring(&props, .Album, sqlite.column_text(stmt, 4), lib.string_allocator)
+			track_set_cstring(&props, .Genre, sqlite.column_text(stmt, 5), lib.string_allocator)
+			props[.Duration] = i64(sqlite.column_int(stmt, 6))
+			props[.Bitrate] = i64(sqlite.column_int(stmt, 7))
+			props[.TrackNumber] = i64(sqlite.column_int(stmt, 8))
+			props[.Year] = i64(sqlite.column_int(stmt, 9))
+			props[.DateAdded] = i64(sqlite.column_int64(stmt, 10))
 			if version >= 1 {
-				track.values[.FileDate] = i64(sqlite.column_int64(stmt, 11))
+				props[.FileDate] = i64(sqlite.column_int64(stmt, 11))
 			}
 			else {
-				track.values[.FileDate] = get_file_date(string(path))
+				props[.FileDate] = get_file_date(string(path))
 			}
 
-			library_add_track(lib, string(path), track)
+			library_add_track(lib, string(path), props)
 		}
 	}
 

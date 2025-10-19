@@ -177,7 +177,7 @@ show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 		}
 
 		if !have_instance && imgui.MenuItem(at.title) {
-			return add_window_instance(at) or_else nil
+			window = add_window_instance(at) or_else nil
 		}
 
 		for inst, i in at.instances {

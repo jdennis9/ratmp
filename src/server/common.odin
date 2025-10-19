@@ -17,6 +17,9 @@
 */
 package server
 
+import "base:runtime"
+import "core:strings"
+
 Sort_Order :: enum {
 	Ascending,
 	Descending,
@@ -29,3 +32,16 @@ Error :: enum {
 }
 
 Path :: [512]u8
+
+Allocator :: runtime.Allocator
+
+clone_cstring_with_null :: proc(str: cstring, allocator: runtime.Allocator) -> string {
+	return string(strings.clone_to_cstring(string(str), allocator))
+}
+
+clone_string_with_null :: proc(str: string, allocator: Allocator) -> string {
+    out := make([]u8, len(str) + 1, allocator)
+    copy(out, str)
+    out[len(str)] = 0
+    return string(out[:len(str)])
+}

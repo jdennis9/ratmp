@@ -36,7 +36,7 @@ test_sql :: proc(t: ^testing.T) {
 	folder := "D:\\Media\\Music\\Original"
 
 	scan_directory_tracks(folder, &tracks)
-	defer delete_track_set(&tracks)
+	defer track_set_delete(&tracks)
 
 	error = sql.open("db.sqlite", &db)
 	log.debug(error)

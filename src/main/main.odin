@@ -145,12 +145,13 @@ server_event_handler :: proc(sv: server.Server, data: rawptr, event: server.Even
 		case server.Current_Track_Changed_Event: {
 			if g.title_track_id != v.track_id {
 				g.title_track_id = v.track_id
-				if md, track_found := server.library_get_track_metadata(sv.library, v.track_id); track_found {
+				if track, track_found := server.library_find_track(sv.library, v.track_id); track_found {
 					buf: [256]u8
+					md := track.properties
 					title := fmt.bprint(buf[:255], build.PROGRAM_NAME_AND_VERSION, "|",
-						md.values[.Artist].(string) or_else "",
+						md[.Artist].(string) or_else "",
 						"-",
-						md.values[.Title].(string) or_else ""
+						md[.Title].(string) or_else ""
 					)
 					sys_main.set_window_title(title)
 				}

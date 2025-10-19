@@ -63,7 +63,6 @@ Client :: struct {
 		width, height: int,
 	},
 	show_imgui_theme_editor: bool,
-	show_memory_usage: bool,
 	
 	dialogs: struct {
 		set_background: sys.File_Dialog_State,
@@ -92,7 +91,7 @@ Client :: struct {
 
 		status_bar: struct {
 			displayed_track_id: Track_ID,
-			metadata: Track_Metadata,
+			metadata: Track_Properties,
 			artist, album, title: [64]u8
 		},
 		licenses: struct {
@@ -217,20 +216,16 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 			track_id := sv.current_track_id
 			client.media_controls.display_track = track_id
 
-			if md, track_found := server.library_get_track_metadata(sv.library, track_id); track_found {
-				/*media_controls.set_metadata(
-					strings.unsafe_string_to_cstring(md.values[.Artist].(string) or_else string(cstring(""))),
-					strings.unsafe_string_to_cstring(md.values[.Album].(string) or_else string(cstring(""))),
-					strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else string(cstring(""))),
-				)*/
+			if track, track_found := server.library_find_track(sv.library, track_id); track_found {
+				md := track.properties
 				path_buf: [512]u8
 				es := string(cstring(""))
 
-				track_info.album = strings.unsafe_string_to_cstring(md.values[.Album].(string) or_else "")
-				track_info.artist = strings.unsafe_string_to_cstring(md.values[.Artist].(string) or_else "")
-				track_info.title = strings.unsafe_string_to_cstring(md.values[.Title].(string) or_else "")
-				track_info.genre = strings.unsafe_string_to_cstring(md.values[.Genre].(string) or_else "")
-				track_info.path = server.library_get_track_path_cstring(sv.library, path_buf[:], track_id) or_else nil
+				track_info.album = strings.unsafe_string_to_cstring(md[.Album].(string) or_else "")
+				track_info.artist = strings.unsafe_string_to_cstring(md[.Artist].(string) or_else "")
+				track_info.title = strings.unsafe_string_to_cstring(md[.Title].(string) or_else "")
+				track_info.genre = strings.unsafe_string_to_cstring(md[.Genre].(string) or_else "")
+				track_info.path = server.library_find_track_path_cstring(sv.library, path_buf[:], track.id) or_else nil
 
 				media_controls.set_track_info(&track_info)
 			}
@@ -362,10 +357,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 		if cl.show_imgui_theme_editor {
 			imgui.ShowStyleEditor()
 		}
-
-		if cl.show_memory_usage {
-			_show_memory_usage(cl, sv^)
-		}
 	}
 
 	return
@@ -421,23 +412,23 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 }
 
 @private
-_go_to_artist :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+_go_to_artist :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Artist].(string) or_else "", .Artist)
+	playlists_window_set_view_by_name(state, md[.Artist].(string) or_else "", .Artist)
 	return true
 }
 
 @private
-_go_to_album :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+_go_to_album :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Album].(string) or_else "", .Album)
+	playlists_window_set_view_by_name(state, md[.Album].(string) or_else "", .Album)
 	return true
 }
 
 @private
-_go_to_genre :: proc(cl: ^Client, md: Track_Metadata) -> bool {
+_go_to_genre :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
-	playlists_window_set_view_by_name(state, md.values[.Genre].(string) or_else "", .Genre)
+	playlists_window_set_view_by_name(state, md[.Genre].(string) or_else "", .Genre)
 	return true
 }
 
@@ -537,9 +528,6 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	when ODIN_DEBUG {
 		if imgui.BeginMenu("Debug") {
 			imgui.MenuItemBoolPtr("ImGui theme editor", nil, &client.show_imgui_theme_editor)
-			if imgui.MenuItem("Memory usage") {
-				client.show_memory_usage = true
-			}
 			if imgui.MenuItem("Fake library update") {
 				sv.library.serial += 1
 			}
@@ -653,13 +641,14 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 	if state.displayed_track_id != sv.current_track_id {
 		state.displayed_track_id = sv.current_track_id
 		if sv.current_track_id == 0 {return false}
-		state.metadata = server.library_get_track_metadata(sv.library, state.displayed_track_id) or_return
+		track := server.library_find_track(sv.library, state.displayed_track_id) or_return
+		state.metadata = track.properties
 		state.artist = {}
 		state.album = {}
 		state.title = {}
-		util.copy_string_to_buf(state.artist[:], state.metadata.values[.Artist].(string) or_else "")
-		util.copy_string_to_buf(state.album[:], state.metadata.values[.Album].(string) or_else "")
-		util.copy_string_to_buf(state.title[:], state.metadata.values[.Title].(string) or_else "")
+		util.copy_string_to_buf(state.artist[:], state.metadata[.Artist].(string) or_else "")
+		util.copy_string_to_buf(state.album[:], state.metadata[.Album].(string) or_else "")
+		util.copy_string_to_buf(state.title[:], state.metadata[.Title].(string) or_else "")
 	}
 
 	if state.displayed_track_id != 0 {
@@ -740,24 +729,6 @@ _draw_background :: proc(client: Client) {
 		{0, 0},
 		{w, h},
 	)
-}
-
-_show_memory_usage :: proc(client: ^Client, sv: Server) {
-	show := imgui.Begin("Memory Usage", &client.show_memory_usage)
-	if !show {
-		imgui.End()
-		return
-	}
-	
-	defer imgui.End()
-
-	library_usage: int
-	library_usage += size_of(Track_ID) * len(sv.library.track_ids)
-	library_usage += size_of(Track_Metadata) * len(sv.library.track_metadata)
-	library_usage += 8 * len(sv.library.track_paths)
-	
-	imgui.Text("Library: %u KB", u32(library_usage) >> 10)
-	
 }
 
 @private

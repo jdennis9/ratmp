@@ -394,7 +394,7 @@ set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) 
 		defer try_pos += 1
 		if try_pos >= len(state.queue) {try_pos = 0}
 		track_id := state.queue[try_pos]
-		path := library_get_track_path(state.library, path_buf[:], track_id) or_continue
+		path := library_find_track_path(state.library, path_buf[:], track_id) or_continue
 		if play_track(state, path, track_id, dont_drop_buffer) {
 			state.queue_pos = try_pos
 			return true

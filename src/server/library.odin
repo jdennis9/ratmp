@@ -41,7 +41,7 @@ LIBRARY_MAX_TRACKS :: (32<<10)
 Track_ID :: distinct u32
 Playlist_ID :: struct {serial, pool: u32}
 
-Metadata_Component :: enum {
+Track_Property_ID :: enum {
 	Album,
 	Genre,
 	Artist,
@@ -55,7 +55,7 @@ Metadata_Component :: enum {
 	FileDate,
 }
 
-METADATA_COMPONENT_NAMES := [Metadata_Component]cstring {
+TRACK_PROPERTY_NAMES := [Track_Property_ID]cstring {
 	.Album = "Album",
 	.Genre = "Genre",
 	.Artist = "Artist",
@@ -68,27 +68,32 @@ METADATA_COMPONENT_NAMES := [Metadata_Component]cstring {
 	.FileDate = "File Date",
 }
 
-Metadata_Value :: union {
+Track_Property :: union {
 	string,
 	i64,
 }
 
-Track_Metadata :: struct {
-	values: [Metadata_Component]Metadata_Value,
-}
+Track_Properties :: [Track_Property_ID]Track_Property
 
 Track_Set :: struct {
 	string_arena: mem.Dynamic_Arena,
 	string_allocator: runtime.Allocator,
 	path_allocator: path_pool.Pool,
 	paths: [dynamic]path_pool.Path,
-	metadata: [dynamic]Track_Metadata,
+	metadata: [dynamic]Track_Properties,
 	cover_art: map[u64]string,
 }
 
 Track_Sort_Spec :: struct {
-	metric: Metadata_Component,
+	metric: Track_Property_ID,
 	order: Sort_Order,
+}
+
+Track :: struct {
+	id: Track_ID,
+	path: path_pool.Path,
+	path_hash: u64,
+	properties: Track_Properties,
 }
 
 Library :: struct {
@@ -100,10 +105,7 @@ Library :: struct {
 	path_allocator: path_pool.Pool,
 	last_track_id: Track_ID,
 
-	track_ids: [dynamic]Track_ID,
-	track_path_hashes: [dynamic]u64,
-	track_paths: [dynamic]path_pool.Path,
-	track_metadata: [dynamic]Track_Metadata,
+	tracks: #soa[dynamic]Track,
 
 	dir_cover_files: map[u64]string,
 	next_playlist_id: u32,
@@ -120,7 +122,7 @@ Library :: struct {
 }
 
 Library_Track_Metadata_Alteration :: struct {
-	values: [Metadata_Component]Maybe(Metadata_Value),
+	values: [Track_Property_ID]Track_Property,
 	tracks: []Track_ID,
 	write_to_file: bool,
 }
@@ -138,10 +140,7 @@ library_init :: proc(lib: ^Library, user_playlist_dir: string) -> (ok: bool) {
 }
 
 library_destroy :: proc(lib: ^Library) {
-	delete(lib.track_ids)
-	delete(lib.track_metadata)
-	delete(lib.track_paths)
-	delete(lib.track_path_hashes)
+	delete(lib.tracks)
 	path_pool.destroy(lib.path_allocator)
 	mem.dynamic_arena_destroy(&lib.string_arena)
 	playlist_list_destroy(&lib.user_playlists)
@@ -158,13 +157,6 @@ library_hash_string :: proc(str: string) -> u32 {
 	return xxhash.XXH32(transmute([]u8)str)
 }
 
-get_default_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> (metadata: Track_Metadata) {
-	name := filepath.stem(filepath.base(path))
-	track_set_string(&metadata, .Title, name, string_allocator)
-	metadata.values[.DateAdded] = time.to_unix_seconds(time.now())
-	return
-}
-
 get_file_date :: proc(path: string) -> i64 {
 	if fi, error := os2.stat(path, context.allocator); error == nil {
 		defer os2.file_info_delete(fi, context.allocator)
@@ -173,67 +165,51 @@ get_file_date :: proc(path: string) -> i64 {
 	return 0
 }
 
-get_file_metadata :: proc(path: string, string_allocator: runtime.Allocator) -> (metadata: Track_Metadata) {
-	when ODIN_OS == .Windows {
-		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(path, context.temp_allocator)))
-	}
-	else {
-		file := taglib.file_new(strings.clone_to_cstring(path, context.temp_allocator))
-	}
-
-	metadata.values[.DateAdded] = time.to_unix_seconds(time.now())
-	metadata.values[.FileDate] = get_file_date(path)
-
-	if file == nil {return get_default_metadata(path, string_allocator)}
-	defer taglib.file_free(file)
-
-	tag := taglib.file_tag(file)
-	if tag == nil {return get_default_metadata(path, string_allocator)}
-	// @Volatile: This could mess up when trying to read file metadata from multiple
-	// threads
-	defer taglib.tag_free_strings()
-
-	properties := taglib.file_audioproperties(file)
-
-	track_set_cstring(&metadata, .Title, taglib.tag_title(tag), string_allocator)
-	track_set_cstring(&metadata, .Artist, taglib.tag_artist(tag), string_allocator)
-	track_set_cstring(&metadata, .Album, taglib.tag_album(tag), string_allocator)
-	track_set_cstring(&metadata, .Genre, taglib.tag_genre(tag), string_allocator)
-	metadata.values[.TrackNumber] = cast(i64) taglib.tag_track(tag)
-	metadata.values[.Year] = cast(i64) taglib.tag_year(tag)
-	if properties != nil {
-		metadata.values[.Duration] = cast(i64) taglib.audioproperties_length(properties)
-		metadata.values[.Bitrate] = cast(i64) taglib.audioproperties_bitrate(properties)
+library_find_track_by_path_hash :: proc(lib: Library, hash: u64) -> (int, bool) {
+	for track, index in lib.tracks {
+		if track.path_hash == hash {
+			return index, true
+		}
 	}
 
-	if (metadata.values[.Title].(string) or_else "") == "" {
-		track_set_string(&metadata, .Title, filepath.stem(filepath.base(path)), string_allocator)
-	}
-
-	return
+	return 0, false
 }
 
-library_add_track :: proc(library: ^Library, path: string, metadata: Track_Metadata) -> Track_ID {
-	path_loc := path_pool.store(&library.path_allocator, path)
+library_get_all_track_ids :: proc(lib: Library) -> []Track_ID {
+	return lib.tracks.id[:len(lib.tracks)]
+}
+
+library_add_track :: proc(lib: ^Library, path: string, properties: Track_Properties) -> Track_ID {
+	path_loc := path_pool.store(&lib.path_allocator, path)
+	path_hash := library_hash_path(path)
 
 	// If the track is already in the library, update the metadata
-	if existing_index, exists := slice.linear_search(library.track_paths[:], path_loc); exists {
-		orig_date_added := library.track_metadata[existing_index].values[.DateAdded]
-		library.track_metadata[existing_index] = metadata
-		library.track_metadata[existing_index].values[.DateAdded] = orig_date_added
-		library.serial += 1
-		return library.track_ids[existing_index]
+	if existing_index, exists := library_find_track_by_path_hash(lib^, path_hash); exists {
+		track := &lib.tracks[existing_index]
+		orig_date_added := track.properties[.DateAdded]
+		track.properties = properties
+		track.properties[.DateAdded] = orig_date_added
+		lib.serial += 1
+		return track.id
 	}
 	
-	library.last_track_id += 1
-	id := library.last_track_id
+	lib.last_track_id += 1
+	id := lib.last_track_id
 
-	append(&library.track_ids, id)
-	append(&library.track_path_hashes, library_hash_path(path))
-	append(&library.track_paths, path_loc)
-	append(&library.track_metadata, metadata)
+	track := Track {
+		id = id,
+		path = path_loc,
+		path_hash = path_hash,
+		properties = properties,
+	}
 
-	library.serial += 1
+	if track.properties[.DateAdded] == nil {
+		track.properties[.DateAdded] = i64(time.to_unix_seconds(time.now()))
+	}
+
+	append(&lib.tracks, track)
+
+	lib.serial += 1
 
 	return id
 }
@@ -242,7 +218,7 @@ library_add_track_set :: proc(library: ^Library, set: Track_Set) {
 	for index in 0..<len(set.metadata) {
 		path_buf: [512]u8
 		path := path_pool.retrieve(set.path_allocator, set.paths[index], path_buf[:])
-		library_add_track(library, path, clone_track_metadata(set.metadata[index], library.string_allocator))
+		library_add_track(library, path, track_properties_clone(set.metadata[index], library.string_allocator))
 	}
 
 	for hash, path in set.cover_art {
@@ -251,66 +227,64 @@ library_add_track_set :: proc(library: ^Library, set: Track_Set) {
 	}
 }
 
-library_lookup_track :: proc(library: Library, id: Track_ID) -> (int, bool) {
-	return slice.linear_search(library.track_ids[:], id)
+library_find_track_index :: proc(lib: Library, id: Track_ID) -> (int, bool) {
+	for track, index in lib.tracks {
+		if track.id == id {
+			return index, true
+		}
+	}
+
+	return 0, false
 }
 
-library_track_id_from_path_hash :: proc(library: Library, hash: u64) -> (id: Track_ID, found: bool) {
-	index := slice.linear_search(library.track_path_hashes[:], hash) or_return
-	return library.track_ids[index], true
+library_find_track :: proc(lib: Library, id: Track_ID) -> (track: Track, found: bool) {
+	index := library_find_track_index(lib, id) or_return
+	return lib.tracks[index], true
 }
 
-library_get_track_path :: proc(library: Library, buf: []u8, track_id: Track_ID) -> (path: string, found: bool) {
-	index := library_lookup_track(library, track_id) or_return
-	return path_pool.retrieve(library.path_allocator, library.track_paths[index], buf), true
+library_get_track_path :: proc(lib: Library, buf: []u8, track_index: int) -> (path: string, found: bool) {
+	return path_pool.retrieve(lib.path_allocator, lib.tracks[track_index].path, buf), true
 }
 
-library_get_track_path_cstring :: proc(library: Library, buf: []u8, track_id: Track_ID) -> (path: cstring, found: bool) {
-	index := library_lookup_track(library, track_id) or_return
-	return path_pool.retrieve_cstring(library.path_allocator, library.track_paths[index], buf), true
+library_get_track_path_cstring :: proc(lib: Library, buf: []u8, track_index: int) -> (path: cstring, found: bool) {
+	return path_pool.retrieve_cstring(lib.path_allocator, lib.tracks[track_index].path, buf), true
 }
 
-library_get_track_metadata :: proc(library: Library, track_id: Track_ID) -> (track: Track_Metadata, found: bool) {
-	index := library_lookup_track(library, track_id) or_return
-	return library.track_metadata[index], true
+library_find_track_path :: proc(lib: Library, buf: []u8, track_id: Track_ID) -> (path: string, found: bool) {
+	index := library_find_track_index(lib, track_id) or_return
+	return library_get_track_path(lib, buf, index)
 }
 
-library_get_track_array_metadata :: proc(lib: Library, tracks: []Track_ID, allocator: mem.Allocator) -> []Track_Metadata {
+library_find_track_path_cstring :: proc(lib: Library, buf: []u8, track_id: Track_ID) -> (path: cstring, found: bool) {
+	index := library_find_track_index(lib, track_id) or_return
+	return library_get_track_path_cstring(lib, buf, index)
+}
+
+/*library_get_track_array_metadata :: proc(lib: Library, tracks: []Track_ID, allocator: mem.Allocator) -> []Track_Metadata {
 	output := make([dynamic]Track_Metadata, allocator)
 	reserve(&output, len(tracks))
 
 	for track in tracks {
-		index := library_lookup_track(lib, track) or_continue
+		index := library_find_track_index(lib, track) or_continue
 		append(&output, lib.track_metadata[index])
 	}
 
 	return output[:]
-}
-
-library_dump_track :: proc(track_arg: Track_Metadata) {
-	track := track_arg
-
-	for component in Metadata_Component {
-		fmt.println(METADATA_COMPONENT_NAMES[component], track.values[component])
-	}
-}
+}*/
 
 library_get_missing_tracks :: proc(lib: Library, output: ^[dynamic]Track_ID) {
-	for i in 0..<len(lib.track_ids) {
+	for track in lib.tracks {
 		path_buf: [512]u8
-		path := path_pool.retrieve(lib.path_allocator, lib.track_paths[i], path_buf[:])
+		path := path_pool.retrieve(lib.path_allocator, track.path, path_buf[:])
 		if !os2.exists(path) {
-			append(output, lib.track_ids[i])
+			append(output, track.id)
 		}
 	}
 }
 
 library_remove_track :: proc(lib: ^Library, id: Track_ID) -> bool {
-	index := library_lookup_track(lib^, id) or_return
-	ordered_remove(&lib.track_ids, index)
-	ordered_remove(&lib.track_metadata, index)
-	ordered_remove(&lib.track_paths, index)
-	ordered_remove(&lib.track_path_hashes, index)
+	index := library_find_track_index(lib^, id) or_return
+	ordered_remove_soa(&lib.tracks, index)
 	lib.serial += 1
 	return true
 }
@@ -443,7 +417,7 @@ library_scan_folder_for_cover_art :: proc(lib: ^Library, dir: string) {
 
 library_find_track_folder_cover_art :: proc(lib: Library, track_index: int) -> (cover: string, found: bool) {
 	path_buf: [512]u8
-	path := path_pool.retrieve(lib.path_allocator, lib.track_paths[track_index], path_buf[:])
+	path := path_pool.retrieve(lib.path_allocator, lib.tracks[track_index].path, path_buf[:])
 	dir := filepath.dir(path)
 	defer delete(dir)
 
@@ -473,15 +447,14 @@ library_add_folder_cover_art :: proc {
 }
 
 library_save_track_metadata_to_file :: proc(lib: Library, track_index: int) -> bool {
-	assert(track_index <= len(lib.track_metadata))
 	path_buf: [512]u8
 
-	md_cstring :: proc(md: Track_Metadata, component: Metadata_Component) -> cstring {
-		return strings.unsafe_string_to_cstring(md.values[component].(string) or_else string(cstring("")))
+	md_cstring :: proc(md: Track_Properties, component: Track_Property_ID) -> cstring {
+		return strings.unsafe_string_to_cstring(md[component].(string) or_else string(cstring("")))
 	}
 
-	md := lib.track_metadata[track_index]
-	path := path_pool.retrieve_cstring(lib.path_allocator, lib.track_paths[track_index], path_buf[:])
+	md := lib.tracks[track_index].properties
+	path := path_pool.retrieve_cstring(lib.path_allocator, lib.tracks[track_index].path, path_buf[:])
 
 	log.debug("Save metadata for", path)
 
@@ -493,8 +466,8 @@ library_save_track_metadata_to_file :: proc(lib: Library, track_index: int) -> b
 	if tag == nil {return false}
 	defer taglib.tag_free_strings()
 
-	taglib.tag_set_year(tag, auto_cast(md.values[.Year].(i64) or_else 0))
-	taglib.tag_set_track(tag, auto_cast(md.values[.TrackNumber].(i64) or_else 0))
+	taglib.tag_set_year(tag, auto_cast(md[.Year].(i64) or_else 0))
+	taglib.tag_set_track(tag, auto_cast(md[.TrackNumber].(i64) or_else 0))
 	taglib.tag_set_title(tag, md_cstring(md, .Title))
 	taglib.tag_set_artist(tag, md_cstring(md, .Artist))
 	taglib.tag_set_album(tag, md_cstring(md, .Album))
@@ -506,23 +479,23 @@ library_save_track_metadata_to_file :: proc(lib: Library, track_index: int) -> b
 }
 
 library_alter_metadata :: proc(lib: ^Library, alter: Library_Track_Metadata_Alteration) {
-	alter_track :: proc(lib: ^Library, md: ^Track_Metadata, component: Metadata_Component, value: Metadata_Value) {
+	alter_track :: proc(lib: ^Library, md: ^Track_Properties, component: Track_Property_ID, value: Track_Property) {
 		switch v in value {
 			case string: {
 				track_set_string(md, component, v, lib.string_allocator)
 			}
 			case i64: {
-				md.values[component] = v
+				md[component] = v
 			}
 		}
 	}
 
-	for component in Metadata_Component {
+	for component in Track_Property_ID {
 		if alter.values[component] == nil {continue}
 		for track in alter.tracks {
-			index := library_lookup_track(lib^, track) or_continue
-			md := &lib.track_metadata[index]
-			alter_track(lib, md, component, alter.values[component].?)
+			index := library_find_track_index(lib^, track) or_continue
+			md := &lib.tracks[index].properties
+			alter_track(lib, md, component, alter.values[component])
 
 			if alter.write_to_file {
 				library_save_track_metadata_to_file(lib^, index)
@@ -580,7 +553,7 @@ scan_directory_tracks :: proc(dir_path: string, set: ^Track_Set) {
 		}
 		else if file.type == .Regular {
 			if is_audio_file_supported(file.name) {
-				metadata := get_file_metadata(file.fullpath, set.string_allocator)
+				metadata := track_properties_from_file(file.fullpath, set.string_allocator)
 				append(&set.paths, path_pool.store(&set.path_allocator, file.fullpath))
 				append(&set.metadata, metadata)
 			}
@@ -595,25 +568,31 @@ scan_directory_tracks :: proc(dir_path: string, set: ^Track_Set) {
 }
 
 // WARNING: Use sparingly! Leaks previous memory used for string!
-track_set_string :: proc(track: ^Track_Metadata, dst: Metadata_Component, str: string, string_allocator: runtime.Allocator) {
-	track.values[dst] = string(strings.clone_to_cstring(str, string_allocator))
+track_set_string :: proc(track: ^Track_Properties, dst: Track_Property_ID, str: string, string_allocator: runtime.Allocator) {
+	track[dst] = string(strings.clone_to_cstring(str, string_allocator))
 }
 
 // WARNING: Use sparingly! Leaks previous memory used for string!
-track_set_cstring :: proc(track: ^Track_Metadata, dst: Metadata_Component, str: cstring, string_allocator: runtime.Allocator) {
-	track.values[dst] = string(strings.clone_to_cstring(string(str), string_allocator))
+track_set_cstring :: proc(track: ^Track_Properties, dst: Track_Property_ID, str: cstring, string_allocator: runtime.Allocator) {
+	track[dst] = string(strings.clone_to_cstring(string(str), string_allocator))
 }
 
-library_compare_tracks :: proc(lib: Library, metric: Metadata_Component, a_index, b_index: int) -> bool {
-	A := lib.track_metadata[a_index]
-	B := lib.track_metadata[b_index]
+library_compare_tracks :: proc(lib: Library, metric: Track_Property_ID, a_index, b_index: int) -> bool {
+	A := lib.tracks[a_index]
+	B := lib.tracks[b_index]
 
-	switch v in A.values[metric] {
+	switch v in A.properties[metric] {
 		case i64: {
-			return (A.values[metric].(i64) or_else 0) < (B.values[metric].(i64) or_else 0)
+			return (
+				A.properties[metric].(i64) or_else 0) <
+				(B.properties[metric].(i64) or_else 0
+			)
 		}
 		case string: {
-			return strings.compare(A.values[metric].(string) or_else "", B.values[metric].(string) or_else "") > 0
+			return strings.compare(
+				A.properties[metric].(string) or_else "",
+				B.properties[metric].(string) or_else ""
+			) > 0
 		}
 	}
 
@@ -624,7 +603,7 @@ library_sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_S
 	Collection :: struct {
 		lib: Library,
 		tracks: []Track_ID,
-		metric: Metadata_Component,
+		metric: Track_Property_ID,
 	}
 
 	collection: Collection
@@ -633,8 +612,8 @@ library_sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_S
 	compare_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
 		collection := cast(^Collection)iface.collection
 		metric := collection.metric
-		a_index := library_lookup_track(collection.lib, collection.tracks[a]) or_return
-		b_index := library_lookup_track(collection.lib, collection.tracks[b]) or_return
+		a_index := library_find_track_index(collection.lib, collection.tracks[a]) or_return
+		b_index := library_find_track_index(collection.lib, collection.tracks[b]) or_return
 		return library_compare_tracks(collection.lib, metric, a_index, b_index)
 	}
 
@@ -669,13 +648,7 @@ library_sort_tracks :: proc(lib: Library, tracks: []Track_ID, spec: Track_Sort_S
 library_sort :: proc(lib: ^Library, spec: Track_Sort_Spec) {
 	Collection :: struct {
 		lib: ^Library,
-		metric: Metadata_Component,
-	}
-
-	swap :: proc(a, b: ^$T) {
-		temp := a^
-		a^ = b^
-		b^ = temp
+		metric: Track_Property_ID,
 	}
 
 	compare_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
@@ -687,15 +660,15 @@ library_sort :: proc(lib: ^Library, spec: Track_Sort_Spec) {
 	len_proc :: proc(iface: sort.Interface) -> int {
 		collection := cast(^Collection)iface.collection
 		lib := collection.lib
-		return len(lib.track_ids)
+		return len(lib.tracks)
 	}
 
 	swap_proc :: proc(iface: sort.Interface, a, b: int) {
 		collection := cast(^Collection)iface.collection
 		lib := collection.lib
-		swap(&lib.track_ids[a], &lib.track_ids[b])
-		swap(&lib.track_metadata[a], &lib.track_metadata[b])
-		swap(&lib.track_paths[a], &lib.track_paths[b])
+		temp := lib.tracks[a]
+		lib.tracks[a] = lib.tracks[b]
+		lib.tracks[b] = temp
 	}
 
 	collection: Collection
@@ -717,7 +690,7 @@ library_sort :: proc(lib: ^Library, spec: Track_Sort_Spec) {
 	lib.serial += 1
 }
 
-delete_track_set :: proc(set: ^Track_Set) {
+track_set_delete :: proc(set: ^Track_Set) {
 	delete(set.metadata)
 	delete(set.paths)
 	delete(set.cover_art)
@@ -725,8 +698,8 @@ delete_track_set :: proc(set: ^Track_Set) {
 	mem.dynamic_arena_destroy(&set.string_arena)
 }
 
-clone_track_metadata :: proc(src: Track_Metadata, string_allocator: runtime.Allocator) -> (dst: Track_Metadata) {
-	for component in Metadata_Component {
+/*clone_track_metadata :: proc(src: Track_Metadata, string_allocator: runtime.Allocator) -> (dst: Track_Metadata) {
+	for component in Track_Property_ID {
 		switch v in src.values[component] {
 			case string: {
 				dst.values[component] = string(strings.clone_to_cstring(v, string_allocator))
@@ -738,11 +711,11 @@ clone_track_metadata :: proc(src: Track_Metadata, string_allocator: runtime.Allo
 	}
 
 	return
-}
+}*/
 
 Track_Filter_Spec :: struct {
 	filter: string,
-	components: bit_set[Metadata_Component],
+	components: bit_set[Track_Property_ID],
 }
 
 @private
@@ -778,10 +751,11 @@ _filter_track_string :: proc(utf8_str: string, filter: []rune) -> bool {
 }
 
 filter_track_from_runes :: proc(lib: Library, spec: Track_Filter_Spec, track_id: Track_ID, filter: []rune) -> bool {
-	md := library_get_track_metadata(lib, track_id) or_return
-	for component in Metadata_Component {
+	track := library_find_track(lib, track_id) or_return
+	md := track.properties
+	for component in Track_Property_ID {
 		if component in spec.components {
-			val := md.values[component].(string) or_continue
+			val := md[component].(string) or_continue
 			if _filter_track_string(val, filter) {
 				return true
 			}

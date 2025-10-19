@@ -207,7 +207,7 @@ wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
 			defer if !ok {thread.destroy(state.calc_thread); state.calc_thread = nil}
 
 			path_buf: [512]u8
-			path := server.library_get_track_path(sv.library, path_buf[:], state.track_id) or_return
+			path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_return
 			decoder.open(&state.dec, path, nil) or_return
 
 			ok = true
@@ -972,16 +972,6 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		offset: f32,
 	) {
 		midpoint := pos.x + (size.x * ratio)
-
-		/*imgui.DrawList_AddImageQuad(
-			drawlist, texture,
-			{midpoint, pos.y},
-			{pos.x + size.x, pos.y},
-			{pos.x + size.x, pos.y + size.y},
-			{midpoint, pos.y + size.y},
-			{1, ratio}, {1, 1}, {0, 1}, {0, ratio},
-			0xff0000ff
-		)*/
 		
 		imgui.DrawList_AddCallback(
 			drawlist,

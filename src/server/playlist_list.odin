@@ -32,39 +32,38 @@ Playlist_List :: struct {
 	base_id: u32,
 }
 
-playlist_list_join_metadata :: proc(cat: ^Playlist_List, library: Library, component: Metadata_Component) {
+playlist_list_join_metadata :: proc(cat: ^Playlist_List, lib: Library, component: Track_Property_ID) {
 	playlist_list_destroy(cat)
 
 	cat.base_id = auto_cast component
 	cat.serial += 1
 
-	for md, track_index in library.track_metadata {
-		value := md.values[component].(string) or_else ""
+	for track, track_index in lib.tracks {
+		value := track.properties[component].(string) or_else ""
 		hash := library_hash_string(value)		
 		dst_id := Playlist_ID{serial=cat.base_id, pool=hash}
 
 		if list_index, list_exists := slice.linear_search(cat.list_ids[:], dst_id); list_exists {
-			playlist_add_track(&cat.lists[list_index], library.track_ids[track_index], md)
+			playlist_add_track(&cat.lists[list_index], track)
 			continue
 		}
 
 		new_list := playlist_list_add_new(cat, value, dst_id) or_continue
-		playlist_add_track(new_list, library.track_ids[track_index], md)
-		new_list.serial = library.serial
+		playlist_add_track(new_list, track)
+		new_list.serial = lib.serial
 	}
 }
 
-playlist_list_join_folders :: proc(cat: ^Playlist_List, library: Library) {
+playlist_list_join_folders :: proc(cat: ^Playlist_List, lib: Library) {
 	playlist_list_destroy(cat)
 
-	cat.base_id = auto_cast len(Metadata_Component)
+	cat.base_id = auto_cast len(Track_Property_ID)
 	cat.serial += 1
 
-	for path_ref, track_index in library.track_paths {
+	for track, track_index in lib.tracks {
 		path_buf: [512]u8
-		md := library.track_metadata[track_index]
 
-		path := path_pool.retrieve(library.path_allocator, path_ref, path_buf[:])
+		path := path_pool.retrieve(lib.path_allocator, track.path, path_buf[:])
 		folder_full_path := filepath.dir(path); defer delete(folder_full_path)
 		folder := filepath.base(folder_full_path)
 		folder_hash := library_hash_string(folder)
@@ -72,12 +71,12 @@ playlist_list_join_folders :: proc(cat: ^Playlist_List, library: Library) {
 		dst_id := Playlist_ID{serial=cat.base_id, pool=folder_hash}
 
 		if list_index, list_exists := slice.linear_search(cat.list_ids[:], dst_id); list_exists {
-			playlist_add_track(&cat.lists[list_index], library.track_ids[track_index], md)
+			playlist_add_track(&cat.lists[list_index], track)
 			continue
 		}
 
 		new_list := playlist_list_add_new(cat, folder, dst_id) or_continue
-		playlist_add_track(new_list, library.track_ids[track_index], md)
+		playlist_add_track(new_list, track)
 	}
 }
 

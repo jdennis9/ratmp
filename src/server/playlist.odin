@@ -67,27 +67,27 @@ playlist_destroy :: proc(playlist: ^Playlist) {
 }
 
 playlist_add_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_ID) {
-	for track in tracks {
-		md := library_get_track_metadata(lib, track) or_continue
-		playlist_add_track(playlist, track, md)
+	for track_id in tracks {
+		track := library_find_track(lib, track_id) or_continue
+		playlist_add_track(playlist, track)
 	}
 	playlist.serial += 1
 }
 
-playlist_add_track :: proc(playlist: ^Playlist, id: Track_ID, metadata: Track_Metadata, assume_unique := false) {
-	if assume_unique || !slice.contains(playlist.tracks[:], id) {
-		append(&playlist.tracks, id)
+playlist_add_track :: proc(playlist: ^Playlist, track: Track, assume_unique := false) {
+	if assume_unique || !slice.contains(playlist.tracks[:], track.id) {
+		append(&playlist.tracks, track.id)
 		playlist.dirty = true
-		playlist.duration += metadata.values[.Duration].(i64) or_else 0
+		playlist.duration += track.properties[.Duration].(i64) or_else 0
 	}
 	playlist.serial += 1
 }
 
 playlist_remove_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_ID) {
-	for track in tracks {
-		md := library_get_track_metadata(lib, track) or_continue
-		index_in_playlist := slice.linear_search(playlist.tracks[:], track) or_continue
-		playlist.duration -= md.values[.Duration].(i64) or_else 0
+	for track_id in tracks {
+		track := library_find_track(lib, track_id) or_continue
+		index_in_playlist := slice.linear_search(playlist.tracks[:], track_id) or_continue
+		playlist.duration -= track.properties[.Duration].(i64) or_else 0
 		ordered_remove(&playlist.tracks, index_in_playlist)
 	}
 	playlist.serial += 1

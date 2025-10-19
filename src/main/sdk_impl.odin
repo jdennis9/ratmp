@@ -170,19 +170,19 @@ _playback_seek_to_second :: proc(second: int) {
 }
 
 _library_lookup_track :: proc(id: sdk.Track_ID) -> (index: int, found: bool) {
-	return server.library_lookup_track(ctx.sv.library, auto_cast id)
+	return server.library_find_track_index(ctx.sv.library, auto_cast id)
 }
 
 _library_get_track_metadata :: proc(index: int, out: ^sdk.Track_Metadata) {
-	assert(index < len(ctx.sv.library.track_metadata))
-	md := ctx.sv.library.track_metadata[index]
-	out.artist = md.values[.Artist].(string) or_else ""
-	out.album = md.values[.Album].(string) or_else ""
-	out.title = md.values[.Title].(string) or_else ""
-	out.genre = md.values[.Genre].(string) or_else ""
-	out.duration_seconds = md.values[.Duration].(i64) or_else 0
-	out.unix_added_date = md.values[.DateAdded].(i64) or_else 0
-	out.unix_file_date = md.values[.FileDate].(i64) or_else 0
+	assert(index < len(ctx.sv.library.tracks))
+	md := ctx.sv.library.tracks[index].properties
+	out.artist = md[.Artist].(string) or_else ""
+	out.album = md[.Album].(string) or_else ""
+	out.title = md[.Title].(string) or_else ""
+	out.genre = md[.Genre].(string) or_else ""
+	out.duration_seconds = md[.Duration].(i64) or_else 0
+	out.unix_added_date = md[.DateAdded].(i64) or_else 0
+	out.unix_file_date = md[.FileDate].(i64) or_else 0
 }
 
 @private
