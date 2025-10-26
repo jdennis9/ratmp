@@ -28,8 +28,8 @@ import "src:util"
 
 import "imx"
 
-Playlist_Row :: struct {
-	id: Playlist_ID,
+/*Playlist_Row :: struct {
+	id: Global_Playlist_ID,
 	serial: uint,
 	name: cstring,
 	//duration: struct {h, m, s: u8},
@@ -42,22 +42,22 @@ Playlist_Table :: struct {
 	rows: [dynamic]Playlist_Row,
 	filter_hash: u32,
 	serial: uint,
-	viewing: Playlist_ID,
-	playing: Playlist_ID,
-	editing: Playlist_ID,
+	viewing: Global_Playlist_ID,
+	playing: Global_Playlist_ID,
+	editing: Global_Playlist_ID,
 }
 
 Playlist_Table_Result :: struct {
-	play: Maybe(Playlist_ID),
-	select: Maybe(Playlist_ID),
+	play: Maybe(Local_Playlist_ID),
+	select: Maybe(Local_Playlist_ID),
 	sort_spec: Maybe(server.Playlist_Sort_Spec),
-	drag_drop_to: Maybe(Playlist_ID),
-	context_menu: Maybe(Playlist_ID),
+	drag_drop_to: Maybe(Local_Playlist_ID),
+	context_menu: Maybe(Local_Playlist_ID),
 }
 
 playlist_table_update :: proc(
 	table: ^Playlist_Table, list: ^server.Playlist_List,
-	filter: string, viewing: Playlist_ID, playing: Playlist_ID, editing: Playlist_ID,
+	filter: string, viewing: Global_Playlist_ID, playing: Global_Playlist_ID, editing: Global_Playlist_ID,
 ) {
 	filter_hash := xxhash.XXH32(transmute([]u8) string(filter))
 	table.viewing = viewing
@@ -69,14 +69,14 @@ playlist_table_update :: proc(
 	table.serial = list.serial
 	table.filter_hash = filter_hash
 
-	playlist_to_row :: proc(playlist: Playlist) -> Playlist_Row {
+	playlist_to_row :: proc(playlist: server.Playlist_Ptr) -> Playlist_Row {
 		// @FixMe: If hours is more than 24, it comes up as 0
 		h, m, s := util.clock_from_seconds(auto_cast playlist.duration)
 		
 		row := Playlist_Row {
-			id = playlist.id,
+			id = server.playlist_global_id(playlist),
 			serial = playlist.serial,
-			name = playlist.name,
+			name = playlist.name_cstring,
 			length = auto_cast len(playlist.tracks),
 		}
 
@@ -86,23 +86,24 @@ playlist_table_update :: proc(
 	}
 
 	if filter != "" {
-		filtered_playlist_ids: [dynamic]Playlist_ID
+		filtered_playlist_ids: [dynamic]Local_Playlist_ID
 		defer delete(filtered_playlist_ids)
 
 		clear(&table.rows)
 
-		server.filter_playlists(list, filter, &filtered_playlist_ids)
+		//server.filter_playlists(list, filter, &filtered_playlist_ids)
+		server.playlist_list_filter_by_name(list^, filter, &filtered_playlist_ids)
 
 		for id in filtered_playlist_ids {
-			playlist := server.playlist_list_get(list^, id) or_continue
-			row := playlist_to_row(playlist^)
+			playlist, _ := server.playlist_list_find_playlist(list, id) or_continue
+			row := playlist_to_row(playlist)
 			append(&table.rows, row)
 		}
 	}
 	else {
 		clear(&table.rows)
-		for playlist in list.lists {
-			append(&table.rows, playlist_to_row(playlist))
+		for _, index in list.playlists {
+			append(&table.rows, playlist_to_row(&list.playlists[index]))
 		}
 	}
 }
@@ -171,17 +172,17 @@ playlist_table_show :: proc(
 			if imgui.TableSetColumnIndex(0) {
 				if row.name == nil {imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))}
 				if imgui.Selectable(row.name != nil ? row.name : "None", table.viewing == row.id, {.SpanAllColumns}) {
-					result.select = row.id
+					result.select = row.id.id
 				}
 				if row.name == nil {imgui.PopStyleColor()}
 
 				if is_play_track_input_pressed() {
-					result.play = row.id
+					result.play = row.id.id
 				}
 
 				if imgui.IsItemClicked(.Right) {
 					imgui.OpenPopupID(context_menu_id)
-					result.context_menu = row.id
+					result.context_menu = row.id.id
 				}
 			}
 		}
@@ -193,4 +194,4 @@ playlist_table_show :: proc(
 playlist_table_free :: proc(table: ^Playlist_Table) {
 	delete(table.rows)
 	table^ = {}
-}
+}*/

@@ -53,7 +53,7 @@ Track_Table_Flags :: bit_set[Track_Table_Flag]
 Track_Table :: struct {
 	rows: [dynamic]Track_Row,
 	serial: uint,
-	playlist_id: Playlist_ID,
+	playlist_id: Global_Playlist_ID,
 	filter_hash: u32,
 	flags: Track_Table_Flags,
 	jump_to_track: Maybe(int),
@@ -106,7 +106,7 @@ track_table_update :: proc(
 	serial: uint,
 	lib: server.Library,
 	tracks: []Track_ID,
-	playlist_id: Playlist_ID,
+	playlist_id: Global_Playlist_ID,
 	filter: string,
 	flags: Track_Table_Flags = {},
 ) {
@@ -197,7 +197,7 @@ track_table_show :: proc(
 		result.lowest_selection_index = 0
 	}
 
-	column_flags := #partial [Metadata_Component]imgui.TableColumnFlags {
+	column_flags := #partial [Track_Property_ID]imgui.TableColumnFlags {
 		.Title = {.NoHide},
 		.Bitrate = {.DefaultHide},
 		.Year = {.DefaultHide},
@@ -209,13 +209,13 @@ track_table_show :: proc(
 
 	imgui.TextDisabled("%u tracks", u32(len(table.rows)))
 
-	if !imgui.BeginTable(str_id, len(Metadata_Component), table_flags) {return}
+	if !imgui.BeginTable(str_id, len(Track_Property_ID), table_flags) {return}
 	defer imgui.EndTable()
 
 	result.bounding_box.Min = imgui.GetWindowPos();
 	result.bounding_box.Max = result.bounding_box.Min + imgui.GetWindowSize();
 
-	for component in Metadata_Component {
+	for component in Track_Property_ID {
 		imgui.TableSetupColumn(server.TRACK_PROPERTY_NAMES[component], column_flags[component])
 	}
 
@@ -284,39 +284,39 @@ track_table_show :: proc(
 				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]))
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Artist) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Artist) {
 				imx.text_unformatted(row.artist)
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Album) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Album) {
 				imx.text_unformatted(row.album)
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Genre) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Genre) {
 				imx.text_unformatted(row.genre)
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Duration) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Duration) {
 				imx.text_unformatted(string(row.duration_str[:row.duration_len]))
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Year) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Year) {
 				imx.text_unformatted(string(row.year_str[:]))
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.DateAdded) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.DateAdded) {
 				imx.text_unformatted(string(row.date_added_str[:]))
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.FileDate) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.FileDate) {
 				imx.text_unformatted(string(row.file_date_str[:]))
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Bitrate) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Bitrate) {
 				imx.text(12, row.bitrate, "kb/s")
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast Metadata_Component.Title) {
+			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Title) {
 				select: bool
 				keep_selection: bool
 
@@ -437,7 +437,7 @@ Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
 Track_Context_Flags :: bit_set[Track_Context_Flag]
 Track_Context_Result :: struct {
 	single_track: Maybe(Track_ID),
-	add_to_playlist: Maybe(Playlist_ID),
+	add_to_playlist: Maybe(server.Playlist_ID),
 	go_to_album: bool,
 	go_to_artist: bool,
 	go_to_genre: bool,
@@ -450,9 +450,9 @@ Track_Context_Result :: struct {
 
 show_add_to_playlist_menu :: proc(lib: Library, result: ^Track_Context_Result) {
 	if imgui.BeginMenu("Add to playlist") {
-		for playlist, i in lib.user_playlists.lists {
-			if imgui.MenuItem(playlist.name) {
-				result.add_to_playlist = lib.user_playlists.list_ids[i]
+		for id, playlist in lib.playlists {
+			if imgui.MenuItem(playlist.name_cstring) {
+				result.add_to_playlist = id
 			}
 		}
 		imgui.EndMenu()
@@ -526,7 +526,7 @@ process_track_context :: proc(
 	result: Track_Context_Result,
 	cl: ^Client,
 	sv: ^Server,
-	from_playlist: Playlist_ID,
+	from_playlist: Global_Playlist_ID,
 	allow_add_to_playlist: bool,
 ) {
 	if result.single_track != nil {
@@ -555,11 +555,10 @@ process_track_context :: proc(
 	}
 
 	if allow_add_to_playlist && result.add_to_playlist != nil {
-		track, track_found := server.library_find_track(sv.library, track_id)
-		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
+		_, track_found := server.library_find_track(sv.library, track_id)
+		playlist, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
 		if track_found && playlist_found {
-			server.playlist_add_track(playlist, track)
-			sv.library.user_playlists.serial += 1
+			server.playlist_add_tracks(playlist, &sv.library, {track_id})
 		}
 	}
 
@@ -598,12 +597,11 @@ track_table_process_context :: proc(
 	}
 
 	if result.add_to_playlist != nil {
-		playlist, playlist_found := server.playlist_list_get(sv.library.user_playlists, result.add_to_playlist.?)
+		playlist, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
 		if playlist_found {
 			selection := track_table_get_selection(table)
 			defer delete(selection)
-			server.playlist_add_tracks(playlist, sv.library, selection)
-			sv.library.user_playlists.serial += 1
+			server.playlist_add_tracks(playlist, &sv.library, selection)
 		}
 	}
 }

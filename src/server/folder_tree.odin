@@ -184,6 +184,32 @@ library_folder_tree_recurse_tracks :: proc(lib: Library, folder: Library_Folder,
 	return out[:]
 }
 
+library_folder_tree_find_folder_by_name_in_folder :: proc(
+	lib: Library, folder: Library_Folder, name: string
+) -> (id: u32, found: bool) {
+	node := lib.folder_tree.root_folder
+
+	for child_name, index in node.child_names {
+		if name == child_name {
+			return node.children[index].id, true
+		}
+	}
+
+	for child, index in node.children {
+		id, found = library_folder_tree_find_folder_by_name_in_folder(
+			lib, child, name
+		)
+
+		if found {return}
+	}
+
+	return 0, false
+}
+
+library_folder_tree_find_folder_by_name :: proc(lib: Library, name: string) -> (id: u32, found: bool) {
+	return library_folder_tree_find_folder_by_name_in_folder(lib, lib.folder_tree.root_folder, name)
+}
+
 import "core:testing"
 import "core:log"
 

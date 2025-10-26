@@ -17,28 +17,34 @@
 */
 package server
 
+import "core:container/small_array"
+import "core:reflect"
+import "core:strconv"
 import "core:os"
 import "core:os/os2"
 import "core:fmt"
 import "core:strings"
 import "core:path/filepath"
 import "core:log"
+import "core:encoding/ini"
 
 Playlist_File_Error :: enum {
 	None,
 	Syntax,
 	MissingFiles,
+	InvalidPlaylist,
 }
 
 Playlist_File_Format :: enum {
 	M3u,
+	Rap,
 }
 
 Playlist_File_Format_Interface :: struct {
 	extensions: []string,
 	save: proc(lib: Library, input: Playlist, output: os.Handle) -> Playlist_File_Error,
 	// Output playlist is already initialized, but the name and content need to filled in by this procedure
-	parse: proc(lib: Library, input: string, output: ^Playlist) -> Playlist_File_Error,
+	parse: proc(lib: ^Library, input: string, output: ^Playlist) -> Playlist_File_Error,
 }
 
 DEFAULT_PLAYLIST_FORMAT :: Playlist_File_Format.M3u
@@ -49,6 +55,11 @@ PLAYLIST_FILE_FORMATS := [Playlist_File_Format]Playlist_File_Format_Interface {
 		extensions = {".m3u"},
 		parse = playlist_file_parse_m3u,
 		save = playlist_file_save_m3u,
+	},
+	.Rap = {
+		extensions = {".rap"},
+		parse = playlist_file_parse_rap,
+		save = playlist_file_save_rap,
 	},
 }
 
@@ -75,17 +86,25 @@ playlist_file_save :: proc(lib: Library, input: Playlist, path: string) -> bool 
 	if file_error != nil {return false}
 	defer os2.close(file)
 
-	return PLAYLIST_FILE_FORMATS[format].save(lib, input, auto_cast os2.fd(file)) == .None
+	error := PLAYLIST_FILE_FORMATS[format].save(lib, input, auto_cast os2.fd(file))
+
+	if error != .None {
+		log.error("Error when saving playlist", input.name, ":", error)
+	}
+
+	return error == .None
 }
 
 // Format is decided by extension
-playlist_file_load :: proc(lib: Library, path: string, output: ^Playlist) -> bool {
+playlist_file_load :: proc(lib: ^Library, path: string, output: ^Playlist) -> (ok: bool) {
 	format := playlist_file_format_from_extension(filepath.ext(path)) or_return
 	data, _ := os2.read_entire_file_from_path(path, context.allocator)
 	if data == nil {return false}
 	defer delete(data)
 
-	return PLAYLIST_FILE_FORMATS[format].parse(lib, string(data), output) == .None
+	error := PLAYLIST_FILE_FORMATS[format].parse(lib, string(data), output)
+
+	return error == .None
 }
 
 playlist_file_save_m3u :: proc(lib: Library, input: Playlist, output: os.Handle) -> Playlist_File_Error {
@@ -103,13 +122,16 @@ playlist_file_save_m3u :: proc(lib: Library, input: Playlist, output: os.Handle)
 	return .None
 }
 
-playlist_file_parse_m3u :: proc(lib: Library, input: string, output: ^Playlist) -> Playlist_File_Error {
+playlist_file_parse_m3u :: proc(
+	lib: ^Library, input: string, output: ^Playlist
+) -> (error: Playlist_File_Error) {
 	lines := strings.split_lines(input)
 	defer delete(lines)
 	if len(lines) == 0 {return .Syntax}
 	if strings.trim(lines[0], " ") != "#EXTM3U" {return .Syntax}
 
 	playlist_name: string
+	defer delete(playlist_name)
 
 	track_paths: [dynamic]string
 	defer delete(track_paths)
@@ -126,7 +148,7 @@ playlist_file_parse_m3u :: proc(lib: Library, input: string, output: ^Playlist) 
 				return .Syntax
 			}
 
-			playlist_name = strings.trim(parts[1], " ")
+			playlist_name = strings.clone(strings.trim(parts[1], " "))
 		}
 		else if strings.starts_with(line, "#") {
 			continue
@@ -136,14 +158,69 @@ playlist_file_parse_m3u :: proc(lib: Library, input: string, output: ^Playlist) 
 		}
 	}
 
-	for track_path in track_paths {
-		path_hash := library_hash_path(track_path)
-		track_index := library_find_track_by_path_hash(lib, path_hash) or_continue
-		track := lib.tracks[track_index]
-		playlist_add_track(output, track, assume_unique=true)
+	if playlist_name == "" {
+		return .Syntax
 	}
 
-	playlist_set_name(output, playlist_name)
+	for track_path in track_paths {
+		path_hash := library_hash_path(track_path)
+		track_index := library_find_track_by_path_hash(lib^, path_hash) or_continue
+		track := lib.tracks[track_index]
+		playlist_add_tracks(output, lib, {track.id}, assume_unique=true)
+	}
+
+	return .None
+}
+
+playlist_file_parse_rap :: proc(
+	lib: ^Library, input: string, output: ^Playlist
+) -> (error: Playlist_File_Error) {
+	data, parse_error := ini.load_map_from_string(input, context.allocator)
+	defer ini.delete_map(data)
+	if parse_error != nil {return .Syntax}
+	params: Playlist_Auto_Build_Params
+
+	meta_section, have_meta_section := data["Meta"]
+	if !have_meta_section {return .Syntax}
+
+	name, have_name := meta_section["Name"]
+	if !have_name {return .Syntax}
+
+	defer output.auto_build_params = params
+	output.name = strings.clone(name, lib.string_allocator)
+
+	for section_name, section in data {
+		param: Playlist_Auto_Build_Param
+		if section_name == "Meta" {continue}
+		type := reflect.enum_from_name(Playlist_Auto_Build_Param_Type, section["Type"]) or_continue
+		filter := section["Filter"] or_continue
+
+		param.type = type
+		copy(param.arg[:len(param.arg)-1], filter)
+
+		small_array.append(&params.constructors, param)
+	}
+
+	return .None
+}
+
+playlist_file_save_rap :: proc(lib: Library, input: Playlist, output: os.Handle) -> Playlist_File_Error {
+	fp :: fmt.fprintln
+	fpf :: fmt.fprintfln
+
+	if input.auto_build_params == nil {return .InvalidPlaylist}
+	params := input.auto_build_params.?
+
+	fp(output, "[Meta]")
+	fpf(output, "Name=%s", string(input.name))
+	fp(output)
+
+	for &param, index in small_array.slice(&params.constructors) {
+		fpf(output, "[Param%d]", index)
+		fpf(output, "Type=%s", reflect.enum_string(param.type))
+		fpf(output, "Filter=%s", string(cstring(&param.arg[0])))
+		fp(output)
+	}
 
 	return .None
 }

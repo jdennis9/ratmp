@@ -78,3 +78,7 @@ track_properties_destroy :: proc(props: ^Track_Properties) {
 		}
 	}
 }
+
+track_property_cstring :: proc(props: Track_Properties, id: Track_Property_ID) -> cstring {
+	return strings.unsafe_string_to_cstring(props[id].(string) or_else string(cstring("")))
+}

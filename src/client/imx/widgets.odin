@@ -17,6 +17,7 @@
 */
 package imgui_extensions
 
+import "core:unicode/utf8"
 import "core:math/linalg"
 
 import imgui "src:thirdparty/odin-imgui"
@@ -149,4 +150,57 @@ peak_meter :: proc(str_id: cstring, peaks: []f32, loud_color: [4]f32, quiet_colo
 	}
 
 	return imgui.InvisibleButton(str_id, size)
+}
+
+input_text_with_suggestions :: proc(label: cstring, buf: []u8, suggestions: []cstring, selection_index: ^int) -> (active: bool, focused: bool) {
+	buf_cstring := cstring(raw_data(buf))
+
+	active |= imgui.InputText(label, buf_cstring, auto_cast len(buf))
+	focused = imgui.IsItemFocused()
+	input_box_size := imgui.GetItemRectSize()
+	input_box_pos := imgui.GetItemRectMin()
+
+	imgui.PushID(label)
+	defer imgui.PopID()
+
+	if len(suggestions) == 0 {return}
+
+	if active {
+		imgui.OpenPopup("##suggestions")
+	}
+
+	imgui.SetNextWindowPos({input_box_pos.x, input_box_pos.y + input_box_size.y})
+	imgui.SetNextWindowSize({input_box_size.x, 0})
+	if imgui.BeginPopup("##suggestions", {.NoSavedSettings, .NoFocusOnAppearing}) {
+		defer imgui.EndPopup()
+
+		if focused {
+			if imgui.IsKeyPressed(.DownArrow) {
+				selection_index^ += 1
+			}
+			else if imgui.IsKeyPressed(.UpArrow) {
+				selection_index^ -= 1
+			}
+		}
+
+		selection_index^ = clamp(selection_index^, 0, len(suggestions)-1)
+
+		if focused && imgui.IsKeyPressed(.Enter) {
+			copy(buf[:len(buf)-1], string(suggestions[selection_index^]))
+			imgui.CloseCurrentPopup()
+			active = true
+		}
+		else {
+			for s, index in suggestions {
+				if imgui.Selectable(s, index == selection_index^) {
+					for &b in buf {b = 0}
+					copy(buf[:len(buf)-1], string(s))
+					imgui.CloseCurrentPopup()
+					active = true
+				}
+			}
+		}
+	}
+
+	return
 }

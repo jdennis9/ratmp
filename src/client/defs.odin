@@ -30,10 +30,11 @@ import "src:server"
 Server :: server.Server
 Library :: server.Library
 Playlist :: server.Playlist
+Global_Playlist_ID :: server.Global_Playlist_ID
 Playlist_ID :: server.Playlist_ID
 Track_ID :: server.Track_ID
 Track_Properties :: server.Track_Properties
-Metadata_Component :: server.Track_Property_ID
+Track_Property_ID :: server.Track_Property_ID
 
 Window_Flag :: enum {
 	AlwaysShow,
@@ -120,6 +121,8 @@ safe_lerp :: proc(a, b, t: $T) -> T {
 }
 
 enum_cstring :: proc(buf: []u8, value: $T) -> cstring {
-	copy(buf[:len(buf)-1], reflect.enum_name_from_value(value) or_else "")
+	value_str := reflect.enum_name_from_value(value) or_else ""
+	copy(buf[:len(buf)-1], value_str)
+	if len(value_str) < len(buf) {buf[len(value_str)] = 0}
 	return cstring(raw_data(buf))
 }

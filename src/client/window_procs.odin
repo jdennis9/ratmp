@@ -92,7 +92,7 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Queue_Window) self
 	context_id := imgui.GetID("##track_context")
 
-	track_table_update(&state.track_table, sv.queue_serial, sv.library, sv.queue[:], {serial=max(u32)}, "", {.NoSort})
+	track_table_update(&state.track_table, sv.queue_serial, sv.library, sv.queue[:], {origin = .Loose, id = max(u32)}, "", {.NoSort})
 	table_result := track_table_show(state.track_table, "##queue", context_id, sv.current_track_id)
 
 	//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
@@ -124,13 +124,14 @@ queue_window_hide :: proc(self: ^Window_Base) {
 
 Playlists_Window :: struct {
 	using base: Window_Base,
-	playlist_table: Playlist_Table,
-	viewing_id: Playlist_ID,
-	editing_id: Playlist_ID,
+	//playlist_table: Playlist_Table,
+	viewing_id: Global_Playlist_ID,
+	editing_id: Global_Playlist_ID,
 	new_playlist_name: [128]u8,
 	track_table: Track_Table,
 	track_filter: [128]u8,
 	playlist_filter: [128]u8,
+	//auto_playlist_param_editor: Auto_Playlist_Parameter_Editor,
 }
 
 PLAYLISTS_WINDOW_ARCHETYPE := Window_Archetype {
@@ -148,21 +149,21 @@ playlists_window_make_instance :: proc(allocator := context.allocator) -> ^Windo
 
 playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
-	playlist_list_window_show(cl, sv, state, &sv.library.user_playlists, allow_edit = true)
+	//playlist_list_window_show(cl, sv, state, &sv.library.user_playlists, allow_edit = true)
 }
 
 playlists_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Playlists_Window) self
-	playlist_table_free(&state.playlist_table)
+	//playlist_table_free(&state.playlist_table)
 }
 
 // =============================================================================
 // Artists, albums, genres
 // =============================================================================
 
-playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string, component: Metadata_Component) {
+playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string, component: Track_Property_ID) {
 	id := server.library_hash_string(name)
-	window.viewing_id = {serial=auto_cast component, pool=id}
+	window.viewing_id = {origin=server.track_property_to_playlist_origin(component), id=auto_cast id}
 	window.want_bring_to_front = true
 }
 
@@ -192,16 +193,16 @@ GENRES_WINDOW_ARCHETYPE := Window_Archetype {
 
 artists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
-	playlist_list_window_show(cl, sv, state, &sv.library.categories.artists)
+	//playlist_list_window_show(cl, sv, state, &sv.library.categories.artists)
 }
 
 albums_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
-	playlist_list_window_show(cl, sv, state, &sv.library.categories.albums)
+	//playlist_list_window_show(cl, sv, state, &sv.library.categories.albums)
 }
 
 genres_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
-	playlist_list_window_show(cl, sv, state, &sv.library.categories.genres)
+	//playlist_list_window_show(cl, sv, state, &sv.library.categories.genres)
 }
 

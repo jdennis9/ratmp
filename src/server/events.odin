@@ -65,7 +65,7 @@ handle_events :: proc(state: ^Server) {
 	free_all(context.temp_allocator)
 
 	flush_scan_queue(state)
-	library_save_dirty_playlists(state.library)
+	library_save_dirty_playlists(&state.library)
 	_background_scan_output_results(&state.library, &state.background_scan)
 
 	if state.library.serial != state.library_save_serial {
@@ -76,5 +76,14 @@ handle_events :: proc(state: ^Server) {
 	if state.library.folder_tree_serial != state.library.serial {
 		state.library.folder_tree_serial = state.library.serial
 		library_build_folder_tree(&state.library)
+	}
+
+	for playlist_id, &playlist in state.library.playlists {
+		if playlist.auto_build_params == nil {continue}
+
+		if playlist.auto_build_params.?.build_serial != state.library.serial {
+			//playlist_list_build_auto_playlist(&state.library.user_playlists, state.library, index)
+			playlist_build_from_auto_params(&playlist, state.library)
+		}
 	}
 }

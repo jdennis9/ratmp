@@ -1,0 +1,140 @@
+package server
+
+import "core:slice"
+import "core:strings"
+import "core:mem"
+import "core:sort"
+
+Track_Category_Hash :: u32
+
+Track_Category_Entry :: struct {
+	hash: Track_Category_Hash,
+	name: string,
+	name_cstring: cstring,
+	duration: i64,
+	tracks: [dynamic]Track_ID,
+}
+
+Track_Category :: struct {
+	arena: mem.Dynamic_Arena,
+	allocator: mem.Allocator,
+	from_property: Track_Property_ID,
+	entries: #soa[]Track_Category_Entry,
+	serial: uint,
+}
+
+Track_Category_Entry_Ptr :: #soa^#soa[]Track_Category_Entry
+
+track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, property: Track_Property_ID) {
+	cat.from_property = property
+	cat.serial = lib.serial
+
+	mem.dynamic_arena_free_all(&cat.arena)
+	mem.dynamic_arena_init(&cat.arena)
+	cat.allocator = mem.dynamic_arena_allocator(&cat.arena)
+
+	Entry_Info :: struct {
+		name: cstring,
+		count: i32,
+	}
+
+	entry_infos: map[Track_Category_Hash]Entry_Info
+	defer delete(entry_infos)
+
+	// Count how many entries there are
+	for track in lib.tracks {
+		property_value := track.properties[property].(string) or_continue
+		property_hash := library_hash_string(property_value)
+		if _, found := entry_infos[property_hash]; found {
+			ei := &entry_infos[property_hash]
+			ei.count += 1
+		}
+		else {
+			entry_infos[property_hash] = Entry_Info {
+				name = strings.clone_to_cstring(property_value, cat.allocator),
+				count = 1,
+			}
+		}
+	}
+
+	if len(entry_infos) == 0 {
+		return
+	}
+
+	cat.entries = make_soa_slice(#soa[]Track_Category_Entry, len(entry_infos))
+	entry_index := 0
+
+	// Add entries to category
+	for entry_hash, entry_info in entry_infos {
+		cat.entries[entry_index] = Track_Category_Entry {
+			tracks = make_dynamic_array_len([dynamic]Track_ID, entry_info.count, cat.allocator),
+			name_cstring = entry_info.name,
+			name = string(entry_info.name),
+			hash = entry_hash,
+		}
+		entry_index += 1
+	}
+
+	// Add tracks to entries
+	for track in lib.tracks {
+		property_value := track.properties[property].(string) or_continue
+		property_hash := library_hash_string(property_value)
+		entry_index = track_category_find_entry_index(cat, property_hash) or_else 0
+		append(&cat.entries[entry_index].tracks, track.id)
+	}
+}
+
+track_category_find_entry_index :: proc(
+	cat: ^Track_Category, hash: Track_Category_Hash
+) -> (int, bool) {
+	return slice.linear_search(cat.entries.hash[:len(cat.entries)], hash)
+}
+
+track_category_sort :: proc(
+	cat: ^Track_Category, spec: Playlist_Sort_Spec,
+) {
+	iface: sort.Interface
+
+	iface.collection = cat
+
+	iface.swap = proc(it: sort.Interface, i, j: int) {
+		cat := cast(^Track_Category) it.collection
+		temp := cat.entries[i]
+		cat.entries[i] = cat.entries[j]
+		cat.entries[j] = temp
+	}
+
+	iface.len = proc(it: sort.Interface) -> int {
+		return len((cast(^Track_Category)it.collection).entries)
+	}
+
+	switch spec.metric {
+		case .Name: {
+			iface.less = proc(it: sort.Interface, i, j: int) -> bool {
+				cat := cast(^Track_Category) it.collection
+				return strings.compare(cat.entries.name[i], cat.entries.name[j]) < 0
+			}
+		}
+		case .Duration: {
+			iface.less = proc(it: sort.Interface, i, j: int) -> bool {
+				cat := cast(^Track_Category) it.collection
+				return cat.entries.duration[i] < cat.entries.duration[j]
+			}
+		}
+		case .Length: {
+			iface.less = proc(it: sort.Interface, i, j: int) -> bool {
+				cat := cast(^Track_Category) it.collection
+				return len(cat.entries.tracks[i]) < len(cat.entries.tracks[j])
+			}
+		}
+	}
+
+	switch spec.order {
+		case .Ascending:
+			sort.reverse_sort(iface)
+		case .Descending:
+			sort.sort(iface)
+	}
+
+	cat.serial += 1
+}

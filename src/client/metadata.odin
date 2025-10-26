@@ -243,13 +243,13 @@ metadata_window_show :: proc(
 		}
 	}
 
-	metadata_string_row :: proc(name: cstring, md: Track_Properties, component: Metadata_Component) -> (clicked: bool) {
+	metadata_string_row :: proc(name: cstring, md: Track_Properties, component: Track_Property_ID) -> (clicked: bool) {
 		v := md[component].(string) or_return
 		if v == "" {return}
 		return string_row(name, v)
 	}
 
-	metadata_date_row :: proc(name: string, md: Track_Properties, component: Metadata_Component) -> bool {
+	metadata_date_row :: proc(name: string, md: Track_Properties, component: Track_Property_ID) -> bool {
 		value := md[component].(i64) or_return
 		imgui.TableNextRow()
 

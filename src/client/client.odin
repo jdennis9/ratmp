@@ -51,7 +51,7 @@ Client :: struct {
 
 	want_quit: bool,
 
-	selected_user_playlist_id: Playlist_ID,
+	selected_user_playlist_id: Global_Playlist_ID,
 
 	tick_last_frame: time.Tick,
 	frame_count: int,

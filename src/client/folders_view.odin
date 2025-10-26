@@ -101,8 +101,8 @@ _rebuild_nodes :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server) {
 	)
 }
 
-_folder_id_to_playlist_id :: proc(id: u32) -> Playlist_ID {
-	return {serial = id, pool = auto_cast len(Metadata_Component)}
+_folder_id_to_playlist_id :: proc(id: u32) -> Global_Playlist_ID {
+	return {id = auto_cast id, origin = .Folder}
 }
 
 _set_viewing_tracks :: proc(state: ^Folders_Window, cl: ^Client, tracks: []Track_ID) {

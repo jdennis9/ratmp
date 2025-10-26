@@ -66,7 +66,7 @@ Server :: struct {
 	decoder: decoder.Decoder,
 	current_track_id: Track_ID,
 	current_track_info: Track_Info,
-	current_playlist_id: Playlist_ID,
+	current_playlist_id: Global_Playlist_ID,
 	queue: [dynamic]Track_ID,
 	queue_pos: int,
 	queue_serial: uint,
@@ -288,7 +288,7 @@ get_volume :: proc(state: ^Server) -> f32 {
 
 play_playlist :: proc(
 	state: ^Server,
-	tracks: []Track_ID, playlist_id: Playlist_ID,
+	tracks: []Track_ID, playlist_id: Global_Playlist_ID,
 	first_track: Track_ID = 0
 ) {
 	play_index := 0
@@ -314,7 +314,7 @@ play_playlist :: proc(
 	state.queue_serial += 1
 }
 
-append_to_queue :: proc(sv: ^Server, tracks: []Track_ID, from_playlist: Playlist_ID) {
+append_to_queue :: proc(sv: ^Server, tracks: []Track_ID, from_playlist: Global_Playlist_ID) {
 	if from_playlist != sv.current_playlist_id {
 		sv.current_playlist_id = {}
 	}

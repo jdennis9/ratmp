@@ -45,3 +45,27 @@ clone_string_with_null :: proc(str: string, allocator: Allocator) -> string {
     out[len(str)] = 0
     return string(out[:len(str)])
 }
+
+@require_results
+realloc_string :: proc(allocator: Allocator, old_value: string, new_value: string) -> (new_ptr: string, allocated: bool) #optional_ok {
+    if len(old_value) >= len(new_value) {
+        copy(transmute([]u8) old_value, new_value)
+        return string((transmute([]u8) old_value)[:len(new_value)]), false
+    }
+    else {
+        return strings.clone(new_value, allocator), true
+    }
+}
+
+
+@require_results
+realloc_cstring :: proc(allocator: Allocator, old_value: string, new_value: string) -> (new_ptr: cstring, allocated: bool) #optional_ok {
+    if len(old_value) >= len(new_value) {
+        copy(transmute([]u8) old_value, new_value)
+        return cstring(raw_data((transmute([]u8) old_value)[:len(new_value)])), false
+    }
+    else {
+        return strings.clone_to_cstring(new_value, allocator), true
+    }
+}
+

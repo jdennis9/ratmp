@@ -1,38 +1,43 @@
-/*
-    RAT MP - A cross-platform, extensible music player
-	Copyright (C) 2025 Jamie Dennis
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
 package server
 
-import "core:strings"
 import "core:slice"
-import "core:sort"
-import "core:time"
 
-// Do not edit outside of playlist_ procs
+import sa "core:container/small_array"
+
+MAX_AUTO_PLAYLIST_PARAMS :: 8
+
+Playlist_Auto_Build_Param_Type :: enum u8 {
+	Artist,
+	Genre,
+	Album,
+	Filter,
+	Folder,
+}
+
+Playlist_Auto_Build_Param :: struct {
+	type: Playlist_Auto_Build_Param_Type,
+	arg: [63]u8,
+}
+
+Playlist_Auto_Build_Params :: struct {
+	constructors: sa.Small_Array(MAX_AUTO_PLAYLIST_PARAMS, Playlist_Auto_Build_Param),
+	track_count_by_constructor: [MAX_AUTO_PLAYLIST_PARAMS]int,
+	string_allocator: Allocator,
+	build_serial: uint,
+}
+
+
 Playlist :: struct {
-	name: cstring,
-	// nil if the playlist has not been loaded from a file
+	id: Playlist_ID,
+	origin: Playlist_Origin,
+	name: string,
+	name_cstring: cstring,
 	src_path: string,
 	duration: i64,
-	time_created: i64,
-	id: Playlist_ID,
 	tracks: [dynamic]Track_ID,
 	serial: uint,
-	dirty: bool,
+	saved_serial: uint,
+	auto_build_params: Maybe(Playlist_Auto_Build_Params),
 }
 
 Playlist_Sort_Metric :: enum {
@@ -46,102 +51,76 @@ Playlist_Sort_Spec :: struct {
 	order: Sort_Order,
 }
 
-playlist_init :: proc(playlist: ^Playlist, name: string, id: Playlist_ID) {
-	if name != "" {
-		playlist.name = strings.clone_to_cstring(string(name))
+playlist_build_from_auto_params :: proc(playlist: ^Playlist, lib: Library) {
+	assert(playlist.auto_build_params != nil)
+	ap := &playlist.auto_build_params.?
+
+	clear(&playlist.tracks)
+	playlist.duration = 0
+	playlist.serial += 1
+	ap.build_serial = lib.serial
+
+	add_from_category :: proc(playlist: ^Playlist, lib: Library, cat: Track_Category, filter: string) -> (added: int, duration: i64) {
+		ap := playlist.auto_build_params
+		for entry in cat.entries {
+			if string(entry.name) == filter {
+				added = len(entry.tracks)
+				for track_id in entry.tracks {
+					if !slice.contains(playlist.tracks[:], track_id) {
+						append(&playlist.tracks, track_id)
+						track := library_find_track(lib, track_id) or_break
+						duration += track.properties[.Duration].(i64) or_else 0
+					}
+				}
+				return
+			}
+		}
+
+		return
 	}
-	playlist.id = id
-	playlist.time_created = time.to_unix_seconds(time.now())
+
+	for &ctor, ctor_index in sa.slice(&ap.constructors) {
+		duration: i64
+		arg := string(cstring(&ctor.arg[0]))
+
+		switch ctor.type {
+			case .Artist:
+				ap.track_count_by_constructor[ctor_index], duration = add_from_category(
+					playlist, lib, lib.categories.artists, arg
+				)
+			case .Album:
+				ap.track_count_by_constructor[ctor_index], duration = add_from_category(
+					playlist, lib, lib.categories.albums, arg
+				)
+			case .Genre:
+				ap.track_count_by_constructor[ctor_index], duration = add_from_category(
+					playlist, lib, lib.categories.genres, arg
+				)
+			case .Filter:
+				spec := Track_Filter_Spec{
+					filter = arg,
+					components = ~{},
+				}
+				filter_tracks(lib, spec, library_get_all_track_ids(lib), &playlist.tracks)
+			case .Folder:
+				/*id, found := library_folder_tree_find_folder_by_name(lib, ctor.arg)
+				if found {
+
+				}*/
+		}
+
+		playlist.duration += duration
+	}
 }
 
-playlist_set_name :: proc(playlist: ^Playlist, name: string) {
-	delete(playlist.name)
-	playlist.name = strings.clone_to_cstring(name)
-}
-
-playlist_destroy :: proc(playlist: ^Playlist) {
-	delete(playlist.src_path)
-	delete(playlist.tracks)
-	delete(playlist.name)
-	playlist^ = {}
-}
-
-playlist_add_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_ID) {
+playlist_add_tracks :: proc(playlist: ^Playlist, lib: ^Library, tracks: []Track_ID, assume_unique := false) {
 	for track_id in tracks {
-		track := library_find_track(lib, track_id) or_continue
-		playlist_add_track(playlist, track)
+		if assume_unique || !slice.contains(playlist.tracks[:], track_id) {
+			track := library_find_track(lib^, track_id) or_continue
+			append(&playlist.tracks, track_id)
+			playlist.duration += track.properties[.Duration].(i64) or_else 0
+		}
 	}
 	playlist.serial += 1
-}
-
-playlist_add_track :: proc(playlist: ^Playlist, track: Track, assume_unique := false) {
-	if assume_unique || !slice.contains(playlist.tracks[:], track.id) {
-		append(&playlist.tracks, track.id)
-		playlist.dirty = true
-		playlist.duration += track.properties[.Duration].(i64) or_else 0
-	}
-	playlist.serial += 1
-}
-
-playlist_remove_tracks :: proc(playlist: ^Playlist, lib: Library, tracks: []Track_ID) {
-	for track_id in tracks {
-		track := library_find_track(lib, track_id) or_continue
-		index_in_playlist := slice.linear_search(playlist.tracks[:], track_id) or_continue
-		playlist.duration -= track.properties[.Duration].(i64) or_else 0
-		ordered_remove(&playlist.tracks, index_in_playlist)
-	}
-	playlist.serial += 1
-	playlist.dirty = true
-}
-
-playlist_sort :: proc(playlist: ^Playlist, lib: Library, spec: Track_Sort_Spec) {
-	library_sort_tracks(lib, playlist.tracks[:], spec)
-	playlist.serial += 1
-}
-
-sort_playlists :: proc(playlists_arg: []Playlist, spec: Playlist_Sort_Spec) {
-	playlists := playlists_arg
-
-	compare_name :: proc(it: sort.Interface, a, b: int) -> bool {
-		playlists := cast(^[]Playlist)it.collection
-		return strings.compare(string(playlists[a].name), string(playlists[b].name)) < 0
-	}
-
-	compare_duration :: proc(it: sort.Interface, a, b: int) -> bool {
-		playlists := cast(^[]Playlist)it.collection
-		return playlists[a].duration < playlists[b].duration
-	}
-
-	compare_length :: proc(it: sort.Interface, a, b: int) -> bool {
-		playlists := cast(^[]Playlist)it.collection
-		return len(playlists[a].tracks) < len(playlists[b].tracks)
-	}
-
-	len_proc :: proc(it: sort.Interface) -> int {
-		playlists := cast(^[]Playlist)it.collection
-		return len(playlists)
-	}
-
-	swap_proc :: proc(it: sort.Interface, a, b: int) {
-		playlists := cast(^[]Playlist)it.collection
-		temp := playlists[a]
-		playlists[a] = playlists[b]
-		playlists[b] = temp
-	}
-
-	it: sort.Interface
-	it.collection = &playlists
-	it.len = len_proc
-	it.swap = swap_proc
-
-	switch spec.metric {
-		case .Name: it.less = compare_name
-		case .Duration: it.less = compare_duration
-		case .Length: it.less = compare_length
-	}
-
-	switch spec.order {
-		case .Ascending: sort.sort(it)
-		case .Descending: sort.reverse_sort(it)
-	}
+	lib.playlists_serial += 1
 }
