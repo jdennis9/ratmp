@@ -17,6 +17,7 @@ Track_Category_Entry :: struct {
 
 Track_Category :: struct {
 	arena: mem.Dynamic_Arena,
+	auto_playlist_param_type: Playlist_Auto_Build_Param_Type,
 	allocator: mem.Allocator,
 	from_property: Track_Property_ID,
 	entries: #soa[]Track_Category_Entry,
@@ -25,13 +26,14 @@ Track_Category :: struct {
 
 Track_Category_Entry_Ptr :: #soa^#soa[]Track_Category_Entry
 
-track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, property: Track_Property_ID) {
+track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, property: Track_Property_ID, auto_playlist_param_type: Playlist_Auto_Build_Param_Type) {
 	cat.from_property = property
 	cat.serial = lib.serial
 
 	mem.dynamic_arena_free_all(&cat.arena)
 	mem.dynamic_arena_init(&cat.arena)
 	cat.allocator = mem.dynamic_arena_allocator(&cat.arena)
+	cat.auto_playlist_param_type = auto_playlist_param_type
 
 	Entry_Info :: struct {
 		name: cstring,
@@ -67,7 +69,7 @@ track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, p
 	// Add entries to category
 	for entry_hash, entry_info in entry_infos {
 		cat.entries[entry_index] = Track_Category_Entry {
-			tracks = make_dynamic_array_len([dynamic]Track_ID, entry_info.count, cat.allocator),
+			tracks = make_dynamic_array_len_cap([dynamic]Track_ID, 0, entry_info.count, cat.allocator),
 			name_cstring = entry_info.name,
 			name = string(entry_info.name),
 			hash = entry_hash,
@@ -81,6 +83,7 @@ track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, p
 		property_hash := library_hash_string(property_value)
 		entry_index = track_category_find_entry_index(cat, property_hash) or_else 0
 		append(&cat.entries[entry_index].tracks, track.id)
+		cat.entries[entry_index].duration += track.properties[.Duration].(i64) or_else 0
 	}
 }
 
@@ -91,7 +94,7 @@ track_category_find_entry_index :: proc(
 }
 
 track_category_sort :: proc(
-	cat: ^Track_Category, spec: Playlist_Sort_Spec,
+	lib: ^Library, cat: ^Track_Category, spec: Playlist_Sort_Spec,
 ) {
 	iface: sort.Interface
 
@@ -137,4 +140,5 @@ track_category_sort :: proc(
 	}
 
 	cat.serial += 1
+	lib.categories.serial += 1
 }

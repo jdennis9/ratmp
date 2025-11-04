@@ -117,13 +117,14 @@ Library :: struct {
 	last_track_id: Track_ID,
 
 	tracks: #soa[dynamic]Track,
-	playlists: map[Playlist_ID]Playlist,
+	playlists: [dynamic]Playlist,
 	playlists_serial: uint,
 	user_playlist_dir: string,
 	next_user_playlist_id: Playlist_ID,
 
 	dir_cover_files: map[u64]string,
 	categories: struct {
+		build_serial: uint,
 		serial: uint,
 		artists: Track_Category,
 		albums: Track_Category,
@@ -147,10 +148,6 @@ library_init :: proc(lib: ^Library, user_playlist_dir: string) -> (ok: bool) {
 	if !os2.exists(lib.user_playlist_dir) {
 		os2.make_directory(lib.user_playlist_dir)
 	}
-	/*playlist_list_init(&lib.user_playlists, .User)
-	playlist_list_init(&lib.categories.artists, .Artist)
-	playlist_list_init(&lib.categories.albums, .Album)
-	playlist_list_init(&lib.categories.genres, .Genre)*/
 	ok = true
 	return
 }
@@ -160,10 +157,6 @@ library_destroy :: proc(lib: ^Library) {
 	delete(lib.playlists)
 	path_pool.destroy(lib.path_allocator)
 	mem.dynamic_arena_destroy(&lib.string_arena)
-	/*playlist_list_destroy(&lib.user_playlists)
-	playlist_list_destroy(&lib.categories.artists)
-	playlist_list_destroy(&lib.categories.albums)
-	playlist_list_destroy(&lib.categories.genres)*/
 }
 
 library_hash_path :: proc(str: string) -> u64 {
@@ -306,7 +299,7 @@ library_remove_missing_tracks :: proc(lib: ^Library) {
 }
 
 library_update_categories :: proc(lib: ^Library) {
-	if lib.categories.serial != lib.serial {
+	if lib.categories.build_serial != lib.serial {
 		log.debug("Rebuilding categories...")
 
 		when ODIN_DEBUG {
@@ -321,10 +314,11 @@ library_update_categories :: proc(lib: ^Library) {
 			time.SCOPED_TICK_DURATION(&duration)
 		}
 
-		lib.categories.serial = lib.serial
-		track_category_build_from_property(&lib.categories.artists, lib^, .Artist)
-		track_category_build_from_property(&lib.categories.albums, lib^, .Album)
-		track_category_build_from_property(&lib.categories.genres, lib^, .Genre)
+		lib.categories.serial += 1
+		lib.categories.build_serial = lib.serial
+		track_category_build_from_property(&lib.categories.artists, lib^, .Artist, .Artist)
+		track_category_build_from_property(&lib.categories.albums, lib^, .Album, .Album)
+		track_category_build_from_property(&lib.categories.genres, lib^, .Genre, .Genre)
 	}
 }
 
@@ -336,7 +330,8 @@ library_alloc_user_playlist_id :: proc(lib: ^Library) -> Playlist_ID {
 library_create_playlist :: proc(lib: ^Library, name: string, auto_playlist := false) -> (id: Playlist_ID, error: Error) {
 	playlist: Playlist
 	lib.next_user_playlist_id += 1
-	id = lib.next_user_playlist_id
+	playlist.id = lib.next_user_playlist_id
+	id = playlist.id
 	
 	if auto_playlist {
 		playlist.auto_build_params = Playlist_Auto_Build_Params{}
@@ -357,26 +352,37 @@ library_create_playlist :: proc(lib: ^Library, name: string, auto_playlist := fa
 		}
 	}
 
-	lib.playlists[id] = playlist
+	append(&lib.playlists, playlist)
 
 	return
 }
 
-library_get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> (playlist: ^Playlist, found: bool) {
-	return &lib.playlists[id]
+library_get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> (playlist: ^Playlist, index: int, found: bool) {
+	for &pl, i in lib.playlists {
+		if pl.id == id {
+			return &pl, i, true
+		}
+	}
+
+	return
 }
 
 library_remove_playlist :: proc(lib: ^Library, id: Playlist_ID) -> bool {
-	playlist := (&lib.playlists[id]) or_return
+	playlist, index := library_get_playlist(lib, id) or_return
 	if playlist.src_path != "" {
 		os2.remove(playlist.src_path)
 	}
-	delete_key(&lib.playlists, id)
+	ordered_remove(&lib.playlists, index)
 	return true
 }
 
+library_set_playlist_name :: proc(lib: ^Library, playlist: ^Playlist, name: string) {
+	playlist.name_cstring = strings.clone_to_cstring(name, lib.string_allocator)
+	playlist.name = string(playlist.name_cstring)
+}
+
 library_save_dirty_playlists :: proc(lib: ^Library) {
-	for id, &playlist in lib.playlists {
+	for &playlist in lib.playlists {
 		if playlist.serial != playlist.saved_serial {
 			playlist.saved_serial = playlist.serial
 			playlist_file_save(lib^, playlist, playlist.src_path)
@@ -387,11 +393,11 @@ library_save_dirty_playlists :: proc(lib: ^Library) {
 library_add_playlist_from_file :: proc(lib: ^Library, path: string) -> bool {
 	playlist: Playlist
 	lib.next_user_playlist_id += 1
-	id := lib.next_user_playlist_id
+	playlist.id = lib.next_user_playlist_id
 
 	playlist_file_load(lib, path, &playlist) or_return
 	playlist.src_path = strings.clone(path, lib.string_allocator)
-	lib.playlists[id] = playlist
+	append(&lib.playlists, playlist)
 
 	log.debug("Add playlist from file:", path)
 	return true
@@ -405,6 +411,50 @@ library_scan_playlists :: proc(lib: ^Library) {
 	for file in files {
 		library_add_playlist_from_file(lib, file.fullpath)
 	}
+}
+
+library_sort_playlists :: proc(lib: ^Library, spec: Playlist_Sort_Spec) {
+	iface: sort.Interface
+
+	iface.collection = lib
+	iface.len = proc(iface: sort.Interface) -> int {
+		lib := cast(^Library) iface.collection
+		return len(lib.playlists)
+	}
+	iface.swap = proc(iface: sort.Interface, i, j: int) {
+		lib := cast(^Library) iface.collection
+		temp := lib.playlists[i]
+		lib.playlists[i] = lib.playlists[j]
+		lib.playlists[j] = temp
+	}
+
+	switch spec.metric {
+		case .Duration: {
+			iface.less = proc(iface: sort.Interface, i, j: int) -> bool {
+				lib := cast(^Library) iface.collection
+				return lib.playlists[i].duration < lib.playlists[j].duration
+			}
+		}
+		case .Length: {
+			iface.less = proc(iface: sort.Interface, i, j: int) -> bool {
+				lib := cast(^Library) iface.collection
+				return len(lib.playlists[i].tracks) < len(lib.playlists[j].tracks)
+			}
+		}
+		case .Name: {
+			iface.less = proc(iface: sort.Interface, i, j: int) -> bool {
+				lib := cast(^Library) iface.collection
+				return strings.compare(lib.playlists[i].name, lib.playlists[j].name) < 0
+			}
+		}
+	}
+
+	switch spec.order {
+		case .Descending: sort.sort(iface)
+		case .Ascending: sort.reverse_sort(iface)
+	}
+
+	lib.playlists_serial += 1
 }
 
 library_scan_folder_for_cover_art :: proc(lib: ^Library, dir: string) {

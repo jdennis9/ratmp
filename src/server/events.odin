@@ -78,12 +78,13 @@ handle_events :: proc(state: ^Server) {
 		library_build_folder_tree(&state.library)
 	}
 
-	for playlist_id, &playlist in state.library.playlists {
+	for &playlist in state.library.playlists {
 		if playlist.auto_build_params == nil {continue}
 
 		if playlist.auto_build_params.?.build_serial != state.library.serial {
 			//playlist_list_build_auto_playlist(&state.library.user_playlists, state.library, index)
-			playlist_build_from_auto_params(&playlist, state.library)
+			playlist_build_from_auto_params(&playlist, &state.library)
+			state.library.playlists_serial += 1
 		}
 	}
 }

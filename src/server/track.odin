@@ -21,14 +21,13 @@ track_properties_from_file :: proc(
 	}
 
 	props[.FileDate] = get_file_date(filename)
-
-	defer {
-		if props[.Title] == nil {
-			props[.Title] = clone_string_with_null(filepath.base(filename), allocator)
-		}
+	
+	if file == nil {
+		props[.Title] = clone_string_with_null(filepath.base(filename), allocator)
+		return
 	}
 
-	if file == nil {return}
+	defer taglib.file_free(file)
 
 	tag := taglib.file_tag(file)
 	if tag != nil {
@@ -51,6 +50,11 @@ track_properties_from_file :: proc(
 	if audio_props != nil {
 		props[.Bitrate] = i64(taglib.audioproperties_bitrate(audio_props))
 		props[.Duration] = i64(taglib.audioproperties_length(audio_props))
+	}
+
+	title := props[.Title].(string) or_else ""
+	if title == "" {
+		props[.Title] = clone_string_with_null(filepath.base(filename), allocator)
 	}
 
 	ok = true

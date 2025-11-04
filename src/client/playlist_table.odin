@@ -18,6 +18,11 @@
 #+private
 package client
 
+import "base:runtime"
+import "core:sort"
+import "core:mem"
+import "core:strings"
+import "core:time"
 import "core:fmt"
 import "core:hash/xxhash"
 
@@ -28,170 +33,182 @@ import "src:util"
 
 import "imx"
 
-/*Playlist_Row :: struct {
-	id: Global_Playlist_ID,
-	serial: uint,
+Playlist_Table_Row :: struct {
 	name: cstring,
-	//duration: struct {h, m, s: u8},
-	length: i32,
-	duration_str: [9]u8,
-	duration_len: int,
+	id: Playlist_ID,
+	duration: [9]u8,
+	length: [6]u8,
+	duration_len: u8,
+	length_len: u8,
 }
 
 Playlist_Table :: struct {
-	rows: [dynamic]Playlist_Row,
-	filter_hash: u32,
+	rows: [dynamic]Playlist_Table_Row,
 	serial: uint,
-	viewing: Global_Playlist_ID,
-	playing: Global_Playlist_ID,
-	editing: Global_Playlist_ID,
+	filter_hash: u32,
 }
 
 Playlist_Table_Result :: struct {
-	play: Maybe(Local_Playlist_ID),
-	select: Maybe(Local_Playlist_ID),
+	select: Maybe(Playlist_ID),
+	play: Maybe(Playlist_ID),
+	append_to_queue: Maybe(Playlist_ID),
+	drag_drop_to: Maybe(Playlist_ID),
+	context_menu_target: Maybe(Playlist_ID),
+	remove: Maybe(Playlist_ID),
 	sort_spec: Maybe(server.Playlist_Sort_Spec),
-	drag_drop_to: Maybe(Local_Playlist_ID),
-	context_menu: Maybe(Local_Playlist_ID),
 }
 
 playlist_table_update :: proc(
-	table: ^Playlist_Table, list: ^server.Playlist_List,
-	filter: string, viewing: Global_Playlist_ID, playing: Global_Playlist_ID, editing: Global_Playlist_ID,
+	table: ^Playlist_Table,
+	playlists: []Playlist, serial: uint,
+	filter: string,
 ) {
-	filter_hash := xxhash.XXH32(transmute([]u8) string(filter))
-	table.viewing = viewing
-	table.playing = playing
-	table.editing = editing
-	
-	if list.serial == table.serial && table.filter_hash == filter_hash && len(table.rows) != 0 {return}
-	
-	table.serial = list.serial
-	table.filter_hash = filter_hash
+	playlist_to_row :: proc(playlist: Playlist) -> (row: Playlist_Table_Row) {
+		row.name = playlist.name_cstring
 
-	playlist_to_row :: proc(playlist: server.Playlist_Ptr) -> Playlist_Row {
-		// @FixMe: If hours is more than 24, it comes up as 0
-		h, m, s := util.clock_from_seconds(auto_cast playlist.duration)
-		
-		row := Playlist_Row {
-			id = server.playlist_global_id(playlist),
-			serial = playlist.serial,
-			name = playlist.name_cstring,
-			length = auto_cast len(playlist.tracks),
-		}
+		length_str := fmt.bprint(row.length[:], len(playlist.tracks))
+		row.length_len = auto_cast len(length_str)
 
-		row.duration_len = len(fmt.bprintf(row.duration_str[:], "%02d:%02d:%02d", h, m, s))
+		hours, minutes, seconds := time.clock_from_seconds(auto_cast playlist.duration)
+		row.duration_len = auto_cast len(fmt.bprintf(row.duration[:], "%02d:%02d:%02d", hours, minutes, seconds))
 
-		return row
+		row.id = playlist.id
+
+		return
 	}
 
-	if filter != "" {
-		filtered_playlist_ids: [dynamic]Local_Playlist_ID
-		defer delete(filtered_playlist_ids)
+	filter_hash := xxhash.XXH32(transmute([]u8) filter)
 
-		clear(&table.rows)
+	if table.serial == serial && table.filter_hash == filter_hash {
+		return
+	}
 
-		//server.filter_playlists(list, filter, &filtered_playlist_ids)
-		server.playlist_list_filter_by_name(list^, filter, &filtered_playlist_ids)
+	clear(&table.rows)
 
-		for id in filtered_playlist_ids {
-			playlist, _ := server.playlist_list_find_playlist(list, id) or_continue
-			row := playlist_to_row(playlist)
-			append(&table.rows, row)
+	if filter == "" {
+		resize(&table.rows, len(playlists))
+
+		for playlist, i in playlists {
+			table.rows[i] = playlist_to_row(playlist)
 		}
 	}
 	else {
-		clear(&table.rows)
-		for _, index in list.playlists {
-			append(&table.rows, playlist_to_row(&list.playlists[index]))
+		stack: mem.Stack
+		stack_data := make([]byte, 4<<10)
+		defer delete(stack_data)
+
+		mem.stack_init(&stack, stack_data)
+		allocator := mem.stack_allocator(&stack)
+
+		filter_lower := strings.to_lower(filter, allocator)
+
+		for playlist in playlists {
+			name_lower := strings.to_lower(playlist.name, allocator)
+			defer mem.stack_free(&stack, raw_data(name_lower))
+
+			if strings.contains(name_lower, filter_lower) {
+				append(&table.rows, playlist_to_row(playlist))
+			}
 		}
 	}
 }
 
-playlist_table_show :: proc(
-	theme: Theme, table: Playlist_Table, str_id: cstring, context_menu_id: imgui.ID
-) -> (result: Playlist_Table_Result) {
-	list_clipper: imgui.ListClipper
-	table_flags := 
-		imgui.TableFlags_Sortable|imgui.TableFlags_SortTristate|
-		imgui.TableFlags_RowBg|imgui.TableFlags_ScrollY|imgui.TableFlags_Reorderable|
-		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInner
+playlist_table_free :: proc(table: ^Playlist_Table) {
+	delete(table.rows)
+	table.rows = nil
+	table.serial = 0
+	table.filter_hash = 0
+}
 
-	if len(table.rows) == 0 {return}
+playlist_table_show :: proc(table: Playlist_Table, viewing_id: Playlist_ID, editing_id: Playlist_ID, playing_id: Global_Playlist_ID) -> (result: Playlist_Table_Result, shown: bool) {
+	table_flags := imgui.TableFlags_Sortable |
+		imgui.TableFlags_SortTristate |
+		imgui.TableFlags_SizingStretchProp |
+		imgui.TableFlags_ScrollY |
+		imgui.TableFlags_RowBg |
+		imgui.TableFlags_Resizable |
+		imgui.TableFlags_BordersInner |
+		imgui.TableFlags_Hideable |
+		imgui.TableFlags_Reorderable
 
-	if !imgui.BeginTable(str_id, 3, table_flags) {return}
+	imgui.BeginTable("##playlists", 3, table_flags) or_return
 	defer imgui.EndTable()
+	shown = true
 
 	imgui.TableSetupColumn("Name")
-	imgui.TableSetupColumn("Length")
+	imgui.TableSetupColumn("No. Tracks")
 	imgui.TableSetupColumn("Duration")
 
 	imgui.TableSetupScrollFreeze(1, 1)
 	imgui.TableHeadersRow()
 
-	table_sort_spec := imgui.TableGetSortSpecs()
-	if table_sort_spec != nil && table_sort_spec.SpecsDirty && table_sort_spec.Specs != nil {
-		table_spec := table_sort_spec.Specs
-		sort_spec := server.Playlist_Sort_Spec{}
+	if table_sort_specs := imgui.TableGetSortSpecs(); table_sort_specs != nil {
+		if specs := table_sort_specs.Specs; specs != nil && table_sort_specs.SpecsDirty {
+			metric: server.Playlist_Sort_Metric
+			order: server.Sort_Order
 
-		switch table_spec.ColumnIndex {
-			case 0: sort_spec.metric = .Name
-			case 1: sort_spec.metric = .Length
-			case 2: sort_spec.metric = .Duration
+			table_sort_specs.SpecsDirty = false
+
+			switch specs.ColumnIndex {
+				case 0: metric = .Name
+				case 1: metric = .Length
+				case 2: metric = .Duration
+			}
+
+			switch specs.SortDirection {
+				case .Ascending: order = .Ascending
+				case .Descending: order = .Descending
+				case .None: order = .Descending
+			}
+
+			result.sort_spec = server.Playlist_Sort_Spec {
+				metric = metric,
+				order = order,
+			}
 		}
-
-		switch table_spec.SortDirection {
-			case .Ascending: sort_spec.order = .Ascending
-			case .Descending, .None: sort_spec.order = .Descending
-		}
-
-		result.sort_spec = sort_spec
-		table_sort_spec.SpecsDirty = false
 	}
 
-	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
-	defer imgui.ListClipper_End(&list_clipper)
+	for &row in table.rows {
+		imgui.TableNextRow()
+		imgui.PushIDPtr(&row)
+		defer imgui.PopID()
 
-	for imgui.ListClipper_Step(&list_clipper) {
-		for index in list_clipper.DisplayStart..<list_clipper.DisplayEnd {
-			row := table.rows[index]
-			imgui.TableNextRow()
+		if playing_id.origin == .User && row.id == cast(Playlist_ID)playing_id.id {
+			imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]))
+		}
 
-			if row.id == table.playing {
-				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(theme.custom_colors[.PlayingHighlight]))
+		if imgui.TableSetColumnIndex(0) {
+			if imgui.Selectable(row.name, viewing_id == row.id, {.SpanAllColumns}) {
+				result.select = row.id
 			}
 
-			if imgui.TableSetColumnIndex(2) {
-				imx.text_unformatted(string(row.duration_str[:row.duration_len]))
+			if is_play_track_input_pressed() {
+				result.play = row.id
 			}
 
-			if imgui.TableSetColumnIndex(1) {
-				imgui.Text("%d", row.length)
-			}
-
-			if imgui.TableSetColumnIndex(0) {
-				if row.name == nil {imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))}
-				if imgui.Selectable(row.name != nil ? row.name : "None", table.viewing == row.id, {.SpanAllColumns}) {
-					result.select = row.id.id
+			if imgui.BeginPopupContextItem() {
+				if imgui.MenuItem("Play") {
+					result.play = row.id
 				}
-				if row.name == nil {imgui.PopStyleColor()}
-
-				if is_play_track_input_pressed() {
-					result.play = row.id.id
+				if imgui.MenuItem("Append to queue") {
+					result.append_to_queue = row.id
 				}
-
-				if imgui.IsItemClicked(.Right) {
-					imgui.OpenPopupID(context_menu_id)
-					result.context_menu = row.id.id
+				imgui.Separator()
+				if imgui.MenuItem("Remove") {
+					result.remove = row.id
 				}
+				imgui.EndPopup()
 			}
+		}
+
+		if imgui.TableSetColumnIndex(1) {
+			imx.text_unformatted(string(row.length[:row.length_len]))
+		}
+
+		if imgui.TableSetColumnIndex(2) {
+			imx.text_unformatted(string(row.duration[:row.duration_len]))
 		}
 	}
 
 	return
 }
-
-playlist_table_free :: proc(table: ^Playlist_Table) {
-	delete(table.rows)
-	table^ = {}
-}*/

@@ -130,9 +130,6 @@ playlist_file_parse_m3u :: proc(
 	if len(lines) == 0 {return .Syntax}
 	if strings.trim(lines[0], " ") != "#EXTM3U" {return .Syntax}
 
-	playlist_name: string
-	defer delete(playlist_name)
-
 	track_paths: [dynamic]string
 	defer delete(track_paths)
 
@@ -148,7 +145,7 @@ playlist_file_parse_m3u :: proc(
 				return .Syntax
 			}
 
-			playlist_name = strings.clone(strings.trim(parts[1], " "))
+			library_set_playlist_name(lib, output, strings.trim(parts[1], " "))
 		}
 		else if strings.starts_with(line, "#") {
 			continue
@@ -158,7 +155,7 @@ playlist_file_parse_m3u :: proc(
 		}
 	}
 
-	if playlist_name == "" {
+	if output.name == "" {
 		return .Syntax
 	}
 
@@ -187,7 +184,7 @@ playlist_file_parse_rap :: proc(
 	if !have_name {return .Syntax}
 
 	defer output.auto_build_params = params
-	output.name = strings.clone(name, lib.string_allocator)
+	library_set_playlist_name(lib, output, name)
 
 	for section_name, section in data {
 		param: Playlist_Auto_Build_Param
@@ -198,7 +195,7 @@ playlist_file_parse_rap :: proc(
 		param.type = type
 		copy(param.arg[:len(param.arg)-1], filter)
 
-		small_array.append(&params.constructors, param)
+		small_array.append(&params.params, param)
 	}
 
 	return .None
@@ -215,7 +212,7 @@ playlist_file_save_rap :: proc(lib: Library, input: Playlist, output: os.Handle)
 	fpf(output, "Name=%s", string(input.name))
 	fp(output)
 
-	for &param, index in small_array.slice(&params.constructors) {
+	for &param, index in small_array.slice(&params.params) {
 		fpf(output, "[Param%d]", index)
 		fpf(output, "Type=%s", reflect.enum_string(param.type))
 		fpf(output, "Filter=%s", string(cstring(&param.arg[0])))

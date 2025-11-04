@@ -1,8 +1,11 @@
 #+private
 package client
 
+import "core:container/small_array"
+import "core:log"
 import "base:runtime"
 import imgui "src:thirdparty/odin-imgui"
+import "imx"
 
 import "src:server"
 
@@ -124,14 +127,15 @@ queue_window_hide :: proc(self: ^Window_Base) {
 
 Playlists_Window :: struct {
 	using base: Window_Base,
-	//playlist_table: Playlist_Table,
-	viewing_id: Global_Playlist_ID,
-	editing_id: Global_Playlist_ID,
+	playlist_table: Playlist_Table,
+	viewing_id: Playlist_ID,
+	editing_id: Playlist_ID,
 	new_playlist_name: [128]u8,
 	track_table: Track_Table,
 	track_filter: [128]u8,
 	playlist_filter: [128]u8,
-	//auto_playlist_param_editor: Auto_Playlist_Parameter_Editor,
+	mode: Side_By_Side_Window_Mode,
+	auto_playlist_param_editor: Auto_Playlist_Parameter_Editor,
 }
 
 PLAYLISTS_WINDOW_ARCHETYPE := Window_Archetype {
@@ -149,60 +153,285 @@ playlists_window_make_instance :: proc(allocator := context.allocator) -> ^Windo
 
 playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
-	//playlist_list_window_show(cl, sv, state, &sv.library.user_playlists, allow_edit = true)
+
+	show_playlist_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Playlists_Window) data
+		imgui.PushID("##playlists")
+		defer imgui.PopID()
+
+		filter_cstring := cstring(&state.playlist_filter[0])
+
+		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
+
+		imgui.SameLine()
+		imgui.Button("+ New playlist")
+
+		playlist_table_update(&state.playlist_table, sv.library.playlists[:], sv.library.playlists_serial, string(filter_cstring))
+		result, _ := playlist_table_show(state.playlist_table, state.viewing_id, state.editing_id, sv.current_playlist_id)
+		if result != {} {
+			log.debug(result)
+		}
+
+		if result.select != nil {
+			state.viewing_id = result.select.?
+		}
+
+		if result.sort_spec != nil {
+			server.library_sort_playlists(&sv.library, result.sort_spec.?)
+		}
+
+		if result.play != nil {
+			if playlist, _, have_playlist := server.library_get_playlist(&sv.library, result.play.?); have_playlist {
+				server.play_playlist(sv, playlist.tracks[:], {.User, auto_cast playlist.id})
+			}
+		}
+	}
+
+	show_track_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Playlists_Window) data
+
+		imgui.PushID("##tracks")
+		defer imgui.PopID()
+
+		playlist, _, have_playlist := server.library_get_playlist(&sv.library, state.viewing_id)
+		if !have_playlist {
+			imgui.TextDisabled("No playlist selected")
+			return
+		}
+
+		// =============================================================================
+		// Auto-playlist parameters
+		// =============================================================================
+
+		if playlist.auto_build_params != nil && imgui.CollapsingHeader("Auto-playlist Parameters") {
+			show_auto_playlist_parameter_editor(&state.auto_playlist_param_editor, &sv.library, playlist)
+		}
+
+		// =============================================================================
+		// Track table
+		// =============================================================================
+
+		filter_cstring := cstring(&state.track_filter[0])
+
+		imx.text_unformatted(playlist.name)
+
+		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
+
+		track_table_update(&state.track_table, playlist.serial, sv.library, playlist.tracks[:], {origin = .User, id = auto_cast playlist.id}, string(filter_cstring))
+
+		context_menu_id := imgui.GetID("##track_context")
+		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)
+		context_result := track_table_show_context(state.track_table, table_result, context_menu_id, {}, sv^)
+
+		track_table_process_result(state.track_table, table_result, cl, sv, {})
+		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+
+		return
+	}
+
+	sbs := Side_By_Side_Window {
+		left_proc = show_playlist_table,
+		right_proc = show_track_table,
+		mode = state.mode,
+		focus_right = state.viewing_id != 0,
+		data = state,
+	}
+
+	result := side_by_side_window_show(sbs, cl, sv)
+	state.mode = result.mode
+	if result.go_back {
+		state.viewing_id = 0
+	}
 }
 
 playlists_window_hide :: proc(self: ^Window_Base) {
 	state := cast(^Playlists_Window) self
-	//playlist_table_free(&state.playlist_table)
+	playlist_table_free(&state.playlist_table)
 }
 
 // =============================================================================
 // Artists, albums, genres
 // =============================================================================
 
+Track_Category_ID :: enum {
+	Artists,
+	Albums,
+	Genres,
+}
+
+Track_Category_Window :: struct {
+	using base: Window_Base,
+	category_table: Track_Category_Table,
+	track_table: Track_Table,
+	mode: Side_By_Side_Window_Mode,
+	viewing_hash: server.Track_Category_Hash,
+	track_filter: [128]u8,
+	category_filter: [128]u8,
+	category: ^server.Track_Category,
+}
+
 playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string, component: Track_Property_ID) {
-	id := server.library_hash_string(name)
-	window.viewing_id = {origin=server.track_property_to_playlist_origin(component), id=auto_cast id}
-	window.want_bring_to_front = true
+	//id := server.library_hash_string(name)
+	//window.viewing_id = {origin=server.track_property_to_playlist_origin(component), id=auto_cast id}
+	//window.want_bring_to_front = true
 }
 
 ARTISTS_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Artists",
 	internal_name = WINDOW_ARTIST,
-	make_instance = playlists_window_make_instance,
+	make_instance = track_category_window_make_instance,
 	show = artists_window_show,
-	hide = playlists_window_hide,
+	hide = track_category_window_hide,
 }
 
 ALBUMS_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Albums",
 	internal_name = WINDOW_ALBUMS,
-	make_instance = playlists_window_make_instance,
+	make_instance = track_category_window_make_instance,
 	show = albums_window_show,
-	hide = playlists_window_hide,
+	hide = track_category_window_hide,
 }
 
 GENRES_WINDOW_ARCHETYPE := Window_Archetype {
 	title = "Genres",
 	internal_name = WINDOW_GENRES,
-	make_instance = playlists_window_make_instance,
+	make_instance = track_category_window_make_instance,
 	show = genres_window_show,
-	hide = playlists_window_hide,
+	hide = track_category_window_hide,
+}
+
+show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, sv: ^Server) {
+	show_category_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Track_Category_Window) data
+		imgui.PushID("##categories")
+		defer imgui.PopID()
+
+		cat := state.category
+
+		filter_cstring := cstring(&state.category_filter[0])
+
+		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.category_filter))
+
+		track_category_table_update(&state.category_table, cat, sv.library.categories.serial, string(filter_cstring))
+		result, _ := track_category_table_show(state.category_table, sv.library, state.viewing_hash)
+		if result != {} {
+			log.debug(result)
+		}
+
+		if result.select != nil {
+			state.viewing_hash = result.select.?
+		}
+
+		if result.sort_spec != nil {
+			server.track_category_sort(&sv.library, cat, result.sort_spec.?)
+		}
+
+		if result.add_to_auto_playlist != nil {
+			params := result.add_to_auto_playlist.?
+			playlist, _, have_playlist := server.library_get_playlist(&sv.library, params.playlist_id)
+			entry_index, have_entry := server.track_category_find_entry_index(cat, params.hash)
+			if have_playlist && have_entry {
+				entry := &cat.entries[entry_index]
+				server.playlist_add_auto_build_param(playlist, &sv.library, cat.auto_playlist_param_type, entry.name)
+			}
+		}
+
+		if result.add_to_playlist != nil {
+			params := result.add_to_playlist.?
+			playlist, _, have_playlist := server.library_get_playlist(&sv.library, params.playlist_id)
+			entry_index, have_entry := server.track_category_find_entry_index(cat, params.hash)
+			if have_playlist && have_entry {
+				entry := &cat.entries[entry_index]
+				server.playlist_add_tracks(playlist, &sv.library, entry.tracks[:])
+			}
+		}
+		
+		if result.play != nil {
+			entry_index, have_entry := server.track_category_find_entry_index(cat, result.play.?)
+			if have_entry {
+				server.play_playlist(sv, cat.entries[entry_index].tracks[:], {
+					server.track_property_to_playlist_origin(cat.from_property),
+					auto_cast cat.entries[entry_index].hash
+				})
+			}
+		}
+	}
+
+	show_track_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Track_Category_Window) data
+
+		imgui.PushID("##tracks")
+		defer imgui.PopID()
+
+		cat := state.category
+
+		entry_index, have_entry := server.track_category_find_entry_index(cat, state.viewing_hash)
+		if !have_entry {
+			imgui.TextDisabled("No tracks")
+			return
+		}
+
+		entry := &cat.entries[entry_index]
+
+		filter_cstring := cstring(&state.track_filter[0])
+
+		imx.text_unformatted(entry.name)
+
+		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.category_filter))
+
+		track_table_update(&state.track_table, sv.library.serial, sv.library, entry.tracks[:], {origin = .User, id = auto_cast entry.hash}, string(filter_cstring))
+
+		context_menu_id := imgui.GetID("##track_context")
+		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)
+		context_result := track_table_show_context(state.track_table, table_result, context_menu_id, {.NoRemove}, sv^)
+
+		track_table_process_result(state.track_table, table_result, cl, sv, {})
+		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+
+		return
+	}
+
+	sbs := Side_By_Side_Window {
+		left_proc = show_category_table,
+		right_proc = show_track_table,
+		mode = state.mode,
+		focus_right = state.viewing_hash != 0,
+		data = state,
+	}
+
+	result := side_by_side_window_show(sbs, cl, sv)
+	state.mode = result.mode
+	if result.go_back {
+		state.viewing_hash = 0
+	}
+}
+
+track_category_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Base {
+	return new(Track_Category_Window, allocator)
+}
+
+track_category_window_hide :: proc(self: ^Window_Base) {
+	state := cast(^Track_Category_Window) self
+	track_table_free(&state.track_table)
+	track_category_table_free(&state.category_table)
 }
 
 artists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
-	state := cast(^Playlists_Window) self
-	//playlist_list_window_show(cl, sv, state, &sv.library.categories.artists)
+	state := cast(^Track_Category_Window) self
+	state.category = &sv.library.categories.artists
+	show_track_category_window(state, cl, sv)
 }
 
 albums_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
-	state := cast(^Playlists_Window) self
-	//playlist_list_window_show(cl, sv, state, &sv.library.categories.albums)
+	state := cast(^Track_Category_Window) self
+	state.category = &sv.library.categories.albums
+	show_track_category_window(state, cl, sv)
 }
 
+
 genres_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
-	state := cast(^Playlists_Window) self
-	//playlist_list_window_show(cl, sv, state, &sv.library.categories.genres)
+	state := cast(^Track_Category_Window) self
+	state.category = &sv.library.categories.genres
+	show_track_category_window(state, cl, sv)
 }
 

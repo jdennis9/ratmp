@@ -36,6 +36,7 @@ Path :: [512]u8
 Allocator :: runtime.Allocator
 
 clone_cstring_with_null :: proc(str: cstring, allocator: runtime.Allocator) -> string {
+    if str == nil {return ""}
 	return string(strings.clone_to_cstring(string(str), allocator))
 }
 

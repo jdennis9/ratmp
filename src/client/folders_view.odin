@@ -55,6 +55,8 @@ Folders_Window :: struct {
 	root: _Folder_Node,
 	viewing_tracks: []Track_ID,
 	viewing_tracks_serial: uint,
+	viewing_folder_name: [128]u8,
+	sbs_mode: Side_By_Side_Window_Mode,
 }
 
 _rebuild_nodes :: proc(state: ^Folders_Window, cl: ^Client, sv: ^Server) {
@@ -141,6 +143,7 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		log.debug(folder)
 		state.viewing_tracks = server.library_folder_tree_recurse_tracks(lib, folder^, context.allocator)
 		state.sel_folder_id = node.id
+		state.viewing_folder_name[copy(state.viewing_folder_name[:len(state.viewing_folder_name)-1], node.name)] = 0
 		return true
 	}
 
@@ -246,14 +249,8 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		_rebuild_nodes(state, cl, sv)
 	}
 
-	root_table_flags := imgui.TableFlags_BordersInnerV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
-
-	if !imgui.BeginTable("##folders", 2, root_table_flags) {return}
-	defer imgui.EndTable()
-
-	imgui.TableNextRow()
-
-	if imgui.TableSetColumnIndex(0) {
+	show_folders :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Folders_Window) data
 		prev_root: ^_Folder_Node
 		root := &state.root
 
@@ -262,6 +259,8 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			prev_root = root
 			root = &root.children[0]
 		}
+
+		imgui.TextDisabled("%d items", i32(len(root.children)))
 
 		if imgui.BeginTable("##folders", 3, imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner) {
 			result: _Node_Result
@@ -284,7 +283,11 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		}
 	}
 
-	if state.sel_folder_id != 0 && imgui.TableSetColumnIndex(1) {
+	show_tracks :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+		state := cast(^Folders_Window) data
+
+		if state.sel_folder_id == 0 {return}
+
 		playlist_id := _folder_id_to_playlist_id(state.sel_folder_id)
 		filter_cstring := cstring(&state.track_filter[0])
 		context_id := imgui.GetID("##track_context")
@@ -297,6 +300,8 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			string(filter_cstring)
 		)
 
+		imgui.TextDisabled("%s", cstring(&state.viewing_folder_name[0]))
+
 		table_result := track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
 		track_table_process_result(state.track_table, table_result, cl, sv, {})
 		if table_result.sort_spec != nil {
@@ -306,6 +311,22 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 		context_result := track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
 		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+	}
+
+	//root_table_flags := imgui.TableFlags_BordersInnerV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
+	sbs: Side_By_Side_Window
+
+	sbs.left_proc = show_folders
+	sbs.right_proc = show_tracks
+	sbs.mode = state.sbs_mode
+	sbs.data = state
+	sbs.focus_right = state.sel_folder_id != 0
+
+	result := side_by_side_window_show(sbs, cl, sv)
+	state.sbs_mode = result.mode
+
+	if result.go_back {
+		state.sel_folder_id = 0
 	}
 }
 
