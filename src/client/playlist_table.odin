@@ -184,11 +184,13 @@ playlist_table_show :: proc(table: Playlist_Table, viewing_id: Playlist_ID, edit
 
 			if is_play_track_input_pressed() {
 				result.play = row.id
+				result.select = row.id
 			}
 
 			if imgui.BeginPopupContextItem() {
 				if imgui.MenuItem("Play") {
 					result.play = row.id
+					result.select = row.id
 				}
 				if imgui.MenuItem("Append to queue") {
 					result.append_to_queue = row.id

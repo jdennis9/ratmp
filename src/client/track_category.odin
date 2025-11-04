@@ -158,6 +158,7 @@ track_category_table_show :: proc(table: Track_Category_Table, lib: Library, vie
 				}
 
 				if is_play_track_input_pressed() {
+					result.select = row.hash
 					result.play = row.hash
 				}
 
