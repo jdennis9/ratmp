@@ -40,6 +40,7 @@ Theme :: struct {
 	imgui_colors: [imgui.Col][4]f32,
 	custom_colors: [Theme_Custom_Color][4]f32,
 	gen_params: Theme_Gen_Params,
+	enable_frame_border: bool,
 }
 
 Theme_Gen_Color :: enum {
@@ -165,6 +166,7 @@ set_theme :: proc(client: ^Client, theme: Theme, name: string) {
 
 	global_theme = theme
 	util.copy_string_to_buf(client.settings.theme[:], name)
+	style.FrameBorderSize = theme.enable_frame_border ? 1 : 0
 }
 
 theme_save_to_file :: proc(theme: Theme, path: string) -> (ok: bool) {
@@ -392,6 +394,10 @@ theme_editor_show :: proc(state: ^Theme_Editor_Window, cl: ^Client) -> (changes:
 		if gen {
 			theme_generate(theme, theme.gen_params)
 		}
+	}
+
+	if imgui.Checkbox("Enable frame borders", &theme.enable_frame_border) {
+		style.FrameBorderSize = theme.enable_frame_border ? 1 : 0
 	}
 
 	if imgui.CollapsingHeader("Fine Tune") {
