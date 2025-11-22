@@ -43,6 +43,7 @@ Track_Category_Table_Result :: struct {
 
 track_category_table_update :: proc(table: ^Track_Category_Table, cat: ^server.Track_Category, serial: uint, filter: string) {
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
+
 	if table.serial == serial && table.filter_hash == filter_hash {
 		return
 	}
@@ -72,6 +73,7 @@ track_category_table_update :: proc(table: ^Track_Category_Table, cat: ^server.T
 		stack: mem.Stack
 		stack_data := make([]byte, 4096)
 		defer delete(stack_data)
+		mem.stack_init(&stack, stack_data)
 		allocator := mem.stack_allocator(&stack)
 
 		filter_lower := strings.to_lower(filter, allocator)
