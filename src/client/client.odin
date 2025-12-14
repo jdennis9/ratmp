@@ -409,22 +409,22 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 
 @private
 _go_to_artist :: proc(cl: ^Client, md: Track_Properties) -> bool {
-	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
-	playlists_window_set_view_by_name(state, md[.Artist].(string) or_else "", .Artist)
+	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
+	track_category_window_set_view_by_name(state, md[.Artist].(string) or_else "")
 	return true
 }
 
 @private
 _go_to_album :: proc(cl: ^Client, md: Track_Properties) -> bool {
-	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
-	playlists_window_set_view_by_name(state, md[.Album].(string) or_else "", .Album)
+	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
+	track_category_window_set_view_by_name(state, md[.Album].(string) or_else "")
 	return true
 }
 
 @private
 _go_to_genre :: proc(cl: ^Client, md: Track_Properties) -> bool {
-	state := cast(^Playlists_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
-	playlists_window_set_view_by_name(state, md[.Genre].(string) or_else "", .Genre)
+	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
+	track_category_window_set_view_by_name(state, md[.Genre].(string) or_else "")
 	return true
 }
 

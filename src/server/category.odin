@@ -26,6 +26,8 @@ Track_Category :: struct {
 
 Track_Category_Entry_Ptr :: #soa^#soa[]Track_Category_Entry
 
+track_category_hash_string :: library_hash_string
+
 track_category_build_from_property :: proc(cat: ^Track_Category, lib: Library, property: Track_Property_ID, auto_playlist_param_type: Playlist_Auto_Build_Param_Type) {
 	cat.from_property = property
 	cat.serial = lib.serial

@@ -270,10 +270,10 @@ Track_Category_Window :: struct {
 	category: ^server.Track_Category,
 }
 
-playlists_window_set_view_by_name :: proc(window: ^Playlists_Window, name: string, component: Track_Property_ID) {
-	//id := server.library_hash_string(name)
-	//window.viewing_id = {origin=server.track_property_to_playlist_origin(component), id=auto_cast id}
-	//window.want_bring_to_front = true
+track_category_window_set_view_by_name :: proc(window: ^Track_Category_Window, name: string) {
+	hash := server.track_category_hash_string(name)
+	window.viewing_hash = hash
+	window.want_bring_to_front = true
 }
 
 ARTISTS_WINDOW_ARCHETYPE := Window_Archetype {
