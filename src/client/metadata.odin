@@ -270,8 +270,8 @@ metadata_window_show :: proc(
 	// Tags
 	imgui.SeparatorText("Metadata")
 	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
-		imgui.TableSetupColumn("name", {}, 0.12)
-		imgui.TableSetupColumn("value", {}, 0.88)
+		imgui.TableSetupColumn("name", {}, 0.2)
+		imgui.TableSetupColumn("value", {}, 0.8)
 
 		metadata_string_row("Title", metadata, .Title)
 		if metadata_string_row("Artist", metadata, .Artist) {_go_to_artist(cl, metadata)}
@@ -297,8 +297,8 @@ metadata_window_show :: proc(
 	if imgui.BeginTable("##file_properies", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
 		path_buf: [512]u8
 		
-		imgui.TableSetupColumn("name", {}, 0.12)
-		imgui.TableSetupColumn("value", {}, 0.88)
+		imgui.TableSetupColumn("name", {}, 0.2)
+		imgui.TableSetupColumn("value", {}, 0.8)
 		
 		path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_else ""
 		string_row("File path", path)
