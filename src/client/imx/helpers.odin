@@ -17,6 +17,8 @@
 */
 package imgui_extensions
 
+import "core:crypto/_chacha20/ref"
+import "core:log"
 import "core:fmt"
 
 import imgui "src:thirdparty/odin-imgui"
@@ -76,3 +78,17 @@ end_status_bar :: proc() {
 	imgui.End()
 }
 
+SCROLLING_TEXT_CHARS_INTERVAL :: 0.5
+
+scrolling_text :: proc(text: string, timer: f64, max_width: f32) {
+	ptr := raw_data(text)
+	text_width := imgui.CalcTextSize(cstring(ptr), cstring(&ptr[len(text)])).x
+	avg_char_width := text_width / f32(len(text))
+	chars_fit_in_width := int(max_width / avg_char_width)
+	if text_width < max_width || chars_fit_in_width >= len(text) {
+		text_unformatted(text)
+		return
+	}
+	offset := int(timer / SCROLLING_TEXT_CHARS_INTERVAL) % (len(text) - chars_fit_in_width)
+	imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
+}

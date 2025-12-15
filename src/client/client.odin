@@ -123,6 +123,8 @@ Client :: struct {
 	bring_window_manager_to_front: bool,
 
 	wake_proc: proc(),
+
+	uptime: f64,
 }
 
 init :: proc(
@@ -263,6 +265,7 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	delta = cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
 	delta = min(delta, 5)
 
+	cl.uptime += f64(delta)
 	cl.frame_count += 1
 	cl.tick_last_frame = prev_frame_start
 	cl.delta = delta

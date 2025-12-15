@@ -207,7 +207,7 @@ metadata_window_show :: proc(
 		imgui.EndPopup()
 	}
 
-	string_row :: proc(name: cstring, value: string) -> (clicked: bool) {
+	string_row :: proc(name: cstring, value: string, uptime: f64) -> (clicked: bool) {
 		if value == "" {return}
 		imgui.TableNextRow()
 
@@ -224,7 +224,7 @@ metadata_window_show :: proc(
 		}
 
 		if imgui.TableSetColumnIndex(1) {
-			imx.text_unformatted(value)
+			imx.scrolling_text(value, uptime, imgui.GetContentRegionAvail().x)
 		}
 
 		return clicked
@@ -243,10 +243,10 @@ metadata_window_show :: proc(
 		}
 	}
 
-	metadata_string_row :: proc(name: cstring, md: Track_Properties, component: Track_Property_ID) -> (clicked: bool) {
+	metadata_string_row :: proc(name: cstring, md: Track_Properties, component: Track_Property_ID, uptime: f64) -> (clicked: bool) {
 		v := md[component].(string) or_return
 		if v == "" {return}
-		return string_row(name, v)
+		return string_row(name, v, uptime)
 	}
 
 	metadata_date_row :: proc(name: string, md: Track_Properties, component: Track_Property_ID) -> bool {
@@ -273,10 +273,10 @@ metadata_window_show :: proc(
 		imgui.TableSetupColumn("name", {}, 0.2)
 		imgui.TableSetupColumn("value", {}, 0.8)
 
-		metadata_string_row("Title", metadata, .Title)
-		if metadata_string_row("Artist", metadata, .Artist) {_go_to_artist(cl, metadata)}
-		if metadata_string_row("Album", metadata, .Album) {_go_to_album(cl, metadata)}
-		if metadata_string_row("Genre", metadata, .Genre) {_go_to_genre(cl, metadata)}
+		metadata_string_row("Title", metadata, .Title, cl.uptime)
+		if metadata_string_row("Artist", metadata, .Artist, cl.uptime) {_go_to_artist(cl, metadata)}
+		if metadata_string_row("Album", metadata, .Album, cl.uptime) {_go_to_album(cl, metadata)}
+		if metadata_string_row("Genre", metadata, .Genre, cl.uptime) {_go_to_genre(cl, metadata)}
 
 		number_row("Track no.", metadata[.TrackNumber].(i64) or_else 0)
 		number_row("Year", metadata[.Year].(i64) or_else 0)
@@ -301,7 +301,7 @@ metadata_window_show :: proc(
 		imgui.TableSetupColumn("value", {}, 0.8)
 		
 		path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_else ""
-		string_row("File path", path)
+		string_row("File path", path, cl.uptime)
 		
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) {
