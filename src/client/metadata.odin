@@ -411,7 +411,7 @@ metadata_editor_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^S
 
 		context_id := imgui.GetID("##track_context")
 
-		track_table_update(&state.track_table, state.serial, sv.library, state.tracks[:], {}, "")
+		track_table_update(cl^, &state.track_table, state.serial, sv.library, state.tracks[:], {}, "")
 		table_result := track_table_show(state.track_table, "##tracks", context_id, 0)
 
 		if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize}) {

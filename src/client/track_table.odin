@@ -35,6 +35,7 @@ import "imx"
 
 Track_Row :: struct {
 	genre, artist, album: string,
+	genre_width, artist_width, album_width: f32,
 	title: cstring,
 	duration_str: [9]u8,
 	duration_len: int,
@@ -53,10 +54,12 @@ Track_Table_Flags :: bit_set[Track_Table_Flag]
 Track_Table :: struct {
 	rows: [dynamic]Track_Row,
 	serial: uint,
+	font_serial: uint,
 	playlist_id: Global_Playlist_ID,
 	filter_hash: u32,
 	flags: Track_Table_Flags,
 	jump_to_track: Maybe(int),
+	uptime: f64,
 }
 
 Track_Table_Result :: struct {
@@ -102,6 +105,7 @@ track_table_get_tracks :: proc(table: Track_Table, allocator := context.allocato
 }
 
 track_table_update :: proc(
+	cl: Client,
 	table: ^Track_Table,
 	serial: uint,
 	lib: server.Library,
@@ -112,13 +116,15 @@ track_table_update :: proc(
 ) {
 	filter_hash := xxhash.XXH32(transmute([]u8) filter)
 	table.flags = flags
+	table.uptime = cl.uptime
 
-	if table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash {return}
+	if table.serial == serial && table.playlist_id == playlist_id && table.filter_hash == filter_hash && table.font_serial == cl.font_serial do return
 	log.debug("Serial", table.serial, "!=", serial)
 	log.debug("Update track table for playlist ID", playlist_id)
 	table.playlist_id = playlist_id
 	table.serial = serial
 	table.filter_hash = filter_hash
+	table.font_serial = cl.font_serial
 
 	track_to_row :: proc(lib: server.Library, id: Track_ID) -> (row: Track_Row, ok: bool) {
 		track := server.library_find_track(lib, id) or_return
@@ -128,6 +134,9 @@ track_table_update :: proc(
 		row.genre = md[.Genre].(string) or_else ""
 		row.artist = md[.Artist].(string) or_else ""
 		row.album = md[.Album].(string) or_else ""
+		row.genre_width = imx.calc_text_size(row.genre).x
+		row.artist_width = imx.calc_text_size(row.artist).x
+		row.album_width = imx.calc_text_size(row.album).x
 		row.title = strings.unsafe_string_to_cstring(md[.Title].(string) or_else string(cstring("")))
 		//row.year = auto_cast(md.values[.Year].(i64) or_else 0)
 		row.track_num = auto_cast(md[.TrackNumber].(i64) or_else 0)
@@ -270,12 +279,12 @@ track_table_show :: proc(
 		for display_index in list_clipper.DisplayStart..<list_clipper.DisplayEnd {
 			index := int(display_index)
 			row := &table.rows[index]
-
+			
 			imgui.PushIDInt(auto_cast display_index)
 			defer imgui.PopID()
-
+			
 			imgui.TableNextRow()
-
+			
 			if jump_to_track != nil && index == jump_to_track.? {
 				imgui.SetScrollHereY()
 			}
@@ -283,17 +292,20 @@ track_table_show :: proc(
 			if row.id == playing {
 				imgui.TableSetBgColor(.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]))
 			}
-
+			
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Artist) {
-				imx.text_unformatted(row.artist)
+				//imx.text_unformatted(row.artist)
+				imx.scrolling_text(row.artist, table.uptime, imgui.GetContentRegionAvail().x, row.artist_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Album) {
-				imx.text_unformatted(row.album)
+				//imx.text_unformatted(row.album)
+				imx.scrolling_text(row.album, table.uptime, imgui.GetContentRegionAvail().x, row.album_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Genre) {
-				imx.text_unformatted(row.genre)
+				//imx.text_unformatted(row.genre)
+				imx.scrolling_text(row.genre, table.uptime, imgui.GetContentRegionAvail().x, row.genre_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Duration) {
@@ -319,8 +331,10 @@ track_table_show :: proc(
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Title) {
 				select: bool
 				keep_selection: bool
+				buf: [1024]u8
 
-				select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
+				//select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
+				select |= imx.scrolling_selectable(buf[:], string(row.title), table.uptime, imgui.GetContentRegionAvail().x, nil, row.selected, {.SpanAllColumns})
 				
 				if imgui.BeginDragDropSource() {
 					tracks := track_table_get_selection(table)

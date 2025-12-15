@@ -17,6 +17,7 @@
 */
 package imgui_extensions
 
+import "core:unicode"
 import "core:crypto/_chacha20/ref"
 import "core:log"
 import "core:fmt"
@@ -80,15 +81,62 @@ end_status_bar :: proc() {
 
 SCROLLING_TEXT_CHARS_INTERVAL :: 0.5
 
-scrolling_text :: proc(text: string, timer: f64, max_width: f32) {
+// Pixels per second (used by unused scrolling code)
+SCROLLING_TEXT_SPEED :: 10
+
+scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil) {
 	ptr := raw_data(text)
-	text_width := imgui.CalcTextSize(cstring(ptr), cstring(&ptr[len(text)])).x
+	text_width := text_width_arg.? or_else calc_text_size(text).x
+
 	avg_char_width := text_width / f32(len(text))
 	chars_fit_in_width := int(max_width / avg_char_width)
+
 	if text_width < max_width || chars_fit_in_width >= len(text) {
 		text_unformatted(text)
 		return
 	}
+
 	offset := int(timer / SCROLLING_TEXT_CHARS_INTERVAL) % (len(text) - chars_fit_in_width)
 	imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
+
+	// Keeping this here because it will work well with my planned
+	// replacement of the ImGui table API
+	/*ptr := raw_data(text)
+	text_width := text_width_arg.? or_else calc_text_size(text).x
+	ratio := max_width / text_width
+	drawlist := imgui.GetWindowDrawList()
+
+	wrap :: proc(v: f32, w: f32) -> f32 {
+		return v - (f32(int(v / w)) * w)
+	}
+
+	x_offset := (1 - ratio) * max_width
+	//o := f32(timer * SCROLLING_TEXT_SPEED)
+	x_offset += wrap(f32(timer * SCROLLING_TEXT_SPEED), max_width)
+	cursor := imgui.GetCursorScreenPos()
+
+	imgui.DrawList_AddText(drawlist, cursor - {x_offset, 0}, imgui.GetColorU32(.Text), cstring(&ptr[0]), cstring(&ptr[len(text)]))*/
+}
+
+scrolling_selectable :: proc(buf: []u8, text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil, selected := false, flags := imgui.SelectableFlags{}) -> bool {
+	ptr := raw_data(text)
+	text_width := text_width_arg.? or_else calc_text_size(text).x
+
+	avg_char_width := text_width / f32(len(text))
+	chars_fit_in_width := int(max_width / avg_char_width)
+
+	if text_width < max_width || chars_fit_in_width >= len(text) {
+		copy(buf[:len(buf)-1], text)
+		return imgui.Selectable(cstring(raw_data(buf)), selected, flags)
+	}
+	
+	offset := int(timer / SCROLLING_TEXT_CHARS_INTERVAL) % (len(text) - chars_fit_in_width)
+	str := fmt.bprint(buf[:len(buf)-1], cstring(&ptr[offset]), "###", text, sep = "")
+	buf[len(str)] = 0
+	return imgui.Selectable(cstring(raw_data(buf)), selected, flags)
+}
+
+calc_text_size :: proc(text: string) -> [2]f32 {
+	ptr := raw_data(text)
+	return imgui.CalcTextSize(cstring(ptr), cstring(&ptr[len(text)]))
 }

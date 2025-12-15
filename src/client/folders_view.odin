@@ -295,6 +295,7 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
 		track_table_update(
+			cl^,
 			&state.track_table, sv.library.serial + state.track_table_serial,
 			sv.library, state.viewing_tracks[:], playlist_id,
 			string(filter_cstring)

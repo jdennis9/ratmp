@@ -155,6 +155,8 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 	scratch: mem.Scratch
 	have_english_font: bool
 
+	client.font_serial += 1
+
 	if mem.scratch_allocator_init(&scratch, 256<<10) != nil {return}
 	defer mem.scratch_allocator_destroy(&scratch)
 

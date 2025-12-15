@@ -40,6 +40,7 @@ library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
 
 	track_table_update(
+		cl^, 
 		&state.track_table, sv.library.serial, sv.library,
 		server.library_get_all_track_ids(sv.library), {}, string(filter_cstring)
 	)
@@ -95,7 +96,7 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Queue_Window) self
 	context_id := imgui.GetID("##track_context")
 
-	track_table_update(&state.track_table, sv.queue_serial, sv.library, sv.queue[:], {origin = .Loose, id = max(u32)}, "", {.NoSort})
+	track_table_update(cl^, &state.track_table, sv.queue_serial, sv.library, sv.queue[:], {origin = .Loose, id = max(u32)}, "", {.NoSort})
 	table_result := track_table_show(state.track_table, "##queue", context_id, sv.current_track_id)
 
 	//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
@@ -217,7 +218,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
 
-		track_table_update(&state.track_table, playlist.serial, sv.library, playlist.tracks[:], {origin = .User, id = auto_cast playlist.id}, string(filter_cstring))
+		track_table_update(cl^, &state.track_table, playlist.serial, sv.library, playlist.tracks[:], {origin = .User, id = auto_cast playlist.id}, string(filter_cstring))
 
 		context_menu_id := imgui.GetID("##track_context")
 		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)
@@ -379,7 +380,7 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.category_filter))
 
-		track_table_update(&state.track_table, sv.library.serial, sv.library, entry.tracks[:], {origin = .User, id = auto_cast entry.hash}, string(filter_cstring))
+		track_table_update(cl^, &state.track_table, sv.library.serial, sv.library, entry.tracks[:], {origin = .User, id = auto_cast entry.hash}, string(filter_cstring))
 
 		context_menu_id := imgui.GetID("##track_context")
 		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)

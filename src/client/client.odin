@@ -51,6 +51,9 @@ Client :: struct {
 
 	want_quit: bool,
 
+	// Increments every time the font is changed
+	font_serial: uint,
+
 	selected_user_playlist_id: Global_Playlist_ID,
 
 	tick_last_frame: time.Tick,
