@@ -213,6 +213,8 @@ metadata_window_show :: proc(
 
 		if imgui.TableSetColumnIndex(0) {
 			clicked = imgui.Selectable(name, false, {.SpanAllColumns})
+			imx.set_item_tooltip(value)
+
 			if imgui.BeginPopupContextItem() {
 				if imgui.MenuItem("Copy to clipboard") {
 					value_cstring := strings.clone_to_cstring(value)
@@ -224,7 +226,8 @@ metadata_window_show :: proc(
 		}
 
 		if imgui.TableSetColumnIndex(1) {
-			imx.scrolling_text(value, uptime, imgui.GetContentRegionAvail().x)
+			//imx.scrolling_text(value, uptime, imgui.GetContentRegionAvail().x)
+			imx.text_unformatted(value)
 		}
 
 		return clicked

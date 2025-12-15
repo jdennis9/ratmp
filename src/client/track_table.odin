@@ -18,6 +18,7 @@
 #+private
 package client
 
+import "core:mem"
 import "base:runtime"
 import "core:slice"
 import "core:time"
@@ -186,6 +187,30 @@ track_table_show :: proc(
 	context_menu_id: imgui.ID,
 	playing: Track_ID,
 ) -> (result: Track_Table_Result) {
+
+	/*columns: [Track_Property_ID]imx.Table_Column = {
+		.Album = {
+		},
+		.Genre = {
+		},
+		.Artist = {
+		},
+		.Title = {
+		},
+		.TrackNumber = {
+		},
+		.Duration = {
+		},
+		.Bitrate = {
+		},
+		.Year = {
+		},
+		.DateAdded = {
+		},
+		.FileDate = {
+		},
+	}*/
+
 	list_clipper: imgui.ListClipper
 	first_selected_row: Maybe(int)
 	jump_to_track: Maybe(int)
@@ -279,7 +304,13 @@ track_table_show :: proc(
 		for display_index in list_clipper.DisplayStart..<list_clipper.DisplayEnd {
 			index := int(display_index)
 			row := &table.rows[index]
-			
+	
+			is_column_hovered :: proc() -> bool {
+				cursor := imgui.GetCursorScreenPos()
+				content_region := imgui.GetContentRegionAvail()
+				return imgui.IsMouseHoveringRect(cursor, cursor + content_region)
+			}
+
 			imgui.PushIDInt(auto_cast display_index)
 			defer imgui.PopID()
 			
@@ -294,18 +325,18 @@ track_table_show :: proc(
 			}
 			
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Artist) {
-				//imx.text_unformatted(row.artist)
-				imx.scrolling_text(row.artist, table.uptime, imgui.GetContentRegionAvail().x, row.artist_width)
+				imx.text_unformatted(row.artist)
+				//imx.scrolling_text(row.artist, table.uptime, imgui.GetContentRegionAvail().x, row.artist_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Album) {
-				//imx.text_unformatted(row.album)
-				imx.scrolling_text(row.album, table.uptime, imgui.GetContentRegionAvail().x, row.album_width)
+				imx.text_unformatted(row.album)
+				//imx.scrolling_text(row.album, table.uptime, imgui.GetContentRegionAvail().x, row.album_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Genre) {
-				//imx.text_unformatted(row.genre)
-				imx.scrolling_text(row.genre, table.uptime, imgui.GetContentRegionAvail().x, row.genre_width)
+				imx.text_unformatted(row.genre)
+				//imx.scrolling_text(row.genre, table.uptime, imgui.GetContentRegionAvail().x, row.genre_width)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast Track_Property_ID.Duration) {
@@ -333,8 +364,8 @@ track_table_show :: proc(
 				keep_selection: bool
 				buf: [1024]u8
 
-				//select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
-				select |= imx.scrolling_selectable(buf[:], string(row.title), table.uptime, imgui.GetContentRegionAvail().x, nil, row.selected, {.SpanAllColumns})
+				select |= imgui.Selectable(row.title, row.selected, {.SpanAllColumns})
+				imgui.SetItemTooltip(row.title)
 				
 				if imgui.BeginDragDropSource() {
 					tracks := track_table_get_selection(table)
@@ -618,4 +649,83 @@ track_table_process_context :: proc(
 			server.playlist_add_tracks(playlist, &sv.library, selection)
 		}
 	}
+}
+
+// -----------------------------------------------------------------------------
+// Example usage of replacement table API
+// -----------------------------------------------------------------------------
+
+Track_Table_2 :: struct {
+	serial: uint,
+	state: imx.Table_State,
+	columns: [len(Track_Property_ID)]imx.Table_Column,
+	arena: mem.Dynamic_Arena,
+	uptime: f64,
+	initialized: bool,
+}
+
+Track_Table_2_Result :: struct {
+}
+
+track_table2_update :: proc(
+	cl: Client,
+	table: ^Track_Table_2,
+	serial: uint,
+	lib: server.Library,
+	tracks: []Track_ID,
+	playlist_id: Global_Playlist_ID,
+	filter: string,
+	flags: Track_Table_Flags = {},
+) {
+	table.uptime = cl.uptime
+
+	if !table.initialized do mem.dynamic_arena_init(&table.arena)
+
+	if serial == table.serial do return
+	table.serial = serial
+
+	mem.dynamic_arena_free_all(&table.arena)
+	allocator := mem.dynamic_arena_allocator(&table.arena)
+
+	build_string_property_rows :: proc(
+		lib: server.Library, tracks: []Track_ID, property: Track_Property_ID,
+		visible_track_count: int, allocator: mem.Allocator
+	) -> []imx.Table_Row {
+		row_count := visible_track_count
+		rows := make([]imx.Table_Row, row_count, allocator)
+
+		for track_id, index in tracks {
+			track := server.library_find_track(lib, track_id) or_continue
+			rows[index].text = track.properties[property].(string) or_else ""
+			rows[index].text_width = imx.calc_text_size(rows[index].text).x
+		}
+
+		return rows
+	}
+
+	visible_track_count := 0
+
+	for track_id in tracks {
+		server.library_find_track(lib, track_id) or_continue
+		visible_track_count += 1
+	}
+
+	table.columns[0].rows = build_string_property_rows(lib, tracks, .Album, visible_track_count, allocator)
+	table.columns[0].name = "Album"
+	table.columns[1].rows = build_string_property_rows(lib, tracks, .Artist, visible_track_count, allocator)
+	table.columns[1].name = "Artist"
+	table.columns[2].rows = build_string_property_rows(lib, tracks, .Title, visible_track_count, allocator)
+	table.columns[2].name = "Title"
+	table.columns[3].rows = build_string_property_rows(lib, tracks, .Genre, visible_track_count, allocator)
+	table.columns[3].name = "Genre"
+}
+
+track_table2_show :: proc(
+	table: ^Track_Table_2,
+	str_id: cstring,
+	context_menu_id: imgui.ID,
+	playing: Track_ID,
+) -> (result: Track_Table_2_Result) {
+	imx.table_show(str_id, table.columns[:4], table.uptime)
+	return
 }

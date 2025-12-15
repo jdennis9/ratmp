@@ -17,6 +17,7 @@
 */
 package imgui_extensions
 
+import "core:log"
 /*
 ******************* CURRENTLY UNUSED *******************
 
@@ -33,7 +34,7 @@ import imgui "src:thirdparty/odin-imgui"
 TABLE_MAX_COLUMNS :: 16
 TABLE_MAX_COLUMN_NAME_LEN :: 24
 
-Table_Flag :: enum {
+/*Table_Flag :: enum {
 	Sortable,
 	Resizable,
 	Reorderable,
@@ -101,6 +102,8 @@ begin_table :: proc(
 ) -> (state: ^Table_State, ok: bool) {
 	initialized: bool
 
+	if row_count == 0 do return
+
 	table_id := imgui.GetID(str_id)
 	avail_region := imgui.GetContentRegionAvail()
 	
@@ -111,6 +114,8 @@ begin_table :: proc(
 	
 	size.x = clamp(size.x, 0, avail_region.x)
 	size.y = clamp(size.y, 0, avail_region.y)
+
+	if size.y <= 10 || size.x <= 10 do return
 	
 	state, initialized = ctx_add_or_get_table(table_id)
 	
@@ -320,12 +325,13 @@ end_table :: proc(table: ^Table_State) {
 
 		old_cursor_pos := imgui.GetCursorScreenPos()
 
-		imgui.SetCursorScreenPos({x_pos - cell_padding.x, y_pos - cell_padding.y})
-		defer imgui.SetCursorScreenPos(old_cursor_pos)
+		//imgui.SetCursorScreenPos({x_pos - cell_padding.x, y_pos - cell_padding.y})
+		//defer imgui.SetCursorScreenPos(old_cursor_pos)
 
 		header_size := [2]f32{width, table.row_height + cell_padding.y}
 
 		imgui.InvisibleButton(text_start, header_size)
+		imgui.SameLine()
 
 		if imgui.IsItemHovered() {
 			pmin := [2]f32{x_pos, y_pos} - cell_padding
@@ -463,9 +469,10 @@ _table_row_bg :: proc(table: ^Table_State, color: u32) {
 table_row_text :: proc(table: ^Table_State, str: string) {
 	//style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
-	//cursor := _table_begin_row(table)
+	cursor := _table_begin_row(table)
+	defer _table_end_row(table)
+
 	imgui.DrawList_AddText(drawlist, table.cursor, max(u32), cstring(raw_data(str)), cstring(&raw_data(str)[len(str)]))
-	_table_end_row(table)
 }
 
 table_row_text_fmt :: proc(table: ^Table_State, $MAX_CHARS: uint, args: ..any) {
@@ -477,6 +484,7 @@ table_row_selectable :: proc(table: ^Table_State, label: string, selected: bool)
 	assert(table.column_index == table.master_column)
 	drawlist := imgui.GetWindowDrawList()
 	cursor := _table_begin_row(table)
+	defer _table_end_row(table)
 
 	imgui.SetCursorScreenPos(cursor)
 	active := imgui.InvisibleButton("##selectable", {table.size.x, table.row_height})
@@ -491,7 +499,6 @@ table_row_selectable :: proc(table: ^Table_State, label: string, selected: bool)
 
 	imgui.DrawList_AddText(drawlist, table.cursor, max(u32), cstring(raw_data(label)), cstring(&raw_data(label)[len(label)]))
 
-	_table_end_row(table)
 	return active
 }
 
@@ -549,4 +556,210 @@ table_test :: proc() {
 
 		end_table(table)
 	}
+}
+*/
+
+Table_State :: struct {
+	columns: [TABLE_MAX_COLUMNS]int,
+	column_weights: [TABLE_MAX_COLUMNS]f32,
+	column_hidden: [TABLE_MAX_COLUMNS]bool,
+	visible_column_count: int,
+	column_count: int,
+	column_index: int,
+	size: [2]f32,
+	offset: [2]f32,
+}
+
+Table_Row :: struct {
+	text: string,
+	text_width: Maybe(f32),
+}
+
+Table_Column :: struct {
+	name: cstring,
+	flags: imgui.TableColumnFlags,
+	rows: []Table_Row,
+}
+
+/*begin_table :: proc(str_id: cstring, state: ^Table_State, columns: []Table_Column, size_arg: Maybe([2]f32) = nil) -> bool {
+	drawlist := imgui.GetWindowDrawList()
+	
+	state.column_count = len(columns)
+	state.visible_column_count = 0
+	state.offset = {}
+	
+	for col in state.column_hidden[:state.column_count] {
+		if !col do state.visible_column_count += 1
+	}
+	
+	for &w in state.column_weights[:state.column_count] {
+		w = 1 / f32(state.visible_column_count)
+	}
+	
+	//imgui.BeginChild(str_id, state.size) or_return
+	size := size_arg.? or_else imgui.GetContentRegionAvail()
+	state.size = size
+
+	offset := f32(0)
+	for col, i in columns {
+		buf: [TABLE_MAX_COLUMN_NAME_LEN+1]u8
+		width := state.column_weights[i] * size.x
+		copy(buf[:len(buf-1)], col.name)
+
+		imgui.Selectable(cstring(&buf[0]), false, {}, {width, imgui.GetTextLineHeight()})
+		//imgui.SmallButton(cstring(&buf[0])/*, {width, imgui.GetTextLineHeight()}*/)
+		if i + 1 != len(columns) do imgui.SameLine()
+
+		offset += width
+	}
+
+	return true
+}
+
+table_begin_column :: proc(table: ^Table_State, index: int) -> bool {
+	table.column_index = index
+	table.offset = {}
+	if table.column_hidden[index] do return false
+
+	for weight, i in table.column_weights[:table.column_count] {
+		if i >= index do break
+		if table.column_hidden[i] do continue
+		table.offset += weight * table.size.x
+	}
+
+	return true
+}
+
+table_end_column :: proc(table: ^Table_State) {
+}
+
+table_text :: proc(table: ^Table_State, str: string) {
+}
+
+table_selectable :: proc(table: ^Table_State, str: string, selected: bool) -> bool {
+	return false
+}
+
+end_table :: proc(table: ^Table_State) {
+	//imgui.EndChild()
+}
+
+table_test :: proc() -> bool {
+	defer imgui.End()
+	imgui.Begin("Table Test") or_return
+
+	@static table: Table_State
+
+	columns := []Table_Column {
+		{
+			flags = {.Master, .NoHide},
+			name = "Title",
+		},
+		{
+			name = "Album",
+		},
+		{
+			name = "Artist",
+		},
+	}
+
+	if begin_table("Test", &table, columns) {
+		end_table(&table)
+	}
+
+	return true
+}*/
+
+table_show :: proc(str_id: cstring, columns: []Table_Column, scrolling_text_timer: f64) -> bool {
+	row_count := len(columns[0].rows)
+	master_column := -1
+	visible_columns := 0
+	window_size := imgui.GetContentRegionAvail()
+
+	// -------------------------------------------------------------------------
+	// Content
+	// -------------------------------------------------------------------------
+	{
+		table_flags := imgui.TableFlags_SizingStretchProp | imgui.TableFlags_Resizable
+		imgui.BeginTable(str_id, auto_cast len(columns), table_flags) or_return
+		defer imgui.EndTable()
+
+		for col in columns {
+			imgui.TableSetupColumn(col.name, col.flags)
+		}
+
+		imgui.TableSetupScrollFreeze(1, 1)
+		imgui.TableHeadersRow()
+
+		imgui.TableNextRow()
+
+		offset := f32(0)
+		y_root := imgui.GetTextLineHeight()
+
+		drawlist := imgui.GetWindowDrawList()
+
+		for col, col_index in columns {
+			/*if state.column_hidden[col_index] do continue
+			width := state.column_weights[col_index] * size.x*/
+
+			//imgui.BeginChild(col.name, {width, imgui.GetContentRegionAvail().y}, {}, {.NoScrollbar, .NoScrollWithMouse})
+			//defer imgui.EndChild()
+
+			imgui.TableSetColumnIndex(auto_cast col_index) or_continue
+			size := imgui.GetContentRegionAvail()
+
+			//x_padding := imgui.GetStyle().CellPadding.x
+			x_padding :: 0
+			cursor := imgui.GetCursorScreenPos()
+
+			imgui.PushClipRect(/*drawlist, */cursor + {x_padding, 0}, cursor + size - {x_padding, 0}, true)
+			defer imgui.PopClipRect(/*drawlist*/)
+
+			for row, row_index in col.rows {
+				scrolling_text(row.text, scrolling_text_timer, size.x, row.text_width, .DrawOffset)
+			}
+
+			//offset += width
+		}
+	}
+
+	return true
+}
+
+table_test :: proc(uptime: f64) -> bool {
+	@static state: Table_State
+
+	defer imgui.End()
+	imgui.Begin("Table Test") or_return
+
+	columns := []Table_Column {
+		{
+			name = "Title",
+			rows = {
+				{text = "ESEF"},
+				{text = "KETCHUP"},
+				{text = "UNCANNY VALLEY"},
+			},
+		},
+		{
+			name = "Artist",
+			rows = {
+				{text = "Billain"},
+				{text = "Billain"},
+				{text = "Billain"},
+			},
+		},
+		{
+			name = "Album",
+			rows = {
+				{text = ""},
+				{text = ""},
+				{text = ""},
+			},
+		}
+	}
+
+	table_show("Test Table", columns, uptime)
+
+	return true
 }

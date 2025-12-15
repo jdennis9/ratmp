@@ -273,6 +273,20 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	cl.tick_last_frame = prev_frame_start
 	cl.delta = delta
 
+	when ODIN_DEBUG {
+		imx.table_test(cl.uptime)
+
+		{
+			@static table: Track_Table_2
+
+			track_table2_update(cl^, &table, sv.library.serial, sv.library,
+				server.library_get_all_track_ids(sv.library), {.Loose, 1}, ""
+			)
+
+			track_table2_show(&table, "teststs", 0, sv.current_track_id)
+		}
+	}
+
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {
 		cl.media_controls.enabled = true

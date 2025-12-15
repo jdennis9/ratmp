@@ -51,9 +51,21 @@ separator_text :: proc(str: string) {
 }
 
 hyperlink :: proc(str: string) {
+	buf: [512]u8
+	copy(buf[:511], str)
+	imgui.TextLink(cstring(&buf[0]))
+}
+
+set_tooltip :: proc(str: string) {
 	buf: [128]u8
 	copy(buf[:127], str)
-	imgui.TextLink(cstring(&buf[0]))
+	imgui.SetTooltip(cstring(&buf[0]))
+}
+
+set_item_tooltip :: proc(str: string) {
+	buf: [512]u8
+	copy(buf[:511], str)
+	imgui.SetItemTooltip(cstring(&buf[0]))
 }
 
 begin_status_bar :: proc() -> bool {
@@ -82,40 +94,65 @@ end_status_bar :: proc() {
 SCROLLING_TEXT_CHARS_INTERVAL :: 0.5
 
 // Pixels per second (used by unused scrolling code)
-SCROLLING_TEXT_SPEED :: 10
+SCROLLING_TEXT_SPEED :: 40
+// Pixels of spacing between incoming and outgoing scrolling text
+SCROLLING_TEXT_SPACING :: 16
 
-scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil) {
+Scrolling_Text_Mode :: enum {StartIndex, DrawOffset}
+
+scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil, mode := Scrolling_Text_Mode.StartIndex) {
 	ptr := raw_data(text)
 	text_width := text_width_arg.? or_else calc_text_size(text).x
 
-	avg_char_width := text_width / f32(len(text))
-	chars_fit_in_width := int(max_width / avg_char_width)
+	switch mode {
+		case .StartIndex:
+			avg_char_width := text_width / f32(len(text))
+			chars_fit_in_width := int(max_width / avg_char_width)
 
-	if text_width < max_width || chars_fit_in_width >= len(text) {
-		text_unformatted(text)
-		return
+			if text_width < max_width || chars_fit_in_width >= len(text) {
+				text_unformatted(text)
+				return
+			}
+
+			offset := int(timer / SCROLLING_TEXT_CHARS_INTERVAL) % (len(text) - chars_fit_in_width)
+			imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
+
+		case .DrawOffset:
+			bullet_pos: [2]f32
+			offset: f32
+
+			drawlist := imgui.GetWindowDrawList()
+			cursor := imgui.GetCursorScreenPos()
+
+			if text_width < max_width {
+				imgui.DrawList_AddText(drawlist, cursor, imgui.GetColorU32(.Text), cstring(&ptr[0]), cstring(&ptr[len(text)]))
+				imgui.NewLine()
+				return
+			}
+
+			wrap :: proc(v: f32, w: f32) -> f32 {
+				return v - (f32(int(v / w)) * w)
+			}
+
+			offset = wrap(f32(timer * SCROLLING_TEXT_SPEED), text_width + SCROLLING_TEXT_SPACING)
+			bullet_pos.x = cursor.x - offset + (SCROLLING_TEXT_SPACING/2) + text_width
+			bullet_pos.y = cursor.y + (imgui.GetTextLineHeight() / 2)
+
+			imgui.DrawList_AddText(
+				drawlist, cursor - {offset, 0}, imgui.GetColorU32(.Text),
+				cstring(&ptr[0]), cstring(&ptr[len(text)])
+			)
+			imgui.DrawList_AddText(
+				drawlist, cursor - {offset, 0} + {text_width + SCROLLING_TEXT_SPACING, 0},
+				imgui.GetColorU32(.Text),
+				cstring(&ptr[0]), cstring(&ptr[len(text)])
+			)
+			imgui.DrawList_AddRectFilled(
+				drawlist, bullet_pos - {2, 2}, bullet_pos + {2, 2},
+				imgui.GetColorU32(.TextDisabled)
+			)
+			imgui.NewLine()
 	}
-
-	offset := int(timer / SCROLLING_TEXT_CHARS_INTERVAL) % (len(text) - chars_fit_in_width)
-	imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
-
-	// Keeping this here because it will work well with my planned
-	// replacement of the ImGui table API
-	/*ptr := raw_data(text)
-	text_width := text_width_arg.? or_else calc_text_size(text).x
-	ratio := max_width / text_width
-	drawlist := imgui.GetWindowDrawList()
-
-	wrap :: proc(v: f32, w: f32) -> f32 {
-		return v - (f32(int(v / w)) * w)
-	}
-
-	x_offset := (1 - ratio) * max_width
-	//o := f32(timer * SCROLLING_TEXT_SPEED)
-	x_offset += wrap(f32(timer * SCROLLING_TEXT_SPEED), max_width)
-	cursor := imgui.GetCursorScreenPos()
-
-	imgui.DrawList_AddText(drawlist, cursor - {x_offset, 0}, imgui.GetColorU32(.Text), cstring(&ptr[0]), cstring(&ptr[len(text)]))*/
 }
 
 scrolling_selectable :: proc(buf: []u8, text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil, selected := false, flags := imgui.SelectableFlags{}) -> bool {
