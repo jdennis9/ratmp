@@ -708,22 +708,20 @@ track_table_update :: proc(
 			switch prop {
 				case .Album, .Genre, .Title, .Artist:
 					row.text = track.properties[prop].(string) or_else ""
-					row.text_width = imx.calc_text_size(row.text).x
-
 				case .DateAdded, .FileDate:
 					ts := time.unix(track.properties[prop].(i64) or_break, 0)
 					y, m, d := time.year(ts), time.month(ts), time.day(ts)
 					row.text = fmt.aprintf("%02d-%02d-%02d", y, m, d)
-					row.text_width = imx.calc_text_size(row.text).x
-
-				case .TrackNumber, .Bitrate, .Year:
-					table.columns[prop].flags = {.DefaultHide}
-
+				case .TrackNumber, .Year:
+					row.text = fmt.aprint(track.properties[prop].(i64) or_else 0)
+				case .Bitrate:
+					row.text = fmt.aprint(track.properties[prop].(i64), "kb/s")
 				case .Duration:
 					h, m, s := time.clock_from_seconds(auto_cast (track.properties[.Duration].(i64) or_else 0))
 					row.text = fmt.aprintf("%02d:%02d:%02d", h, m, s, allocator = allocator)
-					row.text_width = imx.calc_text_size(row.text).x
 			}
+
+			row.text_width = imx.calc_text_size(row.text).x
 		}
 	}
 }
