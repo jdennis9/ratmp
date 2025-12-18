@@ -17,7 +17,7 @@ track_properties_from_file :: proc(
 		file := taglib.file_new_wchar(raw_data(util.win32_utf8_to_utf16(filename, context.temp_allocator)))
 	}
 	else {
-		file := taglib.file_new(strings.clone_to_cstring(path, context.temp_allocator))
+		file := taglib.file_new(strings.clone_to_cstring(filename, context.temp_allocator))
 	}
 
 	props[.FileDate] = get_file_date(filename)
