@@ -221,7 +221,11 @@ wavebar_window_show :: proc(sv: ^Server, state: ^Wavebar_Window) -> (ok: bool) {
 	position := f32(server.get_track_second(sv))
 	duration := f32(server.get_track_duration_seconds(sv))
 
-	if imx.wave_seek_bar("##waveform", state.output[:], &position, duration) {
+	if imx.wave_seek_bar(
+		"##waveform", state.output[:], &position, duration,
+		global_theme.custom_colors[.WavebarQuiet],
+		global_theme.custom_colors[.WavebarLoud]
+	) {
 		server.seek_to_second(sv, int(position))
 	}
 
@@ -825,14 +829,22 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				alpha := 1 - (f32(i) / f32(len(samples)))
 				alpha = clamp(alpha, 0, 1)
 				v := project_sample_to_screen_cross(win_center, size, p)
-				imgui.DrawList_AddRectFilled(drawlist, v, v + {2, 2}, imgui.GetColorU32(.PlotLines, alpha))
+				imgui.DrawList_AddRectFilled(
+					drawlist, v, v + {2, 2}, imgui.GetColorU32ImVec4(
+						global_theme.custom_colors[.Vectorscope] * {1, 1, 1, alpha}
+					),
+				)
 			}
 			case .Mirage:
 			for p, i in samples {
 				alpha := 1 - (f32(i) / f32(len(samples)))
 				alpha = clamp(alpha, 0, 1)
 				v := project_sample_to_screen_mirage(win_center, size, p)
-				imgui.DrawList_AddRectFilled(drawlist, v, v + {2, 2}, imgui.GetColorU32(.PlotLines, alpha))
+				imgui.DrawList_AddRectFilled(
+					drawlist, v, v + {2, 2}, imgui.GetColorU32ImVec4(
+						global_theme.custom_colors[.Vectorscope] * {1, 1, 1, alpha}
+					),
+				)
 			}
 		}
 	}

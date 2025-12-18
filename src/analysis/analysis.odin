@@ -75,7 +75,7 @@ calc_peaks_over_time :: proc(dec: ^decoder.Decoder, output: []f32, state: ^Calc_
 			peak = max(abs(v), peak)
 		}
 
-		output[state.output_count] = clamp(peak, 0, 1)
+		output[state.output_count] = peak
 		state.output_count += 1
 
 		if status == .Eof {break}

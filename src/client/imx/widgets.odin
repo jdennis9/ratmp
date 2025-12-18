@@ -75,10 +75,14 @@ scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.
 }
 
 wave_seek_bar :: proc(
-	str_id: cstring, peaks: []f32, position: ^f32, length: f32, size_arg := [2]f32{}
+	str_id: cstring, peaks: []f32, position: ^f32, length: f32,
+	quite_color: [4]f32,
+	loud_color: [4]f32,
+	size_arg := [2]f32{}
 ) -> (activated: bool) {
 	if len(peaks) == 0 {return}
 
+	style := imgui.GetStyle();
 	drawlist := imgui.GetWindowDrawList()
 	cursor := imgui.GetCursorScreenPos()
 	avail_size := imgui.GetContentRegionAvail()
@@ -97,7 +101,8 @@ wave_seek_bar :: proc(
 	up_to_index := int(f32(len(peaks)) * (position^/length))
 
 	for peak, index in peaks {
-		peak_height := peak * bar_height
+		color: [4]f32
+		peak_height := clamp(peak, 0, 1) * bar_height
 		pmin := [2]f32{x_pos, middle - peak_height}
 		pmax := [2]f32{x_pos + bar_width, middle + peak_height}
 
@@ -106,8 +111,9 @@ wave_seek_bar :: proc(
 			pmax.y = pmin.y + 2
 		}
 
-		color := imgui.GetStyleColorVec4(.PlotLines)^
-		if index > up_to_index {color.w *= 0.5}
+		color = linalg.lerp(quite_color, loud_color, clamp(peak, 0, 1))
+
+		if index > up_to_index do color.w *= 0.5
 		imgui.DrawList_AddRectFilled(drawlist, pmin, pmax, imgui.GetColorU32ImVec4(color))
 		x_pos += bar_width
 	}

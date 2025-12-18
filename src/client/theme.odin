@@ -34,6 +34,9 @@ Theme_Custom_Color :: enum {
 	PlayingHighlight,
 	PeakQuiet,
 	PeakLoud,
+	Vectorscope,
+	WavebarQuiet,
+	WavebarLoud,
 }
 
 Theme :: struct {
@@ -61,6 +64,9 @@ _CUSTOM_COLOR_NAMES := [Theme_Custom_Color]cstring {
 	.PlayingHighlight = "Playing highlight",
 	.PeakQuiet = "Peak quiet",
 	.PeakLoud = "Peak loud",
+	.Vectorscope = "Vectorscope",
+	.WavebarQuiet = "Wavebar quiet",
+	.WavebarLoud = "Wavebar loud",
 }
 
 theme_set_defaults :: proc(theme: ^Theme) {
@@ -72,6 +78,9 @@ theme_set_defaults :: proc(theme: ^Theme) {
 	theme.custom_colors[.PlayingHighlight] = {1, 0.576, 0.227, 0.9}
 	theme.custom_colors[.PeakQuiet] = {0.5, 0.5, 0.5, 0.9}
 	theme.custom_colors[.PeakLoud] = {0.1, 1, 0.1, 1}
+	theme.custom_colors[.Vectorscope] = style.Colors[imgui.Col.PlotLines]
+	theme.custom_colors[.WavebarQuiet] = style.Colors[imgui.Col.PlotLines]
+	theme.custom_colors[.WavebarLoud] = style.Colors[imgui.Col.PlotLinesHovered]
 }
 
 theme_generate :: proc(theme: ^Theme, params: Theme_Gen_Params) {
