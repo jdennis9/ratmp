@@ -94,11 +94,48 @@ end_status_bar :: proc() {
 SCROLLING_TEXT_CHARS_INTERVAL :: 0.5
 
 // Pixels per second (used by unused scrolling code)
-SCROLLING_TEXT_SPEED :: 40
+SCROLLING_TEXT_SPEED :: 60
 // Pixels of spacing between incoming and outgoing scrolling text
 SCROLLING_TEXT_SPACING :: 16
 
 Scrolling_Text_Mode :: enum {StartIndex, DrawOffset}
+
+draw_scrolling_text :: proc(pos: [2]f32, text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil) {
+	ptr := raw_data(text)
+	text_width := text_width_arg.? or_else calc_text_size(text).x
+	bullet_pos: [2]f32
+	offset: f32
+
+	drawlist := imgui.GetWindowDrawList()
+	cursor := pos
+
+	if text_width < max_width {
+		imgui.DrawList_AddText(drawlist, cursor, imgui.GetColorU32(.Text), cstring(&ptr[0]), cstring(&ptr[len(text)]))
+		return
+	}
+
+	wrap :: proc(v: f32, w: f32) -> f32 {
+		return v - (f32(int(v / w)) * w)
+	}
+
+	offset = wrap(f32(timer * SCROLLING_TEXT_SPEED), text_width + SCROLLING_TEXT_SPACING)
+	bullet_pos.x = cursor.x - offset + (SCROLLING_TEXT_SPACING/2) + text_width
+	bullet_pos.y = cursor.y + (imgui.GetTextLineHeight() / 2)
+
+	imgui.DrawList_AddText(
+		drawlist, cursor - {offset, 0}, imgui.GetColorU32(.Text),
+		cstring(&ptr[0]), cstring(&ptr[len(text)])
+	)
+	imgui.DrawList_AddText(
+		drawlist, cursor - {offset, 0} + {text_width + SCROLLING_TEXT_SPACING, 0},
+		imgui.GetColorU32(.Text),
+		cstring(&ptr[0]), cstring(&ptr[len(text)])
+	)
+	imgui.DrawList_AddRectFilled(
+		drawlist, bullet_pos - {2, 2}, bullet_pos + {2, 2},
+		imgui.GetColorU32(.TextDisabled)
+	)
+}
 
 scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil, mode := Scrolling_Text_Mode.StartIndex) {
 	ptr := raw_data(text)
@@ -118,39 +155,7 @@ scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg:
 			imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
 
 		case .DrawOffset:
-			bullet_pos: [2]f32
-			offset: f32
-
-			drawlist := imgui.GetWindowDrawList()
-			cursor := imgui.GetCursorScreenPos()
-
-			if text_width < max_width {
-				imgui.DrawList_AddText(drawlist, cursor, imgui.GetColorU32(.Text), cstring(&ptr[0]), cstring(&ptr[len(text)]))
-				imgui.NewLine()
-				return
-			}
-
-			wrap :: proc(v: f32, w: f32) -> f32 {
-				return v - (f32(int(v / w)) * w)
-			}
-
-			offset = wrap(f32(timer * SCROLLING_TEXT_SPEED), text_width + SCROLLING_TEXT_SPACING)
-			bullet_pos.x = cursor.x - offset + (SCROLLING_TEXT_SPACING/2) + text_width
-			bullet_pos.y = cursor.y + (imgui.GetTextLineHeight() / 2)
-
-			imgui.DrawList_AddText(
-				drawlist, cursor - {offset, 0}, imgui.GetColorU32(.Text),
-				cstring(&ptr[0]), cstring(&ptr[len(text)])
-			)
-			imgui.DrawList_AddText(
-				drawlist, cursor - {offset, 0} + {text_width + SCROLLING_TEXT_SPACING, 0},
-				imgui.GetColorU32(.Text),
-				cstring(&ptr[0]), cstring(&ptr[len(text)])
-			)
-			imgui.DrawList_AddRectFilled(
-				drawlist, bullet_pos - {2, 2}, bullet_pos + {2, 2},
-				imgui.GetColorU32(.TextDisabled)
-			)
+			draw_scrolling_text(imgui.GetCursorScreenPos(), text, timer, max_width, text_width_arg)
 			imgui.NewLine()
 	}
 }

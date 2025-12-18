@@ -52,7 +52,7 @@ Track_Row :: struct {
 Track_Table_Flag :: enum {NoSort,}
 Track_Table_Flags :: bit_set[Track_Table_Flag]
 
-Track_Table :: struct {
+Track_Table_Old :: struct {
 	rows: [dynamic]Track_Row,
 	serial: uint,
 	font_serial: uint,
@@ -76,7 +76,14 @@ Track_Table_Result :: struct {
 	bounding_box: imgui.Rect,
 }
 
-track_table_free :: proc(table: ^Track_Table) {
+Track_Table_Result_Process_Flag :: enum {
+	// Tells proc to try set the queue position to a track when trying to play it, 
+	// rather than queueing the entire playlist
+	SetQueuePos,
+}
+Track_Table_Result_Process_Flags :: bit_set[Track_Table_Result_Process_Flag]
+
+/*track_table_free :: proc(table: ^Track_Table) {
 	delete(table.rows)
 	table.rows = nil
 	table.serial = 0
@@ -187,30 +194,6 @@ track_table_show :: proc(
 	context_menu_id: imgui.ID,
 	playing: Track_ID,
 ) -> (result: Track_Table_Result) {
-
-	/*columns: [Track_Property_ID]imx.Table_Column = {
-		.Album = {
-		},
-		.Genre = {
-		},
-		.Artist = {
-		},
-		.Title = {
-		},
-		.TrackNumber = {
-		},
-		.Duration = {
-		},
-		.Bitrate = {
-		},
-		.Year = {
-		},
-		.DateAdded = {
-		},
-		.FileDate = {
-		},
-	}*/
-
 	list_clipper: imgui.ListClipper
 	first_selected_row: Maybe(int)
 	jump_to_track: Maybe(int)
@@ -436,12 +419,6 @@ track_table_show :: proc(
 	return
 }
 
-Track_Table_Result_Process_Flag :: enum {
-	// Tells proc to try set the queue position to a track when trying to play it, 
-	// rather than queueing the entire playlist
-	SetQueuePos,
-}
-Track_Table_Result_Process_Flags :: bit_set[Track_Table_Result_Process_Flag]
 
 track_table_process_result :: proc(
 	table: Track_Table, result: Track_Table_Result,
@@ -476,7 +453,7 @@ track_table_accept_drag_drop :: proc(result: Track_Table_Result, allocator: runt
 	defer imgui.EndDragDropTarget()
 
 	return get_track_drag_drop_payload(allocator)
-}
+}*/
 
 Track_Context_Flag :: enum {NoRemove, NoQueue, NoEditMetadata}
 Track_Context_Flags :: bit_set[Track_Context_Flag]
@@ -504,7 +481,7 @@ show_add_to_playlist_menu :: proc(lib: Library, result: ^Track_Context_Result) {
 	}
 }
 
-track_table_show_context :: proc(
+/*track_table_show_context :: proc(
 	table: Track_Table, table_result: Track_Table_Result,
 	context_id: imgui.ID, flags: Track_Context_Flags, sv: Server,
 ) -> (result: Track_Context_Result, shown: bool) #optional_ok {
@@ -514,7 +491,7 @@ track_table_show_context :: proc(
 	shown = true
 
 	if table_result.selection_count == 1 {
-		track_id := table.rows[table_result.lowest_selection_index].id
+		track_id := cast(Track_ID) table.rows[table_result.lowest_selection_index].id
 		result.single_track = track_id
 		show_track_context_items(track_id, &result, sv.library)
 	}
@@ -533,7 +510,7 @@ track_table_show_context :: proc(
 	}
 
 	return
-}
+}*/
 
 show_track_context_items :: proc(
 	track_id: Track_ID,
@@ -614,6 +591,257 @@ process_track_context :: proc(
 	}
 }
 
+/*track_table_process_context :: proc(
+	table: Track_Table, table_result: Track_Table_Result,
+	result: Track_Context_Result, cl: ^Client, sv: ^Server,
+) {
+	if result.single_track != nil {
+		process_track_context(result.single_track.?, result, cl, sv, table.playlist_id, false)
+	}
+	else {
+		if result.play {
+			selection := track_table_get_selection(table)
+			defer delete(selection)
+			server.play_playlist(sv, selection, table.playlist_id)
+		}
+		if result.add_to_queue {
+			selection := track_table_get_selection(table)
+			defer delete(selection)
+			server.append_to_queue(sv, selection, table.playlist_id)
+		}
+		if result.edit_metadata {
+			selection := track_table_get_selection(table)
+			defer delete(selection)
+			if editor, ok := bring_window_to_front(cl, WINDOW_METADATA_EDITOR); ok {
+				metadata_editor_window_select_tracks(auto_cast editor, selection)
+			}
+		}
+	}
+
+	if result.add_to_playlist != nil {
+		playlist, _, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
+		if playlist_found {
+			selection := track_table_get_selection(table)
+			defer delete(selection)
+			server.playlist_add_tracks(playlist, &sv.library, selection)
+		}
+	}
+}*/
+
+// -----------------------------------------------------------------------------
+// Example usage of replacement table API
+// -----------------------------------------------------------------------------
+
+Track_Table :: struct {
+	serial: uint,
+	state: imx.Table_State,
+	columns: [len(Track_Property_ID)]imx.Table_Column_Info,
+	rows: []imx.Table_Row,
+	arena: mem.Dynamic_Arena,
+	uptime: f64,
+	initialized: bool,
+	playlist_id: Global_Playlist_ID,
+}
+
+track_table_update :: proc(
+	cl: Client,
+	table: ^Track_Table,
+	serial: uint,
+	lib: server.Library,
+	tracks: []Track_ID,
+	playlist_id: Global_Playlist_ID,
+	filter: string,
+	flags: Track_Table_Flags = {},
+) {
+	table.uptime = cl.uptime
+
+	if !table.initialized do mem.dynamic_arena_init(&table.arena)
+
+	if serial == table.serial && table.playlist_id == playlist_id do return
+
+	util.SCOPED_TIMER("Update track table")
+
+	table.serial = serial
+	table.playlist_id = playlist_id
+
+	mem.dynamic_arena_free_all(&table.arena)
+	allocator := mem.dynamic_arena_allocator(&table.arena)
+
+	visible_track_count := len(tracks)
+
+	table.rows = make([]imx.Table_Row, visible_track_count, allocator)
+	for track_id, i in tracks {
+		table.rows[i].id = auto_cast track_id
+	}
+
+	column_names := [Track_Property_ID]cstring {
+		.Album = "Album",
+		.Genre = "Genre",
+		.Artist = "Artist",
+		.Title = "Title",
+		.TrackNumber = "Track",
+		.Duration = "Duration",
+		.Bitrate = "Bitrate",
+		.Year = "Year",
+		.DateAdded = "Date Added",
+		.FileDate = "File Date",
+	}
+
+	for prop in Track_Property_ID {
+		table.columns[prop].rows = make([]imx.Table_Row_Content, len(tracks), allocator)
+		table.columns[prop].name = column_names[prop]
+	}
+
+	for track_id, row_index in tracks {
+		track := server.library_find_track(lib, track_id) or_continue
+		
+		for prop in Track_Property_ID {
+			rows := table.columns[prop].rows
+			row := &rows[row_index]
+
+			switch prop {
+				case .Album, .Genre, .Title, .Artist:
+					row.text = track.properties[prop].(string) or_else ""
+					row.text_width = imx.calc_text_size(row.text).x
+
+				case .DateAdded, .FileDate:
+					table.columns[prop].flags = {.DefaultHide}
+					ts := time.unix(0, track.properties[prop].(i64) or_break)
+					y, m, d := time.year(ts), time.month(ts), time.day(ts)
+					row.text = fmt.aprintf("%02d-%02d-%02d", y, m, d)
+					row.text_width = imx.calc_text_size(row.text).x
+
+				case .TrackNumber, .Bitrate, .Year:
+					table.columns[prop].flags = {.DefaultHide}
+
+				case .Duration:
+					h, m, s := time.clock_from_seconds(auto_cast (track.properties[.Duration].(i64) or_else 0))
+					row.text = fmt.aprintf("%02d:%02d:%02d", h, m, s, allocator = allocator)
+					row.text_width = imx.calc_text_size(row.text).x
+			}
+		}
+	}
+}
+
+track_table_show :: proc(
+	table: Track_Table,
+	str_id: cstring,
+	context_menu_id: imgui.ID,
+	playing: Track_ID,
+) -> (result: Track_Table_Result) {
+	columns := table.columns
+
+	display := imx.Table_Display_Info {
+		columns = columns[:],
+		rows = table.rows,
+		highlight_color = imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]),
+		highlight_row_id = auto_cast playing,
+		context_menu_id = context_menu_id,
+	}
+	r, _ := imx.table_show(str_id, display, table.uptime)
+
+	if r.middle_clicked_row != nil do result.play = cast(Track_ID) r.middle_clicked_row.?
+	if r.left_clicked_row != nil do result.select = cast(Track_ID) r.left_clicked_row.?
+
+	if r.sort_by_column != nil {
+		order: server.Sort_Order
+		column := table.columns[r.sort_by_column.?]
+		property_id := cast(Track_Property_ID) r.sort_by_column.?
+
+		switch r.sort_order {
+			case .None, .Ascending: order = .Ascending
+			case .Descending: order = .Descending
+		}
+
+		result.sort_spec = server.Track_Sort_Spec {
+			metric = property_id,
+			order = order,
+		}
+	}
+
+	return
+}
+
+track_table_get_tracks :: proc(table: Track_Table) -> []Track_ID {
+	ids := make([]Track_ID, len(table.rows))
+	for row, i in table.rows {
+		ids[i] = auto_cast row.id
+	}
+
+	return ids
+}
+
+track_table_get_selection :: proc(table: Track_Table) -> []Track_ID {
+	ids: [dynamic]Track_ID
+
+	for row in table.rows {
+		if row.selected {
+			append(&ids, cast(Track_ID) row.id)
+		}
+	}
+
+	return ids[:]
+}
+
+track_table_process_result :: proc(
+	table: Track_Table, result: Track_Table_Result,
+	cl: ^Client, sv: ^Server, flags: Track_Table_Result_Process_Flags,
+) {
+	if result.play != nil {
+		if .SetQueuePos in flags {
+			server.set_queue_track(sv, result.play.?)
+		}
+		else {
+			tracks := track_table_get_tracks(table)
+			defer delete(tracks)
+			server.play_playlist(sv, tracks, table.playlist_id, result.play.?)
+		}
+	}
+
+	if result.play_selection {
+		selection := track_table_get_selection(table)
+		defer delete(selection)
+		server.play_playlist(sv, selection, table.playlist_id)
+	}
+	
+	if result.add_selection_to_queue {
+		selection := track_table_get_selection(table)
+		defer delete(selection)
+		server.append_to_queue(sv, selection, table.playlist_id)
+	}
+}
+
+track_table_show_context :: proc(
+	table: Track_Table, table_result: Track_Table_Result,
+	context_id: imgui.ID, flags: Track_Context_Flags, sv: Server,
+) -> (result: Track_Context_Result, shown: bool) #optional_ok {
+	//if table_result.selection_count == 0 {return}
+	imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) or_return
+	defer imgui.EndPopup()
+	shown = true
+
+	if table_result.selection_count == 1 {
+		track_id := cast(Track_ID) table.rows[table_result.lowest_selection_index].id
+		result.single_track = track_id
+		show_track_context_items(track_id, &result, sv.library)
+	}
+	
+	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
+		result.remove = true
+	}
+
+	if .NoQueue not_in flags {
+		result.play |= imgui.MenuItem("Play", "Ctrl + P")
+		result.add_to_queue |= imgui.MenuItem("Add to queue", "Ctrl + Q")
+	}
+
+	if .NoEditMetadata not_in flags {
+		result.edit_metadata |= imgui.MenuItem("Edit metadata")
+	}
+
+	return
+}
+
 track_table_process_context :: proc(
 	table: Track_Table, table_result: Track_Table_Result,
 	result: Track_Context_Result, cl: ^Client, sv: ^Server,
@@ -651,81 +879,14 @@ track_table_process_context :: proc(
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Example usage of replacement table API
-// -----------------------------------------------------------------------------
-
-Track_Table_2 :: struct {
-	serial: uint,
-	state: imx.Table_State,
-	columns: [len(Track_Property_ID)]imx.Table_Column,
-	arena: mem.Dynamic_Arena,
-	uptime: f64,
-	initialized: bool,
-}
-
-Track_Table_2_Result :: struct {
-}
-
-track_table2_update :: proc(
-	cl: Client,
-	table: ^Track_Table_2,
-	serial: uint,
-	lib: server.Library,
-	tracks: []Track_ID,
-	playlist_id: Global_Playlist_ID,
-	filter: string,
-	flags: Track_Table_Flags = {},
-) {
-	table.uptime = cl.uptime
-
-	if !table.initialized do mem.dynamic_arena_init(&table.arena)
-
-	if serial == table.serial do return
-	table.serial = serial
-
+track_table_free :: proc(table: ^Track_Table) {
 	mem.dynamic_arena_free_all(&table.arena)
-	allocator := mem.dynamic_arena_allocator(&table.arena)
-
-	build_string_property_rows :: proc(
-		lib: server.Library, tracks: []Track_ID, property: Track_Property_ID,
-		visible_track_count: int, allocator: mem.Allocator
-	) -> []imx.Table_Row {
-		row_count := visible_track_count
-		rows := make([]imx.Table_Row, row_count, allocator)
-
-		for track_id, index in tracks {
-			track := server.library_find_track(lib, track_id) or_continue
-			rows[index].text = track.properties[property].(string) or_else ""
-			rows[index].text_width = imx.calc_text_size(rows[index].text).x
-		}
-
-		return rows
-	}
-
-	visible_track_count := 0
-
-	for track_id in tracks {
-		server.library_find_track(lib, track_id) or_continue
-		visible_track_count += 1
-	}
-
-	table.columns[0].rows = build_string_property_rows(lib, tracks, .Album, visible_track_count, allocator)
-	table.columns[0].name = "Album"
-	table.columns[1].rows = build_string_property_rows(lib, tracks, .Artist, visible_track_count, allocator)
-	table.columns[1].name = "Artist"
-	table.columns[2].rows = build_string_property_rows(lib, tracks, .Title, visible_track_count, allocator)
-	table.columns[2].name = "Title"
-	table.columns[3].rows = build_string_property_rows(lib, tracks, .Genre, visible_track_count, allocator)
-	table.columns[3].name = "Genre"
+	table.serial = 0
 }
 
-track_table2_show :: proc(
-	table: ^Track_Table_2,
-	str_id: cstring,
-	context_menu_id: imgui.ID,
-	playing: Track_ID,
-) -> (result: Track_Table_2_Result) {
-	imx.table_show(str_id, table.columns[:4], table.uptime)
-	return
+track_table_accept_drag_drop :: proc(result: Track_Table_Result, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
+	imgui.BeginDragDropTargetCustom(result.bounding_box, imgui.GetID("foo")) or_return
+	defer imgui.EndDragDropTarget()
+
+	return get_track_drag_drop_payload(allocator)
 }

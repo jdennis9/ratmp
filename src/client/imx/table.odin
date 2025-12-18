@@ -17,13 +17,13 @@
 */
 package imgui_extensions
 
+import "core:math/linalg"
+import "src:licenses"
 import "core:log"
 /*
-******************* CURRENTLY UNUSED *******************
-
-Custom implemenation of tables that makes some assumptions that simplifies
-the logic and helps a bit with CPU usage. Assumes that rows only contain one line of text
-and that the number of rows in always known ahead of time.
+	Custom implemenation of tables that makes some assumptions that simplifies
+	the logic and helps a bit with CPU usage. Assumes that rows only contain one line of text
+	and that the number of rows in always known ahead of time.
 */
 
 import "core:fmt"
@@ -559,180 +559,538 @@ table_test :: proc() {
 }
 */
 
-Table_State :: struct {
-	columns: [TABLE_MAX_COLUMNS]int,
-	column_weights: [TABLE_MAX_COLUMNS]f32,
-	column_hidden: [TABLE_MAX_COLUMNS]bool,
-	visible_column_count: int,
-	column_count: int,
-	column_index: int,
-	size: [2]f32,
-	offset: [2]f32,
+Table_Row_ID :: u64
+
+Table_Sort_Order :: enum u8 {
+	None,
+	Ascending,
+	Descending,
 }
 
-Table_Row :: struct {
+Table_Column :: struct {
+	weight: f32,
+	hidden: bool,
+	sort_order: Table_Sort_Order,
+}
+
+Table_State :: struct {
+	columns: [TABLE_MAX_COLUMNS]Table_Column,
+	column_order: [TABLE_MAX_COLUMNS]int,
+	column_count: int,
+	need_distribute_weights: bool,
+	settings_loaded: bool,
+	resize_start: f32,
+	resize_column: int,
+}
+
+Table_Result :: struct {
+	left_clicked_row: Maybe(Table_Row_ID),
+	middle_clicked_row: Maybe(Table_Row_ID),
+	sort_by_column: Maybe(int),
+	sort_order: Table_Sort_Order,
+}
+
+Table_Row_Content :: struct {
 	text: string,
 	text_width: Maybe(f32),
 }
 
-Table_Column :: struct {
+Table_Column_Flag :: enum {DefaultHide, NoHide}
+Table_Column_Flags :: bit_set[Table_Column_Flag]
+
+Table_Column_Info :: struct {
 	name: cstring,
-	flags: imgui.TableColumnFlags,
+	flags: Table_Column_Flags,
+	rows: []Table_Row_Content,
+}
+
+@(private="file")
+_table_init :: proc(t: ^Table_State, columns: []Table_Column_Info) {
+	t.column_count = len(columns)
+
+	log.debug("Init table")
+
+	if t.settings_loaded {
+		// Validate weights
+		total_weight: f32
+		have_visible_column: bool
+
+		for &col in t.columns[:t.column_count] {
+			if col.hidden do continue
+			total_weight += col.weight
+			have_visible_column = true
+		}
+
+		if total_weight != 1 do _table_distribute_weights(t)
+	}
+	else {
+		for i in 0..<len(columns) {
+			col := columns[i]
+			t.column_order[i] = i
+			if .DefaultHide in col.flags do t.columns[i].hidden = true
+		}
+		_table_distribute_weights(t)
+	}
+
+}
+
+@(private="file")
+_table_count_visible_columns :: proc(t: ^Table_State) -> (count: int) {
+	for col in t.columns[:t.column_count] {
+		if !col.hidden do count += 1
+	}
+	return
+}
+
+@(private="file")
+_table_distribute_weights :: proc(t: ^Table_State) {
+	visible_columns: f32
+
+	visible_columns = f32(_table_count_visible_columns(t))
+
+	for &c in t.columns[:t.column_count] {
+		c.weight = 1 / visible_columns
+	}
+}
+
+Table_Row :: struct {
+	id: Table_Row_ID,
+	selected: bool,
+}
+
+Table_Display_Info :: struct {
+	highlight_row_id: Table_Row_ID,
+	highlight_color: u32,
+	columns: []Table_Column_Info,
 	rows: []Table_Row,
+	context_menu_id: imgui.ID,
 }
 
-/*begin_table :: proc(str_id: cstring, state: ^Table_State, columns: []Table_Column, size_arg: Maybe([2]f32) = nil) -> bool {
+@(private="file")
+_table_selection_logic :: proc(rows: []Table_Row, row_index: int, keep_selection: bool) {
+	row := &rows[row_index]
+
+	ctrl := imgui.IsKeyDown(.ImGuiMod_Ctrl)
+	shift := imgui.IsKeyDown(.ImGuiMod_Shift)
+
+	// -------------------------------------------------------------
+	// Selection logic
+	// -------------------------------------------------------------
+	if !ctrl && !shift {
+		if !keep_selection || !row.selected {
+			for &r in rows {r.selected = false}
+		}
+		row.selected = true
+	}
+	else if (ctrl && shift) || shift {
+		lo := max(int)
+		hi := -1
+		for r, i in rows {
+			if r.selected {
+				if i < row_index {lo = min(lo, i)}
+				if i > row_index {hi = max(hi, i)}
+			}
+		}
+
+		if lo == max(int) && hi == -1 {
+			for &r in rows[0:row_index+1] {r.selected = true}
+		} else if hi == -1 {
+			for &r in rows[lo:row_index+1] {r.selected = true}
+		} else if lo == max(int) {
+			for &r in rows[row_index+1:hi] {r.selected = true}
+		} else if ((hi-row_index) < (row_index-lo)) {
+			for &r in rows[row_index:hi+1] {r.selected = true}
+		} else {
+			for &r in rows[lo:row_index+1] {r.selected = true}
+		}
+	}
+	else if ctrl {
+		row.selected = true
+	}
+}
+
+table_show :: proc(
+	str_id: cstring, display_info: Table_Display_Info,
+	scrolling_text_timer: f64
+) -> (result: Table_Result, shown: bool) {
+	header_context_menu :: proc(t: ^Table_State, columns: []Table_Column_Info) {
+		if imgui.MenuItem("Show all columns") {
+			for &col in t.columns[:t.column_count] do col.hidden = false
+			t.need_distribute_weights = true
+		}
+
+		imgui.Separator()
+
+		for col_info, i in columns {
+			col := &t.columns[i]
+			shown := !col.hidden
+			if imgui.MenuItemBoolPtr(col_info.name, nil, &shown) {
+				col.hidden = !shown
+				t.need_distribute_weights = true
+			}
+		}
+	}
+
+	columns: []Table_Column_Info
+	row_count: int
+	table_size: [2]f32
+	table_pos: [2]f32
+	padding: [2]f32
+	style: ^imgui.Style
+
+	columns = display_info.columns
+	row_count = len(columns[0].rows)
+	assert(len(display_info.rows) == row_count)
+	table_pos = imgui.GetCursorScreenPos()
+	table_size = imgui.GetContentRegionAvail()
+	style = imgui.GetStyle()
+	padding = style.CellPadding
+	
+	table_size.x -= style.ScrollbarSize
+	if table_size.x <= (padding.x*2) do return
+
+	t, already_exists := ctx_add_or_get_table(imgui.GetID(str_id))
+
+	if !already_exists || t.column_count != len(columns) do _table_init(t, columns)
+
+	if t.need_distribute_weights do _table_distribute_weights(t)
+	t.need_distribute_weights = false
+
 	drawlist := imgui.GetWindowDrawList()
-	
-	state.column_count = len(columns)
-	state.visible_column_count = 0
-	state.offset = {}
-	
-	for col in state.column_hidden[:state.column_count] {
-		if !col do state.visible_column_count += 1
-	}
-	
-	for &w in state.column_weights[:state.column_count] {
-		w = 1 / f32(state.visible_column_count)
-	}
-	
-	//imgui.BeginChild(str_id, state.size) or_return
-	size := size_arg.? or_else imgui.GetContentRegionAvail()
-	state.size = size
-
-	offset := f32(0)
-	for col, i in columns {
-		buf: [TABLE_MAX_COLUMN_NAME_LEN+1]u8
-		width := state.column_weights[i] * size.x
-		copy(buf[:len(buf-1)], col.name)
-
-		imgui.Selectable(cstring(&buf[0]), false, {}, {width, imgui.GetTextLineHeight()})
-		//imgui.SmallButton(cstring(&buf[0])/*, {width, imgui.GetTextLineHeight()}*/)
-		if i + 1 != len(columns) do imgui.SameLine()
-
-		offset += width
-	}
-
-	return true
-}
-
-table_begin_column :: proc(table: ^Table_State, index: int) -> bool {
-	table.column_index = index
-	table.offset = {}
-	if table.column_hidden[index] do return false
-
-	for weight, i in table.column_weights[:table.column_count] {
-		if i >= index do break
-		if table.column_hidden[i] do continue
-		table.offset += weight * table.size.x
-	}
-
-	return true
-}
-
-table_end_column :: proc(table: ^Table_State) {
-}
-
-table_text :: proc(table: ^Table_State, str: string) {
-}
-
-table_selectable :: proc(table: ^Table_State, str: string, selected: bool) -> bool {
-	return false
-}
-
-end_table :: proc(table: ^Table_State) {
-	//imgui.EndChild()
-}
-
-table_test :: proc() -> bool {
-	defer imgui.End()
-	imgui.Begin("Table Test") or_return
-
-	@static table: Table_State
-
-	columns := []Table_Column {
-		{
-			flags = {.Master, .NoHide},
-			name = "Title",
-		},
-		{
-			name = "Album",
-		},
-		{
-			name = "Artist",
-		},
-	}
-
-	if begin_table("Test", &table, columns) {
-		end_table(&table)
-	}
-
-	return true
-}*/
-
-table_show :: proc(str_id: cstring, columns: []Table_Column, scrolling_text_timer: f64) -> bool {
-	row_count := len(columns[0].rows)
-	master_column := -1
-	visible_columns := 0
-	window_size := imgui.GetContentRegionAvail()
+	row_height := imgui.GetTextLineHeight() + (padding.y * 2)
+	cursor := imgui.GetCursorScreenPos()
 
 	// -------------------------------------------------------------------------
-	// Content
+	// Headers
 	// -------------------------------------------------------------------------
 	{
-		table_flags := imgui.TableFlags_SizingStretchProp | imgui.TableFlags_Resizable
-		imgui.BeginTable(str_id, auto_cast len(columns), table_flags) or_return
-		defer imgui.EndTable()
+		offset: f32
 
-		for col in columns {
-			imgui.TableSetupColumn(col.name, col.flags)
-		}
+		imgui.PushStyleVarImVec2(.ItemSpacing, {0, 0})
+		defer imgui.PopStyleVar()
 
-		imgui.TableSetupScrollFreeze(1, 1)
-		imgui.TableHeadersRow()
+		imgui.DrawList_AddRectFilled(drawlist,
+			cursor, cursor + {table_size.x, row_height},
+			imgui.GetColorU32(.TableHeaderBg)
+		)
 
-		imgui.TableNextRow()
+		for col_index in t.column_order[:len(columns)] {
+			col_width: f32
+			col_state: ^Table_Column
+			col: Table_Column_Info
+			bg_rect_min, bg_rect_max: [2]f32
 
-		offset := f32(0)
-		y_root := imgui.GetTextLineHeight()
+			col_state = &t.columns[col_index]
+			
+			if col_state.hidden do continue
+			
+			col = columns[col_index]
+			col_width = table_size.x * t.columns[col_index].weight
 
-		drawlist := imgui.GetWindowDrawList()
+			if col_width <= (padding.x*2) do continue
 
-		for col, col_index in columns {
-			/*if state.column_hidden[col_index] do continue
-			width := state.column_weights[col_index] * size.x*/
+			bg_rect_min = {cursor.x + offset, cursor.y}
+			bg_rect_max = bg_rect_min + {col_width, row_height}
+			
+			if imgui.InvisibleButton(col.name, {col_width, row_height}) {
+				switch col_state.sort_order {
+					case .None: col_state.sort_order = .Ascending
+					case .Ascending: col_state.sort_order = .Descending
+					case .Descending: col_state.sort_order = .None
+				}
 
-			//imgui.BeginChild(col.name, {width, imgui.GetContentRegionAvail().y}, {}, {.NoScrollbar, .NoScrollWithMouse})
-			//defer imgui.EndChild()
+				if col_state.sort_order != .None do result.sort_by_column = col_index
+				result.sort_order = col_state.sort_order
+			}
+			imgui.SameLine()
 
-			imgui.TableSetColumnIndex(auto_cast col_index) or_continue
-			size := imgui.GetContentRegionAvail()
-
-			//x_padding := imgui.GetStyle().CellPadding.x
-			x_padding :: 0
-			cursor := imgui.GetCursorScreenPos()
-
-			imgui.PushClipRect(/*drawlist, */cursor + {x_padding, 0}, cursor + size - {x_padding, 0}, true)
-			defer imgui.PopClipRect(/*drawlist*/)
-
-			for row, row_index in col.rows {
-				scrolling_text(row.text, scrolling_text_timer, size.x, row.text_width, .DrawOffset)
+			if imgui.BeginPopupContextItem() {
+				header_context_menu(t, columns)
+				imgui.EndPopup()
 			}
 
-			//offset += width
+			if imgui.IsItemHovered() do imgui.DrawList_AddRectFilled(
+				drawlist, bg_rect_min, bg_rect_max, imgui.GetColorU32(.HeaderHovered)
+			)
+
+			imgui.DrawList_AddText(drawlist,
+				{cursor.x + offset, cursor.y} + padding,
+				imgui.GetColorU32(.Text), col.name,
+			)
+
+			offset += col_width
+		}
+
+		imgui.NewLine()
+	}
+	
+	imgui.BeginChild(str_id, imgui.GetContentRegionAvail()) or_return
+	defer imgui.EndChild()
+	cursor = imgui.GetCursorScreenPos()	
+	scroll_y := imgui.GetScrollY()
+
+	// -------------------------------------------------------------------------
+	// Row clipping
+	// -------------------------------------------------------------------------
+	display_start := int(scroll_y / row_height)
+	display_end := int((scroll_y + table_size.y) / row_height) + 1
+	display_start = max(display_start, 0)
+	display_end = min(display_end, row_count)
+	
+	// -------------------------------------------------------------------------
+	// Row text
+	// -------------------------------------------------------------------------
+	{
+		offset: f32
+
+		for col_index in t.column_order[:len(columns)] {
+			col := columns[col_index]
+
+			if t.columns[col_index].hidden do continue
+
+			width := table_size.x * t.columns[col_index].weight
+
+			if width <= (padding.x*2) do continue
+			
+			imgui.PushClipRect(
+				{cursor.x + offset + padding.x, cursor.y + scroll_y},
+				{cursor.x + offset + width - padding.x, cursor.y + table_size.y + scroll_y},
+				true
+			)
+			defer imgui.PopClipRect()
+
+			for row, i in col.rows[display_start:display_end] {
+				draw_scrolling_text(
+					{
+						cursor.x + offset,
+						cursor.y + (f32(i + display_start) * row_height),
+					} + padding,
+					row.text, scrolling_text_timer, width, row.text_width
+				)
+			}
+			
+			offset += width
 		}
 	}
 
-	return true
+
+	// -------------------------------------------------------------------------
+	// Vertical borders
+	// -------------------------------------------------------------------------
+	if len(columns) > 1 {
+		offset: f32
+		accum_weight: f32
+		relative_mouse_pos: f32
+
+		resize_right_accum_weight: f32
+		resize_left_accum_weight: f32
+		resize_left_col: ^Table_Column
+		resize_right_col: ^Table_Column
+
+		length := table_size.y
+
+		get_next_visible_column :: proc(
+			t: ^Table_State, display_index: int
+		) -> (col: ^Table_Column, right_weight: f32) {
+			index_in_order := -1
+
+			for col_index, i in t.column_order[display_index+1:t.column_count] {
+				if !t.columns[col_index].hidden {
+					index_in_order = i + display_index + 1
+					col = &t.columns[col_index]
+					break
+				}
+			}
+
+			if index_in_order == -1 do return
+
+			for col_index in t.column_order[index_in_order+1:t.column_count] {
+				if !t.columns[col_index].hidden {
+					right_weight += t.columns[col_index].weight
+				}
+			}
+
+			return
+		}
+
+		relative_mouse_pos = (imgui.GetMousePos().x - table_pos.x) / table_size.x
+		
+		for col_index, col_display_index in t.column_order[0:len(columns)-1] {
+			next_col: ^Table_Column
+			weight_to_right_of_next_col: f32
+			col: ^Table_Column
+			width: f32
+			pos: [2]f32
+			border_color: u32
+			
+			col = &t.columns[col_index]
+
+			if col.hidden do continue
+			
+			width = table_size.x * col.weight
+			offset += width
+			pos = cursor + {offset, scroll_y}
+			
+			next_col, weight_to_right_of_next_col = get_next_visible_column(t, col_display_index)
+			
+			if next_col == nil do continue
+
+			button_min := [2]f32{pos.x - 3, pos.y}
+			button_max := [2]f32{pos.x + 3, pos.y + table_size.y}
+			border_color = imgui.GetColorU32(.TableBorderStrong)
+
+			// Resizing
+			{
+				hovered, held: bool
+				color: u32 = 0xff0000ff
+				id := imgui.GetIDInt(auto_cast col_index)
+				
+				imgui.ItemAdd({button_min, button_max}, id)
+				imgui.ButtonBehavior({button_min, button_max}, id, &hovered, &held, {.MouseButtonLeft})
+
+				if hovered || held do imgui.SetMouseCursor(.ResizeEW)
+				
+				if hovered do border_color = imgui.GetColorU32(.ResizeGripHovered)
+
+				if held {
+					resize_left_accum_weight = accum_weight
+					resize_right_accum_weight = weight_to_right_of_next_col
+					resize_left_col = col
+					resize_right_col = next_col
+					border_color = imgui.GetColorU32(.ResizeGripActive)
+				}
+				
+				if hovered do color = max(u32)
+				if held do color = 0xff00ff00
+			}
+
+			imgui.DrawList_AddLine(drawlist, pos, pos + {0, length}, border_color)
+			accum_weight += col.weight
+		}
+
+		if resize_left_col != nil && resize_right_col != nil {
+			resize_left_col.weight = relative_mouse_pos - resize_left_accum_weight
+			resize_right_col.weight = (1 - resize_right_accum_weight) - relative_mouse_pos
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Row backgrounds and behaviour
+	// -------------------------------------------------------------------------
+	{
+		imgui.PushStyleVarImVec2(.ItemSpacing, {0, 0})
+		defer imgui.PopStyleVar()
+
+		// Add empty space for scrolling
+		if display_start > 0 do imgui.Dummy({table_size.x, f32(display_start) * row_height})
+
+		imgui.DrawList_PushClipRect(
+			drawlist,
+			{cursor.x, cursor.y + scroll_y},
+			{cursor.x + table_size.x, cursor.y + table_size.y + scroll_y},
+			true
+		)
+		defer imgui.DrawList_PopClipRect(drawlist)
+
+		for row_index in display_start..<display_end {
+			clicked: bool
+			keep_selection: bool
+			select: bool
+
+			row := &display_info.rows[row_index]
+
+			y := f32(row_index) * row_height
+			bg_rect_min := [2]f32{cursor.x, cursor.y + y}
+			bg_rect_max := [2]f32{cursor.x + table_size.x, cursor.y + y + row_height}
+
+			if row_index % 2 == 0 {
+				imgui.DrawList_AddRectFilled(
+					drawlist,
+					bg_rect_min,
+					bg_rect_max,
+					imgui.GetColorU32(.TableRowBgAlt),
+				)
+			}
+
+			if row.id == display_info.highlight_row_id {
+				imgui.DrawList_AddRectFilled(
+					drawlist,
+					bg_rect_min,
+					bg_rect_max,
+					display_info.highlight_color,
+				)
+			}
+
+			imgui.PushIDInt(auto_cast row_index)
+			defer imgui.PopID()
+
+			clicked |= imgui.InvisibleButton("##button", {table_size.x, row_height})
+
+			if row.selected {
+				imgui.DrawList_AddRectFilled(
+					drawlist,
+					bg_rect_min,
+					bg_rect_max,
+					imgui.GetColorU32(.Header),
+				)
+			}
+
+			if imgui.IsItemHovered() {
+				imgui.DrawList_AddRectFilled(
+					drawlist,
+					bg_rect_min,
+					bg_rect_max,
+					imgui.GetColorU32(.HeaderHovered),
+				)
+			}
+
+			if imgui.IsItemClicked(.Right) {
+				imgui.OpenPopupID(display_info.context_menu_id)
+				select = true
+				keep_selection = true
+			}
+
+			if clicked {
+				result.left_clicked_row = row.id
+				select = true
+			}
+
+			if imgui.IsItemClicked(.Middle) {
+				result.middle_clicked_row = row.id
+				select = true
+			}
+
+			if select do _table_selection_logic(display_info.rows, row_index, keep_selection)
+		}
+
+		// Horizontal borders
+		for row_index in display_start..<display_end {
+			y := f32(row_index) * row_height
+			bg_rect_min := [2]f32{cursor.x, cursor.y + y}
+			bg_rect_max := [2]f32{cursor.x + table_size.x, cursor.y + y + row_height}
+			imgui.DrawList_AddLine(drawlist, 
+				{cursor.x, cursor.y + y}, 
+				{cursor.x + table_size.x, cursor.y + y},
+				imgui.GetColorU32(.TableBorderStrong)
+			)
+		}
+
+		// Add empty space for scrolling
+		if (row_count - display_end) > 0 {
+			imgui.Dummy({table_size.x, f32(row_count - display_end) * row_height})
+		}
+	}
+
+
+	shown = true
+	return
 }
 
-table_test :: proc(uptime: f64) -> bool {
-	@static state: Table_State
-
+table_test :: proc(uptime: f64) -> bool {	
 	defer imgui.End()
 	imgui.Begin("Table Test") or_return
 
-	columns := []Table_Column {
+	columns := []Table_Column_Info {
 		{
 			name = "Title",
 			rows = {
@@ -759,7 +1117,12 @@ table_test :: proc(uptime: f64) -> bool {
 		}
 	}
 
-	table_show("Test Table", columns, uptime)
+	table_show("Test Table", Table_Display_Info {
+		columns = columns,
+		rows = {{id = 1}, {id = 2}, {id = 3}},
+		highlight_color = 0xdd00ffdd,
+		highlight_row_id = 2,
+	}, uptime)
 
 	return true
 }

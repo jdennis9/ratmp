@@ -19,6 +19,7 @@ package util
 
 import "core:encoding/json"
 import "core:time"
+import "core:log"
 
 copy_string_to_buf :: proc "contextless" (buf: []u8, str: string) -> string {
 	length := len(str)
@@ -82,3 +83,16 @@ clock_from_seconds :: proc "contextless" (in_sec: int) -> (hour, min, sec: int) 
 	sec -= min * time.SECONDS_PER_MINUTE
 	return
 }
+
+
+@(deferred_in_out=_SCOPED_TIMER_END)
+SCOPED_TIMER :: proc(name: string) -> time.Tick {
+	return time.tick_now()
+}
+
+@(private="file")
+_SCOPED_TIMER_END :: proc(name: string, start: time.Tick) {
+	length := time.tick_since(start)
+	log.debugf("%s: %fms", name, time.duration_milliseconds(length))
+}
+
