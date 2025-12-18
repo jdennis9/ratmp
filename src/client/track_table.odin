@@ -687,9 +687,15 @@ track_table_update :: proc(
 		.FileDate = "File Date",
 	}
 
+	default_shown_props := bit_set[Track_Property_ID] {
+		.Album, .Artist, .Title, .Duration
+	}
+
 	for prop in Track_Property_ID {
-		table.columns[prop].rows = make([]imx.Table_Row_Content, len(tracks), allocator)
-		table.columns[prop].name = column_names[prop]
+		col := &table.columns[prop]
+		col.rows = make([]imx.Table_Row_Content, len(tracks), allocator)
+		col.name = column_names[prop]
+		if prop not_in default_shown_props do col.flags |= {.DefaultHide}
 	}
 
 	for track_id, row_index in tracks {
@@ -705,8 +711,7 @@ track_table_update :: proc(
 					row.text_width = imx.calc_text_size(row.text).x
 
 				case .DateAdded, .FileDate:
-					table.columns[prop].flags = {.DefaultHide}
-					ts := time.unix(0, track.properties[prop].(i64) or_break)
+					ts := time.unix(track.properties[prop].(i64) or_break, 0)
 					y, m, d := time.year(ts), time.month(ts), time.day(ts)
 					row.text = fmt.aprintf("%02d-%02d-%02d", y, m, d)
 					row.text_width = imx.calc_text_size(row.text).x
