@@ -38,7 +38,7 @@ import "imx"
 
 @(private="file")
 WINDOW_SIZE :: 8192
-SPECTRUM_MAX_BANDS :: 100
+SPECTRUM_MAX_BANDS :: 180
 MAX_OSCILLOSCOPE_SAMPLES :: 4096
 
 Analysis_State :: struct {
@@ -456,16 +456,18 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		if imgui.MenuItem("Bar graph", nil, state.display_mode == .Bars) {state.display_mode = .Bars}
 		if imgui.MenuItem("Alpha", nil, state.display_mode == .Alpha) {state.display_mode = .Alpha}
 		imgui.SeparatorText("No. bands")
-		if imgui.MenuItem("20", nil, state.band_count == 20) {state.band_count = 20}
-		if imgui.MenuItem("40", nil, state.band_count == 40) {state.band_count = 40}
-		if imgui.MenuItem("60", nil, state.band_count == 60) {state.band_count = 60}
-		if imgui.MenuItem("80", nil, state.band_count == 80) {state.band_count = 80}
-		if imgui.MenuItem("100", nil, state.band_count == 100) {state.band_count = 100}
+		if imgui.MenuItem("20", nil, state.band_count == 20) do state.band_count = 20
+		if imgui.MenuItem("40", nil, state.band_count == 40) do state.band_count = 40
+		if imgui.MenuItem("60", nil, state.band_count == 60) do state.band_count = 60
+		if imgui.MenuItem("80", nil, state.band_count == 80) do state.band_count = 80
+		if imgui.MenuItem("100", nil, state.band_count == 100) do state.band_count = 100
+		if imgui.MenuItem("140", nil, state.band_count == 140) do state.band_count = 140
+		if imgui.MenuItem("180", nil, state.band_count == 180) do state.band_count = 180
 		imgui.SeparatorText("Band size")
 		if imgui.MenuItem("Uniform", nil, state.band_distribution == .Uniform) {state.band_distribution = .Uniform}
 		if imgui.MenuItem("Natural", nil, state.band_distribution == .Natural) {state.band_distribution = .Natural}
 		imgui.SeparatorText("Parameters")
-		if imgui.DragFloat("Natural scaling factor", &state.band_scaling_factor, 0.5, 0, 10) {
+		if imgui.DragFloat("Natural scaling factor", &state.band_scaling_factor, 0.5, -4, 10) {
 			state.band_distribution = .Natural
 		}
 		imgui.Checkbox("Apply interpolation", &state.should_interpolate)
