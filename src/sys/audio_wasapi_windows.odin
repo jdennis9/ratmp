@@ -276,8 +276,6 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 		}
 		
 		if status == .Finish {
-			// Wait for buffer to finish before we call the event callback
-			win.Sleep(buffer_duration_ms/2)
 			if stream.config.event_callback != nil {
 				stream.config.event_callback(stream.config.callback_data, .Finish)
 			}
