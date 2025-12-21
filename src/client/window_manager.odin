@@ -23,6 +23,7 @@ Window_Archetype_Flags :: bit_set[Window_Archetype_Flag]
 
 Window_Base :: struct {
 	archetype: Window_Archetype_ID,
+	imgui_flags: imgui.WindowFlags,
 	arg: uintptr,
 	instance: u32,
 	want_bring_to_front: bool,
@@ -203,7 +204,7 @@ show_window_selector :: proc(cl: ^Client) -> (window: ^Window_Base) {
 
 show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: ^Client, sv: ^Server) -> (shown: bool) {
 	name_buf: [512]u8
-	window_flags: imgui.WindowFlags = {}
+	window_flags: imgui.WindowFlags = window.imgui_flags
 	show_menu := imgui.IsKeyDown(.ImGuiMod_Alt) && 
 		(.MultiInstance in arch.flags || .NoInitialInstance in arch.flags)
 
@@ -223,9 +224,7 @@ show_window_instance :: proc(arch: ^Window_Archetype, window: ^Window_Base, cl: 
 		)
 	}
 
-	if show_menu {
-		window_flags |= {.MenuBar}
-	}
+	if show_menu do window_flags |= {.MenuBar}
 
 	if window.want_bring_to_front {
 		window.open = true

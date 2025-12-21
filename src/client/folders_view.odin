@@ -262,7 +262,7 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 		imgui.TextDisabled("%d items", i32(len(root.children)))
 
-		if imgui.BeginTable("##folders", 3, imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner) {
+		if imgui.BeginTable("##folders", 3, imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner|imgui.TableFlags_ScrollY) {
 			result: _Node_Result
 			imgui.TableSetupColumn("Folder")
 			imgui.TableSetupColumn("Duration")
@@ -314,7 +314,6 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 	}
 
-	//root_table_flags := imgui.TableFlags_BordersInnerV|imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Resizable
 	sbs: Side_By_Side_Window
 
 	sbs.left_proc = show_folders

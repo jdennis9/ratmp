@@ -90,9 +90,10 @@ METADATA_WINDOW_ARCHETYPE := Window_Archetype {
 	flags = {.DefaultShow},
 }
 
-
 metadata_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
-	return new(Metadata_Window, allocator)
+	win := new(Metadata_Window, allocator)
+	win.imgui_flags = {.AlwaysVerticalScrollbar}
+	return win
 }
 
 metadata_window_configure_proc :: proc(self: ^Window_Base, key, value: string) {
