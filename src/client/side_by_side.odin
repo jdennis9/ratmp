@@ -4,8 +4,8 @@ package client
 import imgui "src:thirdparty/odin-imgui"
 
 Side_By_Side_Window_Mode :: enum {
-	SideBySide,
 	Single,
+	SideBySide,
 }
 
 Side_By_Side_Window :: struct {
