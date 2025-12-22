@@ -214,6 +214,7 @@ table_show :: proc(
 	table_pos: [2]f32
 	padding: [2]f32
 	style: ^imgui.Style
+	table_focused: bool
 
 	columns = display_info.columns
 	row_count = len(columns[0].rows)
@@ -303,6 +304,23 @@ table_show :: proc(
 	
 	imgui.BeginChild(str_id, imgui.GetContentRegionAvail()) or_return
 	defer imgui.EndChild()
+
+	table_focused = imgui.IsWindowFocused()
+
+	// -------------------------------------------------------------------------
+	// Jumping
+	// -------------------------------------------------------------------------
+	if display_info.highlight_row_id != 0 && table_focused && is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
+		jump_row_id := display_info.highlight_row_id
+
+		for row, index in display_info.rows {
+			if row.id == jump_row_id {
+				imgui.SetScrollY(f32(index) * row_height - (table_size.y * 0.5))
+				break
+			}
+		}
+	}
+
 	cursor = imgui.GetCursorScreenPos()	
 	scroll_y := imgui.GetScrollY()
 

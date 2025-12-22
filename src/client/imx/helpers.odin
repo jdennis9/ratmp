@@ -182,3 +182,7 @@ calc_text_size :: proc(text: string) -> [2]f32 {
 	ptr := raw_data(text)
 	return imgui.CalcTextSize(cstring(ptr), cstring(&ptr[len(text)]))
 }
+
+is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
+	return imgui.IsKeyChordPressed(auto_cast(mods | key))
+}
