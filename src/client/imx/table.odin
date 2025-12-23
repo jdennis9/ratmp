@@ -464,8 +464,24 @@ table_show :: proc(
 		}
 
 		if resize_left_col != nil && resize_right_col != nil {
-			resize_left_col.weight = relative_mouse_pos - resize_left_accum_weight
-			resize_right_col.weight = (1 - resize_right_accum_weight) - relative_mouse_pos
+			min_weight :: 0.02
+			new_left_weight := relative_mouse_pos - resize_left_accum_weight
+			new_right_weight := (1 - resize_right_accum_weight) - relative_mouse_pos
+
+			// Size correction
+			if new_left_weight <= min_weight {
+				diff := min_weight - new_left_weight
+				new_right_weight -= diff
+				new_left_weight += diff
+			}
+			else if new_right_weight <= min_weight {
+				diff := min_weight - new_right_weight
+				new_right_weight += diff
+				new_left_weight -= diff
+			}
+
+			resize_left_col.weight = new_left_weight
+			resize_right_col.weight = new_right_weight
 		}
 	}
 
