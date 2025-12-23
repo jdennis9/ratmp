@@ -463,16 +463,6 @@ _go_to_genre :: proc(cl: ^Client, md: Track_Properties) -> bool {
 
 @private
 _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
-	STOP_ICON :: ""
-	ARROW_ICON :: ""
-	SHUFFLE_ICON :: ""
-	PREV_TRACK_ICON :: ""
-	NEXT_TRACK_ICON :: ""
-	PLAY_ICON :: ""
-	PAUSE_ICON :: ""
-	REPEAT_ICON :: ""
-	REPEAT_SINGLE_ICON :: ""
-
 	if !imgui.BeginMainMenuBar() {return}
 	defer imgui.EndMainMenuBar()
 
@@ -519,7 +509,7 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 	if imgui.BeginMenu("View") {
 		window := show_window_selector(client)
-		if window != nil {window.want_bring_to_front = true}
+		if window != nil do window.want_bring_to_front = true
 
 		imgui.Separator()
 		if imgui.MenuItem("Manage windows") {
@@ -590,19 +580,19 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 	switch sv.playback_mode {
 		case .Playlist: {
-			if imgui.MenuItem(ARROW_ICON) {
+			if imgui.MenuItem(ICON_ARROW) {
 				server.set_playback_mode(sv, .RepeatPlaylist)
 			}
 			imgui.SetItemTooltip("Stop after playlist")
 		}
 		case .RepeatPlaylist: {
-			if imgui.MenuItem(REPEAT_ICON) {
+			if imgui.MenuItem(ICON_REPEAT) {
 				server.set_playback_mode(sv, .RepeatSingle)
 			}
 			imgui.SetItemTooltip("Repeat playlist")
 		}
 		case .RepeatSingle: {
-			if imgui.MenuItem(REPEAT_SINGLE_ICON) {
+			if imgui.MenuItem(ICON_REPEAT_SINGLE) {
 				server.set_playback_mode(sv, .Playlist)
 			}
 			imgui.SetItemTooltip("Repeat track")
@@ -611,29 +601,29 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 	{
 		value := sv.enable_shuffle
-		if imgui.MenuItemBoolPtr(SHUFFLE_ICON, nil, &value) {
+		if imgui.MenuItemBoolPtr(ICON_SHUFFLE, nil, &value) {
 			server.set_shuffle_enabled(sv, value)
 		}
 		imgui.SetItemTooltip("Shuffle")
 	}
 
 	imgui.Separator()
-	if imgui.MenuItem(STOP_ICON) {
+	if imgui.MenuItem(ICON_STOP) {
 		server.stop_playback(sv)
 	}
 	imgui.SetItemTooltip("Stop playback")
 
-	if imgui.MenuItem(PREV_TRACK_ICON) {
+	if imgui.MenuItem(ICON_PREVIOUS) {
 		server.play_prev_track(sv)
 	}
 	imgui.SetItemTooltip("Step back in queue")
 
-	if imgui.MenuItem(server.is_paused(sv^) ? PLAY_ICON : PAUSE_ICON) {
+	if imgui.MenuItem(server.is_paused(sv^) ? ICON_PLAY : ICON_PAUSE) {
 		server.set_paused(sv, !server.is_paused(sv^))
 	}
 	imgui.SetItemTooltip("Play/pause")
 
-	if imgui.MenuItem(NEXT_TRACK_ICON) {
+	if imgui.MenuItem(ICON_NEXT) {
 		server.play_next_track(sv)
 	}
 	imgui.SetItemTooltip("Step forward in queue")

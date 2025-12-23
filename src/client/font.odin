@@ -25,6 +25,18 @@ import "src:sys"
 
 import imgui "src:thirdparty/odin-imgui"
 
+ICON_STOP :: ""
+ICON_ARROW :: ""
+ICON_SHUFFLE :: ""
+ICON_PREVIOUS :: ""
+ICON_NEXT :: ""
+ICON_PLAY :: ""
+ICON_PAUSE :: ""
+ICON_REPEAT :: ""
+ICON_REPEAT_SINGLE :: ""
+ICON_EXPAND :: ""
+ICON_COMPRESS :: ""
+
 // If path is nil, data is used
 Load_Font :: struct {
 	data: []u8,
@@ -48,7 +60,6 @@ Font_Language :: enum {
 
 Font_Languages :: bit_set[Font_Language]
 
-
 @(private="file")
 ICON_RANGES := []imgui.Wchar {
 	0xf048, 0xf052, // Playback controls
@@ -58,6 +69,7 @@ ICON_RANGES := []imgui.Wchar {
 	0xf0e2, 0xf0e2, // Repeat
 	0xf001, 0xf001, // Music
 	0xf061, 0xf061, // Arrow
+	0xf065, 0xf066, // Expand and compress
 	0
 }
 
