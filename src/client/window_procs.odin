@@ -315,9 +315,6 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 
 		track_category_table_update(&state.category_table, cat, sv.library.categories.serial, string(filter_cstring))
 		result, _ := track_category_table_show(state.category_table, sv.library, state.viewing_hash)
-		if result != {} {
-			log.debug(result)
-		}
 
 		if result.select != nil {
 			state.viewing_hash = result.select.?

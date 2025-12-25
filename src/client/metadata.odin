@@ -422,10 +422,7 @@ metadata_editor_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^S
 			if imgui.MenuItem("Remove") {
 				sel := track_table_get_selection(state.track_table)
 				defer delete(sel)
-
-				log.debug(sel)
-				log.debug(state.tracks[:])
-
+				
 				for id in sel {
 					index := slice.linear_search(state.tracks[:], id) or_continue
 					ordered_remove(&state.tracks, index)
