@@ -190,6 +190,122 @@ table_show :: proc(
 	str_id: cstring, display_info: Table_Display_Info,
 	scrolling_text_timer: f64
 ) -> (result: Table_Result, shown: bool) {
+
+	RESIZE_GRAB_THICKNESS :: 3
+
+	show_vertical_borders :: proc(
+		t: ^Table_State, cursor: [2]f32, table_pos: [2]f32, table_size: [2]f32, y_offset: f32, height: f32
+	) {
+		offset: f32
+		accum_weight: f32
+		relative_mouse_pos: f32
+
+		resize_right_accum_weight: f32
+		resize_left_accum_weight: f32
+		resize_left_col: ^Table_Column
+		resize_right_col: ^Table_Column
+		scroll_y := imgui.GetScrollY()
+		drawlist := imgui.GetWindowDrawList()
+
+		length := height
+
+		get_next_visible_column :: proc(
+			t: ^Table_State, display_index: int
+		) -> (col: ^Table_Column, right_weight: f32) {
+			index_in_order := -1
+
+			for col_index, i in t.column_order[display_index+1:t.column_count] {
+				if !t.columns[col_index].hidden {
+					index_in_order = i + display_index + 1
+					col = &t.columns[col_index]
+					break
+				}
+			}
+
+			if index_in_order == -1 do return
+
+			for col_index in t.column_order[index_in_order+1:t.column_count] {
+				if !t.columns[col_index].hidden {
+					right_weight += t.columns[col_index].weight
+				}
+			}
+
+			return
+		}
+
+		relative_mouse_pos = (imgui.GetMousePos().x - table_pos.x) / table_size.x
+		
+		for col_index, col_display_index in t.column_order[0:t.column_count] {
+			next_col: ^Table_Column
+			weight_to_right_of_next_col: f32
+			col: ^Table_Column
+			width: f32
+			pos: [2]f32
+			border_color: u32
+			
+			col = &t.columns[col_index]
+
+			if col.hidden do continue
+			
+			width = table_size.x * col.weight
+			offset += width
+			pos = cursor + {offset, scroll_y}
+			
+			next_col, weight_to_right_of_next_col = get_next_visible_column(t, col_display_index)
+			
+			if next_col == nil do continue
+
+			button_min := [2]f32{pos.x - RESIZE_GRAB_THICKNESS, pos.y}
+			button_max := [2]f32{pos.x + RESIZE_GRAB_THICKNESS, pos.y + length}
+			border_color = imgui.GetColorU32(.TableBorderStrong)
+
+			// Resizing
+			{
+				hovered, held: bool
+				id := imgui.GetIDInt(auto_cast col_index)
+				
+				imgui.ItemAdd({button_min, button_max}, id)
+				imgui.ButtonBehavior({button_min, button_max}, id, &hovered, &held, {.MouseButtonLeft})
+
+				if hovered || held do imgui.SetMouseCursor(.ResizeEW)
+				
+				if hovered do border_color = imgui.GetColorU32(.ResizeGripHovered)
+
+				if held {
+					resize_left_accum_weight = accum_weight
+					resize_right_accum_weight = weight_to_right_of_next_col
+					resize_left_col = col
+					resize_right_col = next_col
+					border_color = imgui.GetColorU32(.ResizeGripActive)
+				}
+			}
+
+			imgui.DrawList_AddLine(drawlist, pos, pos + {0, length}, border_color)
+			accum_weight += col.weight
+		}
+
+		if resize_left_col != nil && resize_right_col != nil {
+			min_weight :: 0.02
+			new_left_weight := relative_mouse_pos - resize_left_accum_weight
+			new_right_weight := (1 - resize_right_accum_weight) - relative_mouse_pos
+
+			// Size correction
+			if new_left_weight <= min_weight {
+				diff := min_weight - new_left_weight
+				new_right_weight -= diff
+				new_left_weight += diff
+			}
+			else if new_right_weight <= min_weight {
+				diff := min_weight - new_right_weight
+				new_right_weight += diff
+				new_left_weight -= diff
+			}
+
+			resize_left_col.weight = new_left_weight
+			resize_right_col.weight = new_right_weight
+		}
+	}
+
 	header_context_menu :: proc(t: ^Table_State, columns: []Table_Column_Info) {
 		if imgui.MenuItem("Show all columns") {
 			for &col in t.columns[:t.column_count] do col.hidden = false
@@ -238,26 +354,29 @@ table_show :: proc(
 	row_height := imgui.GetTextLineHeight() + (padding.y * 2)
 	cursor := imgui.GetCursorScreenPos()
 
+	show_vertical_borders(t, cursor, table_pos, table_size, 0, row_height)
+
 	// -------------------------------------------------------------------------
 	// Headers
 	// -------------------------------------------------------------------------
 	{
 		offset: f32
 
-		imgui.PushStyleVarImVec2(.ItemSpacing, {0, 0})
+		imgui.PushStyleVarImVec2(.ItemSpacing, {RESIZE_GRAB_THICKNESS, 0})
 		defer imgui.PopStyleVar()
 
+		
 		imgui.DrawList_AddRectFilled(drawlist,
 			cursor, cursor + {table_size.x, row_height},
 			imgui.GetColorU32(.TableHeaderBg)
 		)
-
+		
 		for col_index in t.column_order[:len(columns)] {
 			col_width: f32
 			col_state: ^Table_Column
 			col: Table_Column_Info
 			bg_rect_min, bg_rect_max: [2]f32
-
+			
 			col_state = &t.columns[col_index]
 			
 			if col_state.hidden do continue
@@ -269,8 +388,11 @@ table_show :: proc(
 
 			bg_rect_min = {cursor.x + offset, cursor.y}
 			bg_rect_max = bg_rect_min + {col_width, row_height}
+
+			imgui.PushClipRect(bg_rect_min, bg_rect_max, true)
+			defer imgui.PopClipRect()
 			
-			if imgui.InvisibleButton(col.name, {col_width, row_height}) {
+			if imgui.InvisibleButton(col.name, {col_width - RESIZE_GRAB_THICKNESS, row_height}) {
 				switch col_state.sort_order {
 					case .None: col_state.sort_order = .Ascending
 					case .Ascending: col_state.sort_order = .Descending
@@ -305,14 +427,15 @@ table_show :: proc(
 	defer imgui.EndChild()
 	imgui.BeginChild(str_id, imgui.GetContentRegionAvail()) or_return
 
+	
 	table_focused = imgui.IsWindowFocused()
-
+	
 	// -------------------------------------------------------------------------
 	// Jumping
 	// -------------------------------------------------------------------------
 	if display_info.highlight_row_id != 0 && table_focused && is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
 		jump_row_id := display_info.highlight_row_id
-
+		
 		for row, index in display_info.rows {
 			if row.id == jump_row_id {
 				imgui.SetScrollY(f32(index) * row_height - (table_size.y * 0.5))
@@ -320,9 +443,11 @@ table_show :: proc(
 			}
 		}
 	}
-
+	
 	cursor = imgui.GetCursorScreenPos()	
 	scroll_y := imgui.GetScrollY()
+	
+	show_vertical_borders(t, cursor, table_pos, table_size, 0, table_size.y)
 
 	// -------------------------------------------------------------------------
 	// Row clipping
@@ -368,122 +493,6 @@ table_show :: proc(
 		}
 	}
 
-
-	// -------------------------------------------------------------------------
-	// Vertical borders
-	// -------------------------------------------------------------------------
-	if len(columns) > 1 {
-		offset: f32
-		accum_weight: f32
-		relative_mouse_pos: f32
-
-		resize_right_accum_weight: f32
-		resize_left_accum_weight: f32
-		resize_left_col: ^Table_Column
-		resize_right_col: ^Table_Column
-
-		length := table_size.y
-
-		get_next_visible_column :: proc(
-			t: ^Table_State, display_index: int
-		) -> (col: ^Table_Column, right_weight: f32) {
-			index_in_order := -1
-
-			for col_index, i in t.column_order[display_index+1:t.column_count] {
-				if !t.columns[col_index].hidden {
-					index_in_order = i + display_index + 1
-					col = &t.columns[col_index]
-					break
-				}
-			}
-
-			if index_in_order == -1 do return
-
-			for col_index in t.column_order[index_in_order+1:t.column_count] {
-				if !t.columns[col_index].hidden {
-					right_weight += t.columns[col_index].weight
-				}
-			}
-
-			return
-		}
-
-		relative_mouse_pos = (imgui.GetMousePos().x - table_pos.x) / table_size.x
-		
-		for col_index, col_display_index in t.column_order[0:len(columns)-1] {
-			next_col: ^Table_Column
-			weight_to_right_of_next_col: f32
-			col: ^Table_Column
-			width: f32
-			pos: [2]f32
-			border_color: u32
-			
-			col = &t.columns[col_index]
-
-			if col.hidden do continue
-			
-			width = table_size.x * col.weight
-			offset += width
-			pos = cursor + {offset, scroll_y}
-			
-			next_col, weight_to_right_of_next_col = get_next_visible_column(t, col_display_index)
-			
-			if next_col == nil do continue
-
-			button_min := [2]f32{pos.x - 3, pos.y}
-			button_max := [2]f32{pos.x + 3, pos.y + table_size.y}
-			border_color = imgui.GetColorU32(.TableBorderStrong)
-
-			// Resizing
-			{
-				hovered, held: bool
-				color: u32 = 0xff0000ff
-				id := imgui.GetIDInt(auto_cast col_index)
-				
-				imgui.ItemAdd({button_min, button_max}, id)
-				imgui.ButtonBehavior({button_min, button_max}, id, &hovered, &held, {.MouseButtonLeft})
-
-				if hovered || held do imgui.SetMouseCursor(.ResizeEW)
-				
-				if hovered do border_color = imgui.GetColorU32(.ResizeGripHovered)
-
-				if held {
-					resize_left_accum_weight = accum_weight
-					resize_right_accum_weight = weight_to_right_of_next_col
-					resize_left_col = col
-					resize_right_col = next_col
-					border_color = imgui.GetColorU32(.ResizeGripActive)
-				}
-				
-				if hovered do color = max(u32)
-				if held do color = 0xff00ff00
-			}
-
-			imgui.DrawList_AddLine(drawlist, pos, pos + {0, length}, border_color)
-			accum_weight += col.weight
-		}
-
-		if resize_left_col != nil && resize_right_col != nil {
-			min_weight :: 0.02
-			new_left_weight := relative_mouse_pos - resize_left_accum_weight
-			new_right_weight := (1 - resize_right_accum_weight) - relative_mouse_pos
-
-			// Size correction
-			if new_left_weight <= min_weight {
-				diff := min_weight - new_left_weight
-				new_right_weight -= diff
-				new_left_weight += diff
-			}
-			else if new_right_weight <= min_weight {
-				diff := min_weight - new_right_weight
-				new_right_weight += diff
-				new_left_weight -= diff
-			}
-
-			resize_left_col.weight = new_left_weight
-			resize_right_col.weight = new_right_weight
-		}
-	}
 
 	// -------------------------------------------------------------------------
 	// Row backgrounds and behaviour
@@ -595,45 +604,4 @@ table_show :: proc(
 
 	shown = true
 	return
-}
-
-table_test :: proc(uptime: f64) -> bool {	
-	defer imgui.End()
-	imgui.Begin("Table Test") or_return
-
-	columns := []Table_Column_Info {
-		{
-			name = "Title",
-			rows = {
-				{text = "ESEF"},
-				{text = "KETCHUP"},
-				{text = "UNCANNY VALLEY"},
-			},
-		},
-		{
-			name = "Artist",
-			rows = {
-				{text = "Billain"},
-				{text = "Billain"},
-				{text = "Billain"},
-			},
-		},
-		{
-			name = "Album",
-			rows = {
-				{text = ""},
-				{text = ""},
-				{text = ""},
-			},
-		}
-	}
-
-	table_show("Test Table", Table_Display_Info {
-		columns = columns,
-		rows = {{id = 1}, {id = 2}, {id = 3}},
-		highlight_color = 0xdd00ffdd,
-		highlight_row_id = 2,
-	}, uptime)
-
-	return true
 }
