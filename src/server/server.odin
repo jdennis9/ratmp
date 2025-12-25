@@ -85,6 +85,7 @@ Server :: struct {
 		playlists_folder: string,
 		state: string,
 		library: string,
+		library_backup: string,
 	},
 
 	event_handlers: [dynamic]Event_Handler,
@@ -111,6 +112,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	state.paths.playlists_folder = filepath.join({data_dir, "Playlists"})
 	state.paths.state = filepath.join({config_dir, "state.json"})
 	state.paths.library = filepath.join({data_dir, "library.sqlite"})
+	state.paths.library_backup = filepath.join({data_dir, "library.sqlite.bak"})
 
 	library_init(&state.library, state.paths.playlists_folder) or_return
 	state.stream = sys.audio_create_stream(sys.Audio_Stream_Config {
@@ -120,6 +122,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	}) or_return
 	set_paused(state, true)
 	
+	os2.copy_file(state.paths.library_backup, state.paths.library)
 	library_load_from_file(&state.library, state.paths.library)
 	library_scan_playlists(&state.library)
 
