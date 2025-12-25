@@ -54,8 +54,7 @@ Table_State :: struct {
 	column_count: int,
 	need_distribute_weights: bool,
 	settings_loaded: bool,
-	resize_start: f32,
-	resize_column: int,
+	sort_by_column: int,
 }
 
 Table_Result :: struct {
@@ -82,6 +81,7 @@ Table_Column_Info :: struct {
 @(private="file")
 _table_init :: proc(str_id: cstring, t: ^Table_State, columns: []Table_Column_Info) {
 	t.column_count = len(columns)
+	t.sort_by_column = -1
 
 	log.debug("Init table", str_id)
 
@@ -401,8 +401,43 @@ table_show :: proc(
 
 				if col_state.sort_order != .None do result.sort_by_column = col_index
 				result.sort_order = col_state.sort_order
+				t.sort_by_column = col_index
 			}
 			imgui.SameLine()
+
+			// -----------------------------------------------------------------
+			// Sort order triangle
+			// -----------------------------------------------------------------
+			if col_state.sort_order != .None && t.sort_by_column == col_index {
+				triangle_padding := style.FramePadding
+
+				triangle_size := (row_height - (triangle_padding.x * 2)) * 0.25
+				triangle_size = clamp(triangle_size, 1, 30)
+
+				triangle_pos := [2]f32{
+					bg_rect_max.x - triangle_padding.x - 6,
+					bg_rect_min.y + triangle_padding.y + (row_height * 0.5) - triangle_size
+				}
+
+				if col_state.sort_order == .Ascending {
+					imgui.DrawList_AddTriangleFilled(
+						drawlist,
+						triangle_pos + {0, -triangle_size},
+						triangle_pos + {triangle_size, triangle_size},
+						triangle_pos + {-triangle_size, triangle_size},
+						imgui.GetColorU32(.Text)
+					)
+				}
+				else if col_state.sort_order == .Descending {
+					imgui.DrawList_AddTriangleFilled(
+						drawlist,
+						triangle_pos + {0, triangle_size},
+						triangle_pos + {-triangle_size, -triangle_size},
+						triangle_pos + {triangle_size, -triangle_size},
+						imgui.GetColorU32(.Text)
+					)
+				}
+			}
 
 			if imgui.BeginPopupContextItem() {
 				header_context_menu(t, columns)
