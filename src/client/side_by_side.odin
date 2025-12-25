@@ -31,8 +31,6 @@ side_by_side_window_show :: proc(window: Side_By_Side_Window, cl: ^Client, sv: ^
 
 			imgui.TableNextRow()
 
-			
-			
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Button(ICON_EXPAND) do result.mode = .Single
 				imgui.SameLine()

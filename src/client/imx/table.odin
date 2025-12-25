@@ -302,8 +302,8 @@ table_show :: proc(
 		imgui.NewLine()
 	}
 	
-	imgui.BeginChild(str_id, imgui.GetContentRegionAvail()) or_return
 	defer imgui.EndChild()
+	imgui.BeginChild(str_id, imgui.GetContentRegionAvail()) or_return
 
 	table_focused = imgui.IsWindowFocused()
 

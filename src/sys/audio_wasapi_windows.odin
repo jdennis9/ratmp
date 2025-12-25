@@ -253,9 +253,9 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 			}
 			else if obj == win.WAIT_OBJECT_0+1 {
 				win.ResetEvent(stream.request_drop_buffer_event)
-				stream.config.event_callback(stream.config.callback_data, .DropBuffer)
 				audio_client->Stop()
 				audio_client->Reset()
+				stream.config.event_callback(stream.config.callback_data, .DropBuffer)
 				audio_client->Start()
 			}
 			else if obj == win.WAIT_OBJECT_0+2 {
@@ -283,6 +283,7 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 		
 		audio_client->GetCurrentPadding(&frame_padding)
 		avail_frames = buffer_frame_count - frame_padding
+		log.debug(avail_frames)
 		
 		if win32_check(render_client->GetBuffer(avail_frames, &buffer)) {
 			status = stream.config.stream_callback(
