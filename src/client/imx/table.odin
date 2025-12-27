@@ -495,7 +495,7 @@ table_show :: proc(
 	// -------------------------------------------------------------------------
 	// Row text
 	// -------------------------------------------------------------------------
-	{
+	if display_start <= display_end {
 		offset: f32
 
 		for col_index in t.column_order[:len(columns)] {

@@ -85,6 +85,13 @@ get_font_language_ranges :: proc(lang: sys.Font_Languages, allocator := context.
 
 	imgui.FontGlyphRangesBuilder_Clear(&builder)
 
+	if .English in lang {
+		imgui.FontGlyphRangesBuilder_AddRanges(
+			&builder,
+			imgui.FontAtlas_GetGlyphRangesDefault(atlas)
+		)
+	}
+
 	if .ChineseFull in lang {
 		imgui.FontGlyphRangesBuilder_AddRanges(
 			&builder,
@@ -103,13 +110,6 @@ get_font_language_ranges :: proc(lang: sys.Font_Languages, allocator := context.
 		imgui.FontGlyphRangesBuilder_AddRanges(
 			&builder,
 			imgui.FontAtlas_GetGlyphRangesCyrillic(atlas)
-		)
-	}
-
-	if .English in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesDefault(atlas)
 		)
 	}
 
