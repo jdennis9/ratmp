@@ -331,8 +331,10 @@ library_create_playlist :: proc(lib: ^Library, name: string, auto_playlist := fa
 	playlist: Playlist
 	lib.next_user_playlist_id += 1
 	playlist.id = lib.next_user_playlist_id
+	playlist.origin = .User
 	id = playlist.id
-	
+	playlist_set_name(&playlist, name)
+
 	if auto_playlist {
 		playlist.auto_build_params = Playlist_Auto_Build_Params{}
 	}

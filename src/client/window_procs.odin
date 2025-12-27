@@ -137,6 +137,7 @@ Playlists_Window :: struct {
 	playlist_filter: [128]u8,
 	mode: Side_By_Side_Window_Mode,
 	auto_playlist_param_editor: Auto_Playlist_Parameter_Editor,
+	new_playlist_popup_id: imgui.ID,
 }
 
 PLAYLISTS_WINDOW_ARCHETYPE := Window_Archetype {
@@ -154,6 +155,7 @@ playlists_window_make_instance :: proc(allocator := context.allocator) -> ^Windo
 
 playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Playlists_Window) self
+	state.new_playlist_popup_id = imgui.GetID("##new_playlist")
 
 	show_playlist_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
 		state := cast(^Playlists_Window) data
@@ -161,17 +163,30 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		defer imgui.PopID()
 
 		filter_cstring := cstring(&state.playlist_filter[0])
+		commit_new_playlist := false
 
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
+		
+		commit_new_playlist |= imgui.InputTextWithHint(
+			"##playlist_name", "New playlist name", cstring(&state.new_playlist_name[0]),
+			auto_cast len(state.new_playlist_name), {.EnterReturnsTrue}
+		)
+		
+		new_playlist_name := string(cstring(&state.new_playlist_name[0]))
+		new_playlist_name_exists := false
+		for pl in sv.library.playlists {
+			if pl.name == new_playlist_name {
+				new_playlist_name_exists = true
+				break
+			}
+		}
 
-		imgui.SameLine()
-		imgui.Button("+ New playlist")
+		imgui.BeginDisabled(new_playlist_name_exists)
+		commit_new_playlist |= imgui.Button("+ New playlist")
+		imgui.EndDisabled()
 
 		playlist_table_update(&state.playlist_table, sv.library.playlists[:], sv.library.playlists_serial, string(filter_cstring))
 		result, _ := playlist_table_show(state.playlist_table, state.viewing_id, state.editing_id, sv.current_playlist_id)
-		if result != {} {
-			log.debug(result)
-		}
 
 		if result.select != nil {
 			state.viewing_id = result.select.?
@@ -185,6 +200,10 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			if playlist, _, have_playlist := server.library_get_playlist(&sv.library, result.play.?); have_playlist {
 				server.play_playlist(sv, playlist.tracks[:], {.User, auto_cast playlist.id})
 			}
+		}
+
+		if commit_new_playlist && !new_playlist_name_exists && new_playlist_name != "" {
+			server.library_create_playlist(&sv.library, new_playlist_name)
 		}
 	}
 
@@ -240,8 +259,11 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 	result := side_by_side_window_show(sbs, cl, sv)
 	state.mode = result.mode
-	if result.go_back {
-		state.viewing_id = 0
+	if result.go_back do state.viewing_id = 0
+
+	if imgui.BeginPopupEx(state.new_playlist_popup_id, {.AlwaysAutoResize}) {
+
+		imgui.EndPopup()
 	}
 }
 

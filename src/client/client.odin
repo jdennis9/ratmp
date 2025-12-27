@@ -275,31 +275,6 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	cl.tick_last_frame = prev_frame_start
 	cl.delta = delta
 
-	/*if true {
-		imx.table_test(cl.uptime)
-
-		if imgui.Begin("Library with new table API") {
-			@static table: Track_Table_2
-
-			context_id := imgui.GetID("##context")
-
-			track_table2_update(cl^, &table, sv.library.serial, sv.library,
-				server.library_get_all_track_ids(sv.library), {.Loose, 1}, ""
-			)
-
-			table_result := track_table2_show(&table, "teststs", context_id, sv.current_track_id)
-			track_table2_process_result(&table, table_result, cl, sv, {})
-
-			context_result := track_table2_show_context(&table, table_result, context_id, {.NoRemove}, sv^)
-			track_table2_process_context(&table, table_result, context_result, cl, sv)
-
-			if table_result.sort_spec != nil {
-				server.library_sort(&sv.library, table_result.sort_spec.?)
-			}
-		}
-		imgui.End()
-	}*/
-
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {
 		cl.media_controls.enabled = true

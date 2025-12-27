@@ -1,5 +1,6 @@
 package server
 
+import "core:strings"
 import "core:slice"
 
 import sa "core:container/small_array"
@@ -147,4 +148,9 @@ playlist_mark_dirty :: proc(playlist: ^Playlist, lib: ^Library) {
 		ap := &playlist.auto_build_params.?
 		ap.build_serial = 0
 	}
+}
+
+playlist_set_name :: proc(playlist: ^Playlist, name: string) {
+	playlist.name_cstring = strings.clone_to_cstring(name)
+	playlist.name = string(playlist.name_cstring)
 }

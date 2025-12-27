@@ -33,7 +33,6 @@ side_by_side_window_show :: proc(window: Side_By_Side_Window, cl: ^Client, sv: ^
 
 			if imgui.TableSetColumnIndex(0) {
 				if imgui.Button(ICON_EXPAND) do result.mode = .Single
-				imgui.SameLine()
 				window.left_proc(window.data, cl, sv)
 			}
 			if imgui.TableSetColumnIndex(1) {
@@ -44,7 +43,6 @@ side_by_side_window_show :: proc(window: Side_By_Side_Window, cl: ^Client, sv: ^
 			if imgui.Button(ICON_COMPRESS) do result.mode = .SideBySide
 
 			if window.focus_right {
-				imgui.SameLine()
 				if imgui.Button("Go back") || (imgui.IsWindowFocused() && imgui.IsKeyPressed(.Escape)) {
 					result.go_back = true
 					break
@@ -52,7 +50,6 @@ side_by_side_window_show :: proc(window: Side_By_Side_Window, cl: ^Client, sv: ^
 				window.right_proc(window.data, cl, sv)
 			}
 			else {
-				imgui.SameLine()
 				window.left_proc(window.data, cl, sv)
 			}
 		}
