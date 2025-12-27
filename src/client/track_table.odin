@@ -641,6 +641,7 @@ Track_Table :: struct {
 	uptime: f64,
 	initialized: bool,
 	playlist_id: Global_Playlist_ID,
+	filter_hash: u32,
 }
 
 track_table_update :: proc(
@@ -648,7 +649,7 @@ track_table_update :: proc(
 	table: ^Track_Table,
 	serial: uint,
 	lib: server.Library,
-	tracks: []Track_ID,
+	unfiltered_tracks: []Track_ID,
 	playlist_id: Global_Playlist_ID,
 	filter: string,
 	flags: Track_Table_Flags = {},
@@ -657,15 +658,25 @@ track_table_update :: proc(
 
 	if !table.initialized do mem.dynamic_arena_init(&table.arena)
 
-	if serial == table.serial && table.playlist_id == playlist_id do return
+	filter_hash := xxhash.XXH32(transmute([]u8) filter)
+
+	if serial == table.serial && table.playlist_id == playlist_id && filter_hash == table.filter_hash do return
 
 	util.SCOPED_TIMER("Update track table")
 
 	table.serial = serial
 	table.playlist_id = playlist_id
+	table.filter_hash = filter_hash
 
 	mem.dynamic_arena_free_all(&table.arena)
 	allocator := mem.dynamic_arena_allocator(&table.arena)
+
+	tracks: [dynamic]Track_ID
+	server.filter_tracks(lib, {
+		components = ~{},
+		filter = filter
+	}, unfiltered_tracks, &tracks)
+	defer delete(tracks)
 
 	visible_track_count := len(tracks)
 
