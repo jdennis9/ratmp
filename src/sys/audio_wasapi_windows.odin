@@ -283,7 +283,6 @@ _run_wasapi_session :: proc(stream: ^_WASAPI_Stream) -> (ok: bool) {
 		
 		audio_client->GetCurrentPadding(&frame_padding)
 		avail_frames = buffer_frame_count - frame_padding
-		log.debug(avail_frames)
 		
 		if win32_check(render_client->GetBuffer(avail_frames, &buffer)) {
 			status = stream.config.stream_callback(

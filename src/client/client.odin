@@ -607,16 +607,17 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 
 	// Seek bar
 	{
-		second := cast(f32) server.get_track_second(sv)
-		duration := cast(f32) server.get_track_duration_seconds(sv)
+		second := server.get_track_second(sv)
+		duration := server.get_track_duration_seconds(sv)
 
 		lh, lm, ls := time.clock_from_seconds(auto_cast second)
 		rh, rm, rs := time.clock_from_seconds(auto_cast duration)
 
-		imgui.Text(
+		imx.textf(
+			64,
 			"%02d:%02d:%02d/%02d:%02d:%02d",
-			i32(lh), i32(lm), i32(ls),
-			i32(rh), i32(rm), i32(rs),
+			lh, lm, ls,
+			rh, rm, rs,
 		)
 
 		if imx.scrubber("##seek_bar", &second, 0, duration) {
@@ -683,10 +684,10 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 		frac := f32(output_count) / f32(input_count)
 
 		if !progress.counting_files {
-			imgui.Text("Scanning metadata (%u/%u)", u32(output_count), u32(input_count))
+			imx.text(64, "Scanning metadata (", output_count, "/", input_count, ")", sep = "")
 		}
 		else {
-			imgui.Text("Counting tracks...")
+			imx.text_unformatted("Counting tracks...")
 		}
 		imgui.ProgressBar(frac, {200, 0})
 		imgui.Separator()

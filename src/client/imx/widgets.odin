@@ -24,12 +24,12 @@ import imgui "src:thirdparty/odin-imgui"
 
 lerp :: linalg.lerp
 
-scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.Vec2 = {}, marker_interval: f32 = 10) -> bool {
+scrubber :: proc(str_id: cstring, p_value: ^int, min, max: int, size_arg: imgui.Vec2 = {}, marker_interval: f32 = 10) -> bool {
 	size: [2]f32
 	style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
 	span := max - min
-	frac := (p_value^ + min) / span
+	frac := (f32(p_value^) + f32(min)) / f32(span)
 	avail_size := imgui.GetContentRegionAvail()
 	cursor := imgui.GetCursorScreenPos() + style.FramePadding*1.5
 	mouse := imgui.GetMousePos()
@@ -67,7 +67,7 @@ scrubber :: proc(str_id: cstring, p_value: ^f32, min, max: f32, size_arg: imgui.
 
 	if imgui.IsItemDeactivated() {
 		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
-		p_value^ = lerp(min, max, frac)
+		p_value^ = int(lerp(f32(min), f32(max), frac))
 		return true
 	}
 
