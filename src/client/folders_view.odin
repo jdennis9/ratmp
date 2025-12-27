@@ -170,18 +170,28 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				.RowBg0, imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight])
 			)
 		}
+					
+		if node.track_count > 0 {
+			if imgui.TableSetColumnIndex(1) {
+				imx.text_unformatted(string(node.duration_str[:node.duration_str_len]))
+			}
+			
+			if imgui.TableSetColumnIndex(2) {
+				imx.text(8, node.track_count)
+			}
+		}
 
-		if node.track_count == 0 {
-			if !imgui.TableSetColumnIndex(0) {return}
-			tree_node_flags := imgui.TreeNodeFlags{.SpanAllColumns}
+		if len(node.children) > 0 {
+			if !imgui.TableSetColumnIndex(0) do return
+			tree_node_flags := imgui.TreeNodeFlags{.AllowOverlap, .SpanAllColumns}
 
-			if state.sel_folder_id == node.id {tree_node_flags |= {.Selected}}
-			if depth == 0 {tree_node_flags |= {.DefaultOpen}}
+			if state.sel_folder_id == node.id do tree_node_flags |= {.Selected}
+			if depth == 0 do tree_node_flags |= {.DefaultOpen}
 
 			if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
-				if imgui.IsItemToggledOpen() {
-					result.select = node
-				}
+				//if imgui.IsItemToggledOpen() do result.select = node
+
+
 
 				if imgui.BeginPopupContextItem() {
 					if imgui.MenuItem("Remove from library") {
@@ -196,18 +206,24 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				}
 
 				for &child in node.children {
-					if child.track_count == 0 {show_node(state, cl, sv, &child, depth + 1, result)}
+					if child.track_count == 0 do show_node(state, cl, sv, &child, depth + 1, result)
 				}
 		
 				for &child in node.children {
-					if child.track_count != 0 {show_node(state, cl, sv, &child, depth + 1, result)}
+					if child.track_count != 0 do show_node(state, cl, sv, &child, depth + 1, result)
 				}
-		
 				imgui.TreePop()
 			}
 			else if is_play_track_input_pressed() {
-				result.select = node
 				result.play = node
+				if state.sbs_mode == .SideBySide do result.select = node
+			}
+
+			// Use IsMouseHoveringRect instead of IsItemHovered otherwise the open button
+			// will flicker
+			if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
+				imgui.SameLine()
+				if imgui.SmallButton("Show tracks") do result.select = node
 			}
 		}
 		else {
@@ -221,16 +237,16 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				result.select = node
 			}
 
-			if imgui.BeginPopupContextItem() {
-				if imgui.MenuItem("Remove from library") {}
-				imgui.EndPopup()
-			}
+			//if imgui.BeginPopupContextItem() {
+				//if imgui.MenuItem("Remove from library") {}
+				//imgui.EndPopup()
+			//}
 
 			if is_play_track_input_pressed() {
 				if folder, folder_found := server.library_find_folder(sv.library, node.id); folder_found {
 					server.play_playlist(sv, folder.tracks[:], playlist_id)
 				}
-				result.select = node
+				if state.sbs_mode == .SideBySide do result.select = node
 			}
 
 			if imgui.TableSetColumnIndex(1) {
