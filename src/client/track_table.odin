@@ -73,7 +73,6 @@ Track_Table_Result :: struct {
 	play_selection: bool,
 	add_selection_to_queue: bool,
 	pick_up_drag_drop_payload: []Track_ID,
-	bounding_box: imgui.Rect,
 }
 
 Track_Table_Result_Process_Flag :: enum {
@@ -372,6 +371,7 @@ track_table_show :: proc(
 	playing: Track_ID,
 ) -> (result: Track_Table_Result) {
 	columns := table.columns
+	window_bb := imx.get_window_bounding_box()
 
 	display := imx.Table_Display_Info {
 		columns = columns[:],
@@ -379,7 +379,9 @@ track_table_show :: proc(
 		highlight_color = imgui.GetColorU32ImVec4(global_theme.custom_colors[.PlayingHighlight]),
 		highlight_row_id = auto_cast playing,
 		context_menu_id = context_menu_id,
+		drag_drop_payload_type = "TRACKS",
 	}
+
 	r, _ := imx.table_show(str_id, display, table.uptime)
 
 	if r.middle_clicked_row != nil do result.play = cast(Track_ID) r.middle_clicked_row.?
@@ -457,7 +459,6 @@ track_table_show_context :: proc(
 	table: Track_Table, table_result: Track_Table_Result,
 	context_id: imgui.ID, flags: Track_Context_Flags, sv: Server,
 ) -> (result: Track_Context_Result, shown: bool) #optional_ok {
-	//if table_result.selection_count == 0 {return}
 	imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) or_return
 	defer imgui.EndPopup()
 	shown = true
@@ -526,8 +527,8 @@ track_table_free :: proc(table: ^Track_Table) {
 	table.serial = 0
 }
 
-track_table_accept_drag_drop :: proc(result: Track_Table_Result, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
-	imgui.BeginDragDropTargetCustom(result.bounding_box, imgui.GetID("foo")) or_return
+track_table_accept_drag_drop :: proc(str_id: cstring, bb: imgui.Rect, allocator: runtime.Allocator) -> (payload: []Track_ID, have_payload: bool) {
+	imgui.BeginDragDropTargetCustom(bb, imgui.GetID(str_id)) or_return
 	defer imgui.EndDragDropTarget()
 
 	return get_track_drag_drop_payload(allocator)

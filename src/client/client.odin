@@ -807,12 +807,17 @@ _set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
 @private
 get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []Track_ID, have_payload: bool) {
 	payload := imgui.AcceptDragDropPayload("TRACKS")
-	if payload == nil {return}
+	if payload == nil do return
 
-	assert(payload.DataSize % size_of(Track_ID) == 0)
-	length := payload.DataSize / size_of(Track_ID)
+	assert(payload.DataSize % size_of(imx.Table_Row_ID) == 0)
+	length := payload.DataSize / size_of(imx.Table_Row_ID)
 
-	tracks = slice.clone((cast([^]Track_ID) payload.Data)[:length])
+	tracks = make([]Track_ID, length, allocator)
+
+	for id, i in (cast([^]imx.Table_Row_ID) payload.Data)[:length] {
+		tracks[i] = cast(Track_ID) id
+	}
+
 	have_payload = true
 
 	return

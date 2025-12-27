@@ -186,3 +186,9 @@ calc_text_size :: proc(text: string) -> [2]f32 {
 is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast(mods | key))
 }
+
+get_window_bounding_box :: proc() -> (r: imgui.Rect) {
+	r.Min = imgui.GetWindowPos()
+	r.Max = r.Min + imgui.GetWindowSize()
+	return r
+}

@@ -89,7 +89,10 @@ track_category_table_update :: proc(table: ^Track_Category_Table, cat: ^server.T
 	}
 }
 
-track_category_table_show :: proc(table: Track_Category_Table, lib: Library, viewing_hash: server.Track_Category_Hash) -> (result: Track_Category_Table_Result, shown: bool) {
+track_category_table_show :: proc(
+	cat: ^server.Track_Category,
+	table: Track_Category_Table, lib: Library, viewing_hash: server.Track_Category_Hash
+) -> (result: Track_Category_Table_Result, shown: bool) {
 	table_flags := imgui.TableFlags_Sortable |
 		imgui.TableFlags_SortTristate |
 		imgui.TableFlags_SizingStretchProp |
@@ -166,6 +169,14 @@ track_category_table_show :: proc(table: Track_Category_Table, lib: Library, vie
 
 				imgui.SetItemTooltip("%d tracks", i32(row.track_count))
 
+				if imgui.BeginDragDropSource() {
+					entry_index, have_entry := server.track_category_find_entry_index(cat, row.hash)
+					if have_entry {
+						_set_track_drag_drop_payload(cat.entries[entry_index].tracks[:])
+					}
+					imgui.EndDragDropSource()
+				}
+
 				if imgui.BeginPopupContextItem() {
 					result.context_target = row.hash
 					if imgui.MenuItem("Play") {result.play = row.hash}
@@ -200,10 +211,6 @@ track_category_table_show :: proc(table: Track_Category_Table, lib: Library, vie
 				imx.text_unformatted(string(row.duration[:row.duration_len]))
 			}
 		}
-	}
-
-	for &row in table.rows {
-	
 	}
 
 	shown = true

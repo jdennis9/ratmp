@@ -141,6 +141,7 @@ Table_Display_Info :: struct {
 	columns: []Table_Column_Info,
 	rows: []Table_Row,
 	context_menu_id: imgui.ID,
+	drag_drop_payload_type: cstring,
 }
 
 @(private="file")
@@ -580,6 +581,23 @@ table_show :: proc(
 			defer imgui.PopID()
 
 			clicked |= imgui.InvisibleButton("##button", {table_size.x, row_height})
+
+			// -----------------------------------------------------------------
+			// Drag-drop
+			// -----------------------------------------------------------------
+			if imgui.BeginDragDropSource() {
+				selected_rows: [dynamic]Table_Row_ID
+				defer delete(selected_rows)
+
+				for row in display_info.rows {
+					if row.selected do append(&selected_rows, row.id)
+				}
+
+				imgui.SetDragDropPayload(display_info.drag_drop_payload_type,
+					raw_data(selected_rows), auto_cast(size_of(Table_Row_ID) * len(selected_rows))
+				)
+				imgui.EndDragDropSource()
+			}
 
 			if row.selected {
 				imgui.DrawList_AddRectFilled(

@@ -95,6 +95,7 @@ queue_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Ba
 queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Queue_Window) self
 	context_id := imgui.GetID("##track_context")
+	window_bb := imx.get_window_bounding_box()
 
 	track_table_update(cl^, &state.track_table, sv.queue_serial, sv.library, sv.queue[:], {origin = .Loose, id = max(u32)}, "", {.NoSort})
 	table_result := track_table_show(state.track_table, "##queue", context_id, sv.current_track_id)
@@ -102,7 +103,7 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
 	track_table_process_result(state.track_table, table_result, cl, sv, {.SetQueuePos})
 
-	if payload, have_payload := track_table_accept_drag_drop(table_result, context.allocator); have_payload {
+	if payload, have_payload := track_table_accept_drag_drop("##queue_drag_drop", window_bb, context.allocator); have_payload {
 		server.append_to_queue(sv, payload, {})
 		delete(payload)
 	}
@@ -246,6 +247,12 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		track_table_process_result(state.track_table, table_result, cl, sv, {})
 		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
 
+		if payload, have_payload := track_table_accept_drag_drop(
+			"##playlist_drag_drop", imx.get_window_bounding_box(), context.allocator
+		); have_payload {
+			server.playlist_add_tracks(playlist, &sv.library, payload)
+		}
+
 		return
 	}
 
@@ -336,7 +343,7 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.category_filter))
 
 		track_category_table_update(&state.category_table, cat, sv.library.categories.serial, string(filter_cstring))
-		result, _ := track_category_table_show(state.category_table, sv.library, state.viewing_hash)
+		result, _ := track_category_table_show(state.category, state.category_table, sv.library, state.viewing_hash)
 
 		if result.select != nil {
 			state.viewing_hash = result.select.?
