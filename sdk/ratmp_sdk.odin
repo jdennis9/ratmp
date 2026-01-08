@@ -1,5 +1,6 @@
 package ratmp_sdk
 
+import "core:mem"
 /*
 Procedures to define (copy+paste this into a file to use as a base):
 
@@ -45,7 +46,7 @@ plug_on_playback_state_changed :: proc(new_state: sdk.Playback_State) {}
 Load_Proc :: #type proc(lib: SDK) -> Plugin_Info
 Init_Proc :: #type proc()
 Frame_Proc :: #type proc(delta: f32)
-Analyse_Proc :: #type proc(audio: [][]f32, samplerate: int, delta: f32)
+Analyse_Proc :: #type proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32)
 Post_Process_Proc :: #type proc(audio: []f32, samplerate, channels: int)
 On_Track_Changed_Proc :: #type proc(track: Track_ID)
 On_Playback_State_Changed_Proc :: #type proc(new_state: Playback_State)
@@ -54,9 +55,10 @@ Version :: struct {major, minor, patch: int}
 Track_ID :: distinct u32
 Playback_State :: enum {Playing, Paused, Stopped}
 Texture_ID :: distinct uintptr
+Draw_List :: distinct rawptr
 
 Rect :: struct {
-	pmin, pmax: [2]f32,
+	min, max: [2]f32,
 }
 
 Base_Procs :: struct {
@@ -78,22 +80,23 @@ UI_Procs :: struct {
 	checkbox: proc(label: cstring, value: ^bool) -> bool,
 	begin_combo: proc(label: cstring, preview: cstring) -> bool,
 	end_combo: proc(),
+	get_window_drawlist: proc() -> Draw_List,
 }
 
 Draw_Procs :: struct {
-	rect: proc(pmin, pmax: [2]f32, color: u32, thickness: f32 = 0, rounding: f32 = 0),
-	rect_filled: proc(pmin, pmax: [2]f32, color: u32, rounding: f32 = 0),
-	many_rects: proc(rects: []Rect, colors: []u32, thickness: f32 = 0, rounding: f32 = 0),
-	many_rects_filled: proc(rects: []Rect, colors: []u32, rounding: f32 = 0),
+	rect: proc(drawlist: Draw_List, pmin, pmax: [2]f32, color: u32, thickness: f32 = 0, rounding: f32 = 0),
+	rect_filled: proc(drawlist: Draw_List, pmin, pmax: [2]f32, color: u32, rounding: f32 = 0),
+	many_rects: proc(drawlist: Draw_List, rects: []Rect, colors: []u32, thickness: f32 = 0, rounding: f32 = 0),
+	many_rects_filled: proc(drawlist: Draw_List, rects: []Rect, colors: []u32, rounding: f32 = 0),
 }
 
-Helper_Procs :: struct {
-	// Distribute frequencies naturally
+Analysis_Procs :: struct {
 	distribute_spectrum_frequencies: proc(out: []f32),
-	// Calculates FFT and distributes values into bands based on freq_cutoffs input.
-	// It's recommended to use this with the same input size, output size and frequency cutoffs
-	// between calls for optimal performance
-	calc_spectrum: proc(input: []f32, freq_cutoffs: []f32, output: []f32),
+	fft_new_state: proc(window_size: int) -> FFT_State,
+	fft_destroy_state: proc(state: FFT_State),
+	fft_set_window_size: proc(state: FFT_State, size: int),
+	fft_process: proc(state: FFT_State, input: []f32) -> []f32,
+	fft_extract_bands: proc(fft: []f32, input_frames: int, freq_cutoffs: []f32, samplerate: f32, output: []f32),
 }
 
 Playback_Procs :: struct {
@@ -114,7 +117,7 @@ Library_Procs :: struct {
 SDK :: struct {
 	ui: ^UI_Procs,
 	draw: ^Draw_Procs,
-	helpers: ^Helper_Procs,
+	analysis: ^Analysis_Procs,
 	playback: ^Playback_Procs,
 	library: ^Library_Procs,
 }
@@ -137,3 +140,5 @@ Spectrum_Band :: struct {
 	freq: f32,
 	peak: f32,
 }
+
+FFT_State :: distinct rawptr

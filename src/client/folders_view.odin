@@ -189,10 +189,6 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			if depth == 0 do tree_node_flags |= {.DefaultOpen}
 
 			if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
-				//if imgui.IsItemToggledOpen() do result.select = node
-
-
-
 				if imgui.BeginPopupContextItem() {
 					if imgui.MenuItem("Remove from library") {
 						result.remove = node

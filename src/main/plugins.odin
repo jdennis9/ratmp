@@ -123,15 +123,8 @@ plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Serv
 
 	// Analysis
 	if cl.analysis.channels != 0 {
-		/*spectrum: [len(cl.analysis.spectrum)]sdk.Spectrum_Band
-
-		for &band, i in spectrum[:cl.analysis.spectrum_frequency_bands_calculated] {
-			band.freq = cl.analysis.spectrum_frequencies[i]
-			band.peak = cl.analysis.spectrum[i]
-		}
-
 		for plugin in mgr.plugins {
-			if !plugin.enabled {continue}
+			if !plugin.enabled do continue
 
 			audio: [server.MAX_OUTPUT_CHANNELS][]f32
 			for ch in 0..<server.MAX_OUTPUT_CHANNELS {
@@ -139,9 +132,9 @@ plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Serv
 			}
 
 			if plugin.procs.analyse != nil {
-				plugin.procs.analyse(audio[:cl.analysis.channels], cl.analysis.samplerate, delta)
+				plugin.procs.analyse(audio[:cl.analysis.channels], cl.analysis.fft.real_buffer[:], cl.analysis.samplerate, delta)
 			}
-		}*/
+		}
 	}
 
 	for plugin in mgr.plugins {
