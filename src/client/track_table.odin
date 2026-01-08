@@ -205,7 +205,7 @@ process_track_context :: proc(
 
 	if allow_add_to_playlist && result.add_to_playlist != nil {
 		_, track_found := server.library_find_track(sv.library, track_id)
-		playlist, _, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
+		playlist, _, playlist_found := server.library_get_playlist(sv.library, result.add_to_playlist.?)
 		if track_found && playlist_found {
 			server.playlist_add_tracks(playlist, &sv.library, {track_id})
 		}
@@ -513,7 +513,7 @@ track_table_process_context :: proc(
 	}
 
 	if result.add_to_playlist != nil {
-		playlist, _, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
+		playlist, _, playlist_found := server.library_get_playlist(sv.library, result.add_to_playlist.?)
 		if playlist_found {
 			selection := track_table_get_selection(table)
 			defer delete(selection)

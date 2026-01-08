@@ -359,7 +359,7 @@ library_create_playlist :: proc(lib: ^Library, name: string, auto_playlist := fa
 	return
 }
 
-library_get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> (playlist: ^Playlist, index: int, found: bool) {
+library_get_playlist :: proc(lib: Library, id: Playlist_ID) -> (playlist: ^Playlist, index: int, found: bool) {
 	for &pl, i in lib.playlists {
 		if pl.id == id {
 			return &pl, i, true
@@ -370,7 +370,7 @@ library_get_playlist :: proc(lib: ^Library, id: Playlist_ID) -> (playlist: ^Play
 }
 
 library_remove_playlist :: proc(lib: ^Library, id: Playlist_ID) -> bool {
-	playlist, index := library_get_playlist(lib, id) or_return
+	playlist, index := library_get_playlist(lib^, id) or_return
 	if playlist.src_path != "" {
 		os2.remove(playlist.src_path)
 	}

@@ -187,7 +187,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		imgui.EndDisabled()
 
 		playlist_table_update(&state.playlist_table, sv.library.playlists[:], sv.library.playlists_serial, string(filter_cstring))
-		result, _ := playlist_table_show(state.playlist_table, state.viewing_id, state.editing_id, sv.current_playlist_id)
+		result, _ := playlist_table_show(state.playlist_table, sv.library, state.viewing_id, state.editing_id, sv.current_playlist_id)
 
 		if result.select != nil {
 			state.viewing_id = result.select.?
@@ -198,7 +198,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		}
 
 		if result.play != nil {
-			if playlist, _, have_playlist := server.library_get_playlist(&sv.library, result.play.?); have_playlist {
+			if playlist, _, have_playlist := server.library_get_playlist(sv.library, result.play.?); have_playlist {
 				server.play_playlist(sv, playlist.tracks[:], {.User, auto_cast playlist.id})
 			}
 		}
@@ -214,7 +214,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		imgui.PushID("##tracks")
 		defer imgui.PopID()
 
-		playlist, _, have_playlist := server.library_get_playlist(&sv.library, state.viewing_id)
+		playlist, _, have_playlist := server.library_get_playlist(sv.library, state.viewing_id)
 		if !have_playlist {
 			imgui.TextDisabled("No playlist selected")
 			return
@@ -355,7 +355,7 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 
 		if result.add_to_auto_playlist != nil {
 			params := result.add_to_auto_playlist.?
-			playlist, _, have_playlist := server.library_get_playlist(&sv.library, params.playlist_id)
+			playlist, _, have_playlist := server.library_get_playlist(sv.library, params.playlist_id)
 			entry_index, have_entry := server.track_category_find_entry_index(cat, params.hash)
 			if have_playlist && have_entry {
 				entry := &cat.entries[entry_index]
@@ -365,7 +365,7 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 
 		if result.add_to_playlist != nil {
 			params := result.add_to_playlist.?
-			playlist, _, have_playlist := server.library_get_playlist(&sv.library, params.playlist_id)
+			playlist, _, have_playlist := server.library_get_playlist(sv.library, params.playlist_id)
 			entry_index, have_entry := server.track_category_find_entry_index(cat, params.hash)
 			if have_playlist && have_entry {
 				entry := &cat.entries[entry_index]

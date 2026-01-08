@@ -799,8 +799,7 @@ _imgui_settings_write_proc :: proc "c" (
 
 @private
 _set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
-	log.debug("Set payload")
-	imgui.SetDragDropPayload("TRACKS", raw_data(tracks), auto_cast(size_of(Track_ID) * len(tracks)), .Once)
+	imgui.SetDragDropPayload("TRACKS", raw_data(tracks), auto_cast(size_of(Track_ID) * len(tracks)))
 	imgui.SetTooltip("%d tracks", i32(len(tracks)))
 }
 
@@ -809,15 +808,10 @@ get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []
 	payload := imgui.AcceptDragDropPayload("TRACKS")
 	if payload == nil do return
 
-	assert(payload.DataSize % size_of(imx.Table_Row_ID) == 0)
-	length := payload.DataSize / size_of(imx.Table_Row_ID)
+	assert(payload.DataSize % size_of(Track_ID) == 0)
+	length := payload.DataSize / size_of(Track_ID)
 
-	tracks = make([]Track_ID, length, allocator)
-
-	for id, i in (cast([^]imx.Table_Row_ID) payload.Data)[:length] {
-		tracks[i] = cast(Track_ID) id
-	}
-
+	tracks = slice.clone((cast([^]Track_ID) payload.Data)[:length], allocator)
 	have_payload = true
 
 	return

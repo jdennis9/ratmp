@@ -120,7 +120,7 @@ playlist_table_free :: proc(table: ^Playlist_Table) {
 	table.filter_hash = 0
 }
 
-playlist_table_show :: proc(table: Playlist_Table, viewing_id: Playlist_ID, editing_id: Playlist_ID, playing_id: Global_Playlist_ID) -> (result: Playlist_Table_Result, shown: bool) {
+playlist_table_show :: proc(table: Playlist_Table, lib: Library, viewing_id: Playlist_ID, editing_id: Playlist_ID, playing_id: Global_Playlist_ID) -> (result: Playlist_Table_Result, shown: bool) {
 	table_flags := imgui.TableFlags_Sortable |
 		imgui.TableFlags_SortTristate |
 		imgui.TableFlags_SizingStretchProp |
@@ -180,6 +180,13 @@ playlist_table_show :: proc(table: Playlist_Table, viewing_id: Playlist_ID, edit
 		if imgui.TableSetColumnIndex(0) {
 			if imgui.Selectable(row.name, viewing_id == row.id, {.SpanAllColumns}) {
 				result.select = row.id
+			}
+
+			if imgui.BeginDragDropSource() {
+				if playlist, _, found_playlist := server.library_get_playlist(lib, row.id); found_playlist {
+					_set_track_drag_drop_payload(playlist.tracks[:])
+				}
+				imgui.EndDragDropSource()
 			}
 
 			if is_play_track_input_pressed() {
