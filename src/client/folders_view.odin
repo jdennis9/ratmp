@@ -189,6 +189,11 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			if depth == 0 do tree_node_flags |= {.DefaultOpen}
 
 			if imgui.TreeNodeEx(strings.unsafe_string_to_cstring(node.name), tree_node_flags) {
+				if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
+					imgui.SameLine()
+					if imgui.SmallButton("Show tracks") do result.select = node
+				}
+
 				if imgui.BeginPopupContextItem() {
 					if imgui.MenuItem("Remove from library") {
 						result.remove = node
@@ -210,17 +215,21 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				}
 				imgui.TreePop()
 			}
-			else if is_play_track_input_pressed() {
-				result.play = node
-				if state.sbs_mode == .SideBySide do result.select = node
+			else {
+				if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
+					imgui.SameLine()
+					if imgui.SmallButton("Show tracks") do result.select = node
+				}
+
+				if is_play_track_input_pressed() {
+					result.play = node
+					if state.sbs_mode == .SideBySide do result.select = node
+				}
 			}
 
 			// Use IsMouseHoveringRect instead of IsItemHovered otherwise the open button
 			// will flicker
-			if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
-				imgui.SameLine()
-				if imgui.SmallButton("Show tracks") do result.select = node
-			}
+
 		}
 		else {
 			if !imgui.TableSetColumnIndex(0) {return}
