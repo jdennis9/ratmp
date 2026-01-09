@@ -82,7 +82,6 @@ handle_events :: proc(state: ^Server) {
 		if playlist.auto_build_params == nil {continue}
 
 		if playlist.auto_build_params.?.build_serial != state.library.serial {
-			//playlist_list_build_auto_playlist(&state.library.user_playlists, state.library, index)
 			playlist_build_from_auto_params(&playlist, &state.library)
 			state.library.playlists_serial += 1
 		}

@@ -399,6 +399,9 @@ library_add_playlist_from_file :: proc(lib: ^Library, path: string) -> bool {
 
 	playlist_file_load(lib, path, &playlist) or_return
 	playlist.src_path = strings.clone(path, lib.string_allocator)
+
+	if playlist.auto_build_params != nil do playlist_build_from_auto_params(&playlist, lib)
+
 	append(&lib.playlists, playlist)
 
 	log.debug("Add playlist from file:", path)

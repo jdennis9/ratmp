@@ -165,6 +165,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 		filter_cstring := cstring(&state.playlist_filter[0])
 		commit_new_playlist := false
+		auto_playlist := false
 
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.playlist_filter))
 		
@@ -182,8 +183,13 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			}
 		}
 
-		imgui.BeginDisabled(new_playlist_name_exists)
+		imgui.BeginDisabled(new_playlist_name_exists || state.new_playlist_name[0] == 0)
 		commit_new_playlist |= imgui.Button("+ New playlist")
+		imgui.SameLine()
+		if imgui.Button("+ New auto-playlist") {
+			auto_playlist = true
+			commit_new_playlist = true
+		}
 		imgui.EndDisabled()
 
 		playlist_table_update(&state.playlist_table, sv.library.playlists[:], sv.library.playlists_serial, string(filter_cstring))
@@ -204,7 +210,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		}
 
 		if commit_new_playlist && !new_playlist_name_exists && new_playlist_name != "" {
-			server.library_create_playlist(&sv.library, new_playlist_name)
+			server.library_create_playlist(&sv.library, new_playlist_name, auto_playlist)
 		}
 	}
 

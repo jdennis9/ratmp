@@ -40,6 +40,7 @@ Playlist_Table_Row :: struct {
 	length: [6]u8,
 	duration_len: u8,
 	length_len: u8,
+	is_auto_playlist: bool,
 }
 
 Playlist_Table :: struct {
@@ -73,6 +74,7 @@ playlist_table_update :: proc(
 		row.duration_len = auto_cast len(fmt.bprintf(row.duration[:], "%02d:%02d:%02d", hours, minutes, seconds))
 
 		row.id = playlist.id
+		row.is_auto_playlist = playlist.auto_build_params != nil
 
 		return
 	}
@@ -207,6 +209,11 @@ playlist_table_show :: proc(table: Playlist_Table, lib: Library, viewing_id: Pla
 					result.remove = row.id
 				}
 				imgui.EndPopup()
+			}
+
+			if row.is_auto_playlist {
+				imgui.SameLine()
+				imgui.TextDisabled("[Auto]")
 			}
 		}
 

@@ -124,6 +124,7 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	
 	os2.copy_file(state.paths.library_backup, state.paths.library)
 	library_load_from_file(&state.library, state.paths.library)
+	library_update_categories(&state.library)
 	library_scan_playlists(&state.library)
 
 	load_state(state)
