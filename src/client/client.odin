@@ -263,7 +263,7 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 	}
 }
 
-frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) -> (delta: f32) {
+frame :: proc(cl: ^Client, sv: ^Server, delta_arg: f32) {
 	imgui.PushFontFloat(nil, cl.font_size)
 	defer imgui.PopFont()
 
@@ -271,22 +271,11 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
 
-	delta = cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
-	delta = min(delta, 5)
+	delta := min(delta_arg, 5)
 
 	cl.uptime += f64(delta)
 	cl.frame_count += 1
-	cl.tick_last_frame = prev_frame_start
 	cl.delta = delta
-
-	if imgui.BeginTable("Test Table", 2, imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp) {
-		defer imgui.EndTable()
-
-		imgui.TableNextRow()
-		if imgui.TableSetColumnIndex(0) {
-			imx.scrolling_text("Hamburger, anchovies, hasparagus", cl.uptime, imgui.GetContentRegionAvail().x, mode = .DrawOffset)
-		}
-	}
 
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {

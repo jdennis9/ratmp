@@ -17,6 +17,7 @@
 */
 package imgui_extensions
 
+import "src:global"
 import "core:unicode"
 import "core:crypto/_chacha20/ref"
 import "core:log"
@@ -100,7 +101,8 @@ SCROLLING_TEXT_SPACING :: 16
 
 Scrolling_Text_Mode :: enum {StartIndex, DrawOffset}
 
-draw_scrolling_text :: proc(pos: [2]f32, text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil) {
+draw_scrolling_text :: proc(pos: [2]f32, text: string, max_width: f32, text_width_arg: Maybe(f32) = nil) {
+	timer := global.uptime
 	ptr := raw_data(text)
 	text_width := text_width_arg.? or_else calc_text_size(text).x
 	bullet_pos: [2]f32
@@ -137,9 +139,10 @@ draw_scrolling_text :: proc(pos: [2]f32, text: string, timer: f64, max_width: f3
 	)
 }
 
-scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg: Maybe(f32) = nil, mode := Scrolling_Text_Mode.StartIndex) {
+scrolling_text :: proc(text: string, max_width: f32, text_width_arg: Maybe(f32) = nil, mode := Scrolling_Text_Mode.DrawOffset) {
 	ptr := raw_data(text)
 	text_width := text_width_arg.? or_else calc_text_size(text).x
+	timer := global.uptime
 
 	switch mode {
 		case .StartIndex:
@@ -155,7 +158,7 @@ scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg:
 			imgui.TextUnformatted(cstring(&ptr[offset]), cstring(&ptr[len(text)]))
 
 		case .DrawOffset:
-			draw_scrolling_text(imgui.GetCursorScreenPos(), text, timer, max_width, text_width_arg)
+			draw_scrolling_text(imgui.GetCursorScreenPos(), text, max_width, text_width_arg)
 			//imgui.NewLine()
 			imgui.Dummy({max_width + imgui.GetStyle().ItemSpacing.x, 0})
 	}

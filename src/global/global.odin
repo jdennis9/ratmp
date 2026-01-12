@@ -5,3 +5,4 @@ Run_Flag :: enum {
 }
 
 run_flags: bit_set[Run_Flag]
+uptime: f64

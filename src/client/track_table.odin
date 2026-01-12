@@ -20,12 +20,9 @@ package client
 
 import "core:mem"
 import "base:runtime"
-import "core:slice"
 import "core:time"
-import "core:strings"
 import "core:fmt"
 import "core:hash/xxhash"
-import "core:log"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -108,37 +105,6 @@ show_add_to_playlist_menu :: proc(lib: Library, result: ^Track_Context_Result) {
 	}
 }
 
-/*track_table_show_context :: proc(
-	table: Track_Table, table_result: Track_Table_Result,
-	context_id: imgui.ID, flags: Track_Context_Flags, sv: Server,
-) -> (result: Track_Context_Result, shown: bool) #optional_ok {
-	if table_result.selection_count == 0 {return}
-	imgui.BeginPopupEx(context_id, {.AlwaysAutoResize} | imgui.WindowFlags_NoDecoration) or_return
-	defer imgui.EndPopup()
-	shown = true
-
-	if table_result.selection_count == 1 {
-		track_id := cast(Track_ID) table.rows[table_result.lowest_selection_index].id
-		result.single_track = track_id
-		show_track_context_items(track_id, &result, sv.library)
-	}
-	
-	if .NoRemove not_in flags && imgui.MenuItem("Remove") {
-		result.remove = true
-	}
-
-	if .NoQueue not_in flags {
-		result.play |= imgui.MenuItem("Play", "Ctrl + P")
-		result.add_to_queue |= imgui.MenuItem("Add to queue", "Ctrl + Q")
-	}
-
-	if .NoEditMetadata not_in flags {
-		result.edit_metadata |= imgui.MenuItem("Edit metadata")
-	}
-
-	return
-}*/
-
 show_track_context_items :: proc(
 	track_id: Track_ID,
 	result: ^Track_Context_Result,
@@ -217,43 +183,6 @@ process_track_context :: proc(
 		//cl.windows.metadata_popup_show = true
 	}
 }
-
-/*track_table_process_context :: proc(
-	table: Track_Table, table_result: Track_Table_Result,
-	result: Track_Context_Result, cl: ^Client, sv: ^Server,
-) {
-	if result.single_track != nil {
-		process_track_context(result.single_track.?, result, cl, sv, table.playlist_id, false)
-	}
-	else {
-		if result.play {
-			selection := track_table_get_selection(table)
-			defer delete(selection)
-			server.play_playlist(sv, selection, table.playlist_id)
-		}
-		if result.add_to_queue {
-			selection := track_table_get_selection(table)
-			defer delete(selection)
-			server.append_to_queue(sv, selection, table.playlist_id)
-		}
-		if result.edit_metadata {
-			selection := track_table_get_selection(table)
-			defer delete(selection)
-			if editor, ok := bring_window_to_front(cl, WINDOW_METADATA_EDITOR); ok {
-				metadata_editor_window_select_tracks(auto_cast editor, selection)
-			}
-		}
-	}
-
-	if result.add_to_playlist != nil {
-		playlist, _, playlist_found := server.library_get_playlist(&sv.library, result.add_to_playlist.?)
-		if playlist_found {
-			selection := track_table_get_selection(table)
-			defer delete(selection)
-			server.playlist_add_tracks(playlist, &sv.library, selection)
-		}
-	}
-}*/
 
 // -----------------------------------------------------------------------------
 // Example usage of replacement table API

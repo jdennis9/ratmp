@@ -521,7 +521,7 @@ table_show :: proc(
 						cursor.x + offset,
 						cursor.y + (f32(i + display_start) * row_height),
 					} + padding,
-					row.text, scrolling_text_timer, width, row.text_width
+					row.text, width, row.text_width
 				)
 			}
 			

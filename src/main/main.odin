@@ -17,6 +17,7 @@
 */
 package main
 
+import "src:global"
 import "core:time"
 import "core:log"
 import "core:fmt"
@@ -105,7 +106,15 @@ run :: proc() -> bool {
 	sys_main.show_window(true)
 
 	for {
+		delta: f32
 		frame_start := time.tick_now()
+		
+		defer global.uptime += f64(delta)
+
+		if prev_frame_start != {} {
+			delta = cast(f32) time.duration_seconds(time.tick_diff(prev_frame_start, frame_start))
+		}
+		else do delta = 1.0/60.0
 
 		server.handle_events(&g.sv)
 		client.handle_events(&g.cl, &g.sv)
@@ -114,7 +123,7 @@ run :: proc() -> bool {
 		sys_main.new_frame()
 		imgui.NewFrame()
 		
-		delta := client.frame(&g.cl, &g.sv, prev_frame_start, frame_start)
+		client.frame(&g.cl, &g.sv, delta)
 		if enable_plugins {
 			sdk_frame()
 			plugins_frame(&g.plugin_manager, &g.cl, &g.sv, delta)
