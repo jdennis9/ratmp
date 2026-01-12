@@ -41,8 +41,6 @@ ICON_COMPRESS :: ""
 Load_Font :: struct {
 	data: []u8,
 	path: cstring,
-	size: f32,
-	languages: sys.Font_Languages,
 }
 
 Font_Language :: enum {
@@ -76,153 +74,32 @@ ICON_RANGES := []imgui.Wchar {
 @(private="file")
 _BUILTIN_FONT := #load("data/NotoSans-SemiBold.ttf")
 
-get_font_language_ranges :: proc(lang: sys.Font_Languages, allocator := context.temp_allocator) -> []imgui.Wchar {
-	builder: imgui.FontGlyphRangesBuilder
-	vector: imgui.Vector_Wchar
-	defer imgui.Vector_Destruct(&vector)
-
-	atlas := imgui.GetIO().Fonts
-
-	imgui.FontGlyphRangesBuilder_Clear(&builder)
-
-	if .English in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesDefault(atlas)
-		)
-	}
-
-	if .ChineseFull in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesChineseFull(atlas)
-		)
-	}
-
-	if .ChineseSimplifiedCommon in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesChineseSimplifiedCommon(atlas)
-		)
-	}
-
-	if .Cyrillic in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesCyrillic(atlas)
-		)
-	}
-
-	if .Greek in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesGreek(atlas)
-		)
-	}
-
-	if .Japanese in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesJapanese(atlas)
-		)
-	}
-
-	if .Korean in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesKorean(atlas)
-		)
-	}
-
-	if .Thai in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesThai(atlas)
-		)
-	}
-
-	if .Vietnamese in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			imgui.FontAtlas_GetGlyphRangesVietnamese(atlas)
-		)
-	}
-
-	if .Icons in lang {
-		imgui.FontGlyphRangesBuilder_AddRanges(
-			&builder,
-			raw_data(ICON_RANGES)
-		)
-	}
-
-	imgui.FontGlyphRangesBuilder_BuildRanges(&builder, &vector)
-
-	output := make([]imgui.Wchar, vector.Size, allocator)
-	copy(output, (cast([^]imgui.Wchar)vector.Data)[:vector.Size])
-
-	return output
-}
-
 load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
-	scratch: mem.Scratch
-	have_english_font: bool
-
 	client.font_serial += 1
-
-	if mem.scratch_allocator_init(&scratch, 256<<10) != nil {return}
-	defer mem.scratch_allocator_destroy(&scratch)
-
-	sys.video_invalidate_imgui_objects()
-	defer sys.video_create_imgui_objects()
 
 	io := imgui.GetIO()
 	atlas := io.Fonts
+	imgui.FontAtlas_ClearFonts(atlas)
+
 	cfg := imgui.FontConfig {
-		FontDataOwnedByAtlas = false,
-		OversampleH = 2,
-		OversampleV = 2,
+		FontDataOwnedByAtlas = true,
 		GlyphMaxAdvanceX = max(f32),
 		RasterizerMultiply = 1,
 		RasterizerDensity = 1,
-		EllipsisChar = max(imgui.Wchar),
-		MergeMode = false,
-	}
-
-	imgui.FontAtlas_Clear(atlas)
-
-	for font in fonts {have_english_font |= .English in font.languages}
-
-	if !have_english_font || len(fonts) == 0 {
-		log.debug("Loading default font")
-		imgui.FontAtlas_AddFontDefault(atlas)
-		cfg.MergeMode = true
 	}
 
 	for font in fonts {
-		glyph_ranges := get_font_language_ranges(font.languages, mem.scratch_allocator(&scratch))
-
 		if font.path != nil {
-			cfg.FontDataOwnedByAtlas = true
-			imgui.FontAtlas_AddFontFromFileTTF(atlas, font.path, font.size, &cfg, raw_data(glyph_ranges))
+			imgui.FontAtlas_AddFontFromFileTTF(atlas, font.path, 0, &cfg)
 		}
 		else {
-			cfg.FontDataOwnedByAtlas = false
-			imgui.FontAtlas_AddFontFromMemoryTTF(
-				atlas, raw_data(font.data), auto_cast len(font.data),
-				font.size, &cfg, raw_data(glyph_ranges)
-			)
+			font_data := imgui.MemAlloc(auto_cast len(font.data))
+			mem.copy(font_data, raw_data(font.data), len(font.data))
+			imgui.FontAtlas_AddFontFromMemoryTTF(atlas, font_data, auto_cast len(font.data), 0, &cfg)
 		}
 
 		cfg.MergeMode = true
 	}
-
-	cfg.MergeMode = false
-	cfg.FontDataOwnedByAtlas = false
-	client.mini_font = imgui.FontAtlas_AddFontFromMemoryTTF(
-		atlas, raw_data(_BUILTIN_FONT), auto_cast len(_BUILTIN_FONT), 12, &cfg
-	)
-
-	imgui.FontAtlas_Build(atlas)
 }
 
 load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
@@ -239,35 +116,26 @@ load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
 	have_lang: [sys.Font_Language]bool
 	defer delete(fonts)
 
-	for &font, index in cl.settings.fonts {
+	for &font in cl.settings.fonts {
 		handle: sys.Font_Handle
 		path_buf: [512]u8
 
-		if font.size == 0 {continue}
 		handle = sys.font_handle_from_name(system_fonts, string(cstring(&font.name[0]))) or_continue
 		path := sys.get_font_path(path_buf[:], handle) or_continue
 		
 		append(&fonts, Load_Font {
-			languages = {index},
-			size = f32(font.size) * scale,
 			path = strings.clone_to_cstring(path, path_allocator),
 		})
-
-		have_lang[index] = true
 	}
 
 	if !have_lang[.English] {
 		append(&fonts, Load_Font {
-			languages = {.English},
-			size = 16 * scale,
 			data = _BUILTIN_FONT,
 		})
 	}
 
 	if !have_lang[.Icons] {
 		append(&fonts, Load_Font {
-			languages = {.Icons},
-			size = 11 * scale,
 			data = #load("data/FontAwesome.otf"),
 		})
 	}

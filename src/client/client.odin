@@ -46,7 +46,6 @@ Path :: sys.Path
 
 Client :: struct {
 	ctx: runtime.Context,
-	mini_font: ^imgui.Font,
 	delta: f32,
 
 	want_quit: bool,
@@ -117,7 +116,7 @@ Client :: struct {
 	track_drag_drop_payload: []Track_ID,
 
 	settings: Settings,
-	saved_settings: Settings,
+	saved_settings_serial: uint,
 	show_settings_window: bool,
 	bring_settings_window_to_front: bool,
 	want_apply_settings: bool,
@@ -128,6 +127,8 @@ Client :: struct {
 	wake_proc: proc(),
 
 	uptime: f64,
+
+	font_size: f32,
 }
 
 init :: proc(
@@ -255,14 +256,17 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 		apply_settings(client)
 	}
 	
-	if client.settings != client.saved_settings {
-		client.saved_settings = client.settings
+	if client.settings.serial != client.saved_settings_serial {
+		client.saved_settings_serial = client.settings.serial
 		log.debug("Saving settings...")
 		save_settings(&client.settings, client.paths.settings)
 	}
 }
 
 frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick) -> (delta: f32) {
+	imgui.PushFontFloat(nil, cl.font_size)
+	defer imgui.PopFont()
+
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor()
@@ -720,7 +724,7 @@ _draw_background :: proc(client: Client) {
 	
 	imgui.DrawList_AddImage(
 		drawlist,
-		client.background.texture,
+		to_texture_ref(client.background.texture),
 		{0, 0},
 		{w, h},
 	)
@@ -815,4 +819,9 @@ get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []
 	have_payload = true
 
 	return
+}
+
+@private
+to_texture_ref :: proc(id: imgui.TextureID) -> imgui.TextureRef {
+	return {_TexID = id}
 }

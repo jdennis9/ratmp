@@ -18,6 +18,7 @@
 #+private
 package client
 
+import "base:runtime"
 import "core:encoding/ini"
 import "core:reflect"
 import "core:strconv"
@@ -41,7 +42,6 @@ Settings_Float :: f32
 // String format: <name>:<size>
 Settings_Font :: struct {
 	name: [56]u8,
-	size: int,
 }
 
 Close_Policy :: enum {
@@ -53,8 +53,12 @@ Close_Policy :: enum {
 Settings :: struct {
 	theme: Settings_String,
 	background: Settings_Path,
-	fonts: [sys.Font_Language]Settings_Font,
+	fonts: [dynamic]Settings_Font,
 	close_policy: Close_Policy,
+	font_size: int,
+
+	// Not saved
+	serial: uint,
 }
 
 load_settings :: proc(settings: ^Settings, path: string) -> bool {
@@ -87,21 +91,19 @@ load_settings :: proc(settings: ^Settings, path: string) -> bool {
 			case Settings_Path:
 				path := cast(^Settings_Path) field_ptr
 				copy(path^[:len(Settings_Path) - 1], value)
-			case [sys.Font_Language]Settings_Font:
-				if len(key_parts) == 1 {
-					break
-				}
-				enum_val := reflect.enum_from_name(sys.Font_Language, key_parts[1]) or_break
-				font := &settings.fonts[auto_cast enum_val]
-				value_parts := strings.split(value, ":")
-				defer delete(value_parts)
+			case [dynamic]Settings_Font:
+				output := cast(^[dynamic]Settings_Font) field_ptr
 
-				if len(value_parts) < 2 {
-					break
+				fonts := strings.split(value, ",")
+				defer delete(fonts)
+
+				for font in fonts {
+					f: Settings_Font
+					if font == "" do continue
+					copy(f.name[:len(f.name)-1], font)
+					append(output, f)
 				}
 
-				copy(font.name[:len(font.name)-1], value_parts[0])
-				font.size = strconv.parse_int(value_parts[1]) or_else 0
 			case:
 				field_enum := reflect.type_info_base(field.type)
 				enum_type := field_enum.variant.(reflect.Type_Info_Enum) or_break
@@ -133,8 +135,10 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 		field_ptr, _ := reflect.any_data(field_data)
 		field_type := reflect.type_info_base(field.type)
 
+		if field.name == "serial" do continue
+
 		#partial switch type in field_type.variant {
-			case reflect.Type_Info_Enumerated_Array:
+			/*case reflect.Type_Info_Enumerated_Array:
 				enum_type := reflect.type_info_base(type.index).variant.(reflect.Type_Info_Enum) or_break
 				is_fonts := reflect.are_types_identical(type.elem, type_info_of(Settings_Font))
 
@@ -144,7 +148,22 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 						font := (cast([^]Settings_Font)field_ptr)[enum_type.values[value_index]]
 						fmt.fprintf(f, "%s:%d\n", cstring(&font.name[0]), font.size)
 					}
-				}			
+				}*/
+			case reflect.Type_Info_Dynamic_Array:
+				elem_type := type.elem
+				
+				switch elem_type.id {
+					case Settings_Font:
+						fmt.fprint(f, field.name, "=", sep="")
+						array := cast(^[dynamic]Settings_Font) field_ptr
+						log.debug(array)
+						for &font in array^ {
+							fmt.println(cstring(&font.name[0]))
+							fmt.fprint(f, cstring(&font.name[0]), ",", sep="")
+						}
+						fmt.fprintln(f)
+				}
+
 			case reflect.Type_Info_Array:
 				elem := reflect.type_info_base(type.elem)
 
@@ -161,31 +180,35 @@ save_settings :: proc(settings: ^Settings, path: string) -> bool {
 }
 
 Settings_Editor :: struct {
+	font_input: Settings_Font,
 }
 
 show_settings_editor :: proc(cl: ^Client) {
 	settings := &cl.settings
 	system_fonts := sys.get_font_list()
+	state := &cl.windows.settings
+	settings_changed := false
 
-	font_selector :: proc(font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
+	defer if settings_changed do settings.serial += 1
+
+	font_selector :: proc(font: ^Settings_Font, system_fonts: []sys.Font_Handle) -> (selected: bool) {
 		imgui.PushIDPtr(font)
 		defer imgui.PopID()
 
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 
-		if imgui.BeginCombo("##select_font", font.name[0] != 0 ? cstring(&font.name[0]) : "<Default>") {
-			if imgui.Selectable("<Default>") {
-				for &c in font.name {c = 0}
-			}
-
+		if imgui.BeginCombo("##select_font", "Add a font") {
 			for &sys_font in system_fonts {
 				if imgui.Selectable(cstring(&sys_font.name[0]), false) {
 					for &c in font.name {c = 0}
 					copy(font.name[:len(font.name)-1], sys_font.name[:])
+					selected = true
 				}
 			}
 			imgui.EndCombo()
 		}
+
+		return
 	}
 
 	begin_settings_table :: proc(str_id: cstring) -> bool {
@@ -199,14 +222,17 @@ show_settings_editor :: proc(cl: ^Client) {
 		return false
 	}
 
-	path_row :: proc(name: string, path: ^Settings_Path, browse_dialog: ^sys.File_Dialog_State, file_type: sys.File_Type) {
+	path_row :: proc(
+		name: string, path: ^Settings_Path, browse_dialog: ^sys.File_Dialog_State,
+		file_type: sys.File_Type
+	) -> (changed: bool) {
 		imgui.TableNextRow()
 		imgui.PushIDPtr(path)
 		defer imgui.PopID()
 		if imgui.TableSetColumnIndex(0) {imx.text_unformatted(name)}
 		if imgui.TableSetColumnIndex(1) {
 			imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-			imgui.InputText("##path", cstring(&path^[0]), len(Settings_Path))
+			changed |= imgui.InputText("##path", cstring(&path^[0]), len(Settings_Path))
 		}
 		if imgui.TableSetColumnIndex(2) {
 			if imgui.Button("Browse") {
@@ -214,12 +240,15 @@ show_settings_editor :: proc(cl: ^Client) {
 			}
 			imgui.SameLine()
 			if imgui.Button("Clear") {
-				for &c in path^ {c = 0}
+				for &c in path^ do c = 0
+				changed = true
 			}
 		}
+
+		return
 	}
 
-	enum_picker_row :: proc(name: string, $T: typeid, val: ^T, names: [$E]cstring) -> bool {
+	enum_picker_row :: proc(name: string, $T: typeid, val: ^T, names: [$E]cstring) -> (picked: bool) {
 		assert(len(names) == len(T))
 		imgui.TableNextRow()
 		imgui.PushIDPtr(val)
@@ -230,13 +259,14 @@ show_settings_editor :: proc(cl: ^Client) {
 				for enum_val in reflect.enum_field_values(T) {
 					if imgui.Selectable(names[auto_cast enum_val]) {
 						val^ = auto_cast enum_val
+						picked = true
 					}
 				}
 				imgui.EndCombo()
 			}
 		}
 
-		return true
+		return picked
 	}
 
 	if imgui.Button("Apply") {
@@ -246,7 +276,7 @@ show_settings_editor :: proc(cl: ^Client) {
 
 	if imgui.CollapsingHeader("Appearance", {.DefaultOpen}) {
 		if begin_settings_table("##appearance") {
-			path_row("Background", &settings.background, &cl.dialogs.set_background, .Image)
+			settings_changed |= path_row("Background", &settings.background, &cl.dialogs.set_background, .Image)
 		
 			imgui.TableNextRow()
 			if imgui.TableSetColumnIndex(0) {imx.text_unformatted("Default theme")}
@@ -255,8 +285,9 @@ show_settings_editor :: proc(cl: ^Client) {
 				if imgui.BeginCombo("Default theme", cstring(&settings.theme[0])) {
 					for theme in cl.theme_names {
 						if imgui.Selectable(theme) {
-							for &c in settings.theme {c = 0}
+							for &c in settings.theme do c = 0
 							copy(settings.theme[:len(settings.theme)-1], string(theme))
+							settings_changed = true
 						}
 					}
 					imgui.EndCombo()
@@ -269,7 +300,8 @@ show_settings_editor :: proc(cl: ^Client) {
 
 	if imgui.CollapsingHeader("Behaviour", {.DefaultOpen}) {
 		if begin_settings_table("##behaviour") {
-			enum_picker_row("Close policy", Close_Policy, &settings.close_policy, [Close_Policy]cstring {
+			settings_changed |= enum_picker_row(
+				"Close policy", Close_Policy, &settings.close_policy, [Close_Policy]cstring {
 				.AlwaysAsk = "Always ask",
 				.Exit = "Exit",
 				.MinimizeToTray = "Minimize to tray",
@@ -279,37 +311,50 @@ show_settings_editor :: proc(cl: ^Client) {
 	}
 
 	if imgui.CollapsingHeader("Fonts", {.DefaultOpen}) {
-		if imgui.BeginTable("##font_table", 3, imgui.TableFlags_SizingStretchSame|imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner) {
-			row :: proc(lang: string, font: ^Settings_Font, system_fonts: []sys.Font_Handle) {
-				imgui.TableNextRow()
-				imgui.PushIDPtr(font)
-				defer imgui.PopID()
-				if imgui.TableSetColumnIndex(0) {imx.text_unformatted(lang)}
-				if imgui.TableSetColumnIndex(1) {
-					font_selector(font, system_fonts)
-				}
-				if imgui.TableSetColumnIndex(2) {
-					font.size = clamp(font.size, 9, 48)
-					val := i32(font.size)
-					imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
-					if imgui.DragInt("##size", &val, 0.1, 9, 48) {
-						font.size = int(val)
-					}
+		remove_font: Maybe(int)
+		move_font_up: Maybe(int)
+		move_font_down: Maybe(int)
+
+		font_size := i32(settings.font_size)
+
+		if imgui.DragInt("Font size", &font_size, 0.3, 8, 32) do settings.font_size = int(font_size)
+
+		if imgui.BeginChild("##fonts", {}, {.AlwaysAutoResize, .AutoResizeY}) {
+			for &font, index in settings.fonts {
+				imgui.Selectable(cstring(&font.name[0]))
+
+				if imgui.BeginPopupContextItem() {
+					if index != 0 && imgui.MenuItem("Move up") do move_font_up = index
+					if index < (len(settings.fonts)-1) && imgui.MenuItem("Move down") do move_font_down = index
+					if imgui.MenuItem("Remove") do remove_font = index
+					imgui.EndPopup()
 				}
 			}
 
-			row("Icons", &settings.fonts[.Icons], system_fonts)
-			row("Chinese Full", &settings.fonts[.ChineseFull], system_fonts)
-			row("Chinese Simplified", &settings.fonts[.ChineseSimplifiedCommon], system_fonts)
-			row("Cyrillic", &settings.fonts[.Cyrillic], system_fonts)
-			row("Greek", &settings.fonts[.Greek], system_fonts)
-			row("English", &settings.fonts[.English], system_fonts)
-			row("Japanese", &settings.fonts[.Japanese], system_fonts)
-			row("Korean", &settings.fonts[.Korean], system_fonts)
-			row("Thai", &settings.fonts[.Thai], system_fonts)
-			row("Vietnamese", &settings.fonts[.Vietnamese], system_fonts)
+			imgui.EndChild()
+		}
 
-			imgui.EndTable()
+		if remove_font != nil {
+			ordered_remove(&settings.fonts, remove_font.?)
+			settings_changed = true
+		}
+		else if move_font_up != nil {
+			a := move_font_up.?
+			b := a - 1
+			assert(b >= 0)
+			settings.fonts[a], settings.fonts[b] = settings.fonts[b], settings.fonts[a]
+		}
+		else if move_font_down != nil {
+			a := move_font_down.?
+			b := a + 1
+			assert(b < len(settings.fonts))
+			settings.fonts[a], settings.fonts[b] = settings.fonts[b], settings.fonts[a]
+		}
+
+		if font_selector(&state.font_input, system_fonts) {
+			append(&settings.fonts, state.font_input)
+			state.font_input = {}
+			settings_changed = true
 		}
 	}
 }
@@ -318,6 +363,9 @@ apply_settings :: proc(cl: ^Client) {
 	theme: Theme
 	settings := cl.settings
 	theme_name := string(cstring(&settings.theme[0]))
+	style := imgui.GetStyle()
+
+	cl.font_size = f32(settings.font_size)
 
 	load_fonts_from_settings(cl, 1)
 	theme_load_from_name(cl^, &theme, theme_name)

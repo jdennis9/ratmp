@@ -184,10 +184,16 @@ metadata_window_show :: proc(
 					uv1 = {1, 1}
 				}
 
-				imgui.ImageButton("##album_art", state.album_art, {width, width}, uv0, uv1)
+				imgui.ImageButton(
+					"##album_art", to_texture_ref(state.album_art),
+					{width, width}, uv0, uv1
+				)
 			}
 			else {
-				imgui.ImageButton("##album_art", state.album_art, {width, width * state.album_art_ratio})
+				imgui.ImageButton(
+					"##album_art", to_texture_ref(state.album_art),
+					{width, width * state.album_art_ratio}
+				)
 			}
 		}
 		else {

@@ -127,8 +127,8 @@ run :: proc() -> bool {
 		}
 		sys_main.present()
 
-		imgui.FontAtlas_ClearTexData(imgui.GetIO().Fonts)
-		imgui.FontAtlas_ClearInputData(imgui.GetIO().Fonts)
+		//imgui.FontAtlas_ClearTexData(imgui.GetIO().Fonts)
+		//imgui.FontAtlas_ClearInputData(imgui.GetIO().Fonts)
 
 		prev_frame_start = frame_start
 

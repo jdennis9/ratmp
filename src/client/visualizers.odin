@@ -41,6 +41,8 @@ WINDOW_SIZE :: 8192
 SPECTRUM_MAX_BANDS :: 180
 MAX_OSCILLOSCOPE_SAMPLES :: 4096
 
+VISUALIZER_GUIDE_FONT_SIZE :: 9
+
 Analysis_State :: struct {
 	channels, samplerate: int,
 
@@ -560,11 +562,10 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		pos: imgui.Vec2, size: imgui.Vec2, bands: []f32,
 		band_width: []f32,
 		band_colors: []u32,
-		guide_font: ^imgui.Font,
 	) {
 		x_offset: f32 = 0
 
-		imgui.PushFont(guide_font)
+		imgui.PushFontFloat(nil, VISUALIZER_GUIDE_FONT_SIZE)
 		defer imgui.PopFont()
 
 		db_guides := []cstring {
@@ -643,7 +644,7 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 
 	// Draw frequency guides
 	{
-		imgui.PushFont(cl.mini_font)
+		imgui.PushFontFloat(nil, VISUALIZER_GUIDE_FONT_SIZE)
 		defer imgui.PopFont()
 
 		text_height := imgui.GetTextLineHeight()
@@ -674,7 +675,6 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 				state.band_heights[:state.band_count],
 				band_width[:state.band_count],
 				band_colors[:state.band_count],
-				cl.mini_font,
 			)
 		}
 		case .Alpha: {
@@ -875,7 +875,7 @@ vectorscope_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 			imgui.GetColorU32(.TableBorderLight, 0.5),
 		)
 
-		imgui.PushFont(cl.mini_font)
+		imgui.PushFontFloat(nil, VISUALIZER_GUIDE_FONT_SIZE)
 		defer imgui.PopFont()
 
 		imgui.DrawList_AddText(
@@ -996,7 +996,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		)
 		
 		imgui.DrawList_AddImageQuad(
-			drawlist, texture,
+			drawlist, to_texture_ref(texture),
 			pos,
 			{pos.x + size.x, pos.y},
 			{pos.x + size.x, pos.y + size.y},
