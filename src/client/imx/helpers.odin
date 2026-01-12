@@ -93,7 +93,7 @@ end_status_bar :: proc() {
 
 SCROLLING_TEXT_CHARS_INTERVAL :: 0.5
 
-// Pixels per second (used by unused scrolling code)
+// Pixels per second
 SCROLLING_TEXT_SPEED :: 60
 // Pixels of spacing between incoming and outgoing scrolling text
 SCROLLING_TEXT_SPACING :: 16
@@ -156,7 +156,8 @@ scrolling_text :: proc(text: string, timer: f64, max_width: f32, text_width_arg:
 
 		case .DrawOffset:
 			draw_scrolling_text(imgui.GetCursorScreenPos(), text, timer, max_width, text_width_arg)
-			imgui.NewLine()
+			//imgui.NewLine()
+			imgui.Dummy({max_width + imgui.GetStyle().ItemSpacing.x, 0})
 	}
 }
 

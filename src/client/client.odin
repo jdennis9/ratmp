@@ -279,6 +279,15 @@ frame :: proc(cl: ^Client, sv: ^Server, prev_frame_start, frame_start: time.Tick
 	cl.tick_last_frame = prev_frame_start
 	cl.delta = delta
 
+	if imgui.BeginTable("Test Table", 2, imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp) {
+		defer imgui.EndTable()
+
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) {
+			imx.scrolling_text("Hamburger, anchovies, hasparagus", cl.uptime, imgui.GetContentRegionAvail().x, mode = .DrawOffset)
+		}
+	}
+
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {
 		cl.media_controls.enabled = true
