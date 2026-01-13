@@ -17,6 +17,7 @@
 */
 package client
 
+import "src:decoder"
 import "base:runtime"
 import "core:log"
 import "core:fmt"
@@ -234,6 +235,14 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 				track_info.title = strings.unsafe_string_to_cstring(md[.Title].(string) or_else "")
 				track_info.genre = strings.unsafe_string_to_cstring(md[.Genre].(string) or_else "")
 				track_info.path = server.library_find_track_path_cstring(sv.library, path_buf[:], track.id) or_else nil
+
+				cover, have_cover := server.library_find_track_cover_art(sv.library, track.id, context.allocator)
+				defer delete(cover)
+
+				if have_cover {
+					track_info.cover_data = raw_data(cover)
+					track_info.cover_data_size = auto_cast len(cover)
+				}
 
 				media_controls.set_track_info(&track_info)
 			}

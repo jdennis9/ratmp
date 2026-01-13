@@ -29,6 +29,8 @@ Track_Info :: struct {
 	album: cstring,
 	title: cstring,
 	genre: cstring,
+	cover_data: [^]u8,
+	cover_data_size: u32,
 }
 
 Handler :: #type proc "c" (data: rawptr, signal: Signal)

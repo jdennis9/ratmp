@@ -848,3 +848,35 @@ track_property_to_playlist_origin :: proc(prop: Track_Property_ID) -> Playlist_O
 
 	unreachable()
 }
+
+library_find_track_cover_art :: proc(
+	lib: Library, track_id: Track_ID, allocator: Allocator
+) -> (data: []u8, found: bool) {
+	path_buf: [512]u8
+	path_cstring := cstring(&path_buf[0])
+	index := library_find_track_index(lib, track_id) or_return
+	path := library_get_track_path(lib, path_buf[:len(path_buf)-1], index) or_return
+
+	try_get_art_from_file :: proc(path: cstring, allocator: Allocator) -> (data: []u8, found: bool) {
+		file := taglib.file_new(path)
+		if file == nil do return
+
+		props := taglib.complex_property_get(file, "PICTURE")
+		if props == nil do return
+		defer taglib.complex_property_free(props)
+
+		picture: taglib.Complex_Property_Picture_Data
+		taglib.picture_from_complex_property(props, &picture)
+		if picture.data == nil do return
+
+		data = slice.clone(picture.data[:picture.size], allocator)
+		found = true
+		return
+	}
+
+	if data, found = try_get_art_from_file(path_cstring, allocator); found do return
+
+	cover_path := library_find_folder_cover_art(lib, filepath.dir(path)) or_return
+	
+	return os2.read_entire_file_from_path(cover_path, allocator) or_else nil, false
+}

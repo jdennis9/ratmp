@@ -1,27 +1,36 @@
 #ifdef _WIN32
 #pragma comment(lib, "windowsapp")
+#include <cassert>
 #include <winrt/Windows.Media.Core.h>
 #include <winrt/Windows.Media.Playback.h>
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Media.h>
 #include <winrt/windows.applicationmodel.h>
 #include <winrt/windows.foundation.collections.h>
+#include <winrt/windows.storage.streams.h>
 #include <windows.h>
+#undef max
 
 #include "../media_controls.h"
 
 using namespace winrt::Windows::Media;
 using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Storage::Streams;
 
 static void handle_button_pressed(SystemMediaTransportControls sender,
     SystemMediaTransportControlsButtonPressedEventArgs args);
 
+
+
 struct Media_Controls {
 	Handler *handler;
 	SystemMediaTransportControls smtc;
+
 	void *data;
 
-	Media_Controls(Handler *handler_, void *data_) : handler(handler_), smtc(nullptr), data(data_) {
+	Media_Controls(
+		Handler *handler_, void *data_
+	) : handler(handler_), smtc(nullptr), data(data_) {
 		smtc = Playback::BackgroundMediaPlayer::Current().SystemMediaTransportControls();
 		smtc.IsPlayEnabled(true);
 		smtc.IsPauseEnabled(true);
@@ -92,6 +101,7 @@ void set_track_info(const Track_Info *info) {
 	if (!mc) return;
 
 	auto du = mc->smtc.DisplayUpdater();
+	du.ClearAll();
 	du.Type(MediaPlaybackType::Music);
     utf8_to_wchar(info->artist, str_buf, 128);
     du.MusicProperties().Artist(str_buf);
@@ -99,7 +109,22 @@ void set_track_info(const Track_Info *info) {
     du.MusicProperties().AlbumTitle(str_buf);
     utf8_to_wchar(info->title, str_buf, 128);
     du.MusicProperties().Title(str_buf);
-    du.Update();
+	
+	if (info->cover_data != nullptr) {
+		RandomAccessStreamReference old_stream = du.Thumbnail();
+
+		InMemoryRandomAccessStream stream = InMemoryRandomAccessStream();
+		Buffer buf = Buffer(info->cover_data_size);
+		std::memcpy(buf.data(), info->cover_data, info->cover_data_size);
+		buf.Length(info->cover_data_size);
+
+		uint32_t bytes_written = stream.WriteAsync(buf).get();
+
+		du.Thumbnail(RandomAccessStreamReference::CreateFromStream(stream));
+	}
+
+	du.Update();
+
 }
 
 #endif
