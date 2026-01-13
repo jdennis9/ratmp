@@ -120,10 +120,6 @@ void set_track_info(const Track_Info *info) {
 
 		uint32_t bytes_written = stream.WriteAsync(buf).get();
 
-		//if (old_stream != nullptr) {
-		//	IRandomAccessStreamWithContentType s = old_stream.OpenReadAsync().get();
-		//}
-
 		du.Thumbnail(RandomAccessStreamReference::CreateFromStream(stream));
 	}
 

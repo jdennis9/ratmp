@@ -172,7 +172,7 @@ track_category_table_show :: proc(
 				if imgui.BeginDragDropSource() {
 					entry_index, have_entry := server.track_category_find_entry_index(cat, row.hash)
 					if have_entry {
-						_set_track_drag_drop_payload(cat.entries[entry_index].tracks[:])
+						set_track_drag_drop_payload(cat.entries[entry_index].tracks[:])
 					}
 					imgui.EndDragDropSource()
 				}

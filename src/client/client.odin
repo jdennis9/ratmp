@@ -290,7 +290,7 @@ frame :: proc(cl: ^Client, sv: ^Server, delta_arg: f32) {
 	if cl.enable_media_controls && !cl.media_controls.enabled {
 		cl.media_controls.enabled = true
 		log.debug("Enabling media controls...")
-		media_controls.enable(_media_controls_handler, sv)
+		media_controls.enable(media_controls_handler, sv)
 	}
 	else if !cl.enable_media_controls && cl.media_controls.enabled {
 		cl.media_controls.enabled = false
@@ -324,9 +324,9 @@ frame :: proc(cl: ^Client, sv: ^Server, delta_arg: f32) {
 		}
 	}
 
-	_draw_background(cl^)
-	_main_menu_bar(cl, sv)
-	_status_bar(cl, sv)
+	draw_background(cl^)
+	main_menu_bar(cl, sv)
+	status_bar(cl, sv)
 
 	show_all_windows(cl, sv)
 
@@ -404,14 +404,14 @@ set_background :: proc(client: ^Client, path: string) -> (ok: bool) {
 
 enable_media_controls :: proc(client: ^Client, sv: ^Server) {
 	client.enable_media_controls = true
-	media_controls.enable(_media_controls_handler, sv)
+	media_controls.enable(media_controls_handler, sv)
 }
 
 disable_media_controls :: proc(client: ^Client) {
 	media_controls.disable()
 }
 
-_media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal) {
+media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal) {
 	sv := cast(^Server) data
 	context = sv.ctx
 
@@ -427,28 +427,28 @@ _media_controls_handler :: proc "c" (data: rawptr, signal: media_controls.Signal
 }
 
 @private
-_go_to_artist :: proc(cl: ^Client, md: Track_Properties) -> bool {
+go_to_artist :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_ARTIST) or_return)
 	track_category_window_set_view_by_name(state, md[.Artist].(string) or_else "")
 	return true
 }
 
 @private
-_go_to_album :: proc(cl: ^Client, md: Track_Properties) -> bool {
+go_to_album :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_ALBUMS) or_return)
 	track_category_window_set_view_by_name(state, md[.Album].(string) or_else "")
 	return true
 }
 
 @private
-_go_to_genre :: proc(cl: ^Client, md: Track_Properties) -> bool {
+go_to_genre :: proc(cl: ^Client, md: Track_Properties) -> bool {
 	state := cast(^Track_Category_Window) (bring_window_to_front(cl, WINDOW_GENRES) or_return)
 	track_category_window_set_view_by_name(state, md[.Genre].(string) or_else "")
 	return true
 }
 
 @private
-_main_menu_bar :: proc(client: ^Client, sv: ^Server) {
+main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	if !imgui.BeginMainMenuBar() {return}
 	defer imgui.EndMainMenuBar()
 
@@ -637,7 +637,8 @@ _main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 	}
 }
 
-_status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
+@private
+status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 	if !imx.begin_status_bar() {return false}
 	defer imx.end_status_bar()
 
@@ -666,13 +667,13 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 			return imgui.MenuItem(cstring(raw_data(buf)))
 		}
 
-		if button(state.album[:]) {_go_to_album(cl, state.metadata)}
+		if button(state.album[:]) {go_to_album(cl, state.metadata)}
 		imgui.SetItemTooltip("Album")
 		imgui.Separator()
-		if button(state.artist[:]) {_go_to_artist(cl, state.metadata)}
+		if button(state.artist[:]) {go_to_artist(cl, state.metadata)}
 		imgui.SetItemTooltip("Artist")
 		imgui.Separator()
-		if button(state.title[:]) {_go_to_album(cl, state.metadata)}
+		if button(state.title[:]) {go_to_album(cl, state.metadata)}
 		imgui.SetItemTooltip("Track title")
 		imgui.Separator()
 		imx.text_unformatted(string(cstring(&info.format_name[0])))
@@ -708,7 +709,7 @@ _status_bar :: proc(cl: ^Client, sv: ^Server) -> bool {
 }
 
 @private
-_draw_background :: proc(client: Client) {
+draw_background :: proc(client: Client) {
 	display_size := imgui.GetIO().DisplaySize
 	drawlist := imgui.GetBackgroundDrawList()
 
@@ -809,7 +810,7 @@ _imgui_settings_write_proc :: proc "c" (
 }
 
 @private
-_set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
+set_track_drag_drop_payload :: proc(tracks: []Track_ID) {
 	imgui.SetDragDropPayload("TRACKS", raw_data(tracks), auto_cast(size_of(Track_ID) * len(tracks)))
 	imgui.SetTooltip("%d tracks", i32(len(tracks)))
 }

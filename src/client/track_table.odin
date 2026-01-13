@@ -49,17 +49,6 @@ Track_Row :: struct {
 Track_Table_Flag :: enum {NoSort,}
 Track_Table_Flags :: bit_set[Track_Table_Flag]
 
-Track_Table_Old :: struct {
-	rows: [dynamic]Track_Row,
-	serial: uint,
-	font_serial: uint,
-	playlist_id: Global_Playlist_ID,
-	filter_hash: u32,
-	flags: Track_Table_Flags,
-	jump_to_track: Maybe(int),
-	uptime: f64,
-}
-
 Track_Table_Result :: struct {
 	play: Maybe(Track_ID),
 	select: Maybe(Track_ID),
@@ -73,8 +62,7 @@ Track_Table_Result :: struct {
 }
 
 Track_Table_Result_Process_Flag :: enum {
-	// Tells proc to try set the queue position to a track when trying to play it, 
-	// rather than queueing the entire playlist
+	// Set queue position to track rather than replace queue with the tables tracks
 	SetQueuePos,
 }
 Track_Table_Result_Process_Flags :: bit_set[Track_Table_Result_Process_Flag]
@@ -148,9 +136,9 @@ process_track_context :: proc(
 		if (result.go_to_album || result.go_to_genre || result.go_to_artist) {
 			track, found := server.library_find_track(sv.library, result.single_track.?)
 			if found {
-				if result.go_to_album {_go_to_album(cl, track.properties)}
-				if result.go_to_artist {_go_to_artist(cl, track.properties)}
-				if result.go_to_genre {_go_to_genre(cl, track.properties)}
+				if result.go_to_album {go_to_album(cl, track.properties)}
+				if result.go_to_artist {go_to_artist(cl, track.properties)}
+				if result.go_to_genre {go_to_genre(cl, track.properties)}
 			}
 		}
 

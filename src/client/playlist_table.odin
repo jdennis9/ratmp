@@ -186,7 +186,7 @@ playlist_table_show :: proc(table: Playlist_Table, lib: Library, viewing_id: Pla
 
 			if imgui.BeginDragDropSource() {
 				if playlist, _, found_playlist := server.library_get_playlist(lib, row.id); found_playlist {
-					_set_track_drag_drop_payload(playlist.tracks[:])
+					set_track_drag_drop_payload(playlist.tracks[:])
 				}
 				imgui.EndDragDropSource()
 			}

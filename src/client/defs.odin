@@ -54,34 +54,10 @@ Window_Property_Variant :: union {
 	bool,
 }
 
-/*Window_Info :: struct {
-	display_name: cstring,
-	internal_name: cstring,
-	imgui_flags: imgui.WindowFlags,
-	flags: Window_Flags,
-}*/
-
 Saved_Window :: struct {
 	internal_name: cstring,
 	imgui_flags: imgui.WindowFlags,
 	open: bool,
-}
-
-Base_Window_ID :: enum {
-	Library,
-	Queue,
-	Playlists,
-	Artists,
-	Albums,
-	Genres,
-	Folders,
-	Metadata,
-	ThemeEditor,
-	Spectrum,
-	WaveformSeek,
-	Oscilloscope,
-	Settings,
-	MetadataEditor,
 }
 
 WINDOW_LIBRARY :: "ratmp_library"

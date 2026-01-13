@@ -284,9 +284,9 @@ metadata_window_show :: proc(
 		imgui.TableSetupColumn("value", {}, 0.8)
 
 		metadata_string_row("Title", metadata, .Title, cl.uptime)
-		if metadata_string_row("Artist", metadata, .Artist, cl.uptime) {_go_to_artist(cl, metadata)}
-		if metadata_string_row("Album", metadata, .Album, cl.uptime) {_go_to_album(cl, metadata)}
-		if metadata_string_row("Genre", metadata, .Genre, cl.uptime) {_go_to_genre(cl, metadata)}
+		if metadata_string_row("Artist", metadata, .Artist, cl.uptime) {go_to_artist(cl, metadata)}
+		if metadata_string_row("Album", metadata, .Album, cl.uptime) {go_to_album(cl, metadata)}
+		if metadata_string_row("Genre", metadata, .Genre, cl.uptime) {go_to_genre(cl, metadata)}
 
 		number_row("Track no.", metadata[.TrackNumber].(i64) or_else 0)
 		number_row("Year", metadata[.Year].(i64) or_else 0)
