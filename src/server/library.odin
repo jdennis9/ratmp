@@ -860,6 +860,7 @@ library_find_track_cover_art :: proc(
 	try_get_art_from_file :: proc(path: cstring, allocator: Allocator) -> (data: []u8, found: bool) {
 		file := taglib.file_new(path)
 		if file == nil do return
+		defer taglib.file_free(file)
 
 		props := taglib.complex_property_get(file, "PICTURE")
 		if props == nil do return

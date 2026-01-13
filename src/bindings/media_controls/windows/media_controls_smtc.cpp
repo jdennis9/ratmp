@@ -113,12 +113,16 @@ void set_track_info(const Track_Info *info) {
 	if (info->cover_data != nullptr) {
 		RandomAccessStreamReference old_stream = du.Thumbnail();
 
-		InMemoryRandomAccessStream stream = InMemoryRandomAccessStream();
+		InMemoryRandomAccessStream stream;
 		Buffer buf = Buffer(info->cover_data_size);
 		std::memcpy(buf.data(), info->cover_data, info->cover_data_size);
 		buf.Length(info->cover_data_size);
 
 		uint32_t bytes_written = stream.WriteAsync(buf).get();
+
+		//if (old_stream != nullptr) {
+		//	IRandomAccessStreamWithContentType s = old_stream.OpenReadAsync().get();
+		//}
 
 		du.Thumbnail(RandomAccessStreamReference::CreateFromStream(stream));
 	}
