@@ -481,6 +481,13 @@ table_show :: proc(
 			}
 		}
 	}
+
+	// -------------------------------------------------------------------------
+	// Select all
+	// -------------------------------------------------------------------------
+	if table_focused && is_key_chord_pressed(.ImGuiMod_Ctrl, .A) {
+		for &row in display_info.rows do row.selected = true
+	}
 	
 	cursor = imgui.GetCursorScreenPos()	
 	scroll_y := imgui.GetScrollY()
