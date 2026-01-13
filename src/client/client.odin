@@ -147,6 +147,7 @@ init :: proc(
 	add_window_archetype(client, LIBRARY_WINDOW_ARCHETYPE)
 	add_window_archetype(client, QUEUE_WINDOW_ARCHETYPE)
 	add_window_archetype(client, METADATA_WINDOW_ARCHETYPE)
+	add_window_archetype(client, METADATA_POPUP_WINDOW_ARCHETYPE)
 	add_window_archetype(client, METADATA_EDITOR_WINDOW_ARCHETYPE)
 	add_window_archetype(client, PLAYLISTS_WINDOW_ARCHETYPE)
 	add_window_archetype(client, ARTISTS_WINDOW_ARCHETYPE)
@@ -832,4 +833,13 @@ get_track_drag_drop_payload :: proc(allocator: runtime.Allocator) -> (tracks: []
 @private
 to_texture_ref :: proc(id: imgui.TextureID) -> imgui.TextureRef {
 	return {_TexID = id}
+}
+
+@private
+open_track_in_metadata_popup :: proc(cl: ^Client, track_id: Track_ID) -> bool {
+	window := add_window_instance_from_name(cl, WINDOW_METADATA_POPUP, 0) or_return
+	window.want_bring_to_front = true
+	state := cast(^Metadata_Window) window
+	state.track_id = track_id
+	return true
 }

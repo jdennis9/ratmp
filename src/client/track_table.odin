@@ -52,7 +52,7 @@ Track_Table_Flags :: bit_set[Track_Table_Flag]
 Track_Table_Result :: struct {
 	play: Maybe(Track_ID),
 	select: Maybe(Track_ID),
-	context_menu: Maybe(Track_ID),
+	context_menu_target: Maybe(Track_ID),
 	selection_count: int,
 	lowest_selection_index: int,
 	sort_spec: Maybe(server.Track_Sort_Spec),
@@ -165,11 +165,7 @@ process_track_context :: proc(
 		}
 	}
 
-	if result.more_info {
-		// @TODO
-		//cl.windows.metadata_popup_track = track_id
-		//cl.windows.metadata_popup_show = true
-	}
+	if result.more_info do open_track_in_metadata_popup(cl, track_id)
 }
 
 // -----------------------------------------------------------------------------
@@ -303,6 +299,7 @@ track_table_show :: proc(
 
 	if r.middle_clicked_row != nil do result.play = cast(Track_ID) r.middle_clicked_row.?
 	if r.left_clicked_row != nil do result.select = cast(Track_ID) r.left_clicked_row.?
+	if r.context_menu_opened_with != nil do result.context_menu_target = cast(Track_ID) r.context_menu_opened_with.?
 
 	if r.sort_by_column != nil {
 		order: server.Sort_Order
@@ -380,8 +377,8 @@ track_table_show_context :: proc(
 	defer imgui.EndPopup()
 	shown = true
 
-	if table_result.selection_count == 1 {
-		track_id := cast(Track_ID) table.rows[table_result.lowest_selection_index].id
+	if table_result.context_menu_target != nil {
+		track_id := table_result.context_menu_target.?
 		result.single_track = track_id
 		show_track_context_items(track_id, &result, sv.library)
 	}

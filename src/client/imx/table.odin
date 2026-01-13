@@ -55,6 +55,7 @@ Table_State :: struct {
 	need_distribute_weights: bool,
 	settings_loaded: bool,
 	sort_by_column: int,
+	context_menu_target: Maybe(Table_Row_ID),
 }
 
 Table_Result :: struct {
@@ -62,6 +63,7 @@ Table_Result :: struct {
 	middle_clicked_row: Maybe(Table_Row_ID),
 	sort_by_column: Maybe(int),
 	sort_order: Table_Sort_Order,
+	context_menu_opened_with: Maybe(Table_Row_ID),
 }
 
 Table_Row_Content :: struct {
@@ -534,6 +536,9 @@ table_show :: proc(
 	// Row backgrounds and behaviour
 	// -------------------------------------------------------------------------
 	{
+		if !imgui.IsPopupOpenID(display_info.context_menu_id, {}) do t.context_menu_target = nil
+		else do result.context_menu_opened_with = t.context_menu_target
+
 		imgui.PushStyleVarImVec2(.ItemSpacing, {0, 0})
 		defer imgui.PopStyleVar()
 
@@ -621,6 +626,8 @@ table_show :: proc(
 				imgui.OpenPopupID(display_info.context_menu_id)
 				select = true
 				keep_selection = true
+				t.context_menu_target = row.id
+				result.context_menu_opened_with = row.id
 			}
 
 			if clicked {

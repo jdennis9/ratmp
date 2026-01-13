@@ -90,6 +90,17 @@ METADATA_WINDOW_ARCHETYPE := Window_Archetype {
 	flags = {.DefaultShow},
 }
 
+METADATA_POPUP_WINDOW_ARCHETYPE := Window_Archetype {
+	title = "Track Metadata",
+	internal_name = WINDOW_METADATA_POPUP,
+	make_instance = metadata_window_make_instance_proc,
+	show = metadata_window_show_proc,
+	hide = metadata_window_hide_proc,
+	configure = metadata_window_configure_proc,
+	save_config = metadata_window_save_config_proc,
+	flags = {.NoInitialInstance},
+}
+
 metadata_window_make_instance_proc :: proc(allocator := context.allocator) -> ^Window_Base {
 	win := new(Metadata_Window, allocator)
 	win.imgui_flags = {.AlwaysVerticalScrollbar}
