@@ -837,9 +837,7 @@ to_texture_ref :: proc(id: imgui.TextureID) -> imgui.TextureRef {
 
 @private
 open_track_in_metadata_popup :: proc(cl: ^Client, track_id: Track_ID) -> bool {
-	window := add_window_instance_from_name(cl, WINDOW_METADATA_POPUP, 0) or_return
-	window.want_bring_to_front = true
-	state := cast(^Metadata_Window) window
-	state.track_id = track_id
+	window := cast(^Metadata_Window) (bring_window_to_front(cl, WINDOW_METADATA_POPUP) or_return)
+	window.track_id = track_id
 	return true
 }
