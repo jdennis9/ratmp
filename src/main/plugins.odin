@@ -139,7 +139,9 @@ plugins_frame :: proc(mgr: ^Plugin_Manager, cl: ^client.Client, sv: ^server.Serv
 
 	for plugin in mgr.plugins {
 		if plugin.procs.frame != nil && plugin.enabled {
+			imgui.PushFontFloat(nil, cl.font_size)
 			plugin.procs.frame(delta)
+			imgui.PopFont()
 		}
 	}
 }
