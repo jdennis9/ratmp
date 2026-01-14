@@ -16,6 +16,8 @@ playback: ^sdk.Playback_Procs
 
 state: struct {
 	band_frequencies: [BAND_COUNT]f32,
+	band_peaks: [BAND_COUNT]f32,
+	peak: f32,
 	fft: sdk.FFT_State
 }
 
@@ -54,35 +56,17 @@ plug_init :: proc() {
 // Called every frame. Previous frame length is passed in
 @export @(link_name="plug_frame")
 plug_frame :: proc(delta_time: f32) {
-	drawlist := ui.get_window_drawlist()
-
 	if ui.begin("My Plugin Window") {
+		drawlist := ui.get_window_drawlist()
 		pos := ui.get_cursor()
 		draw.rect_filled(drawlist, pos, pos + {64, 64}, 0xff00ffff, 4)
 		ui.dummy({64, 64})
 
 		ui.text("Hello, world!")
-		ui.end()
-	}
-}
 
-@export @(link_name="plug_analyse")
-plug_analyse :: proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32) {
-	@static smooth_peak: f32
-	peak: f32
-	bands: [24]f32
-
-	for sample in audio[0] {
-		peak = max(peak, sample)
-	}
-
-	smooth_peak = linalg.lerp(smooth_peak, peak, delta * 5)
-	analysis.fft_extract_bands(fft, len(audio[0]), state.band_frequencies[:], f32(samplerate), bands[:])
-
-	if ui.begin("My Plugin Window") {
-		ui.text("Peak:", smooth_peak)
+		ui.text("Peak:", state.peak)
 		for i in 0..<len(state.band_frequencies) {
-			ui.text(state.band_frequencies[i], bands[i])
+			ui.text(state.band_frequencies[i], state.band_peaks[i])
 		}
 
 		if ui.button("Pause") {
@@ -94,6 +78,20 @@ plug_analyse :: proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32) {
 
 		ui.end()
 	}
+}
+
+@export @(link_name="plug_analyse")
+plug_analyse :: proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32) {
+	peak: f32
+
+	for sample in audio[0] {
+		peak = max(peak, sample)
+	}
+
+	for &bp in state.band_peaks do bp = 0
+
+	state.peak = linalg.lerp(state.peak, peak, delta * 5)
+	analysis.fft_extract_bands(fft, len(audio[0]), state.band_frequencies[:], f32(samplerate), state.band_peaks[:])
 }
 
 @export @(link_name="plug_post_process")
