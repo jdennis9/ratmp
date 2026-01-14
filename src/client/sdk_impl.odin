@@ -25,7 +25,7 @@ get_sdk_impl :: proc() -> (ui: sdk.UI_Procs, draw: sdk.Draw_Procs) {
 	}
 
 	ui.text = proc(args: ..any) {
-		imx.text(4096, args)
+		imx.text(4096, ..args)
 	}
 
 	ui.textf = proc(format: string, args: ..any) {
