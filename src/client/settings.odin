@@ -198,7 +198,12 @@ show_settings_editor :: proc(cl: ^Client) {
 		imgui.SetNextItemWidth(imgui.GetContentRegionAvail().x)
 
 		if imgui.BeginCombo("##select_font", "Add a font") {
-			for &sys_font in system_fonts {
+			for &sys_font, index in system_fonts {
+				imgui.PushIDInt(auto_cast index)
+				defer imgui.PopID()
+
+				if sys_font.name[0] == 0 do continue
+
 				if imgui.Selectable(cstring(&sys_font.name[0]), false) {
 					for &c in font.name {c = 0}
 					copy(font.name[:len(font.name)-1], sys_font.name[:])
@@ -321,6 +326,11 @@ show_settings_editor :: proc(cl: ^Client) {
 
 		if imgui.BeginChild("##fonts", {}, {.AlwaysAutoResize, .AutoResizeY}) {
 			for &font, index in settings.fonts {
+				imgui.PushIDInt(auto_cast index)
+				defer imgui.PopID()
+
+				if font.name[0] == 0 do continue
+
 				imgui.Selectable(cstring(&font.name[0]))
 
 				if imgui.BeginPopupContextItem() {
