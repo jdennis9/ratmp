@@ -30,9 +30,6 @@ import misc "src:bindings/windows_misc"
 @(private="file")
 _hdc: win.HDC
 
-@(private="file")
-_font_list: []Font_Handle
-
 Font_Handle :: struct {
 	using common: Font_Handle_Common,
 	_win: struct {
@@ -57,38 +54,8 @@ get_font_path :: proc(buf: []u8, h_arg: Font_Handle) -> (path: string, found: bo
 	return string(cstring(raw_data(buf))), true
 }
 
-@(private="file")
-_sort_fonts :: proc(fonts_arg: []Font_Handle) {
-	fonts := fonts_arg
-	len_proc :: proc(iface: sort.Interface) -> int {
-		fonts := cast(^[]Font_Handle) iface.collection
-		return len(fonts)
-	}
 
-	swap_proc :: proc(iface: sort.Interface, a, b: int) {
-		fonts := cast(^[]Font_Handle) iface.collection
-		temp := fonts[a]
-		fonts[a] = fonts[b]
-		fonts[b] = temp
-	}
-
-	less_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
-		fonts := cast(^[]Font_Handle) iface.collection
-		A := string(cstring(&fonts[a].name[0]))
-		B := string(cstring(&fonts[b].name[0]))
-		return strings.compare(A, B) < 0
-	}
-
-	iface: sort.Interface
-	iface.collection = &fonts
-	iface.len = len_proc
-	iface.less = less_proc
-	iface.swap = swap_proc
-
-	sort.sort(iface)
-}
-
-@(private="file")
+@private
 _list_fonts :: proc() -> []Font_Handle {
 	Enum_Proc_Arg :: struct {
 		output: ^[dynamic]Font_Handle,
@@ -108,6 +75,7 @@ _list_fonts :: proc() -> []Font_Handle {
 		h := Font_Handle {
 			_win = {lf = lf.elfLogFont},
 		}
+
 		utf16.decode_to_utf8(h.name[:len(h.name)-1], lf.elfFullName[:wstring_length(&lf.elfFullName[0])])
 		append(arg.output, h)
 		return 1
@@ -119,11 +87,3 @@ _list_fonts :: proc() -> []Font_Handle {
 	return output[:]
 }
 
-// Does not need to be freed
-get_font_list :: proc() -> []Font_Handle {
-	if len(_font_list) == 0 {
-		_font_list = _list_fonts()
-		_sort_fonts(_font_list)
-	}
-	return _font_list
-}

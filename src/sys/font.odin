@@ -17,6 +17,9 @@
 */
 package sys
 
+import "core:sort"
+import "core:strings"
+
 Font_Language :: enum {
 	ChineseFull,
 	ChineseSimplifiedCommon,
@@ -51,4 +54,45 @@ font_handle_from_name :: proc(handles: []Font_Handle, name: string) -> (handle: 
 	}
 
 	return {}, false
+}
+
+@(private="file")
+_sort_fonts :: proc(fonts_arg: []Font_Handle) {
+	fonts := fonts_arg
+	len_proc :: proc(iface: sort.Interface) -> int {
+		fonts := cast(^[]Font_Handle) iface.collection
+		return len(fonts)
+	}
+
+	swap_proc :: proc(iface: sort.Interface, a, b: int) {
+		fonts := cast(^[]Font_Handle) iface.collection
+		temp := fonts[a]
+		fonts[a] = fonts[b]
+		fonts[b] = temp
+	}
+
+	less_proc :: proc(iface: sort.Interface, a, b: int) -> bool {
+		fonts := cast(^[]Font_Handle) iface.collection
+		A := string(cstring(&fonts[a].name[0]))
+		B := string(cstring(&fonts[b].name[0]))
+		return strings.compare(A, B) < 0
+	}
+
+	iface: sort.Interface
+	iface.collection = &fonts
+	iface.len = len_proc
+	iface.less = less_proc
+	iface.swap = swap_proc
+
+	sort.sort(iface)
+}
+
+get_font_list :: proc() -> []Font_Handle {
+	@static font_list: []Font_Handle
+	if font_list == nil {
+		font_list = _list_fonts()
+		_sort_fonts(font_list)
+	}
+
+	return font_list
 }

@@ -17,6 +17,9 @@
 */
 package sys
 
+import "core:log"
+import "core:fmt"
+import "core:sort"
 import fc "src:bindings/fontconfig"
 
 Font_Handle :: struct {
@@ -38,38 +41,30 @@ get_font_path :: proc(buf: []u8, h: Font_Handle) -> (path: string, found: bool) 
 	return "", false
 }
 
-_font_list: []Font_Handle
-
-@(private="file")
+@private
 _list_fonts :: proc() -> (output: []Font_Handle) {
 	cfg := fc.InitLoadConfigAndFonts()
 	pat := fc.PatternCreate()
 	os := fc.object_set_build_family_file()
 	fs := fc.FontList(cfg, pat, os)
 
-	output = make([]Font_Handle, fs.nfont)
+	out: [dynamic]Font_Handle
+	reserve(&out, fs.nfont)
 
 	for font, i in fs.fonts[:fs.nfont] {
-		family: cstring
-		handle := &output[i]
-		handle._linux.pattern = fs.fonts[i]
+		name: cstring
+		handle: Font_Handle
+		
+		if fc.PatternGetString(font, fc.FULLNAME, 0, &name) != .Match do continue
+		if name == nil || string(name) == "" do continue
 
-		if fc.PatternGetString(font, fc.FAMILY, 0, &family) == .Match {
-			copy(handle.name[:len(handle.name)-1], string(family))
-		}
+		handle._linux.pattern = fs.fonts[i]
+		
+		copy(handle.name[:len(handle.name)-1], string(name))
+
+		append(&out, handle)
 	}
 
-	return
+	return out[:]
 }
 
-/*@(private="file")
-@fini
-_free_font_list :: proc() {
-	delete(_font_list)
-}*/
-
-get_font_list :: proc() -> []Font_Handle {
-	if _font_list == nil {_font_list = _list_fonts()}
-
-	return _font_list
-}

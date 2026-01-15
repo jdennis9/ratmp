@@ -18,7 +18,8 @@ odin build src/main -vet-shadowing $collections -out:out/ratmp $args -show-timin
 	$(pkgconf --libs libswscale) \
 	$(pkgconf --libs dbus-1) \
 	$(pkgconf --libs dbus-glib-1) \
-	$(pkgconf --libs appindicator3-0.1)
+	$(pkgconf --libs appindicator3-0.1) \
+	$(pkgconf --libs x11)
 	"
 
 $cmd
