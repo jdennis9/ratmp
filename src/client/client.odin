@@ -142,6 +142,20 @@ init :: proc(
 
 	io := imgui.GetIO()
 
+	// Create paths
+	client.paths.theme_folder = filepath.join({data_dir, "Themes"}, context.allocator)
+	client.paths.persistent_state = filepath.join({data_dir, "settings.json"}, context.allocator)
+	client.paths.layout_folder = filepath.join({data_dir, "Layouts"}, context.allocator)
+	client.paths.settings = filepath.join({config_dir, "settings.ini"}, context.allocator)
+
+	// Set imgui.ini path
+	{
+		path := filepath.join({data_dir, "imgui.ini"})
+		defer delete(path)
+
+		io.IniFilename = strings.clone_to_cstring(path)
+	}
+
 	imx.init()
 
 	add_window_archetype(client, LIBRARY_WINDOW_ARCHETYPE)
@@ -183,11 +197,6 @@ init :: proc(
 
 	client.wake_proc = wake_proc
 
-	// Create paths
-	client.paths.theme_folder = filepath.join({data_dir, "Themes"}, context.allocator)
-	client.paths.persistent_state = filepath.join({data_dir, "settings.json"}, context.allocator)
-	client.paths.layout_folder = filepath.join({data_dir, "Layouts"}, context.allocator)
-	client.paths.settings = filepath.join({config_dir, "settings.ini"}, context.allocator)
 
 	themes_init(client)
 	theme_set_defaults(&global_theme)
