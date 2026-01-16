@@ -385,7 +385,8 @@ static void *run_dbus_session(void *dont_care) {
 		NULL, NULL
 	);
 
-	loop = g_main_loop_new(NULL, false);
+	GMainContext *ctx = g_main_context_new();
+	loop = g_main_loop_new(ctx, false);
 	g_main_loop_run(loop);
 	g_bus_unown_name(owner_id);
 	g_dbus_node_info_unref(mc.introspection_info);

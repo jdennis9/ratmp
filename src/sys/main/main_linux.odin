@@ -102,10 +102,6 @@ create_window :: proc() -> bool {
 	if _linux.window == nil {return false}
 	glfw.MakeContextCurrent(_linux.window)
 
-	// Workaround for hiding then showing the window to cause a hang on glfw.SwapBuffers
-	// with some wayland compositors
-	glfw.SwapInterval(glfw.GetWindowAttrib(_linux.window, glfw.FOCUSED) != 0 ? 1 : 0)
-
 	load_icon :: proc() -> bool {
 		w, h: i32
 
@@ -155,6 +151,10 @@ shutdown :: proc() {
 }
 
 new_frame :: proc() {
+	// Workaround for hiding then showing the window to cause a hang on glfw.SwapBuffers
+	// with some wayland compositors
+	glfw.SwapInterval(glfw.GetWindowAttrib(_linux.window, glfw.FOCUSED) != 0 ? 1 : 0)
+
 	if _linux.window_visible {
 		sys._gl_clear_buffer()
 	}

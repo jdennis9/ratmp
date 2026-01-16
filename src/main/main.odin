@@ -144,8 +144,6 @@ run :: proc() -> bool {
 		if g.cl.want_quit {
 			break
 		}
-
-		log.debug(delta)
 	}
 
 	return true
