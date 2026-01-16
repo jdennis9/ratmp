@@ -358,7 +358,7 @@ static void on_bus_acquired(GDBusConnection *conn, const char *name, void *userd
 }
 
 static void on_name_acquired(GDBusConnection *conn, const char *name, void *userdata) {
-	g_print("Acquired bus name:", name);
+	g_print("Acquired bus name: %s", name);
 }
 
 static void on_name_lost(GDBusConnection *conn, const char *name, void *userdata) {
@@ -367,7 +367,7 @@ static void on_name_lost(GDBusConnection *conn, const char *name, void *userdata
 static void *run_dbus_session(void *dont_care) {
 	GMainLoop *loop;
 	GError *error = NULL;
-	guint owner_id;	
+	guint owner_id;
 
 	mc.introspection_info = g_dbus_node_info_new_for_xml(
 		server_introspection_xml, &error

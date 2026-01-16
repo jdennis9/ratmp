@@ -1,8 +1,8 @@
 package sys_main
 
+import "core:sync"
 import "base:runtime"
 
-import "core:thread"
 import "core:log"
 import "core:path/filepath"
 import "core:os/os2"
@@ -31,6 +31,7 @@ _linux: struct {
 	sv: ^server.Server,
 	cl: ^client.Client,
 	want_exit: bool,
+	want_show_window: bool,
 
 	minimize_to_tray_dialog: sys.Dialog_State,
 }
@@ -56,7 +57,9 @@ _window_close_callback :: proc "c" (window: glfw.WindowHandle) {
 _systray_event_handler :: proc "c" (event: linux_misc.Systray_Event) {
 	switch event {
 		case .Exit: _linux.running = false
-		case .Show: show_window(true)
+		case .Show:
+			sync.atomic_store(&_linux.want_show_window, true)
+			glfw.PostEmptyEvent()
 	}
 }
 
@@ -98,6 +101,10 @@ create_window :: proc() -> bool {
 	_linux.window = glfw.CreateWindow(1600, 900, build.PROGRAM_NAME_AND_VERSION, nil, nil)
 	if _linux.window == nil {return false}
 	glfw.MakeContextCurrent(_linux.window)
+
+	// Workaround for hiding then showing the window to cause a hang on glfw.SwapBuffers
+	// with some wayland compositors
+	glfw.SwapInterval(glfw.GetWindowAttrib(_linux.window, glfw.FOCUSED) != 0 ? 1 : 0)
 
 	load_icon :: proc() -> bool {
 		w, h: i32
@@ -148,7 +155,9 @@ shutdown :: proc() {
 }
 
 new_frame :: proc() {
-	sys._gl_clear_buffer()
+	if _linux.window_visible {
+		sys._gl_clear_buffer()
+	}
 
 	imgui_glfw.NewFrame()
 	imgui_gl.NewFrame()
@@ -169,6 +178,11 @@ handle_events :: proc() -> bool {
 		}
 
 		sys.async_dialog_destroy(&_linux.minimize_to_tray_dialog)
+	}
+
+	if sync.atomic_load(&_linux.want_show_window) {
+		show_window(true)
+		sync.atomic_store(&_linux.want_show_window, false)
 	}
 
 	return _linux.running
