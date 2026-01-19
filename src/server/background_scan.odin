@@ -18,6 +18,8 @@
 #+private
 package server
 
+import "core:fmt"
+import "core:log"
 import "core:thread"
 import "core:os/os2"
 import "core:path/filepath"
@@ -47,24 +49,14 @@ _background_scan_proc :: proc(scan_thread: ^thread.Thread) {
 			if dir_error != nil {return 0}
 			defer os2.close(dir)
 
-			iter := os2.read_directory_iterator_create(dir)
-			defer os2.read_directory_iterator_destroy(&iter)
+			files, read_error := os2.read_all_directory(dir, context.allocator)
+			defer os2.file_info_slice_delete(files, context.allocator)
 
-			for {
-				file, _ := os2.read_directory_iterator(&iter) or_break
+			if read_error != nil do return 0
 
-				// @FixMe: Workaround for Odin os2 bug when decoding file names, 
-				// remove when fix is released
-				c := filepath.clean(file.fullpath)
-				defer delete(c)
-				if c == cleaned_path {continue}
-
-				if file.type == .Regular &&  is_audio_file_supported(file.fullpath) {
-					count += 1
-				}
-				else if file.type == .Directory {
-					count += count_files(file.fullpath)
-				}
+			for file in files {
+				if file.type == .Regular && is_audio_file_supported(file.fullpath) do count += 1
+				else if file.type == .Directory do count += count_files(file.fullpath)
 			}
 
 			return count
@@ -98,7 +90,7 @@ _begin_background_scan :: proc(scan: ^_Background_Scan, input: []Path, on_comple
 	scan.thread.init_context = context
 	scan.on_complete = on_complete
 
-	resize(&scan.folders, len(input))
+	reserve(&scan.folders, len(input))
 	for folder in input {
 		append(&scan.folders, folder)
 	}
