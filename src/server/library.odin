@@ -45,6 +45,7 @@ Playlist_Origin :: enum {
 	Album,
 	Genre,
 	Folder,
+	Generated,
 }
 
 Track_ID :: distinct u32
@@ -880,4 +881,38 @@ library_find_track_cover_art :: proc(
 	cover_path := library_find_folder_cover_art(lib, filepath.dir(path)) or_return
 	
 	return os2.read_entire_file_from_path(cover_path, allocator) or_else nil, false
+}
+
+library_build_track_radio :: proc(lib: Library, track_index: int, allocator: Allocator) -> []Track_ID {
+	output: [dynamic]Track_ID
+	defer delete(output)
+
+	track := lib.tracks[track_index].properties
+
+	find_similar :: proc(
+		lib: Library, reference: Track_Properties, output: ^[dynamic]Track_ID
+	) {
+		use_properties := []Track_Property_ID {
+			.Album,
+			.Genre,
+			.Artist,
+		}
+
+		for track in lib.tracks {
+			for prop in use_properties {
+				a := track.properties[prop].(string) or_continue
+				b := reference[prop].(string) or_continue
+
+				if a == "" || b == "" do continue
+
+				if a == b && !slice.contains(output[:], track.id) {
+					append(output, track.id)
+				}
+			}
+		}
+	}
+
+	find_similar(lib, track, &output)
+
+	return slice.clone(output[:], allocator)
 }

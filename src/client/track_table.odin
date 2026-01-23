@@ -80,6 +80,7 @@ Track_Context_Result :: struct {
 	edit_metadata: bool,
 	add_to_queue: bool,
 	more_info: bool,
+	start_radio: bool,
 }
 
 show_add_to_playlist_menu :: proc(lib: Library, result: ^Track_Context_Result) {
@@ -105,6 +106,7 @@ show_track_context_items :: proc(
 		imgui.EndMenu()
 	}
 	show_add_to_playlist_menu(lib, result)
+	result.start_radio |= imgui.MenuItem("Play similar music")
 	imgui.Separator()
 	if imgui.MenuItem("More info...") {
 		result.more_info = true
@@ -154,6 +156,17 @@ process_track_context :: proc(
 
 		if result.add_to_queue {
 			server.append_to_queue(sv, {result.single_track.?}, from_playlist)
+		}
+
+		if result.start_radio {
+			if track_index, found := server.library_find_track_index(
+				sv.library, result.single_track.?
+			); found {
+				radio := server.library_build_track_radio(sv.library, track_index, context.allocator)
+				defer delete(radio)
+
+				server.play_playlist(sv, radio[:], {.Generated, 0}, result.single_track.?)
+			}
 		}
 	}
 
