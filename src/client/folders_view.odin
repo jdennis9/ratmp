@@ -264,9 +264,9 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		}
 	}
 
-	if state.serial != sv.library.serial {
+	if state.serial != sv.library.folder_tree_serial {
 		log.debug("Rebuilding folder tree...")
-		state.serial = sv.library.serial
+		state.serial = sv.library.folder_tree_serial
 		_rebuild_nodes(state, cl, sv)
 	}
 
