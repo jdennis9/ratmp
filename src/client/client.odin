@@ -296,36 +296,6 @@ frame :: proc(cl: ^Client, sv: ^Server, delta_arg: f32) {
 	cl.frame_count += 1
 	cl.delta = delta
 
-	if imgui.Begin("Waga") {
-		if imgui.BeginTable("Test", 16, imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp) {
-
-			imgui.TableNextRow()
-			if imgui.TableSetColumnIndex(0) {
-				imx.text_unformatted("Column 1")
-			}
-
-			if imgui.TableSetColumnIndex(1) {
-				imx.scrolling_text("This is some super long text that doesn't fit in a column", imgui.GetContentRegionAvail().x)
-			}
-
-			if imgui.TableSetColumnIndex(2) {
-				imx.text_unformatted("Column 3")
-			}
-
-			for _ in 0..<16 {
-				imgui.TableNextRow()
-				for i in 0..<16 {
-					if imgui.TableSetColumnIndex(auto_cast i) {
-						imx.text_unformatted("Blah")
-					}
-				}
-			}
-
-			imgui.EndTable()
-		}
-	}
-	imgui.End()
-
 	// Media controls
 	if cl.enable_media_controls && !cl.media_controls.enabled {
 		cl.media_controls.enabled = true
