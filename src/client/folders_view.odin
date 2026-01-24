@@ -215,14 +215,14 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 				imgui.TreePop()
 			}
 			else {
-				if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
-					imgui.SameLine()
-					if imgui.SmallButton("Show tracks") do result.select = node
-				}
-
 				if is_play_track_input_pressed() {
 					result.play = node
 					if state.sbs_mode == .SideBySide do result.select = node
+				}
+
+				if imgui.IsMouseHoveringRect(imgui.GetItemRectMin(), imgui.GetItemRectMax()) {
+					imgui.SameLine()
+					if imgui.SmallButton("Show tracks") do result.select = node
 				}
 			}
 
