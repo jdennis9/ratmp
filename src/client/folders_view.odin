@@ -43,7 +43,6 @@ _Folder_Node :: struct {
 @private
 Folders_Window :: struct {
 	using base: Window_Base,
-	track_filter: [128]u8,
 	serial: uint,
 	node_arena: mem.Dynamic_Arena,
 	string_arena: mem.Dynamic_Arena,
@@ -310,29 +309,26 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		if state.sel_folder_id == 0 {return}
 
 		playlist_id := _folder_id_to_playlist_id(state.sel_folder_id)
-		filter_cstring := cstring(&state.track_filter[0])
 		context_id := imgui.GetID("##track_context")
 
-		imgui.InputTextWithHint("##track_filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
-
-		track_table_update(
-			cl^,
-			&state.track_table, sv.library.serial + state.track_table_serial,
-			sv.library, state.viewing_tracks[:], playlist_id,
-			string(filter_cstring)
-		)
+		_Ctx :: struct {state: ^Folders_Window, sv: ^Server}
+		ctx := _Ctx{state, sv}
 
 		imgui.TextDisabled("%s", cstring(&state.viewing_folder_name[0]))
 
-		table_result := track_table_show(state.track_table, "##tracks", context_id, sv.current_track_id)
-		track_table_process_result(state.track_table, table_result, cl, sv, {})
-		if table_result.sort_spec != nil {
-			server.library_sort_tracks(sv.library, state.viewing_tracks[:], table_result.sort_spec.?)
-			state.track_table_serial += 1
+		on_sort :: proc(data: rawptr, spec: server.Track_Sort_Spec) {
+			ctx := cast(^_Ctx) data
+			server.library_sort_tracks(ctx.sv.library, ctx.state.viewing_tracks[:], spec)
 		}
 
-		context_result := track_table_show_context(state.track_table, table_result, context_id, {.NoRemove}, sv^)
-		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+			callback_data = &ctx,
+			str_id = "##folder",
+			tracks = state.viewing_tracks[:],
+			tracks_serial = sv.library.serial + state.track_table_serial,
+			playlist_id = playlist_id,
+			sort_callback = on_sort,
+		})
 	}
 
 	sbs: Side_By_Side_Window

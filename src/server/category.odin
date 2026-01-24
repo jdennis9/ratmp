@@ -13,6 +13,7 @@ Track_Category_Entry :: struct {
 	name_cstring: cstring,
 	duration: i64,
 	tracks: [dynamic]Track_ID,
+	serial: uint,
 }
 
 Track_Category :: struct {
@@ -143,4 +144,11 @@ track_category_sort :: proc(
 
 	cat.serial += 1
 	lib.categories.serial += 1
+}
+
+track_category_entry_sort :: proc(
+	lib: ^Library, cat: ^Track_Category, entry_index: int, spec: Track_Sort_Spec
+) {
+	library_sort_tracks(lib^, cat.entries[entry_index].tracks[:], spec)
+	cat.entries[entry_index].serial += 1
 }

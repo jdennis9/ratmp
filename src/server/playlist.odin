@@ -125,6 +125,16 @@ playlist_add_tracks :: proc(playlist: ^Playlist, lib: ^Library, tracks: []Track_
 	lib.playlists_serial += 1
 }
 
+playlist_remove_tracks :: proc(playlist: ^Playlist, lib: ^Library, tracks: []Track_ID) {
+	for track in tracks {
+		index := slice.linear_search(playlist.tracks[:], track) or_continue
+		ordered_remove(&playlist.tracks, index)
+	}
+
+	playlist.serial += 1
+	lib.playlists_serial += 1
+}
+
 playlist_add_auto_build_param :: proc(playlist: ^Playlist, lib: ^Library, type: Playlist_Auto_Build_Param_Type, arg: string) {
 	param: Playlist_Auto_Build_Param
 
@@ -153,4 +163,9 @@ playlist_mark_dirty :: proc(playlist: ^Playlist, lib: ^Library) {
 playlist_set_name :: proc(playlist: ^Playlist, name: string) {
 	playlist.name_cstring = strings.clone_to_cstring(name)
 	playlist.name = string(playlist.name_cstring)
+}
+
+playlist_sort :: proc(playlist: ^Playlist, lib: Library, spec: Track_Sort_Spec) {
+	library_sort_tracks(lib, playlist.tracks[:], spec)
+	playlist.serial += 1
 }

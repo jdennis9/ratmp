@@ -17,6 +17,7 @@
 */
 package imgui_extensions
 
+import "src:global"
 import "core:math/linalg"
 import "src:licenses"
 import "core:log"
@@ -64,6 +65,7 @@ Table_Result :: struct {
 	sort_by_column: Maybe(int),
 	sort_order: Table_Sort_Order,
 	context_menu_opened_with: Maybe(Table_Row_ID),
+	selection_changed: bool,
 }
 
 Table_Row_Content :: struct {
@@ -147,7 +149,7 @@ Table_Display_Info :: struct {
 }
 
 @(private="file")
-_table_selection_logic :: proc(rows: []Table_Row, row_index: int, keep_selection: bool) {
+_table_selection_logic :: proc(table: ^Table_State, rows: []Table_Row, row_index: int, keep_selection: bool) {
 	row := &rows[row_index]
 
 	ctrl := imgui.IsKeyDown(.ImGuiMod_Ctrl)
@@ -190,11 +192,11 @@ _table_selection_logic :: proc(rows: []Table_Row, row_index: int, keep_selection
 }
 
 table_show :: proc(
-	str_id: cstring, display_info: Table_Display_Info,
-	scrolling_text_timer: f64
+	str_id: cstring, display_info: Table_Display_Info
 ) -> (result: Table_Result, shown: bool) {
 
 	RESIZE_GRAB_THICKNESS :: 3
+	scrolling_text_timer := global.uptime
 
 	show_vertical_borders :: proc(
 		t: ^Table_State, cursor: [2]f32, table_pos: [2]f32, table_size: [2]f32, y_offset: f32, height: f32
@@ -647,7 +649,10 @@ table_show :: proc(
 				select = true
 			}
 
-			if select do _table_selection_logic(display_info.rows, row_index, keep_selection)
+			if select {
+				_table_selection_logic(t, display_info.rows, row_index, keep_selection)
+				result.selection_changed = true
+			}
 		}
 
 		// Horizontal borders
@@ -668,7 +673,7 @@ table_show :: proc(
 		}
 	}
 
-
+	//result.selection_serial = t.selection_serial
 	shown = true
 	return
 }

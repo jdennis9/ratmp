@@ -218,9 +218,30 @@ metadata_window_show :: proc(
 	metadata := track.properties
 
 	if imgui.BeginPopupContextItem() {
-		result: Track_Context_Result
-		show_track_context_items(state.displayed_track_id, &result, sv.library)
-		process_track_context(state.displayed_track_id, result, cl, sv, {}, true)
+		if imgui.BeginMenu("Add to playlist") {
+			for &playlist in sv.library.playlists {
+				if playlist.auto_build_params != nil do continue
+				if imgui.MenuItem(playlist.name_cstring) {
+					server.playlist_add_tracks(&playlist, &sv.library, {track.id})
+				}
+			}
+			imgui.EndMenu()
+		}
+
+		imgui.Separator()
+		if imgui.MenuItem("Play similar music") {
+			track_index, found := server.library_find_track_index(sv.library, track.id)
+			if found {
+				radio := server.library_build_track_radio(sv.library, track_index, context.allocator)
+				defer delete(radio)
+				server.play_playlist(sv, radio, {.Generated, 0}, track.id)
+			}
+		} 
+		if imgui.MenuItem("More by this artist") do go_to_artist(cl, metadata)
+		if imgui.MenuItem("View album") do go_to_album(cl, metadata)
+		if imgui.MenuItem("View genre") do go_to_genre(cl, metadata)
+		imgui.Separator()
+
 		imgui.MenuItemBoolPtr("Crop image", nil, &state.crop_album_art)
 		imgui.EndPopup()
 	}
@@ -432,23 +453,25 @@ metadata_editor_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^S
 
 		context_id := imgui.GetID("##track_context")
 
-		track_table_update(cl^, &state.track_table, state.serial, sv.library, state.tracks[:], {}, "")
-		table_result := track_table_show(state.track_table, "##tracks", context_id, 0)
-
-		if imgui.BeginPopupEx(context_id, {.AlwaysAutoResize}) {
-			if imgui.MenuItem("Remove") {
-				sel := track_table_get_selection(state.track_table)
-				defer delete(sel)
-				
-				for id in sel {
-					index := slice.linear_search(state.tracks[:], id) or_continue
-					ordered_remove(&state.tracks, index)
-				}
-
-				state.serial += 1
+		on_remove :: proc(data: rawptr, tracks: []Track_ID) {
+			state := cast(^Metadata_Editor_Window) data
+			for id in tracks {
+				index := slice.linear_search(state.tracks[:], id) or_continue
+				ordered_remove(&state.tracks, index)
 			}
-			imgui.EndPopup()
+
+			state.serial += 1
 		}
+
+		show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+			callback_data = state,
+			remove_callback = on_remove,
+			str_id = "##editing_tracks",
+			tracks_serial = state.serial,
+			playlist_id = {.Generated, 1},
+			tracks = state.tracks[:],
+			flags = {.NoPlay, .NoFilter},
+		})
 	}
 
 }

@@ -15,7 +15,6 @@ import "src:server"
 
 Library_Window :: struct {
 	using base: Window_Base,
-	filter: [512]u8,
 	track_table: Track_Table,
 }
 
@@ -34,33 +33,27 @@ library_window_make_instance :: proc(allocator := context.allocator) -> ^Window_
 
 library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Library_Window) self
-	filter_cstring := cstring(&state.filter[0])
 	context_id := imgui.GetID("##library_track_context")
 
-	imgui.InputTextWithHint("##library_filter", "Filter", filter_cstring, auto_cast len(state.filter))
-
-	track_table_update(
-		cl^, 
-		&state.track_table, sv.library.serial, sv.library,
-		server.library_get_all_track_ids(sv.library), {}, string(filter_cstring)
-	)
-	table_result := track_table_show(
-		state.track_table, "##library_table", context_id, sv.current_track_id
-	)
-
-	if table_result.sort_spec != nil {server.library_sort(&sv.library, table_result.sort_spec.?)}
-	track_table_process_result(state.track_table, table_result, cl, sv, {})
-
-	context_result := track_table_show_context(state.track_table, table_result, context_id, {}, sv^)
-	track_table_process_context(state.track_table, table_result, context_result, cl, sv)
-
-	if context_result.remove {
-		selection := track_table_get_selection(state.track_table)
-		defer delete(selection)
-		for track in selection {
-			server.library_remove_track(&sv.library, track)
-		}
+	on_remove :: proc(data: rawptr, tracks: []Track_ID) {
+		sv := cast(^Server) data
+		for track in tracks do server.library_remove_track(&sv.library, track)
 	}
+
+	on_sort :: proc(data: rawptr, spec: server.Track_Sort_Spec) {
+		sv := cast(^Server) data
+		server.library_sort(&sv.library, spec)
+	}
+
+	show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+		callback_data = sv,
+		str_id = "##library",
+		tracks = server.library_get_all_track_ids(sv.library),
+		tracks_serial = sv.library.serial,
+		playlist_id = {.Loose, 0},
+		remove_callback = on_remove,
+		sort_callback = on_sort,
+	})
 }
 
 library_window_hide :: proc(self: ^Window_Base) {
@@ -74,7 +67,6 @@ library_window_hide :: proc(self: ^Window_Base) {
 
 Queue_Window :: struct {
 	using base: Window_Base,
-	filter: [512]u8,
 	track_table: Track_Table,
 }
 
@@ -97,24 +89,30 @@ queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	context_id := imgui.GetID("##track_context")
 	window_bb := imx.get_window_bounding_box()
 
-	track_table_update(cl^, &state.track_table, sv.queue_serial, sv.library, sv.queue[:], {origin = .Loose, id = max(u32)}, "", {.NoSort})
-	table_result := track_table_show(state.track_table, "##queue", context_id, sv.current_track_id)
+	on_remove :: proc(data: rawptr, tracks: []Track_ID) {
+		sv := cast(^Server) data
+		server.remove_tracks_from_queue(sv, tracks)
+	}
 
-	//if table_result.sort_spec != nil {server.sort_queue(sv, table_result.sort_spec.?)}
-	track_table_process_result(state.track_table, table_result, cl, sv, {.SetQueuePos})
+	on_sort :: proc(data: rawptr, spec: server.Track_Sort_Spec) {
+		sv := cast(^Server) data
+		server.sort_queue(sv, spec)
+	}
+
+	show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+		callback_data = sv,
+		remove_callback = on_remove,
+		sort_callback = on_sort,
+		str_id = "##queue",
+		tracks = sv.queue[:],
+		tracks_serial = sv.queue_serial,
+		flags = {.IsQueue},
+		playlist_id = {.Loose, max(u32)},
+	})
 
 	if payload, have_payload := track_table_accept_drag_drop("##queue_drag_drop", window_bb, context.allocator); have_payload {
 		server.append_to_queue(sv, payload, {})
 		delete(payload)
-	}
-	
-	context_result := track_table_show_context(state.track_table, table_result, context_id, {}, sv^)
-	track_table_process_context(state.track_table, table_result, context_result, cl, sv)
-
-	if context_result.remove {
-		selection := track_table_get_selection(state.track_table)
-		defer delete(selection)
-		server.remove_tracks_from_queue(sv, selection)
 	}
 }
 
@@ -134,7 +132,6 @@ Playlists_Window :: struct {
 	editing_id: Playlist_ID,
 	new_playlist_name: [128]u8,
 	track_table: Track_Table,
-	track_filter: [128]u8,
 	playlist_filter: [128]u8,
 	mode: Side_By_Side_Window_Mode,
 	auto_playlist_param_editor: Auto_Playlist_Parameter_Editor,
@@ -214,7 +211,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		}
 	}
 
-	show_track_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+	show_selected_playlist_tracks :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
 		state := cast(^Playlists_Window) data
 
 		imgui.PushID("##tracks")
@@ -238,21 +235,34 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		// Track table
 		// =============================================================================
 
-		filter_cstring := cstring(&state.track_filter[0])
-
 		imx.text_unformatted(playlist.name)
 
-		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.track_filter))
+		_Ctx :: struct {
+			window: ^Playlists_Window, sv: ^Server,
+			playlist: ^Playlist,
+		}
+		ctx := _Ctx{state, sv, playlist}
 
-		track_table_update(cl^, &state.track_table, playlist.serial, sv.library, playlist.tracks[:], {origin = .User, id = auto_cast playlist.id}, string(filter_cstring))
+		on_remove :: proc(data: rawptr, tracks: []Track_ID) {
+			ctx := cast(^_Ctx) data
+			server.playlist_remove_tracks(ctx.playlist, &ctx.sv.library, tracks)
+		}
 
-		context_menu_id := imgui.GetID("##track_context")
-		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)
-		context_result := track_table_show_context(state.track_table, table_result, context_menu_id, {}, sv^)
+		on_sort :: proc(data: rawptr, spec: server.Track_Sort_Spec) {
+			ctx := cast(^_Ctx) data
+			server.playlist_sort(ctx.playlist, ctx.sv.library, spec)
+		}
 
-		track_table_process_result(state.track_table, table_result, cl, sv, {})
-		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
-
+		show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+			callback_data = &ctx,
+			str_id = "##playlist",
+			tracks = playlist.tracks[:],
+			tracks_serial = playlist.serial,
+			playlist_id = {.User, auto_cast playlist.id},
+			remove_callback = on_remove,
+			sort_callback = on_sort,
+		})
+	
 		if payload, have_payload := track_table_accept_drag_drop(
 			"##playlist_drag_drop", imx.get_window_bounding_box(), context.allocator
 		); have_payload {
@@ -264,7 +274,7 @@ playlists_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 
 	sbs := Side_By_Side_Window {
 		left_proc = show_playlist_table,
-		right_proc = show_track_table,
+		right_proc = show_selected_playlist_tracks,
 		mode = state.mode,
 		focus_right = state.viewing_id != 0,
 		data = state,
@@ -301,7 +311,6 @@ Track_Category_Window :: struct {
 	track_table: Track_Table,
 	mode: Side_By_Side_Window_Mode,
 	viewing_hash: server.Track_Category_Hash,
-	track_filter: [128]u8,
 	category_filter: [128]u8,
 	category: ^server.Track_Category,
 }
@@ -390,7 +399,7 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 		}
 	}
 
-	show_track_table :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
+	show_tracks :: proc(data: rawptr, cl: ^Client, sv: ^Server) {
 		state := cast(^Track_Category_Window) data
 
 		imgui.PushID("##tracks")
@@ -406,27 +415,35 @@ show_track_category_window :: proc(state: ^Track_Category_Window, cl: ^Client, s
 
 		entry := &cat.entries[entry_index]
 
-		filter_cstring := cstring(&state.track_filter[0])
-
 		imx.text_unformatted(entry.name)
 
-		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(state.category_filter))
+		_Ctx :: struct {
+			state: ^Track_Category_Window, sv: ^Server,
+			cat: ^server.Track_Category,
+			entry_index: int,
+		}
+		ctx := _Ctx{state, sv, cat, entry_index}
 
-		track_table_update(cl^, &state.track_table, sv.library.serial, sv.library, entry.tracks[:], {origin = .User, id = auto_cast entry.hash}, string(filter_cstring))
+		on_sort :: proc(data: rawptr, spec: server.Track_Sort_Spec) {
+			ctx := cast(^_Ctx) data
+			server.track_category_entry_sort(&ctx.sv.library, ctx.cat, ctx.entry_index, spec)
+		}
 
-		context_menu_id := imgui.GetID("##track_context")
-		table_result := track_table_show(state.track_table, "##track_table", context_menu_id, sv.current_track_id)
-		context_result := track_table_show_context(state.track_table, table_result, context_menu_id, {.NoRemove}, sv^)
-
-		track_table_process_result(state.track_table, table_result, cl, sv, {})
-		track_table_process_context(state.track_table, table_result, context_result, cl, sv)
+		show_track_table(&state.track_table, cl, sv, Track_Table_Info {
+			callback_data = &ctx,
+			str_id = "##category_tracks",
+			tracks_serial = ctx.cat.serial + entry.serial,
+			playlist_id = {server.track_property_to_playlist_origin(cat.from_property), entry.hash},
+			tracks = entry.tracks[:],
+			sort_callback = on_sort,
+		})
 
 		return
 	}
 
 	sbs := Side_By_Side_Window {
 		left_proc = show_category_table,
-		right_proc = show_track_table,
+		right_proc = show_tracks,
 		mode = state.mode,
 		focus_right = state.viewing_hash != 0,
 		data = state,
