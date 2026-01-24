@@ -63,10 +63,15 @@ set_tooltip :: proc(str: string) {
 	imgui.SetTooltip(cstring(&buf[0]))
 }
 
-set_item_tooltip :: proc(str: string) {
+set_item_tooltip_unformatted :: proc(str: string) {
 	buf: [512]u8
 	copy(buf[:511], str)
 	imgui.SetItemTooltip(cstring(&buf[0]))
+}
+
+set_item_tooltip :: proc($BUF_SIZE: uint, args: ..any) {
+	buf: [BUF_SIZE]u8
+	set_item_tooltip_unformatted(fmt.bprint(buf[:], ..args))
 }
 
 begin_status_bar :: proc() -> bool {

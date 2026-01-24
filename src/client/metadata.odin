@@ -75,6 +75,7 @@ Metadata_Window :: struct {
 	displayed_track_id: Track_ID,
 	album_art: imgui.TextureID,
 	album_art_ratio: f32,
+	album_art_size: [2]f32,
 	file_info: os2.File_Info,
 	crop_album_art: bool,
 }
@@ -148,6 +149,7 @@ metadata_window_show :: proc(
 		width, height, state.album_art, have_art = _load_track_album_art(sv.library, track_path)
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
+			state.album_art_size = {f32(width), f32(height)}
 		}
 		else {
 			state.album_art_ratio = 1
@@ -217,6 +219,13 @@ metadata_window_show :: proc(
 	track := server.library_find_track(sv.library, state.track_id) or_return
 	metadata := track.properties
 
+	if imgui.BeginItemTooltip() {
+		imx.textf(32, "%dx%d", int(state.album_art_size.x), int(state.album_art_size.y))
+		imgui.Separator()
+		imx.text_unformatted("Right-click for options")
+		imgui.EndTooltip()
+	}
+
 	if imgui.BeginPopupContextItem() {
 		if imgui.BeginMenu("Add to playlist") {
 			for &playlist in sv.library.playlists {
@@ -252,7 +261,7 @@ metadata_window_show :: proc(
 
 		if imgui.TableSetColumnIndex(0) {
 			clicked = imgui.Selectable(name, false, {.SpanAllColumns})
-			imx.set_item_tooltip(value)
+			imx.set_item_tooltip_unformatted(value)
 
 			if imgui.BeginPopupContextItem() {
 				if imgui.MenuItem("Copy to clipboard") {
@@ -265,8 +274,7 @@ metadata_window_show :: proc(
 		}
 
 		if imgui.TableSetColumnIndex(1) {
-			//imx.scrolling_text(value, uptime, imgui.GetContentRegionAvail().x)
-			imx.text_unformatted(value)
+			imx.scrolling_text(value, imgui.GetContentRegionAvail().x)
 		}
 
 		return clicked
