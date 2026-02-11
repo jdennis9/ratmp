@@ -27,6 +27,7 @@ _linux: struct {
 	ctx: runtime.Context,
 	window: glfw.WindowHandle,
 	window_visible: bool,
+	window_focused: bool,
 	running: bool,
 	sv: ^server.Server,
 	cl: ^client.Client,
@@ -151,9 +152,7 @@ shutdown :: proc() {
 }
 
 new_frame :: proc() {
-	// Workaround for hiding then showing the window to cause a hang on glfw.SwapBuffers
-	// with some wayland compositors
-	glfw.SwapInterval(glfw.GetWindowAttrib(_linux.window, glfw.FOCUSED) != 0 ? 1 : 0)
+	_linux.window_focused = glfw.GetWindowAttrib(_linux.window, glfw.FOCUSED) != 0
 
 	if _linux.window_visible {
 		sys._gl_clear_buffer()
@@ -165,8 +164,8 @@ new_frame :: proc() {
 
 // Return false to terminate program
 handle_events :: proc() -> bool {
-	if _linux.window_visible {glfw.PollEvents()}
-	else {glfw.WaitEventsTimeout(0.05)}
+	if _linux.window_visible && _linux.window_focused {glfw.PollEvents()}
+	else {glfw.WaitEventsTimeout(1.0/60.0)}
 	linux_misc.update()
 
 	if result, have_result := sys.async_dialog_get_result(&_linux.minimize_to_tray_dialog); have_result {
@@ -193,9 +192,12 @@ show_window :: proc "contextless" (show: bool) {
 
 	if show {
 		glfw.ShowWindow(_linux.window)
+		glfw.RestoreWindow(_linux.window)
+		glfw.SwapInterval(1)
 	}
 	else {
 		glfw.HideWindow(_linux.window)
+		glfw.SwapInterval(0)
 	}
 }
 
