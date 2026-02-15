@@ -850,6 +850,7 @@ track_property_to_playlist_origin :: proc(prop: Track_Property_ID) -> Playlist_O
 	unreachable()
 }
 
+
 library_find_track_cover_art :: proc(
 	lib: Library, track_id: Track_ID, allocator: Allocator
 ) -> (data: []u8, found: bool) {
@@ -878,9 +879,13 @@ library_find_track_cover_art :: proc(
 
 	if data, found = try_get_art_from_file(path_cstring, allocator); found do return
 
+	error: os2.Error
 	cover_path := library_find_folder_cover_art(lib, filepath.dir(path)) or_return
-	
-	return os2.read_entire_file_from_path(cover_path, allocator) or_else nil, false
+	data, error = os2.read_entire_file_from_path(cover_path, allocator)
+
+	if error != nil do return
+	found = true
+	return
 }
 
 library_build_track_radio :: proc(lib: Library, track_index: int, allocator: Allocator) -> []Track_ID {
