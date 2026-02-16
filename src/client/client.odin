@@ -130,6 +130,7 @@ Client :: struct {
 	uptime: f64,
 
 	font_size: f32,
+	want_reload_layout: bool,
 }
 
 init :: proc(
@@ -227,6 +228,12 @@ destroy :: proc(client: ^Client) {
 
 handle_events :: proc(client: ^Client, sv: ^Server) {
 	update_layout(&client.layouts, &client.window_archetypes)
+	io := imgui.GetIO()
+
+	if client.want_reload_layout {
+		imgui.LoadIniSettingsFromDisk(io.IniFilename)
+		client.want_reload_layout = false
+	}
 
 	if client.media_controls.enabled {
 		track_info: media_controls.Track_Info
@@ -537,6 +544,14 @@ main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 		if imgui.MenuItem("About") {
 			client.windows.about.show = true
 		}
+		imgui.Separator()
+		if imgui.MenuItem("Fix broken tables") {
+			fix_broken_tables_in_imgui_ini()
+			client.want_reload_layout = true
+		}
+		imgui.SetItemTooltip(
+			"Fix tables where every column is tiny and trying to resize any of them will cause a crash."
+		)
 		imgui.EndMenu()
 	}
 
@@ -849,4 +864,28 @@ open_track_in_metadata_popup :: proc(cl: ^Client, track_id: Track_ID) -> bool {
 	window := cast(^Metadata_Window) (bring_window_to_front(cl, WINDOW_METADATA_POPUP) or_return)
 	window.track_id = track_id
 	return true
+}
+
+@private
+fix_broken_tables_in_imgui_ini :: proc() {
+	io := imgui.GetIO()
+	ini_path := string(io.IniFilename)
+	ini_input_data, error := os2.read_entire_file_from_path(ini_path, context.allocator)
+	if error != nil do return
+	defer delete(ini_input_data)
+
+	ini_string := string(ini_input_data)
+
+	//@TODO: This might be different with different implementations of printf
+	fixed_ini_string, new_string_allocated := strings.replace_all(
+		ini_string, "-nan(ind)", "0.1", context.allocator
+	)
+	defer if new_string_allocated do delete(fixed_ini_string)
+
+	os2.remove(ini_path)
+	out_file, create_error := os2.create(ini_path)
+	if create_error != nil do return
+	defer os2.close(out_file)
+	
+	os2.write(out_file, transmute([]byte) fixed_ini_string)
 }
