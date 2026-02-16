@@ -303,7 +303,7 @@ metadata_window_show :: proc(
 
 	// Tags
 	imgui.SeparatorText("Metadata")
-	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
+	if imgui.BeginTable("##metadata", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		imgui.TableSetupColumn("name", {}, 0.2)
 		imgui.TableSetupColumn("value", {}, 0.8)
 
@@ -328,7 +328,7 @@ metadata_window_show :: proc(
 	}
 	
 	imgui.SeparatorText("File properties")
-	if imgui.BeginTable("##file_properies", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_BordersInnerH|imgui.TableFlags_RowBg) {
+	if imgui.BeginTable("##file_properies", 2, imgui.TableFlags_SizingStretchProp|imgui.TableFlags_RowBg) {
 		path_buf: [512]u8
 		
 		imgui.TableSetupColumn("name", {}, 0.2)
