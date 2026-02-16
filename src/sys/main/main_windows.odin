@@ -149,6 +149,7 @@ handle_events :: proc() -> bool {
 show_window :: proc(show: bool) {
 	if show {
 		win.ShowWindow(_win32.hwnd, win.SW_SHOWDEFAULT)
+		win.SetForegroundWindow(_win32.hwnd)
 	}
 	else {
 		win.ShowWindow(_win32.hwnd, win.SW_HIDE)
