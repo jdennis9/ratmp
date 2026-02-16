@@ -48,6 +48,4 @@ foreign lib {
 	decode_packet :: proc(ctx: ^Context, output_spec: ^Audio_Spec, packet_out: ^Packet) -> Decode_Status ---
 	free_packet :: proc(packet: ^Packet) ---
 	seek_to_second :: proc(ctx: ^Context, second: i64) -> bool ---
-	load_thumbnail :: proc(filename: cstring, data: ^rawptr, w: ^i32, h: ^i32) -> bool ---
-	free_thumbnail :: proc(data: rawptr) ---
 }

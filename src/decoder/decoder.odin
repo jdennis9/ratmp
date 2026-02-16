@@ -198,21 +198,3 @@ get_duration :: proc(dec: Decoder) -> int {
 
 	return auto_cast dec.duration_seconds
 }
-
-load_thumbnail :: proc(filename: string) -> (data: rawptr, w, h: int, ok: bool) {
-	filename_buf: [512]u8
-	_w, _h: i32
-
-	copy(filename_buf[:511], filename)
-	ffmpeg.load_thumbnail(cstring(&filename_buf[0]), &data, &_w, &_h) or_return
-	w = auto_cast _w
-	h = auto_cast _h
-
-	ok = true
-	return
-}
-
-delete_thumbnail :: proc(data: rawptr) {
-	ffmpeg.free_thumbnail(data);
-}
-
