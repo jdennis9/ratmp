@@ -36,35 +36,18 @@ import "src:decoder"
 
 import "imx"
 
-_load_track_album_art :: proc(lib: server.Library, str_path: string) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
-	if data, w, h, image_found_in_file := decoder.load_thumbnail(str_path);
-	image_found_in_file {
-		defer decoder.delete_thumbnail(data)
-		texture = sys.video_create_texture(data, w, h) or_return
-		width = w
-		height = h
-		ok = true
-		return
-	}
+_load_track_album_art :: proc(lib: server.Library, track_id: Track_ID) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
+	file_data := server.library_find_track_cover_art(lib, track_id, context.allocator) or_return
+	w, h: i32
 
-	// Look for art in same folder
-	folder := filepath.dir(str_path)
-	defer delete(folder)
+	pixel_data := stbi.load_from_memory(raw_data(file_data), auto_cast len(file_data), &w, &h, nil, 4)
+	if pixel_data == nil do return
+	defer stbi.image_free(pixel_data)
 
-	if cover, found := server.library_find_folder_cover_art(lib, folder); found {
-		cover_cstring := strings.clone_to_cstring(cover, context.allocator)
-		defer delete(cover_cstring)
-
-		w, h: i32
-		image_data := stbi.load(cover_cstring, &w, &h, nil, 4)
-		if image_data == nil {return}
-		defer stbi.image_free(image_data)
-		width = auto_cast w
-		height = auto_cast h
-		texture = sys.video_create_texture(image_data, width, height) or_return
-		ok = true
-		return
-	}
+	width = auto_cast w
+	height = auto_cast h
+	texture = sys.video_create_texture(pixel_data, width, height) or_return
+	ok = true
 
 	return
 }
@@ -146,7 +129,8 @@ metadata_window_show :: proc(
 		
 		path_buf: Path
 		track_path := server.library_find_track_path(sv.library, path_buf[:], state.track_id) or_return
-		width, height, state.album_art, have_art = _load_track_album_art(sv.library, track_path)
+		width, height, state.album_art, have_art = _load_track_album_art(sv.library, state.track_id)
+
 		if have_art {
 			state.album_art_ratio = f32(height) / f32(width)
 			state.album_art_size = {f32(width), f32(height)}
