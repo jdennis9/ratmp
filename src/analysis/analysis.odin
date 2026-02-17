@@ -17,6 +17,7 @@
 */
 package analysis
 
+import "core:sync"
 import "core:log"
 import "core:math"
 import "core:math/bits"
@@ -96,6 +97,10 @@ calc_spectrum_frequencies :: proc(output: []f32) {
 	}
 }
 
+// FFTW expects only one thread at a time to create plans
+@(private="file")
+_fftw_plan_lock: sync.Mutex
+
 FFT_State :: struct {
 	complex_buffer: []fftw.complex,
 	real_buffer: []f32,
@@ -137,7 +142,7 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		divisor = cast(f32) i32(1 << log2)
 		x = y / divisor
 		result = -1.7417939 + (2.8212026 + (-1.4699568 + (0.44717955 - 0.056570851 * x) * x) * x) * x
-    	result += (f32(log2)) * 0.69314718; // ln(2) = 0.69314718
+    	result += (f32(log2)) * 0.69314718 // ln(2) = 0.69314718
 		return
 	}
 
@@ -146,9 +151,11 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 	}
 
 	if state.plan == nil || state.window_size != state.plan_window_size {
+		sync.lock(&_fftw_plan_lock)
 		state.plan = fftw.plan_dft_r2c_1d(
-			auto_cast frame_count, raw_data(input), raw_data(state.complex_buffer), 0
+			auto_cast frame_count, raw_data(input), raw_data(state.complex_buffer)
 		)
+		sync.unlock(&_fftw_plan_lock)
 
 		if state.plan == nil do return
 		state.plan_window_size = state.window_size
@@ -192,6 +199,48 @@ fft_destroy :: proc(fft: ^FFT_State) {
 	fft.real_buffer = nil
 	fft.complex_buffer = nil
 	fft.plan = nil
+}
+
+IFFT_State :: struct {
+	plan: fftw.plan,
+	plan_size: int,
+	buffer: [dynamic]f32,
+}
+
+ifft_init :: proc(state: ^IFFT_State) {
+}
+
+ifft_destroy :: proc(state: ^IFFT_State) {
+	delete(state.buffer)
+	if state.plan != nil do fftw.destroy_plan(state.plan)
+}
+
+ifft_process :: proc(state: ^IFFT_State, input: [][2]f32) -> []f32 {
+	output_size := (len(input) - 1) * 2
+	resize(&state.buffer, output_size)
+
+	if state.plan == nil || state.plan_size != output_size {
+		state.plan_size = output_size
+
+		if state.plan != nil do fftw.destroy_plan(state.plan)
+
+		sync.lock(&_fftw_plan_lock)
+		state.plan = fftw.plan_dft_c2r_1d(
+			auto_cast output_size, raw_data(input), raw_data(state.buffer)
+		)
+		sync.unlock(&_fftw_plan_lock)
+
+		fftw.execute(state.plan)
+	}
+	else {
+		fftw.execute_dft_c2r(state.plan, raw_data(input), raw_data(state.buffer))
+	}
+
+	for &b in state.buffer {
+		b /= f32(output_size)
+	}
+
+	return state.buffer[:]
 }
 
 deinterlace :: proc(input: []f32, output: [][]f32) {

@@ -47,8 +47,6 @@ rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []T) {
 	producer := sync.atomic_load(&buf.producer_index)
 	consumer := sync.atomic_load(&buf.consumer_index)
 
-	log.debug(producer, consumer, producer > consumer)
-
 	if producer > consumer {
 		copied += copy(buf.data[producer:], data[:])
 		if copied != len(data) {

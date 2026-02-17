@@ -12,7 +12,7 @@ else {
 plan :: distinct rawptr
 complex :: [2]f32
 
-Kind :: enum c.int {
+R2R_Kind :: enum c.int {
 	R2HC=0,
 	HC2R=1,
 	DHT=2,
@@ -26,16 +26,23 @@ Kind :: enum c.int {
 	RODFT11=10
 }
 
+FLAG_PRESERVE_INPUT :: 1 << 4
+FLAG_ESTIMATE :: 1 << 6
+
 @(link_prefix="fftwf_")
 foreign lib {
 	/*
 	input is size n
 	output is size (n/2)+1
 	*/
-	plan_dft_r2c_1d :: proc(n: c.int, input: [^]f32, output: [^]complex, flags: c.uint) -> plan ---
-	plan_r2r_1d :: proc(n: c.int, input: [^]f32, output: [^]f32, kind: Kind, flags: c.uint) -> plan ---
+	plan_dft_r2c_1d :: proc(
+		n: c.int, input: [^]f32, output: [^]complex, flags: c.uint = FLAG_PRESERVE_INPUT|FLAG_ESTIMATE
+	) -> plan ---
 	execute_dft_r2c :: proc(_: plan, input: [^]f32, output: [^]complex) ---
-	execute_r2r :: proc(_: plan, input: [^]f32, output: [^]f32) ---
+	plan_dft_c2r_1d :: proc(
+		n: c.int, input: [^]complex, output: [^]f32, flags: c.uint = FLAG_PRESERVE_INPUT|FLAG_ESTIMATE
+	) -> plan ---
+	execute_dft_c2r :: proc(_: plan, input: [^]complex, output: [^]f32) ---
 	execute :: proc(_: plan) ---
 	destroy_plan :: proc(_: plan) ---
 	cleanup :: proc() ---
