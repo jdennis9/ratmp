@@ -47,7 +47,7 @@ Load_Proc :: #type proc(lib: SDK) -> Plugin_Info
 Init_Proc :: #type proc()
 Frame_Proc :: #type proc(delta: f32)
 Analyse_Proc :: #type proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32)
-Post_Process_Proc :: #type proc(audio: []f32, samplerate, channels: int)
+Post_Process_Proc :: #type proc(audio: [][]f32, samplerate: int)
 On_Track_Changed_Proc :: #type proc(track: Track_ID)
 On_Playback_State_Changed_Proc :: #type proc(new_state: Playback_State)
 
@@ -56,6 +56,7 @@ Track_ID :: distinct u32
 Playback_State :: enum {Playing, Paused, Stopped}
 Texture_ID :: distinct uintptr
 Draw_List :: distinct rawptr
+Decoder :: distinct rawptr
 
 Rect :: struct {
 	min, max: [2]f32,
@@ -81,6 +82,8 @@ UI_Procs :: struct {
 	begin_combo: proc(label: cstring, preview: cstring) -> bool,
 	end_combo: proc(),
 	get_window_drawlist: proc() -> Draw_List,
+
+	float_slider: proc(label: cstring, value: ^f32, min, max: f32) -> bool,
 }
 
 Draw_Procs :: struct {
@@ -112,6 +115,10 @@ Library_Procs :: struct {
 	lookup_track: proc(id: Track_ID) -> (index: int, found: bool),
 	get_track_metadata: proc(index: int, md: ^Track_Metadata),
 	get_track_cover_art: proc(index: int) -> (texture: Texture_ID, ok: bool),
+	decoder_open: proc(path: string) -> (Decoder, bool),
+	decoder_read: proc(dec: Decoder, output: []f32, samplerate: int) -> bool,
+	decoder_seek: proc(dec: Decoder, second: i64),
+	decoder_close: proc(dec: Decoder),
 }
 
 SDK :: struct {

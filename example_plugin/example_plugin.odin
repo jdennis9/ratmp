@@ -18,7 +18,9 @@ state: struct {
 	band_frequencies: [BAND_COUNT]f32,
 	band_peaks: [BAND_COUNT]f32,
 	peak: f32,
-	fft: sdk.FFT_State
+	fft: sdk.FFT_State,
+	enable_post_process: bool,
+	post_process_factor: f32,
 }
 
 // =============================================================================
@@ -51,6 +53,8 @@ plug_init :: proc() {
 
 	analysis.distribute_spectrum_frequencies(state.band_frequencies[:])
 	state.fft = analysis.fft_new_state(12000)
+	state.enable_post_process = true
+	state.post_process_factor = 0.4
 }
 
 // Called every frame. Previous frame length is passed in
@@ -75,6 +79,8 @@ plug_frame :: proc(delta_time: f32) {
 		if ui.button("Restart") {
 			playback.seek_to_second(0)
 		}
+		ui.checkbox("Enable post-processing", &state.enable_post_process)
+		ui.float_slider("Post processing factor", &state.post_process_factor, 0.1, 1.3)
 
 		ui.end()
 	}
@@ -95,9 +101,13 @@ plug_analyse :: proc(audio: [][]f32, fft: []f32, samplerate: int, delta: f32) {
 }
 
 @export @(link_name="plug_post_process")
-plug_post_process :: proc(audio: []f32, samplerate, channels: int) {
-	for &s in audio {
-		s = clamp(s, -1, 1)
+plug_post_process :: proc(audio: [][]f32, samplerate: int) {
+	if !state.enable_post_process do return
+	m := state.post_process_factor
+	for ch in audio {
+		for &f in ch {
+			f = clamp(linalg.tan(f * m) / m, -1, 1)
+		}
 	}
 }
 

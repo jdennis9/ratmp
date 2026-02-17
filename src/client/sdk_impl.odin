@@ -68,6 +68,10 @@ get_sdk_impl :: proc() -> (ui: sdk.UI_Procs, draw: sdk.Draw_Procs) {
 		return auto_cast imgui.GetWindowDrawList()
 	}
 
+	ui.float_slider = proc(label: cstring, value: ^f32, vmin, vmax: f32) -> bool {
+		return imgui.SliderFloat(label, value, vmin, vmax)
+	}
+
 	draw.rect = proc(drawlist: sdk.Draw_List, pmin, pmax: [2]f32, color: u32, thickness: f32, rounding: f32) {
 		imgui.DrawList_AddRect(auto_cast drawlist, pmin, pmax, color, rounding, {}, thickness)
 	}

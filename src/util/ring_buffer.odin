@@ -17,6 +17,7 @@
 */
 package util
 
+import "core:log"
 import "core:sync"
 
 Ring_Buffer :: struct($T: typeid, $SIZE: uint) {
@@ -38,18 +39,27 @@ rb_reset :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
 	rb_init(buf)
 	buf.data = {}
 	buf.producer_index = 0
+	buf.consumer_index = 0
 }
 
-rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []T, stride := 1, offset := 0) {
-	for i := 0; i < len(data); i += stride {
-		if (buf.producer_index + 1) % int(SIZE) == buf.consumer_index {
-			return
-		}
+rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []T) {
+	copied := 0
+	producer := sync.atomic_load(&buf.producer_index)
+	consumer := sync.atomic_load(&buf.consumer_index)
 
-		buf.data[buf.producer_index] = data[i+offset]
-		buf.producer_index += 1
-		buf.producer_index = _wrap(buf.producer_index, int(SIZE))
+	log.debug(producer, consumer, producer > consumer)
+
+	if producer > consumer {
+		copied += copy(buf.data[producer:], data[:])
+		if copied != len(data) {
+			copied += copy(buf.data[:consumer], data[copied:])
+		}
 	}
+	else {
+		copied += copy(buf.data[producer:], data[:])
+	}
+
+	sync.atomic_store(&buf.producer_index, _wrap(producer + copied, int(SIZE)))
 }
 
 // Fills the output buffer as much as possible, then consumes consume_count elements

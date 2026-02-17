@@ -17,6 +17,7 @@
 */
 package server
 
+import "src:analysis"
 import "base:runtime"
 import "core:sync"
 import "core:slice"
@@ -50,7 +51,7 @@ _Saved_State :: struct {
 
 Track_Info :: decoder.File_Info
 
-Post_Process_Hook_Proc :: #type proc(data: rawptr, audio: []f32, samplerate, channels: int)
+Post_Process_Hook_Proc :: #type proc(data: rawptr, audio: [][]f32, samplerate: int)
 Post_Process_Hook :: struct {
 	process: Post_Process_Hook_Proc,
 	data: rawptr,
@@ -77,7 +78,6 @@ Server :: struct {
 
 	output_copy: struct {
 		channels, samplerate: int,
-		prev_buffer: [dynamic]f32,
 		buffers: [MAX_OUTPUT_CHANNELS]util.Ring_Buffer(f32, 64<<10),
 	},
 
@@ -437,7 +437,7 @@ add_post_process_hook :: proc(state: ^Server, hook: Post_Process_Hook_Proc, data
 
 // This is being called on the audio thread!
 @(private="file")
-_update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samplerate: int) {
+_update_output_copy_buffers :: proc(state: ^Server, input: [][]f32, channels, samplerate: int) {
 	cpy := &state.output_copy
 
 	if cpy.channels != channels || cpy.samplerate != samplerate {
@@ -447,8 +447,8 @@ _update_output_copy_buffers :: proc(state: ^Server, input: []f32, channels, samp
 	cpy.channels = channels
 	cpy.samplerate = samplerate
 
-	for ch in 0..<channels {
-		util.rb_produce(&cpy.buffers[ch], input[:], channels, ch)
+	for channel_data, ch in input {
+		util.rb_produce(&cpy.buffers[ch], channel_data)
 	}
 }
 
@@ -466,18 +466,28 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 	sync.lock(&state.playback_lock)
 	defer sync.unlock(&state.playback_lock)
 
-	for &f in buffer {f = 0}
+	for &f in buffer do f = 0
 
 	if !state.paused && decoder.is_open(state.decoder) {
-		status := decoder.fill_buffer(&state.decoder, buffer, int(channels), int(samplerate))
+		deinterlaced: [MAX_OUTPUT_CHANNELS][]f32
+		defer for ch in 0..<channels do delete(deinterlaced[ch])
 
-		for hook in sa.slice(&state.post_process_hooks) {
-			hook.process(hook.data, buffer, auto_cast samplerate, auto_cast channels)
+		for ch in 0..<channels {
+			deinterlaced[ch] = make([]f32, len(buffer) / int(channels))
 		}
 
-		_update_output_copy_buffers(state, buffer, int(channels), int(samplerate))
+		status := decoder.fill_buffer(&state.decoder, buffer, int(channels), int(samplerate))
+		analysis.deinterlace(buffer, deinterlaced[:channels])
 
-		if status == .Eof {return .Finish}
+		for hook in sa.slice(&state.post_process_hooks) {
+			hook.process(hook.data, deinterlaced[:channels], auto_cast samplerate)
+		}
+
+		analysis.interlace(deinterlaced[:channels], buffer)
+
+		_update_output_copy_buffers(state, deinterlaced[:channels], int(channels), int(samplerate))
+
+		if status == .Eof do return .Finish
 		return .Continue
 	}
 

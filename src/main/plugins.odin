@@ -49,12 +49,12 @@ Plugin_Manager :: struct {
 	open_ui: bool,
 }
 
-plugins_post_process :: proc(data: rawptr, audio: []f32, samplerate, channels: int) {
+plugins_post_process :: proc(data: rawptr, audio: [][]f32, samplerate: int) {
 	mgr := cast(^Plugin_Manager)data
 
 	for plugin in mgr.plugins {
 		if plugin.procs.post_process != nil && plugin.enabled {
-			plugin.procs.post_process(audio, samplerate, channels)
+			plugin.procs.post_process(audio, samplerate)
 		}
 	}
 }

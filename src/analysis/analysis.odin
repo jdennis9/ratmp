@@ -194,6 +194,30 @@ fft_destroy :: proc(fft: ^FFT_State) {
 	fft.plan = nil
 }
 
+deinterlace :: proc(input: []f32, output: [][]f32) {
+	frame_count := len(output[0])
+	channels := len(output)
+	assert(len(input) / channels == frame_count)
+
+	for frame in 0..<frame_count {
+		for ch in 0..<channels {
+			output[ch][frame] = input[(channels*frame) + ch]
+		}
+	}
+}
+
+interlace :: proc(input: [][]f32, output: []f32) {
+	frame_count := len(input[0])
+	channels := len(input)
+	assert(len(output) / channels == frame_count)
+
+	for ch in 0..<channels {
+		for frame in 0..<frame_count {
+			output[(channels*frame) + ch] = input[ch][frame]
+		}
+	}
+}
+
 get_sdk_impl :: proc() -> sdk.Analysis_Procs {
 	return sdk.Analysis_Procs {
 		distribute_spectrum_frequencies = proc(output: []f32) {
