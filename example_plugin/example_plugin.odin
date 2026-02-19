@@ -4,7 +4,6 @@ import "core:log"
 import "core:math/linalg"
 
 import "../sdk"
-import imgui "../src/thirdparty/odin-imgui"
 
 BAND_COUNT :: 24
 

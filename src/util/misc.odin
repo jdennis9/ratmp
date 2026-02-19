@@ -17,6 +17,9 @@
 */
 package util
 
+import "core:reflect"
+import "base:intrinsics"
+import "base:runtime"
 import "core:encoding/json"
 import "core:time"
 import "core:log"
@@ -86,13 +89,13 @@ clock_from_seconds :: proc "contextless" (in_sec: int) -> (hour, min, sec: int) 
 
 
 @(deferred_in_out=_SCOPED_TIMER_END)
-SCOPED_TIMER :: proc(name: string) -> time.Tick {
+SCOPED_TIMER :: proc(name: string, loc := #caller_location) -> time.Tick {
 	return time.tick_now()
 }
 
 @(private="file")
-_SCOPED_TIMER_END :: proc(name: string, start: time.Tick) {
+_SCOPED_TIMER_END :: proc(name: string, loc: runtime.Source_Code_Location, start: time.Tick) {
 	length := time.tick_since(start)
-	log.debugf("%s: %fms", name, time.duration_milliseconds(length))
+	log.debugf("%s: %fms", name, time.duration_milliseconds(length), location = loc)
 }
 

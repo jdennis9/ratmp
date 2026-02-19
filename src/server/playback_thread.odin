@@ -87,6 +87,9 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		}
 
 		frames_required = util.rb_space(at.ring_buffers[0])
+
+		if frames_required <= 0 do continue
+
 		buffer = make([]f32, at.channels * frames_required)
 		defer delete(buffer)
 		
@@ -96,6 +99,11 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		at.decode_status = decoder.fill_buffer(&at.dec, buffer, at.channels, at.samplerate)
 
 		analysis.deinterlace(buffer, deinterlaced[:at.channels])
+
+		// Post-processing
+		if at.post_process_hook.process != nil do at.post_process_hook.process(
+			at.post_process_hook.data, deinterlaced[:at.channels], at.samplerate
+		)
 
 		for d, ch in deinterlaced[:at.channels] {
 			frames_copied = util.rb_produce(&at.ring_buffers[ch], d)

@@ -456,7 +456,15 @@ _clear_output_copy_buffer :: proc(state: ^Server) {
 	}
 }
 
+@(private="file")
 _post_process_hook :: proc(data: rawptr, audio: [][]f32, samplerate: int) {
+	state := cast(^Server) data
+
+	util.SCOPED_TIMER("Post process")
+
+	for &h in sa.slice(&state.post_process_hooks) {
+		h.process(h.data, audio, samplerate)
+	}
 }
 
 @(private="file")
