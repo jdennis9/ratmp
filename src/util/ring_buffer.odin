@@ -17,75 +17,95 @@
 */
 package util
 
-import "core:log"
+import "core:slice"
 import "core:sync"
 
-Ring_Buffer :: struct($T: typeid, $SIZE: uint) {
-	data: [SIZE]T,
+
+@(private="file")
+_wrap :: proc(i, N: int) -> int {
+	if i < 0 do return N+i
+	else do return i - ((i/N)*N)
+}
+
+Ring_Buffer :: struct($T: typeid) {
+	data: []T,
 	producer_index: int,
 	consumer_index: int,
 }
 
-@(private="file")
-_wrap :: proc(i, N: int) -> int {
-	return i - ((i/N)*N)
+rb_init :: proc(buf: ^Ring_Buffer($T), size: int) {
+	buf.consumer_index = size-1
+	buf.data = make([]T, size)
 }
 
-rb_init :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
-	buf.consumer_index = 0
+rb_resize :: proc(buf: ^Ring_Buffer($T), size: int) {
+	delete(buf.data)
+	buf.data = make([]T, size)
+	rb_reset(buf)
 }
 
-rb_reset :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
-	rb_init(buf)
-	buf.data = {}
+rb_reset :: proc(buf: ^Ring_Buffer($T)) {
+	slice.zero(buf.data)
 	buf.producer_index = 0
-	buf.consumer_index = 0
+	buf.consumer_index = len(buf.data)-1
 }
 
-rb_produce :: proc(buf: ^Ring_Buffer($T, $SIZE), data: []T) {
-	copied := 0
+rb_space :: proc(buf: Ring_Buffer($T)) -> int {
+	write_end := _wrap(buf.consumer_index-1, len(buf.data))
+	if write_end >= buf.producer_index do return write_end - buf.producer_index
+	else do return (len(buf.data) - buf.producer_index) + write_end
+}
+
+rb_produce :: proc(buf: ^Ring_Buffer($T), data: []T) -> (copied: int) {
+	buf_size := len(buf.data)
+	if buf_size == 0 do return
 	producer := sync.atomic_load(&buf.producer_index)
 	consumer := sync.atomic_load(&buf.consumer_index)
 
-	if producer > consumer {
+	write_end := _wrap(consumer-1, buf_size)
+
+	if producer > write_end {
 		copied += copy(buf.data[producer:], data[:])
 		if copied != len(data) {
-			copied += copy(buf.data[:consumer], data[copied:])
+			copied += copy(buf.data[:write_end], data[copied:])
 		}
 	}
 	else {
-		copied += copy(buf.data[producer:], data[:])
+		copied += copy(buf.data[producer:write_end], data[:])
 	}
 
-	sync.atomic_store(&buf.producer_index, _wrap(producer + copied, int(SIZE)))
+	sync.atomic_store(&buf.producer_index, _wrap(producer + copied, buf_size))
+
+	return
 }
 
 // Fills the output buffer as much as possible, then consumes consume_count elements
-rb_consume :: proc(buf: ^Ring_Buffer($T, $SIZE), output: []T, consume_count: int) -> (elems_copied: int) {
-	copied := 0
+rb_consume :: proc(buf: ^Ring_Buffer($T), output: []T, consume_count: Maybe(int)) -> (copied: int) {
+	buf_size := len(buf.data)
+	if buf_size == 0 do return
 	producer := sync.atomic_load(&buf.producer_index)
 	consumer := sync.atomic_load(&buf.consumer_index)
 
 	if producer < consumer {
-		copied = copy(output[:], buf.data[consumer:int(SIZE)])
+		copied += copy(output[:], buf.data[consumer:])
+		if copied < len(output) {
+			copied += copy(output[copied:], buf.data[:producer])
+		}
 	}
 	else {
-		copied = copy(output[:], buf.data[consumer:producer])
+		copied += copy(output[:], buf.data[consumer:producer])
 	}
 
-	left_over := len(output) - copied
-	if left_over > 0 {
-		copy(output[copied:], buf.data[0:min(left_over, producer)])
-	}
-
-	consumer += consume_count
-	consumer = _wrap(consumer, int(SIZE))
+	consumer += consume_count.? or_else copied
+	consumer = _wrap(consumer, buf_size)
 	sync.atomic_store(&buf.consumer_index, consumer)
 
 	return
 }
 
-rb_destroy :: proc(buf: ^Ring_Buffer($T, $SIZE)) {
+rb_destroy :: proc(buf: ^Ring_Buffer($T)) {
+	delete(buf.data)
+	buf.data = nil
 }
 
 import "core:testing"
@@ -93,8 +113,8 @@ import "core:fmt"
 
 @test
 test_ring_buffer :: proc(t: ^testing.T) {
-	buf: Ring_Buffer(f32, 16)
-	rb_init(&buf)
+	buf: Ring_Buffer(f32)
+	rb_init(&buf, 16)
 	defer rb_destroy(&buf)
 
 	for i in 0..<32 {

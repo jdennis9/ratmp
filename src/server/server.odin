@@ -64,7 +64,7 @@ Server :: struct {
 	stream: ^sys.Audio_Stream,
 
 	playback_lock: sync.Mutex,
-	decoder: decoder.Decoder,
+	playback_thread: Playback_Thread,
 	current_track_id: Track_ID,
 	current_track_info: Track_Info,
 	current_playlist_id: Global_Playlist_ID,
@@ -78,7 +78,7 @@ Server :: struct {
 
 	output_copy: struct {
 		channels, samplerate: int,
-		buffers: [MAX_OUTPUT_CHANNELS]util.Ring_Buffer(f32, 64<<10),
+		buffers: [MAX_OUTPUT_CHANNELS]util.Ring_Buffer(f32),
 	},
 
 	paths: struct {
@@ -126,11 +126,15 @@ init :: proc(state: ^Server, wake_proc: proc(), data_dir: string, config_dir: st
 	library_load_from_file(&state.library, state.paths.library)
 	library_update_categories(&state.library)
 	library_scan_playlists(&state.library)
+	playback_thread_init(&state.playback_thread, {post_process_hook = Post_Process_Hook{
+		process = _post_process_hook,
+		data = state,
+	}})
 
 	load_state(state)
 	
 	for &b in state.output_copy.buffers {
-		util.rb_init(&b)
+		util.rb_init(&b, 64<<10)
 	}
 
 	ok = true
@@ -219,9 +223,9 @@ play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_dr
 	defer sync.unlock(&state.playback_lock)
 
 	if !dont_drop_buffer {sys.audio_stream_drop_buffer(state.stream)}
-	decoder.open(&state.decoder, filename, &state.current_track_info) or_return
+	playback_thread_load_track(&state.playback_thread, filename, &state.current_track_info) or_return
 	state.current_track_id = track_id
-	set_paused(state, false, no_lock=true)
+	set_paused(state, false)
 
 	send_event(state, Current_Track_Changed_Event{track_id = track_id})
 
@@ -229,35 +233,28 @@ play_track :: proc(state: ^Server, filename: string, track_id: Track_ID, dont_dr
 }
 
 seek_to_second :: proc(state: ^Server, second: int) {
-	sync.lock(&state.playback_lock)
-	decoder.seek(&state.decoder, second)
-	sync.unlock(&state.playback_lock)
-
+	playback_thread_seek(&state.playback_thread, second)
 	sys.audio_stream_drop_buffer(state.stream)
 }
 
 get_track_duration_seconds :: proc(state: ^Server) -> int {
-	sync.lock(&state.playback_lock)
-	defer sync.unlock(&state.playback_lock)
-
-	return decoder.get_duration(state.decoder)
+	return auto_cast state.playback_thread.dec.duration_seconds
 }
 
 get_track_second :: proc(state: ^Server) -> int {
 	sync.lock(&state.playback_lock)
 	defer sync.unlock(&state.playback_lock)
-
-	return decoder.get_second(state.decoder)
+	return playback_thread_get_track_position(&state.playback_thread)
 }
 
-set_paused :: proc(state: ^Server, paused: bool, no_lock := false) {
+set_paused :: proc(state: ^Server, paused: bool) {
 	if state.paused != paused {
 		if paused {
 			sys.audio_stream_pause(state.stream)
 			state.paused = paused
 			send_event(state, State_Changed_Event{paused = state.paused})
 		}
-		else if decoder.is_open(state.decoder) {
+		else if playback_thread_has_track(state.playback_thread) {
 			sys.audio_stream_resume(state.stream)
 			state.paused = paused
 			send_event(state, State_Changed_Event{paused = state.paused})
@@ -266,7 +263,7 @@ set_paused :: proc(state: ^Server, paused: bool, no_lock := false) {
 }
 
 is_paused :: proc(state: Server) -> bool {return state.paused}
-is_stopped :: proc(state: Server) -> bool {return !decoder.is_open(state.decoder)}
+is_stopped :: proc(state: Server) -> bool {return !playback_thread_has_track(state.playback_thread)}
 
 set_shuffle_enabled :: proc(state: ^Server, value: bool) {
 	if value && !state.queue_is_shuffled {
@@ -377,10 +374,10 @@ stop_playback :: proc(state: ^Server) {
 	defer sync.unlock(&state.playback_lock)
 	state.current_track_id = 0
 	state.current_playlist_id = {}
-	decoder.close(&state.decoder)
+	playback_thread_close_track(&state.playback_thread)
 	clear(&state.queue)
 	state.queue_serial += 1
-	set_paused(state, true, true)
+	set_paused(state, true)
 }
 
 set_queue_position :: proc(state: ^Server, pos: int, dont_drop_buffer := false) -> bool {
@@ -459,6 +456,9 @@ _clear_output_copy_buffer :: proc(state: ^Server) {
 	}
 }
 
+_post_process_hook :: proc(data: rawptr, audio: [][]f32, samplerate: int) {
+}
+
 @(private="file")
 _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate: i32) -> sys.Audio_Callback_Status {
 	state := cast(^Server)data
@@ -468,20 +468,17 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 
 	for &f in buffer do f = 0
 
-	if !state.paused && decoder.is_open(state.decoder) {
+	frame_count := len(buffer) / int(channels)
+
+	if !state.paused && playback_thread_has_track(state.playback_thread) {
 		deinterlaced: [MAX_OUTPUT_CHANNELS][]f32
 		defer for ch in 0..<channels do delete(deinterlaced[ch])
 
 		for ch in 0..<channels {
-			deinterlaced[ch] = make([]f32, len(buffer) / int(channels))
+			deinterlaced[ch] = make([]f32, frame_count)
 		}
 
-		status := decoder.fill_buffer(&state.decoder, buffer, int(channels), int(samplerate))
-		analysis.deinterlace(buffer, deinterlaced[:channels])
-
-		for hook in sa.slice(&state.post_process_hooks) {
-			hook.process(hook.data, deinterlaced[:channels], auto_cast samplerate)
-		}
+		status := playback_thread_request_frames(&state.playback_thread, deinterlaced[:channels], auto_cast samplerate)
 
 		analysis.interlace(deinterlaced[:channels], buffer)
 
