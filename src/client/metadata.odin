@@ -38,6 +38,8 @@ import "imx"
 
 _load_track_album_art :: proc(lib: server.Library, track_id: Track_ID) -> (width, height: int, texture: imgui.TextureID, ok: bool) {
 	file_data := server.library_find_track_cover_art(lib, track_id, context.allocator) or_return
+	defer delete(file_data)
+	
 	w, h: i32
 
 	pixel_data := stbi.load_from_memory(raw_data(file_data), auto_cast len(file_data), &w, &h, nil, 4)
