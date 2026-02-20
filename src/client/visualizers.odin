@@ -28,7 +28,7 @@ import glm "core:math/linalg/glsl"
 
 import imgui "src:thirdparty/odin-imgui"
 
-import "src:analysis"
+import "src:audio"
 import "src:decoder"
 import "src:server"
 import "src:sys"
@@ -52,7 +52,7 @@ Analysis_State :: struct {
 	window_data: [server.MAX_OUTPUT_CHANNELS][WINDOW_SIZE]f32,
 	raw_window_data: [server.MAX_OUTPUT_CHANNELS][WINDOW_SIZE]f32,
 	
-	fft: analysis.FFT_State,
+	fft: audio.FFT_State,
 }
 
 @(private="file")
@@ -102,11 +102,11 @@ analysis_init :: proc(state: ^Analysis_State) {
 	// Hann window
 	_hann_window(state.window_w[:])
 
-	analysis.fft_init(&state.fft, WINDOW_SIZE)
+	audio.fft_init(&state.fft, WINDOW_SIZE)
 }
 
 analysis_destroy :: proc(state: ^Analysis_State) {
-	analysis.fft_destroy(&state.fft)
+	audio.fft_destroy(&state.fft)
 }
 
 update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
@@ -124,7 +124,7 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	if state.need_update_peaks {
 		state.need_update_peaks = false
 		for ch in 0..<state.channels {
-			peak := analysis.calc_peak(state.window_data[ch][:1024])
+			peak := audio.calc_peak(state.window_data[ch][:1024])
 			state.peaks[ch] = math.lerp(state.peaks[ch], peak, t)
 		}
 	}
@@ -136,7 +136,7 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 		}
 	}
 	
-	analysis.fft_process(&state.fft, state.window_data[0][:])
+	audio.fft_process(&state.fft, state.window_data[0][:])
 
 	return true
 }
@@ -144,7 +144,7 @@ update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 Wavebar_Window :: struct {
 	using base: Window_Base,
 	calc_thread: ^thread.Thread,
-	calc_state: analysis.Calc_Peaks_State,
+	calc_state: audio.Calc_Peaks_State,
 	dec: decoder.Decoder,
 	// The length of this array corresponds to the resolution of the output waveform
 	output: [1080]f32,
@@ -154,7 +154,7 @@ Wavebar_Window :: struct {
 @(private="file")
 _calc_wave_thread_proc :: proc(thread_data: ^thread.Thread) {
 	state := cast(^Wavebar_Window) thread_data.data
-	analysis.calc_peaks_over_time(&state.dec, state.output[:], &state.calc_state)
+	audio.calc_peaks_over_time(&state.dec, state.output[:], &state.calc_state)
 }
 
 WAVEBAR_WINDOW_ARCHETYPE := Window_Archetype {
@@ -481,7 +481,7 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 
 	if state.band_freqs_calculated != state.band_count {
 		state.band_freqs_calculated = state.band_count
-		analysis.calc_spectrum_frequencies(state.band_freqs[:state.band_count])
+		audio.calc_spectrum_frequencies(state.band_freqs[:state.band_count])
 
 		// Frequency guides
 		for freq_raw, i in state.band_freqs[:state.band_count] {
@@ -497,7 +497,7 @@ spectrum_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) 
 		}
 	}
 
-	analysis.fft_extract_bands(
+	audio.fft_extract_bands(
 		cl.analysis.fft, state.band_freqs[:state.band_count],
 		auto_cast cl.analysis.samplerate, real_band_heights[:state.band_count]
 	)
@@ -957,7 +957,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	}
 
 	if state.band_frequencies_calculated != SPECTOGRAM_BANDS {
-		analysis.calc_spectrum_frequencies(state.band_frequencies[:])
+		audio.calc_spectrum_frequencies(state.band_frequencies[:])
 		state.band_frequencies_calculated = SPECTOGRAM_BANDS
 	}
 
@@ -965,7 +965,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	frequencies := state.band_frequencies
 	bands: [SPECTOGRAM_BANDS]f32
 
-	analysis.fft_extract_bands(cl.analysis.fft, frequencies[:], f32(cl.analysis.samplerate), bands[:])
+	audio.fft_extract_bands(cl.analysis.fft, frequencies[:], f32(cl.analysis.samplerate), bands[:])
 
 	for b, i in bands {
 		column[i] = imgui.GetColorU32ImU32(max(u32), b)

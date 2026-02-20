@@ -20,12 +20,12 @@ package server
 
 // =============================================================================
 // Procedures to create and interact with an asynchronous playback stream.
-// Exists to keep away decoding and post-processing from the main audio thread,
+// Exists to keep decoding and post-processing away from the main audio thread,
 // and do it before the audio is needed.
 // =============================================================================
 
 import "core:math"
-import "src:analysis"
+import "src:audio"
 import "core:log"
 import "core:sync"
 import "src:decoder"
@@ -121,7 +121,7 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 
 		at.decode_status = decoder.fill_buffer(&at.dec, buffer, at.channels, at.samplerate)
 
-		analysis.deinterlace(buffer, deinterlaced[:at.channels])
+		audio.deinterlace(buffer, deinterlaced[:at.channels])
 
 		// Post-processing
 		if at.post_process_hook.process != nil do at.post_process_hook.process(

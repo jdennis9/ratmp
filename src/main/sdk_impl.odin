@@ -22,7 +22,7 @@ import imgui "src:thirdparty/odin-imgui"
 
 import "src:client"
 import "src:server"
-import "src:analysis"
+import "src:audio"
 import "src:../sdk"
 
 Spectrum_Analyser_Settings :: struct {
@@ -98,7 +98,7 @@ sdk_init :: proc(cl: ^client.Client, sv: ^server.Server) {
 	sdk_procs.draw = &sdk_draw_procs
 
 	sdk_procs.analysis = &sdk_analysis_procs
-	sdk_analysis_procs = analysis.get_sdk_impl()
+	sdk_analysis_procs = audio.get_sdk_impl()
 	
 	playback := &sdk_playback_procs
 	sdk_procs.playback = playback

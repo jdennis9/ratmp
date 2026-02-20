@@ -17,7 +17,7 @@
 */
 package server
 
-import "src:analysis"
+import "src:audio"
 import "base:runtime"
 import "core:sync"
 import "core:slice"
@@ -489,7 +489,7 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 
 		status := playback_thread_request_frames(&state.playback_thread, deinterlaced[:channels], auto_cast samplerate)
 
-		analysis.interlace(deinterlaced[:channels], buffer)
+		audio.interlace(deinterlaced[:channels], buffer)
 
 		_supply_analysis_ring_buffer(state, deinterlaced[:channels], int(samplerate))
 
