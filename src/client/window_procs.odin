@@ -1,9 +1,23 @@
+/*
+    RAT MP - A cross-platform, extensible music player
+	Copyright (C) 2025 Jamie Dennis
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 #+private
 package client
 
-import "core:container/small_array"
-import "core:log"
-import "base:runtime"
 import imgui "src:thirdparty/odin-imgui"
 import "imx"
 
@@ -33,7 +47,6 @@ library_window_make_instance :: proc(allocator := context.allocator) -> ^Window_
 
 library_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Library_Window) self
-	context_id := imgui.GetID("##library_track_context")
 
 	on_remove :: proc(data: rawptr, tracks: []Track_ID) {
 		sv := cast(^Server) data
@@ -86,7 +99,6 @@ queue_window_make_instance :: proc(allocator := context.allocator) -> ^Window_Ba
 
 queue_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 	state := cast(^Queue_Window) self
-	context_id := imgui.GetID("##track_context")
 	window_bb := imx.get_window_bounding_box()
 
 	on_remove :: proc(data: rawptr, tracks: []Track_ID) {

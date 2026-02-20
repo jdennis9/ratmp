@@ -434,11 +434,12 @@ add_post_process_hook :: proc(state: ^Server, hook: Post_Process_Hook_Proc, data
 
 // This is being called on the audio thread!
 @(private="file")
-_update_output_copy_buffers :: proc(state: ^Server, input: [][]f32, channels, samplerate: int) {
+_supply_analysis_ring_buffer :: proc(state: ^Server, input: [][]f32, samplerate: int) {
 	cpy := &state.output_copy
+	channels := len(input)
 
 	if cpy.channels != channels || cpy.samplerate != samplerate {
-		_clear_output_copy_buffer(state)
+		_clear_analysis_ring_buffer(state)
 	}
 
 	cpy.channels = channels
@@ -450,7 +451,7 @@ _update_output_copy_buffers :: proc(state: ^Server, input: [][]f32, channels, sa
 }
 
 @(private="file")
-_clear_output_copy_buffer :: proc(state: ^Server) {
+_clear_analysis_ring_buffer :: proc(state: ^Server) {
 	for &b in state.output_copy.buffers {
 		util.rb_reset(&b)
 	}
@@ -490,7 +491,7 @@ _audio_stream_callback :: proc(data: rawptr, buffer: []f32, channels, samplerate
 
 		analysis.interlace(deinterlaced[:channels], buffer)
 
-		_update_output_copy_buffers(state, deinterlaced[:channels], int(channels), int(samplerate))
+		_supply_analysis_ring_buffer(state, deinterlaced[:channels], int(samplerate))
 
 		if status == .Eof do return .Finish
 		return .Continue
@@ -507,7 +508,7 @@ _audio_event_callback :: proc(data: rawptr, event: sys.Audio_Event) {
 		case .DropBuffer: {
 			sync.lock(&state.playback_lock)
 			defer sync.unlock(&state.playback_lock)
-			_clear_output_copy_buffer(state)
+			_clear_analysis_ring_buffer(state)
 		}
 
 		case .Finish: {
@@ -521,22 +522,3 @@ _audio_event_callback :: proc(data: rawptr, event: sys.Audio_Event) {
 	}
 }
 
-@(private="file")
-_deinterlace :: proc(input: []f32, channels: int, out: ^[MAX_OUTPUT_CHANNELS][dynamic]f32) {
-	for ch in 0..<channels {
-		resize(&out[ch], len(input)/channels)
-	}
-
-	sample_count := len(input)
-	sample: int
-	frame: int
-
-	for sample < sample_count {
-		for ch in 0..<channels {
-			out[ch][frame] = input[sample + ch]
-		}
-
-		sample += channels
-		frame += 1
-	}
-}

@@ -22,7 +22,6 @@ import win "core:sys/windows"
 import "core:thread"
 import "core:log"
 import "core:sync"
-import "core:time"
 
 import "src:bindings/wasapi"
 

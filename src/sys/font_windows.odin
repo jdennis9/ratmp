@@ -18,11 +18,7 @@
 package sys
 
 import "base:runtime"
-
 import win "core:sys/windows"
-import "core:sort"
-import "core:strings"
-
 import "core:unicode/utf16"
 
 import misc "src:bindings/windows_misc"

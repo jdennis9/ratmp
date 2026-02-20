@@ -18,14 +18,9 @@
 #+private file
 package main
 
-import "core:hash/xxhash"
-import "core:slice"
-import "core:log"
-
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:client"
-import "src:client/imx"
 import "src:server"
 import "src:analysis"
 import "src:../sdk"

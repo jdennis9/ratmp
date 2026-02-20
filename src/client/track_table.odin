@@ -18,8 +18,6 @@
 #+private
 package client
 
-import "core:slice"
-import "core:slice/heap"
 import "core:mem"
 import "base:runtime"
 import "core:time"
@@ -194,7 +192,6 @@ show_track_table :: proc(table: ^Track_Table, cl: ^Client, sv: ^Server, info: Tr
 
 	if .NoFilter not_in info.flags {
 		imgui.InputTextWithHint("##filter", "Filter", filter_cstring, auto_cast len(table.filter))
-		filter := string(filter_cstring)
 	}
 
 	// Check if the table needs to update
@@ -230,7 +227,6 @@ show_track_table :: proc(table: ^Track_Table, cl: ^Client, sv: ^Server, info: Tr
 		more_info: bool,
 	}
 
-	table_flags := imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp
 	Column_Info :: struct {
 		property: Track_Property_ID,
 		default_show: bool,
@@ -257,7 +253,6 @@ show_track_table :: proc(table: ^Track_Table, cl: ^Client, sv: ^Server, info: Tr
 	// Sort
 	if r.sort_by_column != nil && info.sort_callback != nil {
 		order: server.Sort_Order
-		column := table.columns[r.sort_by_column.?]
 		property_id := cast(Track_Property_ID) r.sort_by_column.?
 
 		switch r.sort_order {

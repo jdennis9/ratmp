@@ -195,12 +195,12 @@ library_folder_tree_find_folder_by_name_in_folder :: proc(
 		}
 	}
 
-	for child, index in node.children {
+	for child in node.children {
 		id, found = library_folder_tree_find_folder_by_name_in_folder(
 			lib, child, name
 		)
 
-		if found {return}
+		if found do return
 	}
 
 	return 0, false

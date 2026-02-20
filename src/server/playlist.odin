@@ -1,3 +1,20 @@
+/*
+    RAT MP - A cross-platform, extensible music player
+	Copyright (C) 2025 Jamie Dennis
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 package server
 
 import "core:strings"
@@ -60,9 +77,9 @@ playlist_build_from_auto_params :: proc(playlist: ^Playlist, lib: ^Library) {
 	playlist.serial += 1
 	ap.build_serial = lib.serial
 
-	add_from_category :: proc(playlist: ^Playlist, lib: Library, cat: ^Track_Category, filter: string) -> (added: int, duration: i64, found: bool) {
-		ap := playlist.auto_build_params
-
+	add_from_category :: proc(
+		playlist: ^Playlist, lib: Library, cat: ^Track_Category, filter: string
+	) -> (added: int, duration: i64, found: bool) {
 		hash := library_hash_string(filter)
 		entry_index := track_category_find_entry_index(cat, hash) or_return
 		entry := &cat.entries[entry_index]

@@ -18,7 +18,6 @@
 #+private
 package client
 
-import "base:runtime"
 import "core:encoding/ini"
 import "core:reflect"
 import "core:strconv"
@@ -373,7 +372,6 @@ apply_settings :: proc(cl: ^Client) {
 	theme: Theme
 	settings := cl.settings
 	theme_name := string(cstring(&settings.theme[0]))
-	style := imgui.GetStyle()
 
 	cl.font_size = f32(settings.font_size)
 

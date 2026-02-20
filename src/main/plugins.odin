@@ -17,9 +17,6 @@
 */
 package main
 
-import "core:math/linalg"
-import "core:slice"
-import "src:analysis"
 import "core:dynlib"
 import "core:os/os2"
 import "core:strings"

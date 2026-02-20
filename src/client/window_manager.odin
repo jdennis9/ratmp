@@ -1,3 +1,20 @@
+/*
+    RAT MP - A cross-platform, extensible music player
+	Copyright (C) 2025 Jamie Dennis
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 #+private
 package client
 
@@ -7,7 +24,6 @@ import "core:log"
 import "core:hash/xxhash"
 import "core:fmt"
 import "base:runtime"
-import sa "core:container/small_array"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -156,7 +172,7 @@ remove_window_instance :: proc(archetype: ^Window_Archetype, instance: int) {
 }
 
 show_all_windows :: proc(cl: ^Client, sv: ^Server) {
-	for id, &archetype in cl.window_archetypes {
+	for _, &archetype in cl.window_archetypes {
 		for instance in archetype.instances {
 			if instance == nil {continue}
 			show_window_instance(&archetype, instance, cl, sv)

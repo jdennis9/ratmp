@@ -309,7 +309,6 @@ folders_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		if state.sel_folder_id == 0 {return}
 
 		playlist_id := _folder_id_to_playlist_id(state.sel_folder_id)
-		context_id := imgui.GetID("##track_context")
 
 		_Ctx :: struct {state: ^Folders_Window, sv: ^Server}
 		ctx := _Ctx{state, sv}

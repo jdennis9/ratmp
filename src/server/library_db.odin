@@ -22,7 +22,6 @@ import "core:strconv"
 import "core:os/os2"
 import "core:strings"
 import "core:log"
-import "core:hash/xxhash"
 import "core:time"
 
 import sqlite "src:thirdparty/odin-sqlite3"

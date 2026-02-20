@@ -18,9 +18,6 @@
 package imgui_extensions
 
 import "src:global"
-import "core:unicode"
-import "core:crypto/_chacha20/ref"
-import "core:log"
 import "core:fmt"
 
 import imgui "src:thirdparty/odin-imgui"

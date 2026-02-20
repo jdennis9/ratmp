@@ -20,9 +20,6 @@ package client
 
 import "core:reflect"
 import "core:math/linalg"
-import sa "core:container/small_array"
-import "base:runtime"
-import "core:fmt"
 import imgui "src:thirdparty/odin-imgui"
 
 import "src:server"

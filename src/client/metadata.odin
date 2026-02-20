@@ -19,12 +19,10 @@
 package client
 
 import "core:strconv"
-import "core:path/filepath"
 import "core:strings"
 import "core:time"
 import "core:os/os2"
 import "core:slice"
-import "core:log"
 
 import stbi "vendor:stb/image"
 
@@ -32,7 +30,6 @@ import imgui "src:thirdparty/odin-imgui"
 
 import "src:server"
 import "src:sys"
-import "src:decoder"
 
 import "imx"
 
@@ -444,8 +441,6 @@ metadata_editor_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^S
 			state.library_serial = sv.library.serial
 			state.serial += 1
 		}
-
-		context_id := imgui.GetID("##track_context")
 
 		on_remove :: proc(data: rawptr, tracks: []Track_ID) {
 			state := cast(^Metadata_Editor_Window) data

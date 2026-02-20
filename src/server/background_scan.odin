@@ -18,8 +18,6 @@
 #+private
 package server
 
-import "core:fmt"
-import "core:log"
 import "core:thread"
 import "core:os/os2"
 import "core:path/filepath"

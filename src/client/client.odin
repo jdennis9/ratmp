@@ -17,7 +17,6 @@
 */
 package client
 
-import "src:decoder"
 import "base:runtime"
 import "core:log"
 import "core:fmt"
@@ -28,7 +27,6 @@ import "core:path/filepath"
 import "core:strings"
 import "core:strconv"
 import "core:slice"
-import "core:hash/xxhash"
 
 import stbi "vendor:stb/image"
 
@@ -245,7 +243,6 @@ handle_events :: proc(client: ^Client, sv: ^Server) {
 			if track, track_found := server.library_find_track(sv.library, track_id); track_found {
 				md := track.properties
 				path_buf: [512]u8
-				es := string(cstring(""))
 
 				track_info.album = strings.unsafe_string_to_cstring(md[.Album].(string) or_else "")
 				track_info.artist = strings.unsafe_string_to_cstring(md[.Artist].(string) or_else "")
@@ -657,7 +654,7 @@ main_menu_bar :: proc(client: ^Client, sv: ^Server) {
 		)
 
 		if imx.scrubber("##seek_bar", &second, 0, duration) {
-			server.seek_to_second(sv, cast(int) second)
+			server.seek_to_second(sv, second)
 		}
 	}
 }

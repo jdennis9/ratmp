@@ -18,7 +18,6 @@
 package client
 
 import "core:mem"
-import "core:log"
 import "core:strings"
 
 import "src:sys"

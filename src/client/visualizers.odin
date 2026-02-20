@@ -19,7 +19,6 @@
 package client
 
 import "core:math/linalg"
-import "core:log"
 import "core:reflect"
 import "core:strconv"
 import "core:thread"
@@ -112,7 +111,6 @@ analysis_destroy :: proc(state: ^Analysis_State) {
 
 update_analysis :: proc(cl: ^Client, sv: ^Server, delta: f32) -> bool {
 	state := &cl.analysis
-	settings := &cl.settings
 	tick := cl.tick_last_frame
 
 	if server.is_paused(sv^) {return false}
@@ -986,9 +984,7 @@ spectogram_window_show :: proc(self: ^Window_Base, cl: ^Client, sv: ^Server) {
 		size: [2]f32,
 		ratio: f32,
 		offset: f32,
-	) {
-		midpoint := pos.x + (size.x * ratio)
-		
+	) {		
 		imgui.DrawList_AddCallback(
 			drawlist,
 			sys.video_imgui_callback_override_sampler,

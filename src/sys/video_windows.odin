@@ -17,9 +17,6 @@
 */
 package sys
 
-import "core:log"
-import "core:slice"
-import "core:mem"
 import win "core:sys/windows"
 import dx11 "vendor:directx/d3d11"
 import dxgi "vendor:directx/dxgi"

@@ -1,6 +1,5 @@
 package ratmp_sdk
 
-import "core:mem"
 /*
 Procedures to define (copy+paste this into a file to use as a base):
 

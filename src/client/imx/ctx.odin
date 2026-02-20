@@ -20,8 +20,6 @@ package imgui_extensions
 import "core:strings"
 import "core:strconv"
 import "base:runtime"
-import "core:mem"
-import sa "core:container/small_array"
 
 import imgui "src:thirdparty/odin-imgui"
 

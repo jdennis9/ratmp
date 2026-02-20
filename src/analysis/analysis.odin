@@ -18,7 +18,6 @@
 package analysis
 
 import "core:sync"
-import "core:log"
 import "core:math"
 import "core:math/bits"
 import glm "core:math/linalg/glsl"

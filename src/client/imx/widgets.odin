@@ -17,7 +17,6 @@
 */
 package imgui_extensions
 
-import "core:unicode/utf8"
 import "core:math/linalg"
 
 import imgui "src:thirdparty/odin-imgui"
@@ -82,7 +81,6 @@ wave_seek_bar :: proc(
 ) -> (activated: bool) {
 	if len(peaks) == 0 {return}
 
-	style := imgui.GetStyle();
 	drawlist := imgui.GetWindowDrawList()
 	cursor := imgui.GetCursorScreenPos()
 	avail_size := imgui.GetContentRegionAvail()

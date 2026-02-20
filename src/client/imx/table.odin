@@ -17,18 +17,14 @@
 */
 package imgui_extensions
 
-import "src:global"
-import "core:math/linalg"
-import "src:licenses"
 import "core:log"
+
 /*
 	Custom implemenation of tables that makes some assumptions that simplifies
 	the logic and helps a bit with CPU usage. Assumes that rows only contain one line of text
 	and that the number of rows in always known ahead of time.
 */
 
-import "core:fmt"
-import sa "core:container/small_array"
 
 import imgui "src:thirdparty/odin-imgui"
 
@@ -196,7 +192,6 @@ table_show :: proc(
 ) -> (result: Table_Result, shown: bool) {
 
 	RESIZE_GRAB_THICKNESS :: 3
-	scrolling_text_timer := global.uptime
 
 	show_vertical_borders :: proc(
 		t: ^Table_State, cursor: [2]f32, table_pos: [2]f32, table_size: [2]f32, y_offset: f32, height: f32
@@ -658,8 +653,6 @@ table_show :: proc(
 		// Horizontal borders
 		for row_index in display_start..<display_end {
 			y := f32(row_index) * row_height
-			bg_rect_min := [2]f32{cursor.x, cursor.y + y}
-			bg_rect_max := [2]f32{cursor.x + table_size.x, cursor.y + y + row_height}
 			imgui.DrawList_AddLine(drawlist, 
 				{cursor.x, cursor.y + y}, 
 				{cursor.x + table_size.x, cursor.y + y},

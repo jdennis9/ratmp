@@ -17,8 +17,6 @@
 */
 package util
 
-import "core:reflect"
-import "base:intrinsics"
 import "base:runtime"
 import "core:encoding/json"
 import "core:time"
