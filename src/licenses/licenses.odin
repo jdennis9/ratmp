@@ -1,6 +1,6 @@
 /*
     RAT MP - A cross-platform, extensible music player
-	Copyright (C) 2025 Jamie Dennis
+	Copyright (C) 2025-2026 Jamie Dennis
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -71,7 +71,7 @@ licenses := [License_ID]License {
 get_license :: proc() -> License {
 	return {
 		name = "RAT MP",
-		ownage = "2025 Jamie Dennis",
+		ownage = "2025-2026 Jamie Dennis",
 		url = "https://github.com/jdennis9/ratmp",
 	}
 }
