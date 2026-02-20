@@ -94,7 +94,9 @@ load_fonts :: proc(client: ^Client, fonts: []Load_Font) {
 		else {
 			font_data := imgui.MemAlloc(auto_cast len(font.data))
 			mem.copy(font_data, raw_data(font.data), len(font.data))
-			imgui.FontAtlas_AddFontFromMemoryTTF(atlas, font_data, auto_cast len(font.data), 0, &cfg)
+			imgui.FontAtlas_AddFontFromMemoryTTF(
+				atlas, font_data, auto_cast len(font.data), 0, &cfg
+			)
 		}
 
 		cfg.MergeMode = true
@@ -112,8 +114,13 @@ load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
 	
 	system_fonts := sys.get_font_list()
 	fonts: [dynamic]Load_Font
-	have_lang: [sys.Font_Language]bool
 	defer delete(fonts)
+
+	if len(cl.settings.fonts) == 0 {
+		append(&fonts, Load_Font {
+			data = #load("data/NotoSans-SemiBold.ttf"),
+		})
+	}
 
 	for &font in cl.settings.fonts {
 		handle: sys.Font_Handle
@@ -127,17 +134,9 @@ load_fonts_from_settings :: proc(cl: ^Client, scale: f32) {
 		})
 	}
 
-	if !have_lang[.English] {
-		append(&fonts, Load_Font {
-			data = _BUILTIN_FONT,
-		})
-	}
-
-	if !have_lang[.Icons] {
-		append(&fonts, Load_Font {
-			data = #load("data/FontAwesome.otf"),
-		})
-	}
+	append(&fonts, Load_Font {
+		data = #load("data/FontAwesome.otf"),
+	})
 
 	load_fonts(cl, fonts[:])
 }
