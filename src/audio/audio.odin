@@ -266,6 +266,50 @@ interlace :: proc(input: [][]f32, output: []f32) {
 	}
 }
 
+make_window_hann :: proc(output: []f32) {
+	N := f32(len(output))
+	for i in 0..<len(output) {
+		n := f32(i)
+		output[i] = 0.5 * (1 - math.cos_f32((2 * math.PI * n) / (N - 1)))
+	}
+}
+
+make_window_welch :: proc(output: []f32) {
+	N := f32(len(output))
+	N_2 := N/2
+
+	for i in 0..<len(output) {
+		n := f32(i)
+		t := (n - N_2)/(N_2)
+		output[i] = 1 - (t*t*t)
+	}
+}
+
+make_window_osc :: proc(output: []f32) {
+	N: f32
+	margin := len(output)/10
+	end_of_middle := len(output)-margin
+	N = f32(margin)
+
+	for i in 0..<margin {
+		n := f32(i)
+		output[i] = n/N
+	}
+
+	for i in margin..<end_of_middle {
+		output[i] = 1
+	}
+
+	for i in end_of_middle..<len(output) {
+		n := f32(i-end_of_middle)
+		output[i] = 1 - (n/N)
+	}
+}
+
+invert_window :: proc(w: []f32) {
+	for &v in w do v = 1 / v
+}
+
 get_sdk_impl :: proc() -> sdk.Analysis_Procs {
 	return sdk.Analysis_Procs {
 		distribute_spectrum_frequencies = proc(output: []f32) {

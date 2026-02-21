@@ -55,52 +55,9 @@ Analysis_State :: struct {
 	fft: audio.FFT_State,
 }
 
-@(private="file")
-_hann_window :: proc(output: []f32) {
-	N := f32(len(output))
-	for i in 0..<len(output) {
-		n := f32(i)
-		output[i] = 0.5 * (1 - math.cos_f32((2 * math.PI * n) / (N - 1)))
-	}
-}
-
-@(private="file")
-_welch_window :: proc(output: []f32) {
-	N := f32(len(output))
-	N_2 := N/2
-
-	for i in 0..<len(output) {
-		n := f32(i)
-		t := (n - N_2)/(N_2)
-		output[i] = 1 - (t*t*t)
-	}
-}
-
-@(private="file")
-_osc_window :: proc(output: []f32) {
-	N: f32
-	margin := len(output)/10
-	end_of_middle := len(output)-margin
-	N = f32(margin)
-
-	for i in 0..<margin {
-		n := f32(i)
-		output[i] = n/N
-	}
-
-	for i in margin..<end_of_middle {
-		output[i] = 1
-	}
-
-	for i in end_of_middle..<len(output) {
-		n := f32(i-end_of_middle)
-		output[i] = 1 - (n/N)
-	}
-}
 
 analysis_init :: proc(state: ^Analysis_State) {
-	// Hann window
-	_hann_window(state.window_w[:])
+	audio.make_window_hann(state.window_w[:])
 
 	audio.fft_init(&state.fft, WINDOW_SIZE)
 }
@@ -290,7 +247,7 @@ oscilloscope_window_show_proc :: proc(self: ^Window_Base, cl: ^Client, sv: ^Serv
 	if state.sample_count == 0 {state.sample_count = MAX_OSCILLOSCOPE_SAMPLES}
 	if len(state.window_w) != state.sample_count {
 		resize(&state.window_w, state.sample_count)
-		_osc_window(state.window_w[:])
+		audio.make_window_osc(state.window_w[:])
 	}
 
 	if imgui.BeginPopupContextWindow() {
