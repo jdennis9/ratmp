@@ -72,7 +72,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> bool {
 		append(&ui.windows.library.track_table.rows, row)
 	}
 
-	add_font_from_memory :: proc(buf: []byte, merge: bool) {
+	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) {
 		font_buf := imgui.MemAlloc(len(buf))
 		mem.copy(font_buf, raw_data(buf), len(buf))
 		
@@ -81,6 +81,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> bool {
 			GlyphMaxAdvanceX = max(f32),
 			RasterizerMultiply = 1,
 			RasterizerDensity = 1,
+			ExtraSizeScale = 1 + scale_mod,
 			MergeMode = merge
 		}
 
@@ -90,7 +91,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> bool {
 	}
 
 	add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false)
-	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true)
+	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2)
 
 	// Theme defaults
 	ui_theme.colors[.PlayingHighlight] = 0xff0568fc

@@ -5,13 +5,9 @@ import gl "vendor:OpenGL"
 import "core:log"
 import imgui_gl "src:thirdparty/odin-imgui/imgui_impl_opengl3"
 import imgui "src:thirdparty/odin-imgui"
-import hm "core:container/handle_map"
 
 _Texture :: struct {
 	id: u32,
-}
-
-_gl: struct {
 }
 
 @private

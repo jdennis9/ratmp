@@ -1,5 +1,6 @@
 package main
 
+import "vendor:glfw"
 import "core:log"
 import imgui "src:thirdparty/odin-imgui"
 
@@ -21,7 +22,12 @@ run :: proc() -> bool {
 	server: Server
 	ui: UI
 
-	use_audio_wasapi()
+	when ODIN_OS == .Windows {
+		use_audio_wasapi()
+	}
+	else {
+		use_audio_pulse()
+	}
 
 	audio_init(server_audio_callback, &server) or_return
 	defer audio_shutdown()
@@ -79,7 +85,7 @@ run :: proc() -> bool {
 @(private="file")
 run_headless :: proc(server: ^Server) -> bool {
 	for {
-		server_handle_events(server)
+		server_wait_events(server)
 	}
 
 	return true

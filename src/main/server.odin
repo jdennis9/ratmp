@@ -116,7 +116,13 @@ server_init :: proc(sv: ^Server) -> bool {
 
 	playback_thread_init(&sv.playback_thread, {})
 
-	files, error := os.read_all_directory_by_path("D:\\Media\\Music\\Good", context.allocator)
+	when ODIN_OS == .Windows {
+		files, error := os.read_all_directory_by_path("D:\\Media\\Music\\Good", context.allocator)
+	}
+	else {
+		files, error := os.read_all_directory_by_path("/mnt/storage/Media/Music/Good", context.allocator)
+	}
+
 	if error != nil {
 		log.error(error)
 	}

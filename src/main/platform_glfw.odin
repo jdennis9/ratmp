@@ -50,5 +50,8 @@ use_platform_glfw :: proc() {
 
 	_platform_impl_swap_buffers = proc() {
 		if _glfw.video_impl == .OpenGL do glfw.SwapBuffers(_glfw.window)
+		if glfw.WindowShouldClose(_glfw.window) {
+			handle_graphics_device_lost()
+		}
 	}
 }
