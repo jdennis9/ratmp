@@ -43,12 +43,8 @@ run :: proc() -> bool {
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
 	
-	when ODIN_OS == .Windows {
-		use_platform_win32()
-	}
-	else {
-		use_platform_glfw()
-	}
+	when ODIN_OS == .Windows do use_platform_win32()
+	else do use_platform_glfw()
 
 	if io := imgui.GetIO(); io != nil {
 		io.ConfigFlags |= {.DockingEnable}

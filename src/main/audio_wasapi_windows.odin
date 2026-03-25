@@ -99,6 +99,24 @@ use_audio_wasapi :: proc() {
 		_send_event(IN_EVENT_DROP_BUFFER)
 	}
 
+	_audio_impl_pause = proc() -> bool {
+		w := &_wasapi
+		if !w.is_paused {
+			_send_event(IN_EVENT_PAUSE)
+			return true
+		}
+		return false
+	}
+
+	_audio_impl_resume = proc() -> bool {
+		w := &_wasapi
+		if w.is_paused {
+			_send_event(IN_EVENT_RESUME)
+			return true
+		}
+		return false
+	}
+
 	_audio_impl_get_volume = proc() -> f32 {
 		return _wasapi.volume
 	}

@@ -15,6 +15,12 @@ import "src:dsp"
 
 Track_ID :: hm.Handle32
 
+Playback_State :: enum {
+	Stopped,
+	Paused,
+	Playing,
+}
+
 Track_Property_ID :: enum {
 	Album,
 	Artist,
@@ -53,8 +59,10 @@ Server_Event_Type :: enum {
 	TrackFinished,
 	NextTrackRequested,
 	PrevTrackRequested,
-	RequestPlay,
+	RequestPlayTrack,
 	RequestPlayPlaylist,
+	RequestPlay,
+	RequestPause,
 }
 
 Server_Event :: struct {
@@ -69,6 +77,7 @@ Server :: struct {
 	track_arena: mem.Dynamic_Arena,
 	track_allocator: mem.Allocator,
 	playback_thread: Playback_Thread,
+	playback_state: Playback_State,
 	tracks: hm.Dynamic_Handle_Map(Track, Track_ID),
 	tracks_serial: uint,
 	event_signal: sync.Auto_Reset_Event,
@@ -241,6 +250,10 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 
 	playback_thread_load_track(&sv.playback_thread, track.url, &sv.track_info)
 
+	audio_resume()
+
+	sv.playback_state = .Playing
+
 	return true
 }
 
@@ -253,6 +266,15 @@ server_handle_events :: proc(sv: ^Server) {
 		defer delete(ev.tracks)
 
 		switch ev.type {
+		
+		case .RequestPlay:
+			if audio_resume() {
+				sv.playback_state = .Playing
+			}
+		case .RequestPause:
+			if audio_pause() {
+				sv.playback_state = .Paused
+			}
 
 		case .RequestPlayPlaylist:
 			playback_thread_close_track(&sv.playback_thread)
@@ -269,7 +291,7 @@ server_handle_events :: proc(sv: ^Server) {
 				_play_track(sv, track)
 			}
 
-		case .RequestPlay:
+		case .RequestPlayTrack:
 			playback_thread_close_track(&sv.playback_thread)
 			audio_drop_buffer()
 			_play_track(sv, ev.track)
@@ -328,7 +350,7 @@ server_get_queue :: proc(sv: ^Server) -> []Track_ID {
 
 server_move_queue_to_track :: proc(sv: ^Server, track: Track_ID) {
 	playback_queue_set_track(&sv.playback, track)
-	server_send_event(sv, Server_Event{type = .RequestPlay, track = track})
+	server_send_event(sv, Server_Event{type = .RequestPlayTrack, track = track})
 }
 
 server_request_play_playlist :: proc(
@@ -344,3 +366,6 @@ server_request_play_playlist :: proc(
 
 	server_send_event(sv, event)
 }
+
+server_request_pause :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPause})}
+server_request_resume :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPlay})}

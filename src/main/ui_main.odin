@@ -122,7 +122,9 @@ ui_show :: proc(ui: ^UI) {
 			imgui.EndMenu()
 		}
 
+		// -----------------------------------------------------------------------
 		// Volume
+		// -----------------------------------------------------------------------
 		imgui.Separator()
 		volume := audio_get_volume() * 100
 		volume_label: cstring = ICON_VOLUME_OFF + "###volume"
@@ -136,11 +138,28 @@ ui_show :: proc(ui: ^UI) {
 			audio_set_volume(volume / 100)
 		}
 
+		// -----------------------------------------------------------------------
 		// Playback controls
+		// -----------------------------------------------------------------------
 		imgui.Separator()
 		if imgui.SmallButton(ICON_PREVIOUS_TRACK) {
 			server_request_previous_track(sv)
 		}
+
+		imgui.BeginDisabled(sv.playback_state == .Stopped)
+		
+		switch sv.playback_state {
+		case .Stopped, .Paused:
+			if imgui.SmallButton(ICON_PLAY + "###playback_state") {
+				server_request_resume(sv)
+			}
+		case .Playing:
+			if imgui.SmallButton(ICON_PAUSE + "###playback_state") {
+				server_request_pause(sv)
+			}
+		}
+		imgui.EndDisabled()
+
 		if imgui.SmallButton(ICON_NEXT_TRACK) {
 			server_request_next_track(sv)
 		}
@@ -280,7 +299,7 @@ _track_table_show :: proc(
 	}
 
 	for col in column_infos {
-		imgui.TableSetupColumn(col.name, col.flags)
+		imgui.TableSetupColumn(col.name, col.flags, 1.0/f32(NUM_COLUMNS))
 	}
 
 	imgui.TableSetupScrollFreeze(1, 1)
@@ -297,13 +316,11 @@ _track_table_show :: proc(
 				title_buf: [128]u8
 				copy(title_buf[:127], row.title)
 
-				selectable_flags: imgui.SelectableFlags = {.SpanAllColumns}
-
 				if row.id == sv.current_track_id {
 					imgui.TableSetBgColor(.RowBg0, ui_theme.colors[.PlayingHighlight])
 				}
 
-				if imgui.Selectable(cstring(&title_buf[0]), row.selected, selectable_flags) {
+				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
 					select_row(table, row_index)
 				}
 

@@ -4,6 +4,8 @@ package main
 import win "core:sys/windows"
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
 
+WINDOW_CLASS_NAME :: PROGRAM_ID + "_window_class"
+
 _win: struct {
 	hinstance: win.HINSTANCE,
 	hwnd: win.HWND,
@@ -22,7 +24,7 @@ use_platform_win32 :: proc() {
 
 			wndclass := win.WNDCLASSEXW {
 				hInstance = _win.hinstance,
-				lpszClassName = "WINDOW_CLASS",
+				lpszClassName = WINDOW_CLASS_NAME,
 				cbSize = size_of(win.WNDCLASSEXW),
 				lpfnWndProc = _wnd_proc,
 			}
@@ -31,7 +33,7 @@ use_platform_win32 :: proc() {
 		}
 
 		_win.hwnd = win.CreateWindowExW(
-			0, "WINDOW_CLASS", "RAT MP", win.WS_OVERLAPPEDWINDOW, win.CW_USEDEFAULT,
+			0, WINDOW_CLASS_NAME, PROGRAM_NAME_AND_VERSION, win.WS_OVERLAPPEDWINDOW, win.CW_USEDEFAULT,
 			win.CW_USEDEFAULT, win.CW_USEDEFAULT, win.CW_USEDEFAULT, nil, nil, _win.hinstance, nil
 		)
 
