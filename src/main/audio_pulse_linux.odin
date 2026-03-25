@@ -87,12 +87,14 @@ use_audio_pulse :: proc() {
 		_send_message(.DropBuffer)
 	}
 
-	_audio_impl_pause = proc() {
+	_audio_impl_pause = proc() -> bool {
 		_send_message(.Pause)
+		return true
 	}
 
-	_audio_impl_resume = proc() {
+	_audio_impl_resume = proc() -> bool {
 		_send_message(.Resume)
+		return true
 	}
 
 	_audio_impl_set_volume = proc(v: f32) {
