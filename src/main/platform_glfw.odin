@@ -11,7 +11,7 @@ _glfw: struct {
 	events: Platform_Events,
 }
 
-use_platform_glfw :: proc() {
+platform_init_glfw :: proc() {
 	log.debug("Using GLFW platform")
 
 	_platform_impl_set_gl_proc_address = glfw.gl_set_proc_address
@@ -20,7 +20,7 @@ use_platform_glfw :: proc() {
 		_glfw.events.window_closed = true
 	}
 
-	_platform_impl_init = proc() -> bool {
+	_platform_impl_make_window = proc() -> bool {
 		glfw.Init() or_return
 
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
@@ -35,12 +35,12 @@ use_platform_glfw :: proc() {
 
 		imgui_glfw.InitForOpenGL(_glfw.window, true)
 		
-		init_video_opengl()
+		video_init_opengl()
 
 		return true
 	}
 
-	_platform_impl_shutdown = proc() {
+	_platform_impl_destroy_window = proc() {
 		log.debug("Cleaning up GLFW...")
 		imgui_glfw.Shutdown()
 		glfw.DestroyWindow(_glfw.window)

@@ -7,23 +7,25 @@ Video_Impl :: enum {
 
 Platform_Events :: struct {
 	window_closed: bool,
+	want_exit: bool,
 }
 
-// init should also choose graphics backend
-_platform_impl_init: proc() -> bool
+// make_window should also choose graphics backend
+_platform_impl_make_window: proc() -> bool
+_platform_impl_destroy_window: proc()
+_platform_impl_shutdown: proc()
 _platform_impl_imgui_new_frame: proc()
 _platform_impl_poll_events: proc() -> Platform_Events
 _platform_impl_swap_buffers: proc()
-_platform_impl_shutdown: proc()
 _platform_impl_set_gl_proc_address: proc(p: rawptr, name: cstring)
 _platform_impl_is_window_visible: proc() -> bool
 
-platform_init :: proc() -> bool {
-	return _platform_impl_init()
+platform_make_window :: proc() -> bool {
+	return _platform_impl_make_window()
 }
 
-platform_destroy :: proc() {
-	_platform_impl_shutdown()
+platform_destroy_window :: proc() {
+	_platform_impl_destroy_window()
 }
 
 platform_imgui_new_frame :: proc() {
@@ -44,4 +46,8 @@ platform_set_gl_proc_address :: proc(p: rawptr, name: cstring) {
 
 platform_is_window_visible :: proc() -> bool {
 	return _platform_impl_is_window_visible()
+}
+
+platform_shutdown :: proc() {
+	_platform_impl_shutdown()
 }

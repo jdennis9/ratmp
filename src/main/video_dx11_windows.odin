@@ -16,7 +16,16 @@ _dx: struct {
 }
 
 @private
-init_video_dx11 :: proc(hwnd: win.HWND) -> bool {
+video_shutdown_dx11:: proc() {
+	imgui_dx11.Shutdown()
+	_destroy_render_target()
+	if _dx.swapchain != nil do _dx.swapchain->Release()
+	if _dx.ctx != nil do _dx.ctx->Release()
+	if _dx.device != nil do _dx.device->Release()
+}
+
+@private
+video_init_dx11 :: proc(hwnd: win.HWND) -> bool {
 	_init(hwnd) or_return
 
 	_video_impl_render_frame = proc() {
@@ -45,13 +54,6 @@ init_video_dx11 :: proc(hwnd: win.HWND) -> bool {
 		imgui_dx11.NewFrame()
 	}
 
-	_video_impl_shutdown	= proc() {
-		imgui_dx11.Shutdown()
-		_destroy_render_target()
-		if _dx.swapchain != nil do _dx.swapchain->Release()
-		if _dx.ctx != nil do _dx.ctx->Release()
-		if _dx.device != nil do _dx.device->Release()
-	}
 
 	_video_impl_create_texture = proc(td: Texture_Desc) -> (texture_id: rawptr, ok: bool) {
 		staging: ^dx.ITexture2D

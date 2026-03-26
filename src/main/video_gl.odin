@@ -11,15 +11,17 @@ _Texture :: struct {
 }
 
 @private
-init_video_opengl :: proc() -> bool {
+video_shutdown_opengl :: proc() {
+	imgui_gl.Shutdown()
+}
+
+@private
+video_init_opengl :: proc() -> bool {
 	log.debug("Using OpenGL 3")
 
 	gl.load_up_to(3, 0, platform_set_gl_proc_address)
 	imgui_gl.Init() or_return
 
-	_video_impl_shutdown = proc() {
-		imgui_gl.Shutdown()
-	}
 
 	_video_impl_imgui_new_frame = proc() {
 		imgui_gl.NewFrame()
