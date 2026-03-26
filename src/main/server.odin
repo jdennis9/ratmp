@@ -63,6 +63,7 @@ Server_Event_Type :: enum {
 	RequestPlayPlaylist,
 	RequestPlay,
 	RequestPause,
+	RequestSeek,
 }
 
 Server_Event :: struct {
@@ -71,6 +72,7 @@ Server_Event :: struct {
 	tracks: []Track_ID,
 	initial_track: Maybe(Track_ID),
 	playlist_uid: UID,
+	seek_target: int,
 }
 
 Server :: struct {
@@ -267,6 +269,10 @@ server_handle_events :: proc(sv: ^Server) {
 
 		switch ev.type {
 		
+		case .RequestSeek:
+			audio_drop_buffer()
+			playback_thread_seek(&sv.playback_thread, ev.seek_target)
+
 		case .RequestPlay:
 			if audio_resume() {
 				sv.playback_state = .Playing
@@ -369,3 +375,15 @@ server_request_play_playlist :: proc(
 
 server_request_pause :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPause})}
 server_request_resume :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPlay})}
+
+server_send_empty_event :: proc(sv: ^Server) {
+	sync.auto_reset_event_signal(&sv.event_signal)
+}
+
+server_seek :: proc(sv: ^Server, second: int) {
+	server_send_event(sv, {type = .RequestSeek, seek_target = second})
+}
+
+server_get_track_position_seconds :: proc(sv: ^Server) -> int {
+	return playback_thread_get_track_position(&sv.playback_thread)
+}

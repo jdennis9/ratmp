@@ -15,6 +15,7 @@ Audio_File_Info :: struct {
 	format_name: [64]u8,
 	samplerate: int,
 	channels: int,
+	duration: int,
 }
 
 Decoder :: struct {
@@ -55,6 +56,7 @@ decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_I
 		copy(info.format_name[:len(info.format_name)-1], string(cstring(&file_info.format_name[0])))
 		info.samplerate = dec.samplerate
 		info.channels = dec.channels
+		info.duration = auto_cast dec.duration_seconds
 	}
 	
 	dec.is_open = true

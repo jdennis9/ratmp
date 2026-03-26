@@ -1,5 +1,6 @@
 package imx
 
+import "core:math/linalg"
 import "core:log"
 import "core:mem"
 import "base:runtime"
@@ -42,77 +43,6 @@ typeid_to_data_type :: proc(t: typeid) -> (s: imgui.DataType, ok: bool) {
 	return
 }
 
-Type_Edit_Callback :: #type proc(label: cstring, ptr: rawptr, T: typeid, callbacks: map[typeid]Type_Edit_Callback = nil, callback_data: rawptr = nil) -> bool
-
-edit_any :: proc(label: cstring, ptr: rawptr, T: typeid, callbacks: map[typeid]Type_Edit_Callback = nil, callback_data: rawptr = nil) -> bool {
-	type := type_info_of(T)
-	type = reflect.type_info_base(type)
-
-	if cb, have_cb := callbacks[T]; have_cb {
-		return cb(label, ptr, T, callbacks, callback_data)
-	}
-
-	#partial switch variant in type.variant {
-	case runtime.Type_Info_Struct:
-		imgui.TreeNodeEx(label, {.DefaultOpen}) or_return
-		for fi in 0..<variant.field_count {
-			name_buf: [128]u8
-			name := cstring(&name_buf[0])
-			field := reflect.struct_field_at(type.id, auto_cast fi)
-			field_type := reflect.type_info_base(field.type)
-			field_ptr := raw_data((cast([^]byte) ptr)[field.offset:][:field.type.size])
-			copy(name_buf[:len(name_buf)-1], field.name)
-			edit_any(name, field_ptr, field.type.id, callbacks, callback_data)
-		}
-		imgui.TreePop()
-
-	case runtime.Type_Info_Array:
-		elem := reflect.type_info_base(variant.elem)
-		if variant.count <= 4 {
-			dt := typeid_to_data_type(variant.elem.id) or_break
-			imgui.InputScalarN(label, dt, ptr, auto_cast variant.count)
-		}
-		else {
-			imgui.TreeNodeEx(label, {.DefaultOpen}) or_return
-			for i in 0..<variant.count {
-				elem_name_buf: [32]u8
-				elem_name := cstring(&elem_name_buf[0])
-				elem_ptr := mem.ptr_offset(cast(^byte) ptr, elem.size * i)
-				fmt.bprint(elem_name_buf[:31], "[", i, "]", sep="")
-				edit_any(elem_name, elem_ptr, elem.id, callbacks, callback_data)
-			}
-			imgui.TreePop()
-		}
-
-	case runtime.Type_Info_Integer, runtime.Type_Info_Float:
-		dt := typeid_to_data_type(type.id) or_return
-		return imgui.InputScalar(label, dt, ptr)
-
-	case runtime.Type_Info_Boolean:
-		value: bool
-		data := any{ptr, T}
-		switch v in data {
-			case bool: value = v
-			case b16: value = bool(v)
-			case b32: value = bool(v)
-			case b64: value = bool(v)
-		}
-		if imgui.Checkbox(label, &value) {
-			switch &v in data {
-				case bool: v = value
-				case b16: v = b16(value)
-				case b32: v = b32(value)
-				case b64: v = b64(value)
-			}
-			return true
-		}
-
-		return false
-	}
-
-	return false
-}
-
 begin_combo :: proc($BUF_SIZE: uint, label: cstring, preview: string) -> bool {
 	buf: [BUF_SIZE]u8
 	copy(buf[:BUF_SIZE-1], preview)
@@ -124,3 +54,70 @@ menu_item :: proc($BUF_SIZE: uint, label: string) -> bool {
 	copy(buf[:BUF_SIZE-1], label)
 	return imgui.MenuItem(cstring(&buf[0]))
 }
+
+scrubber :: proc(
+	str_id: cstring, p_value: ^int, min, max: int,
+	size_arg: imgui.Vec2 = {}, marker_interval: int = 10
+) -> bool {
+	size: [2]f32
+	style := imgui.GetStyle()
+	drawlist := imgui.GetWindowDrawList()
+	span := max - min
+	frac := (f32(p_value^) + f32(min)) / f32(span)
+	avail_size := imgui.GetContentRegionAvail()
+	cursor := imgui.GetCursorScreenPos() + style.FramePadding*1.5
+	mouse := imgui.GetMousePos()
+
+	size.x = size_arg.x == 0 ? avail_size.x : size_arg.x
+	size.y = size_arg.y == 0 ? avail_size.y : size_arg.y
+
+	size -= style.FramePadding*2
+	cursor.y += size.y / 4
+
+	if avail_size.x <= 4 || avail_size.y <= 4 {return false}
+
+	// Button
+	imgui.InvisibleButton(str_id, avail_size)
+	if imgui.IsItemActive() || imgui.IsItemDeactivated() {
+		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
+	}
+	hovered := imgui.IsItemHovered()
+
+	// Bg
+	imgui.DrawList_AddRectFilled(drawlist, cursor, cursor + size, imgui.GetColorU32(.Header), 2)
+	// Fg
+	imgui.DrawList_AddRectFilled(drawlist, cursor, cursor + {size.x * frac, size.y}, imgui.GetColorU32(.HeaderActive), 2)
+
+	// Scrubber
+	scrubber_size := [2]f32{size.y*0.8, size.y}
+	scrubber_padding := [2]f32{2, 2}
+
+	imgui.DrawList_AddCircleFilled(
+		drawlist, {cursor.x + frac * size.x, cursor.y + size.y / 2}, scrubber_size.y,
+		hovered ? imgui.GetColorU32(.NavCursor) : imgui.GetColorU32(.HeaderActive)
+	)
+
+	if imgui.IsItemDeactivated() {
+		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
+		p_value^ = int(linalg.lerp(f32(min), f32(max), frac))
+		return true
+	}
+	
+	// Markers
+	/*{
+		marker_count := (max - min) / marker_interval
+		if marker_count != 0 {
+			marker_gap := size.x / f32(marker_count)
+			pos := cursor
+
+			for m in 0..<marker_count {
+				imgui.DrawList_AddLine(drawlist, pos, {pos.x, pos.y + avail_size.y}, imgui.GetColorU32(.PlotLines))
+				pos.x += marker_gap
+			}
+		}
+	}*/
+
+	return false
+}
+
+

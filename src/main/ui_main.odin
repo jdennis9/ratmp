@@ -13,6 +13,7 @@ ICON_VOLUME_LOW :: ""
 ICON_VOLUME_MEDIUM :: ""
 ICON_VOLUME_HIGH :: ""
 ICON_SHUFFLE :: ""
+ICON_ARROW_RIGHT :: ""
 ICON_PREVIOUS_TRACK :: ""
 ICON_NEXT_TRACK :: ""
 ICON_PAUSE :: ""
@@ -142,6 +143,13 @@ ui_show :: proc(ui: ^UI) {
 		// Playback controls
 		// -----------------------------------------------------------------------
 		imgui.Separator()
+
+		if imgui.SmallButton(
+			sv.playback.enable_shuffle ? ICON_SHUFFLE + "###shuffle" : ICON_ARROW_RIGHT + "###shuffle"
+		) {
+			sv.playback.enable_shuffle = !sv.playback.enable_shuffle
+		}
+
 		if imgui.SmallButton(ICON_PREVIOUS_TRACK) {
 			server_request_previous_track(sv)
 		}
@@ -162,6 +170,23 @@ ui_show :: proc(ui: ^UI) {
 
 		if imgui.SmallButton(ICON_NEXT_TRACK) {
 			server_request_next_track(sv)
+		}
+
+		// -----------------------------------------------------------------------
+		// Seek bar
+		// -----------------------------------------------------------------------
+		imgui.Separator()
+		{
+			current_pos := server_get_track_position_seconds(sv)
+			duration := sv.track_info.duration
+
+			dh, dm, ds := time.clock_from_seconds(auto_cast duration)
+			ph, pm, ps := time.clock_from_seconds(auto_cast current_pos)
+			imx.textf(32, "%02d:%02d:%02d/%02d:%02d:%02d", ph, pm, ps, dh, dm, ds)
+
+			if imx.scrubber("##seekbar", &current_pos, 0, duration) {
+				server_seek(sv, current_pos)
+			}
 		}
 	}
 
@@ -267,11 +292,14 @@ _track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	// Show
 	// --------------------------------------------------------------------------
-	COLUMN_TITLE :: 0
-	COLUMN_ARTIST :: 1
-	COLUMN_ALBUM :: 2
-	COLUMN_GENRE :: 3
-	NUM_COLUMNS :: 4
+	_Column_Index :: enum {
+		TrackNo,
+		Title,
+		Artist,
+		Album,
+		Genre,
+		Duration,
+	}
 
 	actions: struct {
 		play_track: Maybe(Track_ID),
@@ -279,7 +307,7 @@ _track_table_show :: proc(
 
 	list_clipper: imgui.ListClipper
 
-	imgui.BeginTable(name, NUM_COLUMNS,
+	imgui.BeginTable(name, auto_cast len(_Column_Index),
 		imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
 		imgui.TableFlags_Hideable|imgui.TableFlags_Reorderable|
 		imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|
@@ -288,18 +316,20 @@ _track_table_show :: proc(
 	) or_return
 	defer imgui.EndTable()
 
-	column_infos: [NUM_COLUMNS]struct {
+	column_infos: [_Column_Index]struct {
 		flags: imgui.TableColumnFlags,
 		name: cstring,
 	} = {
-		COLUMN_TITLE = {name = "Title", flags = {.NoHide}},
-		COLUMN_ARTIST = {name = "Artist"},
-		COLUMN_ALBUM = {name = "Album"},
-		COLUMN_GENRE = {name = "Genre"},
+		.Title = {name = "Title", flags = {.NoHide}},
+		.Artist = {name = "Artist"},
+		.Album = {name = "Album"},
+		.Genre = {name = "Genre"},
+		.TrackNo = {name = "Track"},
+		.Duration = {name = "Duration"},
 	}
 
 	for col in column_infos {
-		imgui.TableSetupColumn(col.name, col.flags, 1.0/f32(NUM_COLUMNS))
+		imgui.TableSetupColumn(col.name, col.flags, 1.0/f32(len(_Column_Index)))
 	}
 
 	imgui.TableSetupScrollFreeze(1, 1)
@@ -312,7 +342,7 @@ _track_table_show :: proc(
 			imgui.TableNextRow()
 			row_index := local_row_index + auto_cast list_clipper.DisplayStart
 
-			if imgui.TableSetColumnIndex(COLUMN_TITLE) {
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Title) {
 				title_buf: [128]u8
 				copy(title_buf[:127], row.title)
 
@@ -338,16 +368,24 @@ _track_table_show :: proc(
 				}
 			}
 
-			if imgui.TableSetColumnIndex(COLUMN_ARTIST) {
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
 				imx.text_unformatted(row.artist)
 			}
 
-			if imgui.TableSetColumnIndex(COLUMN_ALBUM) {
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
 				imx.text_unformatted(row.album)
 			}
 
-			if imgui.TableSetColumnIndex(COLUMN_GENRE) {
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
 				imx.text_unformatted(row.genre)
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Duration) {
+				imx.text_unformatted(string_from_array(row.duration[:]))
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.TrackNo) {
+				imx.text_unformatted(string_from_array(row.track_no[:]))
 			}
 		}
 	}
