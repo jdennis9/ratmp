@@ -1,5 +1,6 @@
 package main
 
+import "core:hash/xxhash"
 import "core:path/filepath"
 import "core:thread"
 import "core:slice"
@@ -101,6 +102,9 @@ Server :: struct {
 	playback_state: Playback_State,
 	tracks: hm.Dynamic_Handle_Map(Track, Track_ID),
 	tracks_serial: uint,
+	// Map track url hash -> handle for keeping track of which
+	// files are already in the library
+	track_url_hash_map: map[u64]Track_ID,
 	event_signal: sync.Auto_Reset_Event,
 	event_queue: [dynamic]Server_Event,
 	event_queue_lock: sync.Mutex,
@@ -112,6 +116,10 @@ Server :: struct {
 	playlists_serial: uint,
 	background_scan: Server_Background_Scan_State,
 	need_background_scan: bool,
+}
+
+hash_track_url :: proc(str: string) -> u64 {
+	return xxhash.XXH3_64_default(transmute([]u8) str)
 }
 
 server_audio_callback :: proc(
@@ -181,12 +189,31 @@ track_clone :: proc(track: Track, allocator: mem.Allocator) -> (output: Track, e
 	return output, nil
 }
 
-server_add_track :: proc(sv: ^Server, track: Track) -> (Track_ID, bool) {
+server_add_track :: proc(sv: ^Server, track: Track, update_existing := false) -> (Track_ID, bool) {
+	hash := hash_track_url(track.url)
+	if hash == 0 do return {}, false
+
+	if existing_handle, exists := sv.track_url_hash_map[hash]; exists {
+		if update_existing {
+			if ptr, found := hm.get(&sv.tracks, existing_handle); found {
+				ptr^ = track
+				return existing_handle, true
+			}
+			else {
+				delete_key(&sv.track_url_hash_map, hash)
+			}
+		}
+		else if hm.is_valid(&sv.tracks, existing_handle) {
+			return existing_handle, true
+		}
+	}
+
 	handle, error := hm.add(&sv.tracks, track)
 	if error != nil {
 		log.error(error)
 		return {}, false
 	}
+	sv.track_url_hash_map[hash] = handle
 	sv.tracks_serial += 1
 	return handle, true
 }
