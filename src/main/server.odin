@@ -1,5 +1,7 @@
 package main
 
+import "core:path/filepath"
+import "core:thread"
 import "core:slice"
 import "core:sync"
 import "core:os"
@@ -64,6 +66,7 @@ Server_Event_Type :: enum {
 	RequestPlay,
 	RequestPause,
 	RequestSeek,
+	BackgroundScanComplete,
 }
 
 Server_Event :: struct {
@@ -73,6 +76,22 @@ Server_Event :: struct {
 	initial_track: Maybe(Track_ID),
 	playlist_uid: UID,
 	seek_target: int,
+}
+
+Server_Background_Scan_State :: struct {
+	// Main thread signals this to start the scan
+	start_signal: sync.Auto_Reset_Event,
+	// Main thread signals this to say the scan output has
+	// been added to the library
+	output_used_signal: sync.Auto_Reset_Event,
+	total_file_count: int,
+	scanned_count: int,
+	runner: ^thread.Thread,
+	queue_arena: mem.Dynamic_Arena,
+	queue: [dynamic]string,
+	queue_lock: sync.Mutex,
+	output_arena: mem.Dynamic_Arena,
+	output: [dynamic]Track,
 }
 
 Server :: struct {
@@ -91,6 +110,8 @@ Server :: struct {
 	current_track_id: Track_ID,
 	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
 	playlists_serial: uint,
+	background_scan: Server_Background_Scan_State,
+	need_background_scan: bool,
 }
 
 server_audio_callback :: proc(
@@ -127,24 +148,12 @@ server_init :: proc(sv: ^Server) -> bool {
 
 	playback_thread_init(&sv.playback_thread, {})
 
-	when ODIN_OS == .Windows {
-		files, error := os.read_all_directory_by_path("D:\\Media\\Music\\Good", context.allocator)
-	}
-	else {
-		files, error := os.read_all_directory_by_path("/mnt/storage/Media/Music/Good", context.allocator)
-	}
-
-	if error != nil {
-		log.error(error)
-	}
-	else {
-		for file in files {
-			playback_queue_add(&sv.playback, {
-				server_add_track_from_file(sv, file.fullpath) or_else {}
-			}, 0)
-		}
-		os.file_info_slice_delete(files, context.allocator)
-	}
+	mem.dynamic_arena_init(&sv.background_scan.output_arena)
+	mem.dynamic_arena_init(&sv.background_scan.queue_arena)
+	sv.background_scan.runner = thread.create(_background_scan_proc)
+	sv.background_scan.runner.data = sv
+	sv.background_scan.runner.init_context = context
+	thread.start(sv.background_scan.runner)
 
 	return true
 }
@@ -154,6 +163,22 @@ server_shutdown :: proc(sv: ^Server) {
 	hm.dynamic_destroy(&sv.tracks)
 	delete(sv.event_queue)
 	sv.event_queue = nil
+}
+
+track_clone :: proc(track: Track, allocator: mem.Allocator) -> (output: Track, error: mem.Allocator_Error) {
+	if track.album != "" do output.album = strings.clone(track.album, allocator) or_return
+	if track.artist != "" do output.artist = strings.clone(track.artist, allocator) or_return
+	if track.genre != "" do output.genre = strings.clone(track.genre, allocator) or_return
+	if track.title != "" do output.title = strings.clone(track.title, allocator) or_return
+	output.url = strings.clone(track.url, allocator)
+	output.bitrate_kbps = track.bitrate_kbps
+	output.channels = track.channels
+	output.duration_seconds = track.duration_seconds
+	output.flags = track.flags
+	output.release_year = track.release_year
+	output.samplerate = track.samplerate
+	output.track_no = track.track_no
+	return output, nil
 }
 
 server_add_track :: proc(sv: ^Server, track: Track) -> (Track_ID, bool) {
@@ -181,15 +206,18 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 
 		file = taglib.file_new(path_cstring)
 	}
-	
-	if file == nil do return
+
+	if file == nil {
+		log.warn("Failed to open file", path)
+		return
+	}
 	defer taglib.file_free(file)
-	
+
+	found = true
 	track.url = strings.clone(path, allocator)
 	
 	tag := taglib.file_tag(file)
 	if tag != nil {
-		found = true
 		defer taglib.tag_free_strings()
 
 		title := taglib.tag_title(tag)
@@ -207,9 +235,12 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 		track.track_no = auto_cast track_no
 	}
 
+	if track.title == "" {
+		track.title = strings.clone(filepath.short_stem(filepath.base(path)), allocator)
+	}
+
 	audio_props := taglib.file_audioproperties(file)
 	if audio_props != nil {
-		found = true
 		track.bitrate_kbps = auto_cast taglib.audioproperties_bitrate(audio_props)
 		track.duration_seconds = auto_cast taglib.audioproperties_length(audio_props)
 		track.samplerate = auto_cast taglib.audioproperties_samplerate(audio_props)
@@ -264,10 +295,24 @@ server_handle_events :: proc(sv: ^Server) {
 	defer sync.unlock(&sv.event_queue_lock)
 	defer clear(&sv.event_queue)
 
+	if sv.need_background_scan {
+		sv.need_background_scan = false
+		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
+	}
+
 	for ev in sv.event_queue {
 		defer delete(ev.tracks)
 
 		switch ev.type {
+		case .BackgroundScanComplete:
+			tracks := sv.background_scan.output[:]
+			for track in tracks {
+				cloned := track_clone(track, sv.track_allocator) or_continue
+				server_add_track(sv, cloned)
+			}
+			clear(&sv.background_scan.output)
+			mem.dynamic_arena_free_all(&sv.background_scan.output_arena)
+			sync.auto_reset_event_signal(&sv.background_scan.output_used_signal)
 		
 		case .RequestSeek:
 			audio_drop_buffer()
@@ -386,4 +431,83 @@ server_seek :: proc(sv: ^Server, second: int) {
 
 server_get_track_position_seconds :: proc(sv: ^Server) -> int {
 	return playback_thread_get_track_position(&sv.playback_thread)
+}
+
+server_queue_for_background_scan :: proc(sv: ^Server, path: string) {
+	allocator := mem.dynamic_arena_allocator(&sv.background_scan.queue_arena)
+	sync.lock(&sv.background_scan.queue_lock)
+	append(&sv.background_scan.queue, strings.clone(path, allocator))
+	sync.unlock(&sv.background_scan.queue_lock)
+	sv.need_background_scan = true
+	server_send_empty_event(sv)
+}
+
+@(private="file")
+_background_scan_proc :: proc(t: ^thread.Thread) {
+	sv := cast(^Server) t.data
+	state := &sv.background_scan
+
+	input_arena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&input_arena)
+	defer mem.dynamic_arena_destroy(&input_arena)
+
+	allocator := mem.dynamic_arena_allocator(&input_arena)
+	output_allocator := mem.dynamic_arena_allocator(&state.output_arena)
+
+	for {
+		input: [dynamic]string
+		defer {
+			delete(input)
+			mem.dynamic_arena_free_all(&input_arena)
+		}
+
+		sync.auto_reset_event_wait(&state.start_signal)
+
+		// Copy queue to local array
+		sync.lock(&state.queue_lock)
+		for i in state.queue {
+			append(&input, strings.clone(i, allocator))
+		}
+		clear(&state.queue)
+		mem.dynamic_arena_free_all(&state.queue_arena)
+		sync.unlock(&state.queue_lock)
+
+		// Collect files
+		files: [dynamic]os.File_Info
+		defer delete(files)
+
+		add_files :: proc(dir: string, output: ^[dynamic]os.File_Info, allocator: mem.Allocator) -> os.Error {
+			df := os.read_all_directory_by_path(dir, allocator) or_return
+			for file in df {
+				if file.type == .Regular {
+					append(output, file)
+				}
+				else if file.type == .Directory {
+					add_files(file.fullpath, output, allocator)
+				}
+			}
+			return nil
+		}
+
+		for i in input {
+			add_files(i, &files, allocator)
+			state.total_file_count = len(files)
+		}
+		log.debug("Scanning", state.total_file_count, "files...")
+
+		// Get metadata
+		for file in files {
+			track := read_audio_file_metadata(file.fullpath, output_allocator) or_continue
+			assert(track.title != "")
+			append(&state.output, track)
+			state.scanned_count += 1
+		}
+
+		log.debug("Scanned", state.total_file_count, "files")
+
+		server_send_event(sv, {type = .BackgroundScanComplete})
+		sync.auto_reset_event_wait(&state.output_used_signal)
+		state.total_file_count = 0
+		state.scanned_count = 0
+	}
 }

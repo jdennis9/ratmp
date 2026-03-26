@@ -52,6 +52,9 @@ UI :: struct {
 			serial: uint,
 			track_table: _Track_Table,
 		},
+	},
+	dialogs: struct {
+		add_folder: File_Dialog_State,
 	}
 }
 
@@ -114,12 +117,29 @@ ui_show :: proc(ui: ^UI) {
 	imgui.PopStyleColor(2)
 
 	// --------------------------------------------------------------------------
+	// Folder dialog
+	// --------------------------------------------------------------------------
+	{
+		results: [dynamic]Path
+		defer delete(results)
+
+		if async_file_dialog_get_results(&ui.dialogs.add_folder, &results) {
+			for &p in results {
+				server_queue_for_background_scan(sv, string(cstring(&p[0])))
+			}
+		}
+	}
+
+	// --------------------------------------------------------------------------
 	// Main menu bar
 	// --------------------------------------------------------------------------
 	if imgui.BeginMainMenuBar() {
 		defer imgui.EndMainMenuBar()
 
 		if imgui.BeginMenu("File") {
+			if imgui.MenuItem("Add folders") {
+				async_file_dialog_open(&ui.dialogs.add_folder, .Audio, {.SelectFolders, .SelectMultiple})
+			}
 			imgui.EndMenu()
 		}
 
