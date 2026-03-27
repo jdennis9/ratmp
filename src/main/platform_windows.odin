@@ -1,9 +1,12 @@
 #+private file
 package main
 
+import "core:os"
 import "core:unicode/utf16"
 import win "core:sys/windows"
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
+
+
 
 WINDOW_CLASS_NAME :: PROGRAM_ID + "_window_class"
 
@@ -33,11 +36,21 @@ platform_init_win32 :: proc() -> bool {
 		assert(_win.hwnd != nil)
 		if _win.hwnd == nil do return false
 
+		// Dark mode
+		{
+			on: win.BOOL = true
+			win.DwmSetWindowAttribute(_win.hwnd, 
+				auto_cast win.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE,
+				&on, size_of(on)
+			)
+		}
+
 		win.ShowWindow(_win.hwnd, win.SW_SHOWDEFAULT)
 		win.UpdateWindow(_win.hwnd) or_return
 
 		imgui_win32.Init(_win.hwnd) or_return
 		video_init_dx11(_win.hwnd) or_return
+
 
 		return true
 	}
