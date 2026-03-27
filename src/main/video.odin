@@ -1,5 +1,6 @@
 package main
 
+import stbi "vendor:stb/image"
 import imgui "src:thirdparty/odin-imgui"
 import hm "core:container/handle_map"
 
@@ -82,4 +83,52 @@ texture_get_imgui_ref :: proc(h: Texture_Handle) -> (ref: imgui.TextureRef, ok: 
 	return _video_impl_get_texture_imgui_ref(tex.impl)
 }
 
+texture_is_outdated :: proc(h: Texture_Handle) -> bool {
+	_, found := hm.get(&_video.textures, h)
+	if !found do return true
+	return false
+}
 
+texture_create_from_file :: proc(path: string) -> (handle: Texture_Handle, width, height: int, ok: bool) {
+	path_buf: [512]u8
+	path_cstr := cstring(&path_buf[0])
+	copy(path_buf[:511], path)
+
+	w, h: i32
+	image_data := stbi.load(path_cstr, &w, &h, nil, 4)
+	if image_data == nil do return
+	defer stbi.image_free(image_data)
+
+	width = auto_cast w
+	height = auto_cast h
+
+	desc := Texture_Desc {
+		data = image_data,
+		width = width,
+		height = height,
+	}
+
+	handle = texture_create(desc) or_return
+	ok = true
+	return
+}
+
+texture_create_from_memory :: proc(data: []byte) -> (handle: Texture_Handle, width, height: int, ok: bool) {
+	w, h: i32
+	image_data := stbi.load_from_memory(raw_data(data), auto_cast len(data), &w, &h, nil, 4)
+	if image_data == nil do return
+	defer stbi.image_free(image_data)
+
+	width = auto_cast w
+	height = auto_cast h
+
+	desc := Texture_Desc {
+		data = image_data,
+		width = width,
+		height = height,
+	}
+
+	handle = texture_create(desc) or_return
+	ok = true
+	return
+}

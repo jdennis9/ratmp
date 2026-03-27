@@ -1,6 +1,8 @@
 #+private file
 package main
 
+import "core:log"
+import "core:strings"
 import "core:mem"
 import "core:container/handle_map"
 import "src:imx"
@@ -38,6 +40,20 @@ _Track_Table :: struct {
 	rows: [dynamic]_Track_Table_Row,
 }
 
+_Metadata_Window :: struct {
+	displayed_track: Track_ID,
+	cover_art: Maybe(Texture_Handle),
+	cover_width, cover_height: int,
+	should_crop_art: bool,
+	comment: string,
+}
+
+@private
+UI_Actions :: struct {
+	minimize_to_tray: bool,
+	exit: bool,
+}
+
 @private
 UI :: struct {
 	server: ^Server,
@@ -52,10 +68,22 @@ UI :: struct {
 			serial: uint,
 			track_table: _Track_Table,
 		},
+
+		metadata: _Metadata_Window,
 	},
 	dialogs: struct {
 		add_folder: File_Dialog_State,
-	}
+		set_background: File_Dialog_State,
+	},
+	background: struct {
+		texture: Maybe(Texture_Handle),
+		width, height: int,
+		path: string,
+	},
+	debug: struct {
+		show_style_editor: bool,
+	},
+	actions: UI_Actions,
 }
 
 ui_theme: struct {
@@ -108,8 +136,28 @@ ui_shutdown :: proc(ui: ^UI) {
 }
 
 @private
-ui_show :: proc(ui: ^UI) {
+ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
+	// @TODO: Half the programs memory usage comes from storing a large background image.
+	load_background :: proc(ui: ^UI) -> bool {
+		log.debug("Loading background", ui.background.path, "...")
+		
+		if ui.background.texture != nil {
+			texture_release(ui.background.texture.?)
+		}
+		
+		ui.background.texture = nil
+		h, width, height := texture_create_from_file(ui.background.path) or_return
+		ui.background.texture = h
+		ui.background.width = width
+		ui.background.height = height
+		
+		log.debugf("Loaded image with size: %dx%d (%M)", width, height, width*height*4)
+		
+		return true
+	}
+	
 	sv := ui.server
+	ui.actions = {}
 
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.PushStyleColor(.WindowBg, 0)
@@ -117,7 +165,7 @@ ui_show :: proc(ui: ^UI) {
 	imgui.PopStyleColor(2)
 
 	// --------------------------------------------------------------------------
-	// Folder dialog
+	// Add folders
 	// --------------------------------------------------------------------------
 	{
 		results: [dynamic]Path
@@ -131,6 +179,40 @@ ui_show :: proc(ui: ^UI) {
 	}
 
 	// --------------------------------------------------------------------------
+	// Set background
+	// --------------------------------------------------------------------------
+	{
+		results: [dynamic]Path
+		defer delete(results)
+
+		if async_file_dialog_get_results(&ui.dialogs.set_background, &results) {
+			bg_path := string_from_array(results[0][:])
+			delete(ui.background.path)
+			ui.background.path = strings.clone(bg_path)
+
+			load_background(ui)
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Draw background
+	// --------------------------------------------------------------------------
+
+	// Re-load background if graphics device was lost
+	if ui.background.texture != nil && texture_is_outdated(ui.background.texture.?) {
+		load_background(ui)
+	}
+
+	if ui.background.texture != nil {
+		drawlist := imgui.GetBackgroundDrawList()
+
+		if tex_ref, ok := texture_get_imgui_ref(ui.background.texture.?); ok {
+			size := imgui.GetIO().DisplaySize
+			imgui.DrawList_AddImage(drawlist, tex_ref, {0, 0}, size)
+		}
+	}
+	
+	// --------------------------------------------------------------------------
 	// Main menu bar
 	// --------------------------------------------------------------------------
 	if imgui.BeginMainMenuBar() {
@@ -140,7 +222,27 @@ ui_show :: proc(ui: ^UI) {
 			if imgui.MenuItem("Add folders") {
 				async_file_dialog_open(&ui.dialogs.add_folder, .Audio, {.SelectFolders, .SelectMultiple})
 			}
+			if !global_command_opts.no_tray {
+				ui.actions.minimize_to_tray |= imgui.MenuItem("Minimize to tray")
+			}
+			ui.actions.exit |= imgui.MenuItem("Exit")
 			imgui.EndMenu()
+		}
+
+		if imgui.BeginMenu("Settings") {
+			if imgui.MenuItem("Change background") {
+				async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
+			}
+			imgui.EndMenu()
+		}
+
+		when ODIN_DEBUG {
+			if imgui.BeginMenu("Debug") {
+				if imgui.MenuItem("Style editor") {
+					ui.debug.show_style_editor = true
+				}
+				imgui.EndMenu()
+			}
 		}
 
 		// -----------------------------------------------------------------------
@@ -217,6 +319,16 @@ ui_show :: proc(ui: ^UI) {
 	}
 
 	// --------------------------------------------------------------------------
+	// Debug
+	// --------------------------------------------------------------------------
+	if ui.debug.show_style_editor {
+		if imgui.Begin("[Debug] Style editor", &ui.debug.show_style_editor) {
+			imgui.ShowStyleEditor()
+		}
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
 	// Library
 	// --------------------------------------------------------------------------
 	if imgui.Begin("Library###library") {
@@ -247,6 +359,105 @@ ui_show :: proc(ui: ^UI) {
 		)
 	}
 	imgui.End()
+
+	// --------------------------------------------------------------------------
+	// Metadata
+	// --------------------------------------------------------------------------
+	show_metadata_window :: proc(sv: ^Server, ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
+		load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
+			if w.cover_art != nil {
+				texture_release(w.cover_art.?)
+				w.cover_art = nil
+			}
+
+			cover_data, mime_type := find_track_thumbnail(
+				sv, w.displayed_track, context.allocator
+			) or_return
+
+			delete(mime_type)
+			defer delete(cover_data)
+
+			h, width, height := texture_create_from_memory(cover_data) or_return
+			w.cover_art = h
+			w.cover_width = width
+			w.cover_height = height
+
+			return true
+		}
+
+		if w.displayed_track != track_id {
+			w.displayed_track = track_id
+
+			if w.displayed_track == {} {
+				imgui.TextDisabled("No track to display")
+				return true
+			}
+			
+			load_cover(sv, w)
+		}
+
+		if w.displayed_track == {} {
+			imgui.TextDisabled("No track to display")
+			return true
+		}
+
+		md := get_track(sv, w.displayed_track) or_return
+
+		// Update cover art if needed
+		if w.cover_art != nil && texture_is_outdated(w.cover_art.?) {
+			w.cover_art = nil
+			load_cover(sv, w)
+		}
+		
+		avail_size := imgui.GetContentRegionAvail()
+
+		// Cover art
+		if w.cover_art != nil {
+			if ref, ok := texture_get_imgui_ref(w.cover_art.?); ok {
+				imgui.PushStyleColor(.Button, 0)
+				imgui.PushStyleColor(.ButtonHovered, 0)
+				imgui.PushStyleColor(.ButtonActive, 0)
+				defer imgui.PopStyleColor(3)
+
+				ratio := f32(w.cover_height) / f32(w.cover_width)
+				size := [2]f32{
+					avail_size.x,
+					avail_size.x * ratio,
+				}
+				imgui.ImageButton("##cover", ref, size)
+			}
+		}
+
+		imgui.SeparatorText("Metadata")
+		if imgui.BeginTable("##metadata", 2, imgui.TableFlags_RowBg) {
+			defer imgui.EndTable()
+
+			row :: proc(name, value: string) -> bool {
+				if value == "" do return false
+				imgui.TableNextRow()
+				if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
+				if imgui.TableSetColumnIndex(1) do imx.text_unformatted(value)
+				return false
+			}
+
+			imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
+			imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
+			
+			row("Title", md.title)
+			row("Artist", md.artist)
+			row("Album", md.album)
+			row("Genre", md.genre)
+		}
+
+		return true
+	}
+
+	if imgui.Begin("Metadata###metadata") {
+		show_metadata_window(sv, ui, &ui.windows.metadata, sv.current_track_id)
+	}
+	imgui.End()
+		
+	return ui.actions
 }
 
 _track_table_row_from_track :: proc(
@@ -367,6 +578,8 @@ _track_table_show :: proc(
 		for &row, local_row_index in table.rows[list_clipper.DisplayStart:list_clipper.DisplayEnd] {
 			imgui.TableNextRow()
 			row_index := local_row_index + auto_cast list_clipper.DisplayStart
+			imgui.PushIDInt(auto_cast row_index)
+			defer imgui.PopID()
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Title) {
 				title_buf: [128]u8

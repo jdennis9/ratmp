@@ -25,16 +25,17 @@ platform_init_glfw :: proc() -> bool {
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0)
 		
 		_glfw.window = glfw.CreateWindow(1600, 900, "RAT MP", nil, nil)
+		_glfw.video_impl = .OpenGL
 		
 		glfw.MakeContextCurrent(_glfw.window)
-		glfw.SwapInterval(1)
-
+		
 		glfw.SetWindowCloseCallback(_glfw.window, close_proc)
-
+		
 		imgui_glfw.InitForOpenGL(_glfw.window, true) or_return
 		
 		video_init_opengl(glfw.gl_set_proc_address) or_return
-
+		glfw.SwapInterval(1)
+		
 		glfw.PostEmptyEvent()
 
 		return true

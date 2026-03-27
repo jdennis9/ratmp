@@ -253,7 +253,7 @@ _begin_stream_session :: proc() -> (ok: bool) {
 		sync.sema_post(&s.ready_sem)
 	}
 
-	s.stream = pa.stream_new(s.pa_context, "RAT MP Playback", &sample_spec, nil)
+	s.stream = pa.stream_new(s.pa_context, PROGRAM_NAME, &sample_spec, nil)
 	if s.stream == nil do return
 	_check(pa.stream_connect_playback(s.stream, nil, nil, 0, nil, nil)) or_return
 	pa.stream_set_state_callback(s.stream, _stream_state_callback, s)

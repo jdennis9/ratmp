@@ -219,21 +219,24 @@ server_add_track :: proc(sv: ^Server, track: Track, update_existing := false) ->
 	return handle, true
 }
 
-read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (track: Track, found: bool) {
-	file: taglib.File
-
+taglib_open :: proc(path: string) -> taglib.File {
 	when ODIN_OS == .Windows {
 		path_utf16: [512]u16
 		utf16.encode_string(path_utf16[:511], path)
 
-		file = taglib.file_new_wchar(cstring16(&path_utf16[0]))
+		return taglib.file_new_wchar(cstring16(&path_utf16[0]))
 	}
 	else {
 		path_cstring := strings.clone_to_cstring(path, context.allocator)
 		defer delete(path_cstring)
 
-		file = taglib.file_new(path_cstring)
+		return taglib.file_new(path_cstring)
 	}
+
+}
+
+read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (track: Track, found: bool) {
+	file := taglib_open(path)
 
 	if file == nil {
 		log.warn("Failed to open file", path)
@@ -274,6 +277,27 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 		track.samplerate = auto_cast taglib.audioproperties_samplerate(audio_props)
 		track.channels = auto_cast taglib.audioproperties_channels(audio_props)
 	}
+
+	return
+}
+
+find_track_thumbnail :: proc(
+	sv: ^Server, track_id: Track_ID, allocator: mem.Allocator
+) -> (data: []byte, mime_type: string, found: bool) {
+	track := get_track(sv, track_id) or_return
+	file := taglib_open(track.url)
+	if file == nil do return
+	defer taglib.file_free(file)
+
+	picture_data: taglib.Complex_Property_Picture_Data
+	picture_prop := taglib.complex_property_get(file, "PICTURE")
+	if picture_prop == nil do return
+	taglib.picture_from_complex_property(picture_prop, &picture_data)
+	defer taglib.complex_property_free(picture_prop)
+
+	data = slice.clone(picture_data.data[:picture_data.size], allocator)
+	mime_type = strings.clone(string(picture_data.mimeType), allocator)
+	found = true
 
 	return
 }

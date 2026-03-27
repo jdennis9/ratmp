@@ -121,7 +121,7 @@ extern "C" void linux_misc_systray_init(
 }
 
 extern "C" void linux_misc_update() {
-	gtk_main_iteration_do(false);
+	gtk_main_iteration_do(true);
 }
 
 #endif

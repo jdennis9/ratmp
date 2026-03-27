@@ -53,6 +53,8 @@ video_init_opengl :: proc(set_gl_proc_address: gl.Set_Proc_Address_Type) -> bool
 		gl.GenTextures(1, &tex.id)
 		if tex.id == 0 do return
 
+		gl.BindTexture(target, tex.id)
+		defer gl.BindTexture(target, 0)
 		gl.TexParameteri(target, gl.TEXTURE_WRAP_S, gl.REPEAT)
 		gl.TexParameteri(target, gl.TEXTURE_WRAP_T, gl.REPEAT)
 		gl.TexParameteri(target, gl.TEXTURE_MIN_FILTER, gl.LINEAR)

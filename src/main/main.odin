@@ -1,5 +1,6 @@
 package main
 
+import "core:time"
 import "core:thread"
 import "core:fmt"
 import "core:os"
@@ -26,21 +27,16 @@ run :: proc() -> bool {
 
 	server: Server
 	ui: UI
-	command_opts: struct {
-		headless: bool `usage:"Run without UI."`,
-		no_media_controls: bool `usage:"Don't use system media controls."`,
-		force_opengl: bool `usage:"(Windows) Force using OpenGL if DX11 is not supported on your device."`,
-	}
 
 	// --------------------------------------------------------------------------
 	// Parse command-line
 	// --------------------------------------------------------------------------
 	if len(os.args) > 1 {
-		error := flags.parse(&command_opts, os.args[1:])
-
+		error := flags.parse(&global_command_opts, os.args[1:])
+		
 		switch e in error {
 		case flags.Help_Request:
-			flags.write_usage(os.to_writer(os.stdout), type_of(command_opts), "RATMP")
+			flags.write_usage(os.to_writer(os.stdout), type_of(global_command_opts), "RATMP")
 			return true
 		case flags.Parse_Error, flags.Open_File_Error, flags.Validation_Error:
 			log.error(error)
@@ -48,14 +44,21 @@ run :: proc() -> bool {
 		}
 	}
 
+	command_opts := global_command_opts
+
 	// --------------------------------------------------------------------------
 	// Audio
 	// --------------------------------------------------------------------------
-	when ODIN_OS == .Windows {
-		use_audio_wasapi()
+	if !command_opts.no_audio {
+		when ODIN_OS == .Windows {
+			use_audio_wasapi()
+		}
+		else {
+			use_audio_pulse()
+		}
 	}
 	else {
-		use_audio_pulse()
+		audio_use_null()
 	}
 	
 	audio_init(server_audio_callback, &server) or_return
@@ -100,15 +103,18 @@ run :: proc() -> bool {
 	// --------------------------------------------------------------------------
 	// System tray
 	// --------------------------------------------------------------------------
-	when ODIN_OS == .Windows {
-		systray_use_win32()
+	if !command_opts.no_tray {
+		when ODIN_OS == .Windows {
+			systray_use_win32()
+		}
+		else {
+			systray_use_linux_appindicator()
+		}
 	}
-	else {
-		systray_use_linux_appindicator()
-	}
-	
+
 	systray_create(_tray_callback, &server)
 	defer systray_destroy()
+	
 
 	// --------------------------------------------------------------------------
 	// Media controls
@@ -136,6 +142,9 @@ run :: proc() -> bool {
 
 	for {
 		events: Platform_Events
+		ui_actions: UI_Actions
+
+		frame_start := time.tick_now()
 
 		if _g.want_show_window {
 			_g.want_show_window = false
@@ -150,7 +159,7 @@ run :: proc() -> bool {
 			server_handle_events(&server)
 			events = platform_poll_events()
 
-			ui_show(&ui)
+			ui_actions = ui_show(&ui)
 
 			imgui.Render()
 			video_render_frame()
@@ -161,9 +170,25 @@ run :: proc() -> bool {
 			server_handle_events(&server)
 		}
 
+		// -----------------------------------------------------------------------
+		// Handle platform events
+		// -----------------------------------------------------------------------
 		if events.window_closed {
 			platform_set_window_visible(false)
 		}
+		
+		// -----------------------------------------------------------------------
+		// Handle UI actions
+		// -----------------------------------------------------------------------
+		if ui_actions.minimize_to_tray {
+			platform_set_window_visible(false)
+		}
+		
+		if ui_actions.exit {
+			break
+		}
+
+		frame_time := time.tick_diff(frame_start, time.tick_now())
 	}
 
 	return true
