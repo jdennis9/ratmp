@@ -11,18 +11,16 @@ _glfw: struct {
 	events: Platform_Events,
 }
 
-platform_init_glfw :: proc() {
+platform_init_glfw :: proc() -> bool {
 	log.debug("Using GLFW platform")
+	glfw.Init() or_return
 
-	_platform_impl_set_gl_proc_address = glfw.gl_set_proc_address
-
+	
 	close_proc :: proc "c" (win: glfw.WindowHandle) {
 		_glfw.events.window_closed = true
 	}
-
+	
 	_platform_impl_make_window = proc() -> bool {
-		glfw.Init() or_return
-
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0)
 		
@@ -33,9 +31,11 @@ platform_init_glfw :: proc() {
 
 		glfw.SetWindowCloseCallback(_glfw.window, close_proc)
 
-		imgui_glfw.InitForOpenGL(_glfw.window, true)
+		imgui_glfw.InitForOpenGL(_glfw.window, true) or_return
 		
-		video_init_opengl()
+		video_init_opengl(glfw.gl_set_proc_address) or_return
+
+		glfw.PostEmptyEvent()
 
 		return true
 	}
@@ -43,9 +43,9 @@ platform_init_glfw :: proc() {
 	_platform_impl_destroy_window = proc() {
 		log.debug("Cleaning up GLFW...")
 		imgui_glfw.Shutdown()
+		video_shutdown_opengl()
 		glfw.DestroyWindow(_glfw.window)
 		_glfw.window = nil
-		glfw.Terminate()
 	}
 
 	_platform_impl_imgui_new_frame = proc() {
@@ -58,14 +58,32 @@ platform_init_glfw :: proc() {
 		return _glfw.events
 	}
 
+	_platform_impl_wait_events = proc() -> Platform_Events {
+		_glfw.events = {}
+		glfw.WaitEvents()
+		return _glfw.events
+	}
+
+	_platform_impl_flush_events = proc() {
+		glfw.PostEmptyEvent()
+	}
+
 	_platform_impl_swap_buffers = proc() {
 		if _glfw.video_impl == .OpenGL do glfw.SwapBuffers(_glfw.window)
-		if glfw.WindowShouldClose(_glfw.window) {
-			handle_graphics_device_lost()
-		}
 	}
 
 	_platform_impl_is_window_visible = proc() -> bool {
 		return _glfw.window != nil && glfw.GetWindowAttrib(_glfw.window, glfw.VISIBLE) != 0
 	}
+
+	_platform_impl_set_window_visible = proc(visible: bool) {
+		if visible && _glfw.window == nil {
+			_platform_impl_make_window()
+		}
+		else if !visible && _glfw.window != nil {
+			_platform_impl_destroy_window()
+		}
+	}
+
+	return true
 }

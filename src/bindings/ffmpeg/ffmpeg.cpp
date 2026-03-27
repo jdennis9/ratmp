@@ -60,7 +60,7 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	const AVStream *stream = NULL;
 	const AVCodecParameters *codecpar = NULL;
 	const AVInputFormat *input_format = NULL;
-	int64_t duration = NULL;
+	int64_t duration = 0;
 
 	if (!ff) return false;
 

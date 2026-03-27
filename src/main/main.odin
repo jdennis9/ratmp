@@ -1,5 +1,6 @@
 package main
 
+import "core:thread"
 import "core:fmt"
 import "core:os"
 import "core:flags"
@@ -13,6 +14,10 @@ handle_graphics_device_lost :: proc() -> bool {
 	platform_destroy_window()
 	platform_make_window() or_return
 	return true
+}
+
+_g: struct {
+	want_show_window: bool,
 }
 
 @(private="file")
@@ -68,6 +73,7 @@ run :: proc() -> bool {
 	// --------------------------------------------------------------------------
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
+	log.debug("ImGui version:", imgui.GetVersion())
 	
 	if io := imgui.GetIO(); io != nil {
 		io.ConfigFlags |= {.DockingEnable}
@@ -116,7 +122,11 @@ run :: proc() -> bool {
 
 	for {
 		events: Platform_Events
-		sys_main_frame()
+
+		if _g.want_show_window {
+			_g.want_show_window = false
+			platform_set_window_visible(true)
+		}
 
 		if platform_is_window_visible() {
 			platform_imgui_new_frame()
@@ -146,19 +156,12 @@ run :: proc() -> bool {
 }
 
 @(private="file")
-run_headless :: proc(server: ^Server) -> bool {
-	for {
-		server_wait_events(server)
-	}
-
-	return true
-}
-
-@(private="file")
 _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 	sv := cast(^Server) data
 	switch button {
-		case .Show: platform_set_window_visible(true)
+		case .Show:
+			_g.want_show_window = true
+			platform_flush_events()
 		case .Pause: server_request_pause(sv)
 		case .Resume: server_request_resume(sv)
 		case .Prev: server_request_previous_track(sv)

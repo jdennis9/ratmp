@@ -16,12 +16,13 @@ video_shutdown_opengl :: proc() {
 }
 
 @private
-video_init_opengl :: proc() -> bool {
+video_init_opengl :: proc(set_gl_proc_address: gl.Set_Proc_Address_Type) -> bool {
 	log.debug("Using OpenGL 3")
 
-	gl.load_up_to(3, 0, platform_set_gl_proc_address)
+	if gl.impl_DrawElements == nil {
+		gl.load_up_to(3, 0, set_gl_proc_address)
+	}
 	imgui_gl.Init() or_return
-
 
 	_video_impl_imgui_new_frame = proc() {
 		imgui_gl.NewFrame()

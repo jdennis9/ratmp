@@ -11,15 +11,19 @@ Message_Type :: enum c.int {
 	OkCancel,
 }
 
-Systray_Event :: enum i32 {
-	Show,
-	Exit,
+Tray_Button :: struct {
+	name: cstring,
+	id: i32,
 }
 
 @(link_prefix="linux_misc_")
 foreign lib {
 	init :: proc() ---
 	message_box :: proc(message: cstring, type: Message_Type) -> bool ---
-	systray_init :: proc(event_handler: proc "c" (event: Systray_Event)) ---
+	systray_init :: proc(
+		event_handler: proc "c" (button: i32),
+		buttons: [^]Tray_Button,
+		button_count: i32
+	) ---
 	update :: proc() ---
 }

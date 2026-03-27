@@ -31,7 +31,6 @@ platform_init_null :: proc() {
 		return {}
 	}
 	_platform_impl_swap_buffers = proc() {}
-	_platform_impl_set_gl_proc_address = proc(p: rawptr, name: cstring) {}
 	_platform_impl_is_window_visible = proc() -> bool {return false}
 	_platform_impl_set_window_visible = proc(visible: bool) {}
 	_platform_impl_flush_events = proc() {

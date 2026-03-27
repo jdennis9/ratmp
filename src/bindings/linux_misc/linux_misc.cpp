@@ -69,28 +69,33 @@ static AppIndicator *global_app_indicator;
 static GtkMenuShell *global_tray_menu;
 static void (*systray_event_handler)(int event);
 
-#define MENU_ITEM_SHOW "Show"
-#define MENU_ITEM_EXIT "Exit"
-
-enum {
-	SYSTRAY_EVENT_SHOW,
-	SYSTRAY_EVENT_EXIT,
+struct Tray_Button {
+	const char *name;
+	int event;
 };
+
+#define MAX_TRAY_BUTTONS 32
+static Tray_Button global_tray_buttons[MAX_TRAY_BUTTONS];
+static int global_tray_button_count;
 
 static void tray_menu_callback(GtkMenuItem *item, gpointer data) {
 	const char *label = gtk_menu_item_get_label(item);
 
 	if (!systray_event_handler) return;
 
-	if (!strcmp(label, MENU_ITEM_SHOW)) {
-		systray_event_handler(SYSTRAY_EVENT_SHOW);
-	}
-	else if (!strcmp(label, MENU_ITEM_EXIT)) {
-		systray_event_handler(SYSTRAY_EVENT_EXIT);
+	for (int i = 0; i < global_tray_button_count; ++i) {
+		Tray_Button butt = global_tray_buttons[i];
+		if (!strcmp(label, butt.name)) {
+			systray_event_handler(butt.event);
+		}
 	}
 }
 
-extern "C" void linux_misc_systray_init(void (*event_handler)(int event)) {
+extern "C" void linux_misc_systray_init(
+	void (*event_handler)(int event),
+	Tray_Button *buttons,
+	int button_count
+) {
 	GtkWidget *item;
 	const char *icon = "ratmp";
 
@@ -98,15 +103,16 @@ extern "C" void linux_misc_systray_init(void (*event_handler)(int event)) {
 
 	global_tray_menu = GTK_MENU_SHELL(gtk_menu_new());
 
-	item = gtk_menu_item_new_with_label(MENU_ITEM_SHOW);
-	gtk_widget_show(item);
-	gtk_menu_shell_append(global_tray_menu, item);
-	g_signal_connect(item, "activate", G_CALLBACK(tray_menu_callback), NULL);
+	global_tray_button_count = button_count;
 
-	item = gtk_menu_item_new_with_label(MENU_ITEM_EXIT);
-	gtk_widget_show(item);
-	gtk_menu_shell_append(global_tray_menu, item);
-	g_signal_connect(item, "activate", G_CALLBACK(tray_menu_callback), NULL);
+	for (int i = 0; i < button_count; ++i) {
+		Tray_Button butt = buttons[i];
+		global_tray_buttons[i] = butt;
+		item = gtk_menu_item_new_with_label(butt.name);
+		gtk_widget_show(item);
+		gtk_menu_shell_append(global_tray_menu, item);
+		g_signal_connect(item, "activate", G_CALLBACK(tray_menu_callback), NULL);
+	}
 
 	global_app_indicator = app_indicator_new("ratmp", icon, APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
 	app_indicator_set_status(global_app_indicator, APP_INDICATOR_STATUS_ACTIVE);

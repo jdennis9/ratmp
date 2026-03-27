@@ -18,7 +18,6 @@ _platform_impl_imgui_new_frame: proc()
 _platform_impl_poll_events: proc() -> Platform_Events
 _platform_impl_wait_events: proc() -> Platform_Events
 _platform_impl_swap_buffers: proc()
-_platform_impl_set_gl_proc_address: proc(p: rawptr, name: cstring)
 _platform_impl_is_window_visible: proc() -> bool
 _platform_impl_set_window_visible: proc(visible: bool)
 _platform_impl_flush_events: proc()
@@ -50,10 +49,6 @@ platform_wait_events :: proc() -> Platform_Events {
 // Send an empty event to stop blocking on platform_wait_events
 platform_flush_events :: proc() {
 	_platform_impl_flush_events()
-}
-
-platform_set_gl_proc_address :: proc(p: rawptr, name: cstring) {
-	_platform_impl_set_gl_proc_address(p, name)
 }
 
 platform_is_window_visible :: proc() -> bool {

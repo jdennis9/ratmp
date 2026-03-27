@@ -10,13 +10,9 @@ _systray_appindicator: struct {
 	ctx: runtime.Context,
 }
 
-_callback_wrapper :: proc "c" (in_event: lm.Systray_Event) {
+_callback_wrapper :: proc "c" (in_button: i32) {
 	context = _systray_appindicator.ctx
-	button: Sys_Tray_Button
-	switch in_event {
-		case .Show: button = .Show
-		case .Exit: button = .Exit
-	}
+	button := cast(Sys_Tray_Button) in_button
 
 	_systray_appindicator.callback(_systray_appindicator.callback_data, button)
 }
@@ -27,7 +23,21 @@ systray_use_linux_appindicator :: proc() {
 		_systray_appindicator.callback = cb
 		_systray_appindicator.callback_data = cbd
 		_systray_appindicator.ctx = context
-		lm.systray_init(_callback_wrapper)
+
+		buttons := []lm.Tray_Button {
+			{"Show", auto_cast Sys_Tray_Button.Show},
+			{"Pause", auto_cast Sys_Tray_Button.Pause},
+			{"Resume", auto_cast Sys_Tray_Button.Resume},
+			{"Previous", auto_cast Sys_Tray_Button.Prev},
+			{"Next", auto_cast Sys_Tray_Button.Next},
+			{"Exit", auto_cast Sys_Tray_Button.Exit},
+		}
+
+		lm.systray_init(
+			_callback_wrapper,
+			raw_data(buttons),
+			auto_cast len(buttons)
+		)
 		return true
 	}
 
