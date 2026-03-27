@@ -23,8 +23,21 @@ _win_systray: struct {
 	ctx: runtime.Context,
 }
 
+_Tray_Button :: enum i32 {
+	Show,
+	Pause,
+	Resume,
+	Prev,
+	Next,
+	Exit,
+}
+
 TRAY_BUTTON_SHOW :: 0
-TRAY_BUTTON_EXIT :: 1
+TRAY_BUTTON_PAUSE :: 1
+TRAY_BUTTON_RESUME :: 2
+TRAY_BUTTON_PREV :: 3
+TRAY_BUTTON_NEXT :: 4
+TRAY_BUTTON_EXIT :: 5
 
 @private
 systray_use_win32 :: proc() {
@@ -105,7 +118,6 @@ _wnd_proc :: proc "system" (
 			s.callback(s.callback_data, .Show)
 		case win.WM_RBUTTONDOWN:
 			mouse: win.POINT
-			log.debug("Waga")
 			win.GetCursorPos(&mouse)
 			win.TrackPopupMenu(s.tray_menu, win.TPM_LEFTBUTTON, mouse.x, mouse.y, 0, s.hwnd, nil)
 			win.PostMessageW(s.hwnd, win.WM_NULL, 0, 0)
@@ -114,11 +126,15 @@ _wnd_proc :: proc "system" (
 		return 0
 	}
 	case win.WM_COMMAND:
-		switch wparam {
-		case TRAY_BUTTON_SHOW:
-			s.callback(s.callback_data, .Show)
-		case TRAY_BUTTON_EXIT:
-			s.callback(s.callback_data, .Exit)
+		button := cast(_Tray_Button) wparam
+
+		switch button {
+		case .Show: s.callback(s.callback_data, .Show)
+		case .Pause: s.callback(s.callback_data, .Pause)
+		case .Resume: s.callback(s.callback_data, .Resume)
+		case .Prev: s.callback(s.callback_data, .Prev)
+		case .Next: s.callback(s.callback_data, .Next)
+		case .Exit: s.callback(s.callback_data, .Exit)
 		}
 		return 0
 	}
@@ -167,8 +183,20 @@ _background_thread_proc :: proc(t: ^thread.Thread) {
 
 	s.tray_menu = win.CreatePopupMenu()
 	if s.tray_menu != nil {
-		win.AppendMenuW(s.tray_menu, win.MF_STRING, TRAY_BUTTON_SHOW, "Show")
-		win.AppendMenuW(s.tray_menu, win.MF_STRING, TRAY_BUTTON_EXIT, "Exit")
+		buttons := [_Tray_Button]struct {
+			name: cstring16,
+		} {
+			.Show = {"Show"},
+			.Pause = {"Pause"},
+			.Resume = {"Resume"},
+			.Prev = {"Prev"},
+			.Next = {"Next"},
+			.Exit = {"Exit"},
+		}
+
+		for butt, id in buttons {
+			win.AppendMenuW(s.tray_menu, win.MF_STRING, auto_cast id, butt.name)
+		}
 	}
 
 	sync.auto_reset_event_signal(&s.ready_event)

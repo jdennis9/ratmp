@@ -2,6 +2,10 @@ package main
 
 Sys_Tray_Button :: enum {
 	Show,
+	Pause,
+	Resume,
+	Prev,
+	Next,
 	Exit,
 }
 

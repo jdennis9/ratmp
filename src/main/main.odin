@@ -103,7 +103,7 @@ run :: proc() -> bool {
 	
 	systray_create(_tray_callback, &server)
 	defer systray_destroy()
-	
+
 	platform_make_window() or_return
 
 	defer {
@@ -156,8 +156,14 @@ run_headless :: proc(server: ^Server) -> bool {
 
 @(private="file")
 _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
-	if button == .Show {
-		platform_set_window_visible(true)
+	sv := cast(^Server) data
+	switch button {
+		case .Show: platform_set_window_visible(true)
+		case .Pause: server_request_pause(sv)
+		case .Resume: server_request_resume(sv)
+		case .Prev: server_request_previous_track(sv)
+		case .Next: server_request_next_track(sv)
+		case .Exit:
 	}
 }
 
