@@ -22,7 +22,6 @@ import win "core:sys/windows"
 @(private="file")
 FILE_TYPE_DIALOG_GUID := [File_Type]win.GUID{
 	.Audio = {0x35dc0f32, 0xaf27, 0x4b39, {0xad, 0xc0, 0xbc, 0xd5, 0xe5, 0x45, 0x8e, 0x3e}},
-	.Font = {0x4016d885, 0x9c04, 0x4be7, {0xbf, 0x5d, 0x62, 0xb9, 0xb2, 0x5b, 0xf1, 0x16}},
 	.Image = {0x0714f821, 0xa80b, 0x4b79, {0xa5, 0x08, 0x73, 0x4d, 0xee, 0x25, 0x79, 0x0d}},
 }
 
@@ -103,13 +102,6 @@ _open_file_or_folder_multiselect_dialog :: proc(
 				}
 				dialog->SetFileTypes(1, &filter)
 			}
-			case .Font: {
-				filter := win.COMDLG_FILTERSPEC {
-					pszName = win.L("Supported font format"),
-					pszSpec = win.L("*.ttf;*.ttc;*.otf"),
-				}
-				dialog->SetFileTypes(1, &filter)
-			}
 			case .Image: {
 				filter := win.COMDLG_FILTERSPEC {
 					pszName = win.L("Supported image format"),
@@ -175,13 +167,6 @@ open_file_dialog :: proc(buf: []u8, file_type: File_Type) -> (file: string, ok: 
 			filter := win.COMDLG_FILTERSPEC{
 				pszName = win.L("Supported audio format"),
 				pszSpec = win.L("*.mp3;*.wav;*.flac;*.ogg;*.opus;*.aiff")
-			}
-			dialog->SetFileTypes(1, &filter)
-		}
-		case .Font: {
-			filter := win.COMDLG_FILTERSPEC {
-				pszName = win.L("Supported font format"),
-				pszSpec = win.L("*.ttf;*.ttc;*.otf"),
 			}
 			dialog->SetFileTypes(1, &filter)
 		}

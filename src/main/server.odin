@@ -236,6 +236,8 @@ taglib_open :: proc(path: string) -> taglib.File {
 }
 
 read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (track: Track, found: bool) {
+	if !file_is_type(path, .Audio) do return
+
 	file := taglib_open(path)
 
 	if file == nil {

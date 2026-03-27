@@ -1,5 +1,6 @@
 package main
 
+import "core:path/filepath"
 import "core:log"
 import "core:thread"
 
@@ -10,7 +11,6 @@ File_Proc :: #type proc(path: string, is_folder: bool, data: rawptr)
 File_Type :: enum {
 	Audio,
 	Image,
-	Font,
 }
 
 File_Dialog_Flag :: enum {
@@ -26,6 +26,18 @@ File_Dialog_State :: struct {
 	results: [dynamic]Path,
 }
 
+FILE_TYPE_EXTENSIONS := [File_Type][]string {
+	.Audio = {
+		".mp3", ".aac", ".m4a", ".wav",
+		".alac", ".flac", ".ape", ".ogg",
+		".opus",
+	},
+	.Image = {
+		".jpg", ".jpeg", ".png", ".webp", ".tiff",
+		".tga", ".bmp",
+	},
+}
+
 @(private="file")
 _file_dialog_thread_proc :: proc(dialog_thread: ^thread.Thread) {
 	state := cast(^File_Dialog_State) dialog_thread.data
@@ -38,6 +50,16 @@ _file_dialog_thread_proc :: proc(dialog_thread: ^thread.Thread) {
 	}
 
 	for_each_file_in_dialog(nil, iterator, state, state.file_type, state.flags)
+}
+
+file_is_type :: proc(path: string, type: File_Type) -> bool {
+	ext := filepath.ext(path)
+	if ext == "" do return false
+	for e in FILE_TYPE_EXTENSIONS[type] {
+		if ext == e do return true
+	}
+
+	return false
 }
 
 async_file_dialog_open :: proc(state: ^File_Dialog_State, file_type: File_Type, flags: File_Dialog_Flags) -> bool {

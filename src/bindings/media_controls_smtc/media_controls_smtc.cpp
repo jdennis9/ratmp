@@ -18,7 +18,7 @@ using namespace winrt::Windows::Foundation;
 using namespace winrt::Windows::Storage::Streams;
 
 static void handle_button_pressed(SystemMediaTransportControls sender,
-    SystemMediaTransportControlsButtonPressedEventArgs args);
+	 SystemMediaTransportControlsButtonPressedEventArgs args);
 
 
 
@@ -45,23 +45,23 @@ struct Media_Controls {
 static Media_Controls *mc;
 
 static void handle_button_pressed(SystemMediaTransportControls sender,
-    SystemMediaTransportControlsButtonPressedEventArgs args) {
+	 SystemMediaTransportControlsButtonPressedEventArgs args) {
 	if (!mc) return;
 
-    switch (args.Button()) {
-    case SystemMediaTransportControlsButton::Pause:
-        mc->handler(mc->data, SIGNAL_PAUSE);
-        break;
-    case SystemMediaTransportControlsButton::Play:
-        mc->handler(mc->data, SIGNAL_PLAY);
-        break;
-    case SystemMediaTransportControlsButton::Next:
-        mc->handler(mc->data, SIGNAL_NEXT);
-        break;
-    case SystemMediaTransportControlsButton::Previous:
-        mc->handler(mc->data, SIGNAL_PREV);
-        break;
-    }
+	switch (args.Button()) {
+	case SystemMediaTransportControlsButton::Pause:
+		mc->handler(mc->data, SIGNAL_PAUSE);
+		break;
+	case SystemMediaTransportControlsButton::Play:
+		mc->handler(mc->data, SIGNAL_PLAY);
+		break;
+	case SystemMediaTransportControlsButton::Next:
+		mc->handler(mc->data, SIGNAL_NEXT);
+		break;
+	case SystemMediaTransportControlsButton::Previous:
+		mc->handler(mc->data, SIGNAL_PREV);
+		break;
+	}
 }
 
 void smtc_create(Handler *handler, void *data) {
@@ -87,11 +87,13 @@ void smtc_set_state(State *state) {
 	else {
 		mc->smtc.PlaybackStatus(MediaPlaybackStatus::Playing);
 	}
+
+	mc->smtc.ShuffleEnabled(state->shuffle);
 }
 
 static void utf8_to_wchar(const char *str, wchar_t *buf, int buf_size) {
 	for (int i = 0; i < buf_size && buf[i] != 0; i++) buf[i] = 0;
-   MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, buf_size);
+	MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, buf_size);
 }
 
 void smtc_set_track_info(const Track_Info *info) {
