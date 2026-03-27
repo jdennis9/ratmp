@@ -108,12 +108,12 @@ run :: proc() -> bool {
 	systray_create(_tray_callback, &server)
 	defer systray_destroy()
 	
-
 	// --------------------------------------------------------------------------
 	// Media controls
 	// --------------------------------------------------------------------------
 	if !command_opts.no_media_controls {
 		when ODIN_OS == .Windows {
+			media_controls_use_smtc()
 		}
 		else {
 			media_controls_use_dbus()

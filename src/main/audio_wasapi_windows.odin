@@ -118,7 +118,7 @@ use_audio_wasapi :: proc() {
 	}
 
 	_audio_impl_is_paused = proc() -> bool {
-		return _wasapi.is_paused
+		return auto_cast _wasapi.is_paused
 	}
 
 	_audio_impl_get_volume = proc() -> f32 {

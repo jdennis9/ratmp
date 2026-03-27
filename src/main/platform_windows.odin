@@ -1,6 +1,7 @@
 #+private file
 package main
 
+import "core:unicode/utf16"
 import win "core:sys/windows"
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
 
@@ -93,11 +94,15 @@ platform_init_win32 :: proc() -> bool {
 		}
 	}
 
-	_platform_impl_set_gl_proc_address = proc(p: rawptr, name: cstring) {
-		win.gl_set_proc_address(p, name)
+	_platform_impl_swap_buffers = proc() {
 	}
 
-	_platform_impl_swap_buffers = proc() {
+	_platform_impl_set_window_title = proc(title: cstring) {
+		buf: [1024]u16
+		if _win.hwnd != nil {
+			utf16.encode_string(buf[:1023], string(title))
+			win.SetWindowTextW(_win.hwnd, cstring16(&buf[0]))
+		}
 	}
 
 	_win.hinstance = cast(win.HINSTANCE) win.GetModuleHandleW(nil)

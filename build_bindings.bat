@@ -15,7 +15,8 @@ cl %args% /c /EHsc /std:c++17 ^
 /I %input%\ffmpeg ^
 %input%\taglib\*.cpp ^
 %input%\windows_misc\*.cpp ^
-%input%\ffmpeg\*.cpp
+%input%\ffmpeg\*.cpp ^
+%input%\media_controls_smtc\*.cpp
 
 lib .\*.obj /OUT:%input%\bindings.lib
 del .\*.obj
