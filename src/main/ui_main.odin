@@ -27,7 +27,7 @@ _Theme_Color :: enum {
 }
 
 _Track_Table_Row :: struct {
-	album, artist, genre, title: string,
+	album, artist, genre, title, url: string,
 	duration: [9]u8,
 	year: [4]u8,
 	id: Track_ID,
@@ -436,25 +436,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		}
 
 		imgui.SeparatorText("Metadata")
-		if imgui.BeginTable("##metadata", 2, imgui.TableFlags_RowBg) {
-			defer imgui.EndTable()
-
-			row :: proc(name, value: string) -> bool {
-				if value == "" do return false
-				imgui.TableNextRow()
-				if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
-				if imgui.TableSetColumnIndex(1) do imx.text_unformatted(value)
-				return false
-			}
-
-			imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
-			imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
-			
-			row("Title", md.title)
-			row("Artist", md.artist)
-			row("Album", md.album)
-			row("Genre", md.genre)
-		}
+		_show_track_metadata_table("##metadata", md^)
 
 		return true
 	}
@@ -478,6 +460,7 @@ _track_table_row_from_track :: proc(
 	row.artist = track.artist
 	row.genre = track.genre
 	row.title = track.title
+	row.url = track.url
 
 	{
 		h, m, s := time.clock_from_seconds(auto_cast track.duration_seconds)
@@ -588,6 +571,9 @@ _track_table_show :: proc(
 			imgui.PushIDInt(auto_cast row_index)
 			defer imgui.PopID()
 
+			// --------------------------------------------------------------------
+			// Title
+			// --------------------------------------------------------------------
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Title) {
 				title_buf: [128]u8
 				copy(title_buf[:127], row.title)
@@ -600,6 +586,13 @@ _track_table_show :: proc(
 					select_row(table, row_index)
 				}
 
+				if imgui.BeginItemTooltip() {
+					if track, got_track := get_track(sv, row.id); got_track {
+						_show_track_metadata_table("##metadata", track^)
+					}
+					imgui.EndTooltip()
+				}
+
 				if imgui.IsItemClicked(.Middle) {
 					actions.play_track = row.id
 				}
@@ -607,11 +600,18 @@ _track_table_show :: proc(
 				if imgui.BeginPopupContextItem() {
 					defer imgui.EndPopup()
 
+					select_row(table, row_index)
+
+					if imgui.MenuItem("Play") {
+						actions.play_track = row.id
+					}
+
 					if .NoRemove not_in flags {
 						imgui.Separator()
 						imgui.MenuItem("Remove")
 					}
 				}
+
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
@@ -645,6 +645,47 @@ _track_table_show :: proc(
 			defer delete(tracks)
 			server_request_play_playlist(sv, tracks, playlist_id, actions.play_track.?)
 		}
+	}
+
+	return true
+}
+
+_show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
+	imgui.BeginTable(str_id, 2, imgui.TableFlags_RowBg) or_return
+	defer imgui.EndTable()
+
+	protocol_string := [Track_Protocol]string {
+		.File = "Disk"
+	}
+
+	row :: proc(name: string, args: ..any) -> bool {
+		buf: [1024]u8
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
+		if imgui.TableSetColumnIndex(1) do imx.text_unformatted(fmt.bprint(buf[:], ..args))
+		return false
+	}
+
+	rowf :: proc(name: string, format: string, args: ..any) -> bool {
+		buf: [1024]u8
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
+		if imgui.TableSetColumnIndex(1) do imx.text_unformatted(fmt.bprintf(buf[:], format, ..args))
+		return false
+	}
+
+	imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
+	imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
+	
+	if track.title != "" do row("Title", track.title)
+	if track.artist != "" do row("Artist", track.artist)
+	if track.album != "" do row("Album", track.album)
+	if track.genre != "" do row("Genre", track.genre)
+	if track.url != "" do row("Path", track.url)
+	row("From", protocol_string[track.protocol])
+
+	if track.protocol == .File {
+		rowf("File size", "%M", track.file_size)
 	}
 
 	return true

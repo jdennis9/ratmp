@@ -120,4 +120,9 @@ scrubber :: proc(
 	return false
 }
 
-
+set_item_tooltip :: proc(str: string) {
+	if imgui.BeginItemTooltip() {
+		text_unformatted(str)
+		imgui.EndTooltip()
+	}
+}

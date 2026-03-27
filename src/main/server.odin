@@ -1,5 +1,7 @@
 package main
 
+import "core:time"
+import "core:path/slashpath"
 import "core:hash/xxhash"
 import "core:path/filepath"
 import "core:thread"
@@ -39,9 +41,14 @@ Track_Flag :: enum {
 	Missing,
 }
 
+Track_Protocol :: enum {
+	File,
+}
+
 Track :: struct {
 	handle: Track_ID,
 	url: string,
+	protocol: Track_Protocol,
 
 	artist,
 	album,
@@ -53,7 +60,11 @@ Track :: struct {
 	release_year,
 	bitrate_kbps,
 	channels,
-	samplerate: int,
+	samplerate,
+	file_size: int,
+
+	file_date,
+	date_added: time.Time,
 
 	flags: bit_set[Track_Flag],
 }
@@ -187,6 +198,9 @@ track_clone :: proc(track: Track, allocator: mem.Allocator) -> (output: Track, e
 	output.release_year = track.release_year
 	output.samplerate = track.samplerate
 	output.track_no = track.track_no
+	output.file_size = track.file_size
+	output.file_date = track.file_date
+	output.protocol = track.protocol
 	return output, nil
 }
 
@@ -240,6 +254,7 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 
 	file := taglib_open(path)
 
+	
 	if file == nil {
 		log.warn("Failed to open file", path)
 		return
@@ -248,6 +263,13 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 
 	found = true
 	track.url = strings.clone(path, allocator)
+	track.protocol = .File
+
+	if file_info, error := os.stat(path, context.allocator); error == nil {
+		track.file_date = file_info.creation_time
+		track.file_size = auto_cast file_info.size
+		os.file_info_delete(file_info, context.allocator)
+	}
 	
 	tag := taglib.file_tag(file)
 	if tag != nil {
