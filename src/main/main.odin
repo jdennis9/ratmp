@@ -110,6 +110,20 @@ run :: proc() -> bool {
 	systray_create(_tray_callback, &server)
 	defer systray_destroy()
 
+	// --------------------------------------------------------------------------
+	// Media controls
+	// --------------------------------------------------------------------------
+	if !command_opts.no_media_controls {
+		when ODIN_OS == .Windows {
+		}
+		else {
+			media_controls_use_dbus()
+		}
+	}
+
+	media_controls_init(_media_controls_proc, &server)
+	defer media_controls_destroy()
+
 	platform_make_window() or_return
 
 	defer {
@@ -167,6 +181,22 @@ _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 		case .Prev: server_request_previous_track(sv)
 		case .Next: server_request_next_track(sv)
 		case .Exit:
+	}
+}
+
+@(private="file")
+_media_controls_proc :: proc(data: rawptr, event: Media_Controls_Event) {
+	sv := cast(^Server) data
+
+	switch event {
+		case .Play: server_request_resume(sv)
+		case .Toggle:
+		case .Pause: server_request_pause(sv)
+		case .Stop:
+		case .Next: server_request_next_track(sv)
+		case .Prev: server_request_previous_track(sv)
+		case .EnableShuffle: server_set_shuffle_enabled(sv, true)
+		case .DisableShuffle: server_set_shuffle_enabled(sv, false)
 	}
 }
 

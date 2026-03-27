@@ -68,12 +68,13 @@ Server_Event_Type :: enum {
 	RequestPause,
 	RequestSeek,
 	BackgroundScanComplete,
+	UpdateState,
 }
 
 Server_Event :: struct {
 	type: Server_Event_Type,
 	track: Track_ID,
-	tracks: []Track_ID,
+	tracks: []Track_ID, // Needs to be freed after use
 	initial_track: Maybe(Track_ID),
 	playlist_uid: UID,
 	seek_target: int,
@@ -313,24 +314,39 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	audio_resume()
 
 	sv.playback_state = .Playing
+	media_controls_update_track(track^)
+
+	server_send_event(sv, {type = .UpdateState})
 
 	return true
 }
 
 server_handle_events :: proc(sv: ^Server) {
 	sync.lock(&sv.event_queue_lock)
-	defer sync.unlock(&sv.event_queue_lock)
-	defer clear(&sv.event_queue)
+
+	events := slice.clone(sv.event_queue[:])
+	defer delete(events)
+	clear(&sv.event_queue)
+
+	sync.unlock(&sv.event_queue_lock)
 
 	if sv.need_background_scan {
 		sv.need_background_scan = false
 		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
 	}
 
-	for ev in sv.event_queue {
+	for ev in events {
 		defer delete(ev.tracks)
 
 		switch ev.type {
+
+		case .UpdateState:
+			media_controls_update_state(Media_Controls_State {
+				paused = audio_is_paused(),
+				have_track = sv.current_track_id != {},
+				shuffle_enabled = sv.playback.enable_shuffle,
+			})
+
 		case .BackgroundScanComplete:
 			tracks := sv.background_scan.output[:]
 			for track in tracks {
@@ -348,10 +364,12 @@ server_handle_events :: proc(sv: ^Server) {
 		case .RequestPlay:
 			if audio_resume() {
 				sv.playback_state = .Playing
+				server_send_event(sv, {type = .UpdateState})
 			}
 		case .RequestPause:
 			if audio_pause() {
 				sv.playback_state = .Paused
+				server_send_event(sv, {type = .UpdateState})
 			}
 
 		case .RequestPlayPlaylist:
@@ -421,6 +439,15 @@ server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Hand
 	
 	ok = true
 	return
+}
+
+server_is_shuffle_enabled :: proc(sv: ^Server) -> bool {
+	return sv.playback.enable_shuffle
+}
+
+server_set_shuffle_enabled :: proc(sv: ^Server, enabled: bool) {
+	playback_queue_set_shuffle_enabled(&sv.playback, enabled)
+	server_send_event(sv, {type = .UpdateState})
 }
 
 server_get_queue :: proc(sv: ^Server) -> []Track_ID {

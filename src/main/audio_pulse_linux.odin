@@ -39,6 +39,7 @@ _stream: struct {
 	index: u32,
 	callback: Audio_Callback,
 	callback_data: rawptr,
+	paused: bool,
 }
 
 @private
@@ -95,6 +96,10 @@ use_audio_pulse :: proc() {
 	_audio_impl_resume = proc() -> bool {
 		_send_message(.Resume)
 		return true
+	}
+
+	_audio_impl_is_paused = proc() -> bool {
+		return _stream.paused
 	}
 
 	_audio_impl_set_volume = proc(v: f32) {
@@ -177,11 +182,13 @@ _stream_session_thread :: proc(t: ^thread.Thread) {
 		if .Pause in messages {
 			pa.stream_cork(s.stream, 1, nil, nil)
 			s.callback(s.callback_data, .Paused, nil, {})
+			s.paused = true
 		}
 
 		if .Resume in messages {
 			pa.stream_cork(s.stream, 0, nil, nil)
 			s.callback(s.callback_data, .Resumed, nil, {})
+			s.paused = false
 		}
 
 		if .Quit in messages {

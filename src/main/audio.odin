@@ -33,6 +33,7 @@ _audio_impl_start: proc() -> bool
 _audio_impl_drop_buffer: proc()
 _audio_impl_pause: proc() -> bool
 _audio_impl_resume: proc() -> bool
+_audio_impl_is_paused: proc() -> bool
 _audio_impl_stop: proc()
 _audio_impl_get_volume: proc() -> f32
 _audio_impl_set_volume: proc(v: f32)
@@ -63,6 +64,10 @@ audio_pause :: proc() -> bool {
 
 audio_resume :: proc() -> bool {
 	return _audio_impl_resume()
+}
+
+audio_is_paused :: proc() -> bool {
+	return _audio_impl_is_paused()
 }
 
 audio_get_volume :: proc() -> f32 {

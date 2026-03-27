@@ -163,11 +163,17 @@ ui_show :: proc(ui: ^UI) {
 		// Playback controls
 		// -----------------------------------------------------------------------
 		imgui.Separator()
+		shuffled := server_is_shuffle_enabled(sv)
 
 		if imgui.SmallButton(
-			sv.playback.enable_shuffle ? ICON_SHUFFLE + "###shuffle" : ICON_ARROW_RIGHT + "###shuffle"
+			shuffled ? ICON_SHUFFLE + "###shuffle" : ICON_ARROW_RIGHT + "###shuffle"
 		) {
-			sv.playback.enable_shuffle = !sv.playback.enable_shuffle
+			if shuffled {
+				server_set_shuffle_enabled(sv, false)
+			}
+			else {
+				server_set_shuffle_enabled(sv, true)
+			}
 		}
 
 		if imgui.SmallButton(ICON_PREVIOUS_TRACK) {

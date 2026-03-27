@@ -10,6 +10,7 @@ Playback_Queue :: struct {
 	playlist_uid: UID,
 	serial: uint,
 	enable_shuffle: bool,
+	shuffled: bool,
 }
 
 playback_queue_set_pos :: proc(p: ^Playback_Queue, pos: int) -> (Track_ID, bool) {
@@ -50,7 +51,11 @@ playback_queue_add :: proc(p: ^Playback_Queue, tracks: []Track_ID, from_playlist
 
 	p.serial += 1
 
-	if p.enable_shuffle do rand.shuffle(p.tracks[:])
+	if p.enable_shuffle {
+		rand.shuffle(p.tracks[:])
+		p.shuffled = true
+	}
+	else do p.shuffled = false
 
 	return true
 }
@@ -66,4 +71,13 @@ playback_queue_set_track :: proc(p: ^Playback_Queue, track_id: Track_ID) {
 			return
 		}
 	}
+}
+
+playback_queue_set_shuffle_enabled :: proc(p: ^Playback_Queue, value: bool) {
+	if value && !p.shuffled {
+		rand.shuffle(p.tracks[:])
+		p.shuffled = true
+	}
+
+	p.enable_shuffle = value
 }
