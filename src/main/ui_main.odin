@@ -44,6 +44,7 @@ _Metadata_Window :: struct {
 	displayed_track: Track_ID,
 	cover_art: Maybe(Texture_Handle),
 	cover_width, cover_height: int,
+	cover_file_size: int,
 	should_crop_art: bool,
 	comment: string,
 }
@@ -378,79 +379,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	// Metadata
 	// --------------------------------------------------------------------------
-	show_metadata_window :: proc(sv: ^Server, ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
-		load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
-			if w.cover_art != nil {
-				texture_release(w.cover_art.?)
-				w.cover_art = nil
-			}
-
-			cover_data, mime_type := find_track_thumbnail(
-				sv, w.displayed_track, context.allocator
-			) or_return
-
-			delete(mime_type)
-			defer delete(cover_data)
-
-			h, width, height := texture_create_from_memory(cover_data) or_return
-			w.cover_art = h
-			w.cover_width = width
-			w.cover_height = height
-
-			return true
-		}
-
-		if w.displayed_track != track_id {
-			w.displayed_track = track_id
-
-			if w.displayed_track == {} {
-				imgui.TextDisabled("No track to display")
-				return true
-			}
-			
-			load_cover(sv, w)
-		}
-
-		if w.displayed_track == {} {
-			imgui.TextDisabled("No track to display")
-			return true
-		}
-
-		md := get_track(sv, w.displayed_track) or_return
-
-		// Update cover art if needed
-		if w.cover_art != nil && texture_is_outdated(w.cover_art.?) {
-			w.cover_art = nil
-			load_cover(sv, w)
-		}
-		
-		avail_size := imgui.GetContentRegionAvail()
-
-		// Cover art
-		if w.cover_art != nil {
-			if ref, ok := texture_get_imgui_ref(w.cover_art.?); ok {
-				imgui.PushStyleColor(.Button, 0)
-				imgui.PushStyleColor(.ButtonHovered, 0)
-				imgui.PushStyleColor(.ButtonActive, 0)
-				defer imgui.PopStyleColor(3)
-
-				ratio := f32(w.cover_height) / f32(w.cover_width)
-				size := [2]f32{
-					avail_size.x,
-					avail_size.x * ratio,
-				}
-				imgui.ImageButton("##cover", ref, size)
-			}
-		}
-
-		imgui.SeparatorText("Metadata")
-		_show_track_metadata_table("##metadata", md^)
-
-		return true
-	}
-
 	if imgui.Begin("Metadata###metadata") {
-		show_metadata_window(sv, ui, &ui.windows.metadata, sv.current_track_id)
+		_show_metadata_window(sv, ui, &ui.windows.metadata, sv.current_track_id)
 	}
 	imgui.End()
 		
@@ -695,6 +625,84 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 	if track.protocol == .File {
 		rowf("File size", "%M", track.file_size)
 	}
+
+	return true
+}
+
+_show_metadata_window :: proc(sv: ^Server, ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
+	load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
+		if w.cover_art != nil {
+			texture_release(w.cover_art.?)
+			w.cover_art = nil
+		}
+
+		cover_data, mime_type := find_track_thumbnail(
+			sv, w.displayed_track, context.allocator
+		) or_return
+
+		delete(mime_type)
+		defer delete(cover_data)
+
+		h, width, height := texture_create_from_memory(cover_data) or_return
+		w.cover_art = h
+		w.cover_width = width
+		w.cover_height = height
+		w.cover_file_size = len(cover_data)
+
+		return true
+	}
+
+	if w.displayed_track != track_id {
+		w.displayed_track = track_id
+
+		if w.displayed_track == {} {
+			imgui.TextDisabled("No track to display")
+			return true
+		}
+		
+		load_cover(sv, w)
+	}
+
+	if w.displayed_track == {} {
+		imgui.TextDisabled("No track to display")
+		return true
+	}
+
+	md := get_track(sv, w.displayed_track) or_return
+
+	// Update cover art if needed
+	if w.cover_art != nil && texture_is_outdated(w.cover_art.?) {
+		w.cover_art = nil
+		load_cover(sv, w)
+	}
+	
+	avail_size := imgui.GetContentRegionAvail()
+
+	// Cover art
+	if w.cover_art != nil {
+		if ref, ok := texture_get_imgui_ref(w.cover_art.?); ok {
+			imgui.PushStyleColor(.Button, 0)
+			imgui.PushStyleColor(.ButtonHovered, 0)
+			imgui.PushStyleColor(.ButtonActive, 0)
+			defer imgui.PopStyleColor(3)
+
+			ratio := f32(w.cover_height) / f32(w.cover_width)
+			size := [2]f32{
+				avail_size.x,
+				avail_size.x * ratio,
+			}
+			imgui.ImageButton("##cover", ref, size)
+
+			if imgui.BeginItemTooltip() {
+				imx.text(32, "Dimensions: ", w.cover_width, "x", w.cover_height, sep="")
+				imx.textf(32, "Size: %M", w.cover_file_size)
+				imgui.EndTooltip()
+			}
+		}
+	}
+
+	imgui.SeparatorText("Metadata")
+	_show_track_metadata_table("##metadata", md^)
 
 	return true
 }

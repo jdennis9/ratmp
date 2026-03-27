@@ -14,9 +14,9 @@ text_unformatted :: proc(str: string) {
 	imgui.TextUnformatted(cstring(base), cstring(&base[len(str)]))
 }
 
-text :: proc($BUF_SIZE: uint, args: ..any) {
+text :: proc($BUF_SIZE: uint, args: ..any, sep := "") {
 	buf: [BUF_SIZE]u8
-	text_unformatted(fmt.bprint(buf[:], ..args))
+	text_unformatted(fmt.bprint(buf[:], ..args, sep=sep))
 }
 
 textf :: proc($BUF_SIZE: uint, format: string, args: ..any) {
