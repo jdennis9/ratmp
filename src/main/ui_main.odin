@@ -91,6 +91,7 @@ UI :: struct {
 		show_style_editor: bool,
 	},
 	actions: UI_Actions,
+	window_open: map[imgui.ID]bool,
 }
 
 ui_theme: struct {
@@ -347,7 +348,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	// Library
 	// --------------------------------------------------------------------------
-	if imgui.Begin("Library###library") {
+	if _begin(ui, "Library###library", default_open = true) {
 		w := &ui.windows.library
 
 		if w.serial != sv.tracks_serial {
@@ -360,29 +361,31 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 			ui, "##library", &w.track_table, w.serial, w.tracks, {},
 			0
 		)
+
+		imgui.End()
 	}
-	imgui.End()
 
 	// --------------------------------------------------------------------------
 	// Queue
 	// --------------------------------------------------------------------------
-	if imgui.Begin("Queue###queue") {
+	if _begin(ui, "Queue###queue", default_open = true) {
 		w := &ui.windows.queue
 
 		_track_table_show(
 			ui, "##queue", &w.track_table, sv.playback.serial,
 			server_get_queue(sv), {.IsQueue}, sv.queue_uid,
 		)
+
+		imgui.End()
 	}
-	imgui.End()
 
 	// --------------------------------------------------------------------------
 	// Metadata
 	// --------------------------------------------------------------------------
-	if imgui.Begin("Metadata###metadata") {
-		_show_metadata_window(sv, ui, &ui.windows.metadata, sv.current_track_id)
+	if _begin(ui, "Metadata###metadata", default_open = true) {
+		_show_metadata_window(sv, &ui.windows.metadata, sv.current_track_id)
+		imgui.End()
 	}
-	imgui.End()
 		
 	return ui.actions
 }
@@ -629,7 +632,7 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 	return true
 }
 
-_show_metadata_window :: proc(sv: ^Server, ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
+_show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
 	load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
 		if w.cover_art != nil {
 			texture_release(w.cover_art.?)
@@ -705,4 +708,16 @@ _show_metadata_window :: proc(sv: ^Server, ui: ^UI, w: ^_Metadata_Window, track_
 	_show_track_metadata_table("##metadata", md^)
 
 	return true
+}
+
+_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
+	id := imgui.GetID(title)
+	is_open := &ui.window_open[id]
+	if is_open == nil {
+		ui.window_open[id] = default_open
+		is_open = &ui.window_open[id]
+	}
+	else if !is_open^ do return false
+
+	return imx.begin(title, is_open, flags)
 }
