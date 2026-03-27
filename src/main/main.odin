@@ -1,5 +1,8 @@
 package main
 
+import "core:fmt"
+import "core:os"
+import "core:flags"
 import "core:sync"
 import "vendor:glfw"
 import "core:log"
@@ -18,7 +21,31 @@ run :: proc() -> bool {
 
 	server: Server
 	ui: UI
+	command_opts: struct {
+		headless: bool `usage:"Run without UI."`,
+		no_media_controls: bool `usage:"Don't use system media controls."`,
+		force_opengl: bool `usage:"(Windows) Force using OpenGL if DX11 is not supported on your device."`,
+	}
 
+	// --------------------------------------------------------------------------
+	// Parse command-line
+	// --------------------------------------------------------------------------
+	if len(os.args) > 1 {
+		error := flags.parse(&command_opts, os.args[1:])
+
+		switch e in error {
+		case flags.Help_Request:
+			flags.write_usage(os.to_writer(os.stdout), type_of(command_opts), "RATMP")
+			return true
+		case flags.Parse_Error, flags.Open_File_Error, flags.Validation_Error:
+			log.error(error)
+			return false
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Audio
+	// --------------------------------------------------------------------------
 	when ODIN_OS == .Windows {
 		use_audio_wasapi()
 	}
@@ -30,16 +57,15 @@ run :: proc() -> bool {
 	defer audio_shutdown()
 	audio_start() or_return
 	
+	// --------------------------------------------------------------------------
+	// Server
+	// --------------------------------------------------------------------------
 	server_init(&server) or_return
 	defer server_shutdown(&server)
 	
-	if .Headless in global_flags {
-		return run_headless(&server)
-	}
-	
-	sys_main_init() or_return
-	defer sys_main_shutdown()
-	
+	// --------------------------------------------------------------------------
+	// ImGui
+	// --------------------------------------------------------------------------
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
 	
@@ -47,15 +73,36 @@ run :: proc() -> bool {
 		io.ConfigFlags |= {.DockingEnable}
 	}
 	
-	when ODIN_OS == .Windows {
-		platform_init_win32(_tray_callback, &server) or_return
+	// --------------------------------------------------------------------------
+	// Platform
+	// --------------------------------------------------------------------------
+	sys_main_init() or_return
+	defer sys_main_shutdown()
+
+	if command_opts.headless {
+		platform_init_null()
 	}
 	else {
-		platform_init_glfw() or_return
-		systray_use_linux_appindicator()
-		systray_create(_tray_callback, &server)
-		defer systray_destroy()
+		when ODIN_OS == .Windows {
+			platform_init_win32() or_return
+		}
+		else {
+			platform_init_glfw() or_return
+		}
 	}
+
+	// --------------------------------------------------------------------------
+	// System tray
+	// --------------------------------------------------------------------------
+	when ODIN_OS == .Windows {
+		systray_use_win32()
+	}
+	else {
+		systray_use_linux_appindicator()
+	}
+	
+	systray_create(_tray_callback, &server)
+	defer systray_destroy()
 	
 	platform_make_window() or_return
 
@@ -68,6 +115,7 @@ run :: proc() -> bool {
 	defer ui_shutdown(&ui)
 
 	for {
+		events: Platform_Events
 		sys_main_frame()
 
 		if platform_is_window_visible() {
@@ -76,19 +124,21 @@ run :: proc() -> bool {
 			imgui.NewFrame()
 			
 			server_handle_events(&server)
-			platform_poll_events()
+			events = platform_poll_events()
 
-			// Show UI here
 			ui_show(&ui)
 
 			imgui.Render()
-
 			video_render_frame()
-			
 			platform_swap_buffers()
 		}
 		else {
-			server_wait_events(&server)
+			events = platform_wait_events()
+			server_handle_events(&server)
+		}
+
+		if events.window_closed {
+			platform_set_window_visible(false)
 		}
 	}
 
@@ -106,6 +156,9 @@ run_headless :: proc(server: ^Server) -> bool {
 
 @(private="file")
 _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
+	if button == .Show {
+		platform_set_window_visible(true)
+	}
 }
 
 main :: proc() {

@@ -55,12 +55,12 @@ FFMPEG_Context *ffmpeg_create_context() {
 }
 
 bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info_out) {
-	bool found_stream;
-	const AVCodec *codec;
-	const AVStream *stream;
-	const AVCodecParameters *codecpar;
-	const AVInputFormat *input_format;
-	int64_t duration;
+	bool found_stream = false;
+	const AVCodec *codec = NULL;
+	const AVStream *stream = NULL;
+	const AVCodecParameters *codecpar = NULL;
+	const AVInputFormat *input_format = NULL;
+	int64_t duration = NULL;
 
 	if (!ff) return false;
 

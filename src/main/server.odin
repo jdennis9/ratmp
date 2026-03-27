@@ -397,6 +397,7 @@ server_send_event :: proc(sv: ^Server, ev: Server_Event) {
 	sync.unlock(&sv.event_queue_lock)
 
 	sync.auto_reset_event_signal(&sv.event_signal)
+	platform_flush_events()
 }
 
 server_request_previous_track :: proc(sv: ^Server) {
