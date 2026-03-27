@@ -86,5 +86,9 @@ platform_init_glfw :: proc() -> bool {
 		}
 	}
 
+	_platform_impl_set_window_title = proc(title: cstring) {
+		glfw.SetWindowTitle(_glfw.window, title)
+	}
+
 	return true
 }

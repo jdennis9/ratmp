@@ -1,5 +1,6 @@
 package main
 
+import "core:log"
 import stbi "vendor:stb/image"
 import imgui "src:thirdparty/odin-imgui"
 import hm "core:container/handle_map"
@@ -16,11 +17,12 @@ Texture :: struct {
 	handle: Texture_Handle,
 	impl: rawptr,
 	ref_count: int,
+	device_serial: uint,
 }
 
 @(private="file")
 _video: struct {
-	textures: hm.Dynamic_Handle_Map(Texture, Texture_Handle)
+	textures: hm.Dynamic_Handle_Map(Texture, Texture_Handle),
 }
 
 _video_impl_imgui_new_frame: proc()
@@ -45,6 +47,14 @@ video_invalidate_textures :: proc() {
 		_video_impl_destroy_texture(tex.impl)
 	}
 	hm.clear(&_video.textures)
+}
+
+handle_graphics_device_lost :: proc() -> bool {
+	log.warn("Graphics device lost, freeing resources and reinitializing...")
+	video_invalidate_textures()
+	platform_destroy_window()
+	platform_make_window() or_return
+	return true
 }
 
 texture_create :: proc(desc: Texture_Desc) -> (handle: Texture_Handle, ok: bool) {

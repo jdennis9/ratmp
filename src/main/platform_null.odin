@@ -36,4 +36,5 @@ platform_init_null :: proc() {
 	_platform_impl_flush_events = proc() {
 		sync.auto_reset_event_signal(&_null_platform.event_signal)
 	}
+	_platform_impl_set_window_title = proc(title: cstring) {}
 }

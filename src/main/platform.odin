@@ -1,5 +1,7 @@
 package main
 
+import "core:strings"
+import "core:fmt"
 Video_Impl :: enum {
 	OpenGL,
 	DX11,
@@ -21,6 +23,7 @@ _platform_impl_swap_buffers: proc()
 _platform_impl_is_window_visible: proc() -> bool
 _platform_impl_set_window_visible: proc(visible: bool)
 _platform_impl_flush_events: proc()
+_platform_impl_set_window_title: proc(title: cstring)
 
 platform_make_window :: proc() -> bool {
 	return _platform_impl_make_window()
@@ -61,4 +64,10 @@ platform_set_window_visible :: proc(visible: bool) {
 
 platform_shutdown :: proc() {
 	_platform_impl_shutdown()
+}
+
+platform_set_window_title :: proc(args: ..any) {
+	buf: [1024]u8
+	str := fmt.bprint(buf[:1023], ..args)
+	_platform_impl_set_window_title(strings.unsafe_string_to_cstring(str))
 }

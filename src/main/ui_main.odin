@@ -52,6 +52,10 @@ _Metadata_Window :: struct {
 UI_Actions :: struct {
 	minimize_to_tray: bool,
 	exit: bool,
+
+	debug: struct {
+		force_device_reset: bool,
+	}
 }
 
 @private
@@ -240,6 +244,9 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 			if imgui.BeginMenu("Debug") {
 				if imgui.MenuItem("Style editor") {
 					ui.debug.show_style_editor = true
+				}
+				if imgui.MenuItem("Force video reset") {
+					ui.actions.debug.force_device_reset = true
 				}
 				imgui.EndMenu()
 			}

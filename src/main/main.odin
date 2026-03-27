@@ -10,13 +10,6 @@ import "vendor:glfw"
 import "core:log"
 import imgui "src:thirdparty/odin-imgui"
 
-handle_graphics_device_lost :: proc() -> bool {
-	log.warn("Graphics device lost, freeing resources and reinitializing...")
-	platform_destroy_window()
-	platform_make_window() or_return
-	return true
-}
-
 _g: struct {
 	want_show_window: bool,
 }
@@ -180,6 +173,10 @@ run :: proc() -> bool {
 		// -----------------------------------------------------------------------
 		// Handle UI actions
 		// -----------------------------------------------------------------------
+		if ui_actions.debug.force_device_reset {
+			handle_graphics_device_lost()
+		}
+
 		if ui_actions.minimize_to_tray {
 			platform_set_window_visible(false)
 		}

@@ -339,6 +339,7 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 
 	sv.playback_state = .Playing
 	media_controls_update_track(track^)
+	platform_set_window_title(PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title)
 
 	server_send_event(sv, {type = .UpdateState})
 
