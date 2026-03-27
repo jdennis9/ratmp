@@ -155,9 +155,11 @@ static GVariant *mapped_property_to_variant(const Mapped_Property& p) {
 			if (info->title)
 				g_variant_builder_add(builder, "{sv}", "xesam:title", g_variant_new_string(info->title));
 			if (info->path)
-				g_variant_builder_add(builder, "{sv}", "mpris:track_id", g_variant_new_string(info->path));
+				g_variant_builder_add(builder, "{sv}", "mpris:trackid", g_variant_new_string(info->path));
 			else
-				g_variant_builder_add(builder, "{sv}", "mpris:track_id", g_variant_new_string("/"));
+				g_variant_builder_add(builder, "{sv}", "mpris:trackid", g_variant_new_string("/"));
+			if (info->cover_uri)
+				g_variant_builder_add(builder, "{sv}", "mpris:artUrl", g_variant_new_string(info->cover_uri));
 
 			result = g_variant_new("a{sv}", builder);
 			return result;
@@ -485,6 +487,7 @@ void set_track_info(const Track_Info *info) {
 	if (out->genre) free((void*)out->genre);
 	if (out->title) free((void*)out->title);
 	if (out->path) free((void*)out->path);
+	if (out->cover_uri) free((void*)out->cover_uri);
 
 	const char *prop_names[] = {
 		"Metadata",
@@ -495,6 +498,7 @@ void set_track_info(const Track_Info *info) {
 	out->genre = info->genre ? strdup(info->genre) : nullptr;
 	out->title = info->title ? strdup(info->title) : nullptr;
 	out->path = info->path ? strdup(info->path) : nullptr;
+	out->cover_uri = info->cover_uri ? strdup(info->cover_uri) : nullptr;
 
 	signal_player_property_change(prop_names, ARRAY_LENGTH(prop_names));
 }

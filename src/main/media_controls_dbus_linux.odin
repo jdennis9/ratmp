@@ -1,5 +1,8 @@
 package main
 
+import "core:log"
+import "core:path/filepath"
+import "core:os"
 import "core:strings"
 import "base:runtime"
 import impl "src:bindings/media_controls_dbus"
@@ -12,6 +15,53 @@ _dbus: struct {
 }
 
 media_controls_use_dbus :: proc() {
+	_write_thumbnail_to_file :: proc(sv: ^Server, track_id: Track_ID) -> (uri: cstring, ok: bool) {
+		user_cache_dir, dir_error := os.user_cache_dir(context.allocator)
+		defer delete(user_cache_dir)
+
+		if dir_error != nil {
+			log.error(dir_error)
+			return
+		}
+
+		data, mime_type := find_track_thumbnail(sv, track_id, context.allocator) or_return
+		defer delete(data)
+		defer delete(mime_type)
+
+		extension: string
+		switch mime_type {
+			case "image/jpeg": extension = "jpg"
+			case "image/png": extension = "png"
+			case "image/webp": extension = "webp"
+			case "image/tiff": extension = "tiff"
+			case "image/bmp": extension = "bmp"
+			case: return
+		}
+
+		cover_file_name := strings.join({user_cache_dir, "/ratmp/cover.", extension}, "", context.allocator)
+		defer delete(cover_file_name)
+		cover_uri := strings.join({"file://", cover_file_name}, "", context.allocator)
+		defer delete(cover_uri)
+
+		log.debug("Writing thumbnail to", cover_file_name)
+
+		if !os.exists(filepath.dir(cover_file_name)) {
+			os.make_directory(filepath.dir(cover_file_name))
+		}
+
+		file, file_error := os.create(cover_file_name)
+		if file_error != nil {
+			log.error(file_error)
+			return
+		}
+		defer os.close(file)
+
+		os.write(file, data)
+
+		ok = true
+		return strings.clone_to_cstring(cover_uri), true
+	}
+
 	_handler_wrapper :: proc "c" (_: rawptr, signal: impl.Signal) {
 		context = _dbus.ctx
 
@@ -41,13 +91,15 @@ media_controls_use_dbus :: proc() {
 		return true
 	}
 
-	_media_controls_impl_update_track = proc(track: Track) {
+	_media_controls_impl_update_track = proc(sv: ^Server, track: Track) {
+
 		ti := impl.Track_Info {
 			album = track.album != "" ? strings.clone_to_cstring(track.album) : nil,
 			artist = track.artist != "" ? strings.clone_to_cstring(track.artist) : nil,
 			genre = track.genre != "" ? strings.clone_to_cstring(track.genre) : nil,
 			title = track.title != "" ? strings.clone_to_cstring(track.title) : nil,
 			path = strings.clone_to_cstring(track.url),
+			cover_uri = _write_thumbnail_to_file(sv, track.handle) or_else nil,
 		}
 
 		defer {
@@ -56,6 +108,7 @@ media_controls_use_dbus :: proc() {
 			delete(ti.genre)
 			delete(ti.title)
 			delete(ti.path)
+			delete(ti.cover_uri)
 		}
 
 		impl.set_track_info(&ti)

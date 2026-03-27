@@ -25,8 +25,7 @@ struct Track_Info {
 	const char *album;
 	const char *title;
 	const char *genre;
-	const uint8_t *cover_data;
-	uint32_t cover_data_size;
+	const char *cover_uri;
 };
 
 typedef void Handler(void *data, int32_t signal);

@@ -20,7 +20,7 @@ Media_Controls_State :: struct {
 Media_Controls_Proc :: #type proc(data: rawptr, event: Media_Controls_Event)
 
 _media_controls_impl_init: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool
-_media_controls_impl_update_track: proc(track: Track)
+_media_controls_impl_update_track: proc(sv: ^Server, track: Track)
 _media_controls_impl_update_state: proc(state: Media_Controls_State)
 _media_controls_impl_destroy: proc()
 
@@ -31,9 +31,9 @@ media_controls_init :: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool {
 	return true
 }
 
-media_controls_update_track :: proc(track: Track) {
+media_controls_update_track :: proc(sv: ^Server, track: Track) {
 	if _media_controls_impl_update_track != nil {
-		_media_controls_impl_update_track(track)
+		_media_controls_impl_update_track(sv, track)
 	}
 }
 

@@ -49,6 +49,10 @@ platform_init_glfw :: proc() -> bool {
 		_glfw.window = nil
 	}
 
+	_platform_impl_shutdown = proc() {
+		glfw.Terminate()
+	}
+
 	_platform_impl_imgui_new_frame = proc() {
 		imgui_glfw.NewFrame()
 	}
