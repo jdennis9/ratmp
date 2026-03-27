@@ -1,5 +1,6 @@
 package main
 
+import "core:encoding/cbor"
 import "core:time"
 import "core:path/slashpath"
 import "core:hash/xxhash"
@@ -46,7 +47,7 @@ Track_Protocol :: enum {
 }
 
 Track :: struct {
-	handle: Track_ID,
+	handle: Track_ID `cbor:"-"`,
 	url: string,
 	protocol: Track_Protocol,
 
@@ -128,6 +129,8 @@ Server :: struct {
 	playlists_serial: uint,
 	background_scan: Server_Background_Scan_State,
 	need_background_scan: bool,
+	library_path: string,
+	saved_library_serial: uint,
 }
 
 hash_track_url :: proc(str: string) -> u64 {
@@ -174,6 +177,8 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.background_scan.runner.data = sv
 	sv.background_scan.runner.init_context = context
 	thread.start(sv.background_scan.runner)
+
+	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.bin"}, context.allocator)
 
 	return true
 }
@@ -384,6 +389,12 @@ server_handle_events :: proc(sv: ^Server) {
 		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
 	}
 
+	if sv.saved_library_serial != sv.tracks_serial {
+		// @TODO: Do this asynchronously somehow
+		server_save_library_to_file(sv, sv.library_path)
+		sv.saved_library_serial = sv.tracks_serial
+	}
+
 	for ev in events {
 		defer delete(ev.tracks)
 
@@ -488,6 +499,58 @@ server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Hand
 	
 	ok = true
 	return
+}
+
+server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
+	file, file_error := os.create(path)
+	if file_error != nil {
+		log.error(file_error)
+		return false
+	}
+	defer os.close(file)
+
+	lib := server_get_all_tracks(sv, context.allocator)
+	defer delete(lib)
+
+	tracks: [dynamic]Track
+	defer delete(tracks)
+
+	for track_id in lib {
+		t := get_track(sv, track_id) or_continue
+		append(&tracks, t^)
+	}
+
+	error := cbor.marshal_into_writer(os.to_writer(file), tracks)
+	if error != nil {
+		log.error(error)
+		return false
+	}
+
+	return true
+}
+
+server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
+	file, file_error := os.open(path)
+	if file_error != nil {
+		log.error(file_error)
+		return false
+	}
+	defer os.close(file)
+
+	tracks: []Track
+	defer delete(tracks)
+
+	error := cbor.unmarshal_from_reader(os.to_reader(file), &tracks)
+	if error != nil {
+		log.error(error)
+		return false
+	}
+
+	for track in tracks {
+		server_add_track(sv, track)
+	}
+
+	return true
 }
 
 server_is_shuffle_enabled :: proc(sv: ^Server) -> bool {

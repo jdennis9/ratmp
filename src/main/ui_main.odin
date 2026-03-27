@@ -55,6 +55,8 @@ UI_Actions :: struct {
 
 	debug: struct {
 		force_device_reset: bool,
+		load_library: bool,
+		save_library: bool,
 	}
 }
 
@@ -247,6 +249,12 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 				}
 				if imgui.MenuItem("Force video reset") {
 					ui.actions.debug.force_device_reset = true
+				}
+				if imgui.MenuItem("Save library") {
+					ui.actions.debug.save_library = true
+				}
+				if imgui.MenuItem("Load library") {
+					ui.actions.debug.load_library = true
 				}
 				imgui.EndMenu()
 			}

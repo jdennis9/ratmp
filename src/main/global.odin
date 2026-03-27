@@ -27,3 +27,8 @@ global_command_opts: struct {
 	no_tray: bool `usage:"Don't create a system tray icon."`,
 	no_audio: bool `usage:"(Debug) Disable audio output."`,
 }
+
+global_paths: struct {
+	config_dir: string,
+	data_dir: string,
+}

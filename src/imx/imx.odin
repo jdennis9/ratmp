@@ -126,3 +126,9 @@ set_item_tooltip :: proc(str: string) {
 		imgui.EndTooltip()
 	}
 }
+
+begin :: proc(title: cstring, p_open: ^bool = nil, flags: imgui.WindowFlags = {}) -> bool {
+	if imgui.Begin(title, p_open, flags) do return true
+	else do imgui.End()
+	return false
+}

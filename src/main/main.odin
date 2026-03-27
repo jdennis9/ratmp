@@ -1,5 +1,6 @@
 package main
 
+import "core:path/filepath"
 import "core:time"
 import "core:thread"
 import "core:fmt"
@@ -40,6 +41,20 @@ run :: proc() -> bool {
 	command_opts := global_command_opts
 
 	// --------------------------------------------------------------------------
+	// Get paths
+	// --------------------------------------------------------------------------
+	when ODIN_OS == .Linux && !ODIN_DEBUG {
+		global_paths.config_dir = os.user_config_dir(context.allocator)
+		global_paths.data_dir = os.user_data_dir(context.allocator)
+		defer delete(global_paths.config_dir)
+		defer delete(global_paths.data_dir)
+	}
+	else {
+		global_paths.config_dir = "."
+		global_paths.data_dir = "."
+	}
+
+	// --------------------------------------------------------------------------
 	// Audio
 	// --------------------------------------------------------------------------
 	if !command_opts.no_audio {
@@ -63,6 +78,11 @@ run :: proc() -> bool {
 	// --------------------------------------------------------------------------
 	server_init(&server) or_return
 	defer server_shutdown(&server)
+
+	library_load_thread := thread.create(_library_load_thread_proc)
+	library_load_thread.data = &server
+	library_load_thread.init_context = context
+	thread.start(library_load_thread)
 	
 	// --------------------------------------------------------------------------
 	// ImGui
@@ -129,6 +149,8 @@ run :: proc() -> bool {
 		platform_destroy_window()
 		platform_shutdown()
 	}
+
+	thread.join(library_load_thread)
 	
 	ui_init(&ui, &server) or_return
 	defer ui_shutdown(&ui)
@@ -173,6 +195,14 @@ run :: proc() -> bool {
 		// -----------------------------------------------------------------------
 		// Handle UI actions
 		// -----------------------------------------------------------------------
+		if ui_actions.debug.save_library {
+			server_save_library_to_file(&server, server.library_path)
+		}
+
+		if ui_actions.debug.load_library {
+			server_load_library_from_file(&server, server.library_path)
+		}
+
 		if ui_actions.debug.force_device_reset {
 			handle_graphics_device_lost()
 		}
@@ -220,6 +250,12 @@ _media_controls_proc :: proc(data: rawptr, event: Media_Controls_Event) {
 		case .EnableShuffle: server_set_shuffle_enabled(sv, true)
 		case .DisableShuffle: server_set_shuffle_enabled(sv, false)
 	}
+}
+
+@(private="file")
+_library_load_thread_proc :: proc(t: ^thread.Thread) {
+	sv := cast(^Server) t.data
+	server_load_library_from_file(sv, sv.library_path)
 }
 
 main :: proc() {
