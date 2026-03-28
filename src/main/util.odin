@@ -1,6 +1,38 @@
 package main
 
+import "core:fmt"
+import "core:log"
+import "core:time"
+import "core:hash/xxhash"
+
 string_from_array :: proc(arr: []u8) -> string {
 	if arr[len(arr)-1] == 0 do return string(cstring(raw_data(arr)))
 	else do return string(arr[:])
+}
+
+hash_string_64 :: proc(str: string) -> u64 {
+	return xxhash.XXH3_64_default(transmute([]u8) str)
+}
+
+hash_string_32 :: proc(str: string) -> u32 {
+	return xxhash.XXH32(transmute([]u8) str)
+}
+
+format_duration :: proc(buf: []u8, seconds: int) {
+	h, m, s := time.clock_from_seconds(auto_cast seconds)
+	fmt.bprintf(buf, "%02d:%02d:%02d", h, m ,s)
+}
+
+@(deferred_out=_TIMED_SCOPE_EXIT)
+TIME_SCOPE :: proc(name_args: ..any, sep := "") -> (string, time.Tick) {
+	name := fmt.aprint(..name_args, sep=sep, allocator=context.allocator)
+	start := time.tick_now()
+	return name, start
+}
+
+@(private="file")
+_TIMED_SCOPE_EXIT :: proc(name: string, start: time.Tick) {
+	duration := time.tick_since(start)
+	log.debugf("[TIMER] %s: %gms", name, time.duration_milliseconds(duration))
+	delete(name)
 }

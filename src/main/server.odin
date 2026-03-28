@@ -70,6 +70,21 @@ Track :: struct {
 	flags: bit_set[Track_Flag],
 }
 
+Track_Category_Entry :: struct {
+	uid: UID,
+	name_hash: u32,
+	name: string,
+	duration: int,
+	tracks: [dynamic]Track_ID,
+}
+
+Track_Category_Entry_Ptr :: #soa^#soa[dynamic]Track_Category_Entry
+
+Track_Category :: struct {
+	arena: mem.Dynamic_Arena,
+	entries: #soa[dynamic]Track_Category_Entry,
+}
+
 Server_Event_Type :: enum {
 	TrackFinished,
 	NextTrackRequested,
@@ -108,12 +123,14 @@ Server_Background_Scan_State :: struct {
 	output: [dynamic]Track,
 }
 
+Track_Map :: hm.Dynamic_Handle_Map(Track, Track_ID)
+
 Server :: struct {
 	track_arena: mem.Dynamic_Arena,
 	track_allocator: mem.Allocator,
 	playback_thread: Playback_Thread,
 	playback_state: Playback_State,
-	tracks: hm.Dynamic_Handle_Map(Track, Track_ID),
+	tracks: Track_Map,
 	tracks_serial: uint,
 	// Map track url hash -> handle for keeping track of which
 	// files are already in the library
@@ -131,6 +148,12 @@ Server :: struct {
 	need_background_scan: bool,
 	library_path: string,
 	saved_library_serial: uint,
+	categories: struct {
+		artist: Track_Category,
+		album: Track_Category,
+		genre: Track_Category,
+	},
+	track_category_serial: uint,
 }
 
 hash_track_url :: proc(str: string) -> u64 {
@@ -393,6 +416,16 @@ server_handle_events :: proc(sv: ^Server) {
 		// @TODO: Do this asynchronously somehow
 		server_save_library_to_file(sv, sv.library_path)
 		sv.saved_library_serial = sv.tracks_serial
+	}
+
+	if sv.track_category_serial != sv.tracks_serial {
+		track_category_build(&sv.categories.artist, &sv.tracks, "artist")
+		track_category_build(&sv.categories.album, &sv.tracks, "album")
+		track_category_build(&sv.categories.genre, &sv.tracks, "genre")
+		sv.track_category_serial = sv.tracks_serial
+		log.debug(len(sv.categories.artist.entries), "artists")
+		log.debug(len(sv.categories.album.entries), "albums")
+		log.debug(len(sv.categories.genre.entries), "genres")
 	}
 
 	for ev in events {
@@ -676,5 +709,59 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 		sync.auto_reset_event_wait(&state.output_used_signal)
 		state.total_file_count = 0
 		state.scanned_count = 0
+	}
+}
+
+track_category_find_entry_by_hash :: proc(
+	cat: ^Track_Category, hash: u32
+) -> (index: int, found: bool) {
+	for entry, i in cat.entries {
+		if entry.name_hash == hash {
+			return i, true 
+		}
+	}
+	return
+}
+
+track_category_find_entry_by_name :: proc(
+	cat: ^Track_Category, name: string
+) -> (index: int, found: bool) {
+	name_hash := hash_string_32(name)
+	return track_category_find_entry_by_hash(cat, name_hash)
+}
+
+track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from_field: string) {
+	TIME_SCOPE("Build track category:", from_field)
+
+	mem.dynamic_arena_destroy(&cat.arena)
+	cat.arena = {}
+	mem.dynamic_arena_init(&cat.arena)
+	allocator := mem.dynamic_arena_allocator(&cat.arena)
+	clear(&cat.entries)
+
+	field := reflect.struct_field_by_name(Track, from_field)
+	assert(field.type.id == string)
+
+	it := hm.iterator_make(from_tracks)
+	for track, _ in hm.iterate(&it) {
+		entry_index: int
+		field_val := reflect.struct_field_value(track^, field)
+		str := field_val.(string)
+
+		if existing_index, exists := track_category_find_entry_by_name(cat, str); exists {
+			entry_index = existing_index
+		}
+		else {
+			entry_index = len(cat.entries)
+			append(&cat.entries, Track_Category_Entry {
+				name = str,
+				name_hash = hash_string_32(str),
+				uid = generate_uid(),
+			})
+		}
+
+		entry := &cat.entries[entry_index]
+		entry.duration += track.duration_seconds
+		append(&entry.tracks, track.handle)
 	}
 }

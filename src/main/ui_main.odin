@@ -37,6 +37,7 @@ _Track_Table_Row :: struct {
 
 _Track_Table :: struct {
 	serial: uint,
+	playlist_uid: UID,
 	rows: [dynamic]_Track_Table_Row,
 }
 
@@ -47,6 +48,32 @@ _Metadata_Window :: struct {
 	cover_file_size: int,
 	should_crop_art: bool,
 	comment: string,
+}
+
+_Playlist_Table_Row :: struct {
+	uid: UID,
+	title: string,
+	duration: [9]u8,
+	length: [7]u8,
+	tracks: []Track_ID,
+	selected: bool,
+}
+
+_Playlist_Table :: struct {
+	serial: uint,
+	rows: [dynamic]_Playlist_Table_Row,
+}
+
+_Track_Category_Window :: struct {
+	displayed_entry_hash: u32,
+	playlist_table: _Playlist_Table,
+	track_table: _Track_Table,
+}
+
+_Window_State :: struct {
+	name: cstring,
+	open: bool,
+	bring_to_front: bool,
 }
 
 @private
@@ -76,6 +103,10 @@ UI :: struct {
 			track_table: _Track_Table,
 		},
 
+		artists: _Track_Category_Window,
+		albums: _Track_Category_Window,
+		genres: _Track_Category_Window,
+
 		metadata: _Metadata_Window,
 	},
 	dialogs: struct {
@@ -91,7 +122,7 @@ UI :: struct {
 		show_style_editor: bool,
 	},
 	actions: UI_Actions,
-	window_open: map[imgui.ID]bool,
+	window_state: map[imgui.ID]_Window_State,
 }
 
 ui_theme: struct {
@@ -223,6 +254,81 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	// Main menu bar
 	// --------------------------------------------------------------------------
+	_main_menu_bar(sv, ui)
+
+	// --------------------------------------------------------------------------
+	// Debug
+	// --------------------------------------------------------------------------
+	if ui.debug.show_style_editor {
+		if imgui.Begin("[Debug] Style editor", &ui.debug.show_style_editor) {
+			imgui.ShowStyleEditor()
+		}
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Library
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Library###library", default_open = true) {
+		w := &ui.windows.library
+
+		if w.serial != sv.tracks_serial {
+			delete(w.tracks)
+			w.serial = sv.tracks_serial
+			w.tracks = server_get_all_tracks(sv, context.allocator)
+		}
+
+		_track_table_show(
+			sv, "##library", &w.track_table, w.serial, w.tracks, {}, 0
+		)
+
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Queue
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Queue###queue", default_open = true) {
+		w := &ui.windows.queue
+
+		_track_table_show(
+			sv, "##queue", &w.track_table, sv.playback.serial,
+			server_get_queue(sv), {.IsQueue}, sv.queue_uid,
+		)
+
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Metadata
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Metadata###metadata", default_open = true) {
+		_show_metadata_window(sv, &ui.windows.metadata, sv.current_track_id)
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Categories
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Artists###artists") {
+		_track_category_window_show_focused(sv, &ui.windows.artists, &sv.categories.artist)
+		imgui.End()
+	}
+
+	if _begin(ui, "Albums###albums") {
+		_track_category_window_show_focused(sv, &ui.windows.albums, &sv.categories.album)
+		imgui.End()
+	}
+
+	if _begin(ui, "Genres###genres") {
+		_track_category_window_show_focused(sv, &ui.windows.genres, &sv.categories.genre)
+		imgui.End()
+	}
+
+	return ui.actions
+}
+
+_main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 	if imgui.BeginMainMenuBar() {
 		defer imgui.EndMainMenuBar()
 
@@ -244,6 +350,17 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 			imgui.EndMenu()
 		}
 
+		if imgui.BeginMenu("View") {
+			for _, &state in ui.window_state {
+				if imgui.MenuItem(state.name) {
+					state.bring_to_front = true
+					state.open = true
+				}
+			}
+
+			imgui.EndMenu()
+		}
+
 		when ODIN_DEBUG {
 			if imgui.BeginMenu("Debug") {
 				if imgui.MenuItem("Style editor") {
@@ -261,7 +378,6 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 				imgui.EndMenu()
 			}
 		}
-
 		// -----------------------------------------------------------------------
 		// Volume
 		// -----------------------------------------------------------------------
@@ -334,60 +450,6 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 			}
 		}
 	}
-
-	// --------------------------------------------------------------------------
-	// Debug
-	// --------------------------------------------------------------------------
-	if ui.debug.show_style_editor {
-		if imgui.Begin("[Debug] Style editor", &ui.debug.show_style_editor) {
-			imgui.ShowStyleEditor()
-		}
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Library
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Library###library", default_open = true) {
-		w := &ui.windows.library
-
-		if w.serial != sv.tracks_serial {
-			delete(w.tracks)
-			w.serial = sv.tracks_serial
-			w.tracks = server_get_all_tracks(sv, context.allocator)
-		}
-
-		_track_table_show(
-			ui, "##library", &w.track_table, w.serial, w.tracks, {},
-			0
-		)
-
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Queue
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Queue###queue", default_open = true) {
-		w := &ui.windows.queue
-
-		_track_table_show(
-			ui, "##queue", &w.track_table, sv.playback.serial,
-			server_get_queue(sv), {.IsQueue}, sv.queue_uid,
-		)
-
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Metadata
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Metadata###metadata", default_open = true) {
-		_show_metadata_window(sv, &ui.windows.metadata, sv.current_track_id)
-		imgui.End()
-	}
-		
-	return ui.actions
 }
 
 _track_table_row_from_track :: proc(
@@ -426,7 +488,7 @@ _track_table_get_tracks :: proc(t: _Track_Table, allocator: mem.Allocator) -> []
 _Track_Table_Flag :: enum {IsQueue, NoRemove}
 
 _track_table_show :: proc(
-	ui: ^UI,
+	sv: ^Server,
 	name: cstring,
 	table: ^_Track_Table,
 	serial: uint,
@@ -435,27 +497,19 @@ _track_table_show :: proc(
 	playlist_id: UID,
 ) -> bool {
 
-	select_row :: proc(table: ^_Track_Table, row_index: int) {
-		if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
-			for &row in table.rows do row.selected = false
-		}
-		table.rows[row_index].selected = true
-	}
-
 	// --------------------------------------------------------------------------
 	// Update if needed
 	// --------------------------------------------------------------------------
-	if serial != table.serial {
+	if serial != table.serial || table.playlist_uid != playlist_id {
 		table.serial = serial
+		table.playlist_uid = playlist_id
 		clear(&table.rows)
 
 		for track in track_ids {
-			row := _track_table_row_from_track(ui.server, track) or_continue
+			row := _track_table_row_from_track(sv, track) or_continue
 			append(&table.rows, row)
 		}
 	}
-
-	sv := ui.server
 
 	// --------------------------------------------------------------------------
 	// Show
@@ -475,12 +529,13 @@ _track_table_show :: proc(
 
 	list_clipper: imgui.ListClipper
 
+	_check_table_size() or_return
 	imgui.BeginTable(name, auto_cast len(_Column_Index),
 		imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
 		imgui.TableFlags_Hideable|imgui.TableFlags_Reorderable|
 		imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|
 		imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Sortable|
-		imgui.TableFlags_SortTristate
+		imgui.TableFlags_SortTristate|imgui.TableFlags_ScrollX
 	) or_return
 	defer imgui.EndTable()
 
@@ -491,8 +546,8 @@ _track_table_show :: proc(
 		.Title = {name = "Title", flags = {.NoHide}},
 		.Artist = {name = "Artist"},
 		.Album = {name = "Album"},
-		.Genre = {name = "Genre"},
-		.TrackNo = {name = "Track"},
+		.Genre = {name = "Genre", flags = {.DefaultHide}},
+		.TrackNo = {name = "Track", flags = {.DefaultHide}},
 		.Duration = {name = "Duration"},
 	}
 
@@ -503,7 +558,8 @@ _track_table_show :: proc(
 	imgui.TableSetupScrollFreeze(1, 1)
 	imgui.TableHeadersRow()
 
-	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeight())
+	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
+	defer imgui.ListClipper_End(&list_clipper)
 
 	for imgui.ListClipper_Step(&list_clipper) {
 		for &row, local_row_index in table.rows[list_clipper.DisplayStart:list_clipper.DisplayEnd] {
@@ -524,7 +580,7 @@ _track_table_show :: proc(
 				}
 
 				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
-					select_row(table, row_index)
+					_table_select_row(table, row_index)
 				}
 
 				if imgui.BeginItemTooltip() {
@@ -541,7 +597,7 @@ _track_table_show :: proc(
 				if imgui.BeginPopupContextItem() {
 					defer imgui.EndPopup()
 
-					select_row(table, row_index)
+					_table_select_row(table, row_index)
 
 					if imgui.MenuItem("Play") {
 						actions.play_track = row.id
@@ -599,20 +655,26 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 		.File = "Disk"
 	}
 
-	row :: proc(name: string, args: ..any) -> bool {
+	row :: proc(name: string, args: ..any) -> (active: bool) {
 		buf: [1024]u8
+		fmt.bprint(buf[:1023], ..args)
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
-		if imgui.TableSetColumnIndex(1) do imx.text_unformatted(fmt.bprint(buf[:], ..args))
-		return false
+		if imgui.TableSetColumnIndex(1) {
+			active |= imgui.Selectable(cstring(&buf[0]))
+		}
+		return
 	}
 
-	rowf :: proc(name: string, format: string, args: ..any) -> bool {
+	rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
 		buf: [1024]u8
+		fmt.bprintf(buf[:1023], format, ..args)
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
-		if imgui.TableSetColumnIndex(1) do imx.text_unformatted(fmt.bprintf(buf[:], format, ..args))
-		return false
+		if imgui.TableSetColumnIndex(1) {
+			active |= imgui.Selectable(cstring(&buf[0]))
+		}
+		return
 	}
 
 	imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
@@ -712,12 +774,202 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 
 _begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
 	id := imgui.GetID(title)
-	is_open := &ui.window_open[id]
-	if is_open == nil {
-		ui.window_open[id] = default_open
-		is_open = &ui.window_open[id]
+	state := &ui.window_state[id]
+	if state == nil {
+		ui.window_state[id] = _Window_State {
+			name = title,
+			open = default_open
+		}
+		state = &ui.window_state[id]
 	}
-	else if !is_open^ do return false
+	else if !state.open do return false
 
-	return imx.begin(title, is_open, flags)
+	if state.bring_to_front do imgui.SetNextWindowFocus()
+	state.bring_to_front = false
+	return imx.begin(title, &state.open, flags)
 }
+
+_track_category_window_show_playlists :: proc(
+	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+) -> (shown: bool) {
+	entry_index, have_entry := track_category_find_entry_by_hash(cat, w.displayed_entry_hash)
+	entry: Track_Category_Entry_Ptr
+
+	if have_entry do entry = &cat.entries[entry_index]
+
+	// --------------------------------------------------------------------------
+	// Rebuild playlist table
+	// --------------------------------------------------------------------------
+	if w.playlist_table.serial != sv.track_category_serial {
+		clear(&w.playlist_table.rows)
+		w.playlist_table.serial = sv.track_category_serial
+
+		for e in cat.entries {
+			row := _Playlist_Table_Row {
+				uid = e.uid,
+				title = e.name,
+				tracks = e.tracks[:],
+			}
+
+			format_duration(row.duration[:], e.duration)
+			fmt.bprint(row.length[:], len(e.tracks))
+
+			append(&w.playlist_table.rows, row)
+		}
+	}
+
+	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
+	if result.selected_row != nil {
+		w.displayed_entry_hash = hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
+	}
+
+	if result.played_row != nil {
+		w.displayed_entry_hash = hash_string_32(w.playlist_table.rows[result.played_row.?].title)
+	}
+
+	return true
+}
+
+_track_category_window_show_tracks :: proc(
+	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+) -> bool {
+	entry_index, have_entry := track_category_find_entry_by_hash(cat, w.displayed_entry_hash)
+	entry: Track_Category_Entry_Ptr
+
+	if have_entry do entry = &cat.entries[entry_index]
+	else {
+		if w.displayed_entry_hash != 0 do w.displayed_entry_hash = 0
+		imgui.TextDisabled("Select a playlist")
+		return false
+	}
+
+	_track_table_show(
+		sv, "##tracks", &w.track_table, sv.track_category_serial,
+		entry.tracks[:], {.NoRemove}, entry.uid
+	)
+
+	return true
+}
+
+_track_category_window_show_focused :: proc(
+	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+) {
+	if w.displayed_entry_hash != 0 {
+		if imgui.Button("Back") {
+			w.displayed_entry_hash = 0
+		}
+		_track_category_window_show_tracks(sv, w, cat)
+	}
+	else {
+		_track_category_window_show_playlists(sv, w, cat)
+	}
+}
+
+_Playlist_Table_Actions :: struct {
+	selected_row: Maybe(int),
+	played_row: Maybe(int),
+}
+
+_Playlist_Table_Flag :: enum {MultiSelect}
+_Playlist_Table_Flags :: bit_set[_Playlist_Table_Flag]
+
+_playlist_table_show :: proc(
+	str_id: cstring, sv: ^Server, table: ^_Playlist_Table,
+	flags: _Playlist_Table_Flags,
+) -> (result: _Playlist_Table_Actions, shown: bool) {
+	actions: struct {
+		play: Maybe(int),
+		play_selection: bool,
+	}
+
+	_check_table_size() or_return
+	imgui.BeginTable(
+		str_id, 3,
+		imgui.TableFlags_BordersInner|imgui.TableFlags_Resizable|
+		imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Reorderable|
+		imgui.TableFlags_ScrollX|imgui.TableFlags_ScrollY
+	) or_return
+	defer imgui.EndTable()
+
+	imgui.TableSetupColumn("Name")
+	imgui.TableSetupColumn("Duration")
+	imgui.TableSetupColumn("Length")
+
+	imgui.TableSetupScrollFreeze(1, 1)
+	imgui.TableHeadersRow()
+
+	list_clipper: imgui.ListClipper
+	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
+	defer imgui.ListClipper_End(&list_clipper)
+
+	for imgui.ListClipper_Step(&list_clipper) {
+		for &row, local_row_index in table.rows[list_clipper.DisplayStart:list_clipper.DisplayEnd] {
+			imgui.TableNextRow()
+			row_index := local_row_index + auto_cast list_clipper.DisplayStart
+			imgui.PushIDInt(auto_cast row_index)
+			defer imgui.PopID()
+
+			if row.uid == sv.playback.playlist_uid {
+				imgui.TableSetBgColor(.RowBg0, ui_theme.colors[.PlayingHighlight])
+			}
+
+			if imgui.TableSetColumnIndex(0) {
+				buf: [256]u8
+				if row.title == "" do copy(buf[:255], "<None>")
+				else do copy(buf[:255], row.title)
+
+				if row.title == "" do imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))
+				
+				if imgui.Selectable(cstring(&buf[0]), row.selected, {.SpanAllColumns}) {
+					if .MultiSelect in flags {
+						_table_select_row(table, row_index)
+					}
+					else {
+						result.selected_row = row_index
+						for &other_row in table.rows do other_row.selected = false
+						row.selected = true
+					}
+				}
+
+				if row.title == "" do imgui.PopStyleColor()
+				
+				if imgui.IsItemClicked(.Middle) {
+					actions.play = row_index
+				}
+			}
+
+			if imgui.TableSetColumnIndex(1) {
+				imx.text_unformatted(string_from_array(row.duration[:]))
+			}
+
+			if imgui.TableSetColumnIndex(2) {
+				imx.text_unformatted(string_from_array(row.length[:]))
+			}
+		}
+	}
+
+	if actions.play != nil {
+		row := table.rows[actions.play.?]
+		server_request_play_playlist(sv, row.tracks, row.uid)
+		result.played_row = actions.play.?
+	}
+
+	shown = true
+	return
+}
+
+_table_select_row :: proc(table: ^$T, row_index: int) {
+	if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
+		for &row in table.rows do row.selected = false
+	}
+	table.rows[row_index].selected = true
+}
+
+// Ensure that there is enough space for a resizable table to 
+// prevent the bug where all columns have NaN width and ImGui explodes.
+// Not sure if this actually works or not :/.
+_check_table_size :: proc() -> bool {
+	s := imgui.GetContentRegionAvail()
+	return s.x >= 50 && s.y >= 20
+}
+
