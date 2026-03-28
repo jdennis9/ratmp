@@ -1,8 +1,10 @@
 package main
 
+import "core:mem"
 PROGRAM_VERSION_STRING :: "0.5.0"
 PROGRAM_NAME :: "RAT MP"
 PROGRAM_ID :: "ratmp"
+PROGRAM_FOLDER_NAME :: "ratmp"
 PROGRAM_NAME_AND_VERSION :: PROGRAM_NAME + " | " + PROGRAM_VERSION_STRING
 
 Global_Flag :: enum {

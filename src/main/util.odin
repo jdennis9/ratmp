@@ -1,5 +1,6 @@
 package main
 
+import "core:os"
 import "core:fmt"
 import "core:log"
 import "core:time"
@@ -35,4 +36,9 @@ _TIMED_SCOPE_EXIT :: proc(name: string, start: time.Tick) {
 	duration := time.tick_since(start)
 	log.debugf("[TIMER] %s: %gms", name, time.duration_milliseconds(duration))
 	delete(name)
+}
+
+ensure_dir :: proc(path: string) {
+	if os.exists(path) do return
+	os.make_directory_all(path)
 }

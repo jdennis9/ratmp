@@ -1,6 +1,10 @@
 #+private file
 package main
 
+import "core:path/filepath"
+import "core:os"
+import "core:encoding/json"
+import "core:math/rand"
 import "core:log"
 import "core:strings"
 import "core:mem"
@@ -88,9 +92,21 @@ UI_Actions :: struct {
 	}
 }
 
+_UI_Allocator_ID :: enum {
+	ThemeData,
+}
+
 @private
 UI :: struct {
 	server: ^Server,
+	base_tracking_allocator: mem.Tracking_Allocator,
+	base_allocator: mem.Allocator,
+	allocators: struct {
+		theme_data_arena: mem.Dynamic_Arena,
+		theme_data: mem.Allocator,
+		temp_arena: mem.Dynamic_Arena,
+		temp: mem.Allocator,
+	},
 	windows: struct {
 		library: struct {
 			track_table: _Track_Table,
@@ -118,6 +134,10 @@ UI :: struct {
 		width, height: int,
 		path: string,
 	},
+	paths: struct {
+		theme_folder: string,
+	},
+	themes: [dynamic]_Theme,
 	debug: struct {
 		show_style_editor: bool,
 	},
@@ -125,26 +145,60 @@ UI :: struct {
 	window_state: map[imgui.ID]_Window_State,
 }
 
-ui_theme: struct {
+_Saved_Theme :: struct {
+	name: string,
+	accents: [_Theme_Accent][3]f32,
 	colors: [_Theme_Color]u32,
-	imgui_colors: [imgui.Col]u32,
+	imgui_colors: [imgui.Col.COUNT][4]f32,
 }
 
+_Theme_Accent :: enum {
+	Fg1,
+	Fg2,
+	Bg,
+}
+
+_Theme :: struct {
+	name: [128]u8,
+	accents: [_Theme_Accent][3]f32,
+	colors: [_Theme_Color]u32,
+	imgui_colors: [imgui.Col.COUNT][4]f32,
+	path: string,
+}
+
+ui_theme: _Theme
+
 @private
-ui_init :: proc(ui: ^UI, server: ^Server) -> bool {
+ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.server = server
+	ui_theme.imgui_colors = imgui.GetStyle().Colors
+
+	// --------------------------------------------------------------------------
+	// Allocators
+	// --------------------------------------------------------------------------
+	when ODIN_DEBUG {
+		mem.tracking_allocator_init(&ui.base_tracking_allocator, context.allocator)
+		ui.base_allocator = mem.tracking_allocator(&ui.base_tracking_allocator)
+	}
+	else {
+		ui.base_allocator = context.allocator
+	}
+	
+	mem.dynamic_arena_init(
+		&ui.allocators.theme_data_arena, block_allocator=ui.base_allocator, block_size=4096
+	)
+	ui.allocators.theme_data = mem.dynamic_arena_allocator(&ui.allocators.theme_data_arena)
+
+	mem.dynamic_arena_init(&ui.allocators.temp_arena, block_allocator=ui.base_allocator)
+	ui.allocators.temp = mem.dynamic_arena_allocator(&ui.allocators.temp_arena)
 
 	style := imgui.GetStyle()
 	style.FontSizeBase = 16
 
-	it := handle_map.iterator_make(&server.tracks)
-	for track, _ in handle_map.iterate(&it) {
-		row := _track_table_row_from_track(server, track.handle) or_continue
-		append(&ui.windows.library.track_table.rows, row)
-	}
-
-	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) {
+	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) -> Error {
 		font_buf := imgui.MemAlloc(len(buf))
+		if font_buf == nil do return mem.Allocator_Error.Out_Of_Memory
+
 		mem.copy(font_buf, raw_data(buf), len(buf))
 		
 		cfg := imgui.FontConfig {
@@ -159,15 +213,23 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> bool {
 		io := imgui.GetIO()
 		fonts := io.Fonts
 		imgui.FontAtlas_AddFontFromMemoryTTF(fonts, font_buf, auto_cast len(buf), font_cfg = &cfg)
+
+		return nil
 	}
 
-	add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false)
-	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2)
+	add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false) or_return
+	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
 
 	// Theme defaults
 	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
 
-	return true
+	// Paths
+	ui.paths.theme_folder = filepath.join({global_paths.config_dir, "themes"}, context.allocator) or_return
+	ensure_dir(ui.paths.theme_folder)
+
+	_load_themes(ui)
+
+	return nil
 }
 
 @private
@@ -194,6 +256,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		
 		return true
 	}
+
+	defer free_all(ui.allocators.temp)
 	
 	sv := ui.server
 	ui.actions = {}
@@ -323,6 +387,15 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	if _begin(ui, "Genres###genres") {
 		_track_category_window_show_focused(sv, &ui.windows.genres, &sv.categories.genre)
 		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Theme editor
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Theme###theme") {
+		_show_theme_editor(ui)
+		imgui.End()
+
 	}
 
 	return ui.actions
@@ -956,6 +1029,267 @@ _playlist_table_show :: proc(
 
 	shown = true
 	return
+}
+
+_show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
+	accent_changed: bool
+
+	t := &ui_theme
+	colors := &t.imgui_colors
+
+	defer if changed {
+		imgui.GetStyle().Colors = t.imgui_colors
+	}
+
+	// Load/save
+	{
+		imgui.BeginDisabled(t.name[0] == 0)
+		defer imgui.EndDisabled()
+
+		if imgui.Button("Save") {
+			if t.path == "" {
+				buf: [64]u8
+				id := rand.uint64()
+				file_name := fmt.bprint(buf[:], id, ".json", sep="")
+				path, _ := os.join_path({ui.paths.theme_folder, file_name}, context.allocator)
+				defer delete(path)
+
+				for os.exists(path) {
+					delete(path)
+					id = rand.uint64()
+					file_name = fmt.bprint(buf[:], id, ".json", sep="")
+					path, _ = os.join_path({ui.paths.theme_folder, file_name}, context.allocator)
+				}
+
+				t.path = strings.clone(path, ui.allocators.theme_data)
+			}
+
+			_save_theme_to_file(t.path)
+			_load_themes(ui)
+		}
+
+		if t.name[0] == 0 {
+			imx.set_item_tooltip("Theme must have a name")
+		}
+	}
+
+	if t.path != "" {
+		imgui.SameLine()
+		if imgui.Button("Load") {
+			t^, _ = _load_theme_from_file(ui, t.path, ui.allocators.theme_data)
+			changed = true
+		}
+
+		imgui.SameLine()
+		if imgui.Button("New") {
+			for &b in t.name do b = 0
+			t.path = ""
+		}
+	}
+
+	if imgui.BeginCombo("##load_existing", nil, {.NoPreview}) {
+		defer imgui.EndCombo()
+		for &theme, i in ui.themes {
+			imgui.PushIDInt(auto_cast i)
+			defer imgui.PopID()
+			if imgui.MenuItem(cstring(&theme.name[0])) {
+				t^ = theme
+				changed = true
+			}
+		}
+	}
+	imgui.SameLine()
+	imgui.InputText("Name", cstring(&t.name[0]), auto_cast len(t.name))
+
+	imgui.BeginTabBar("##theme_tabs") or_return
+	defer imgui.EndTabBar()
+
+	edit_accent :: proc(t: ^_Theme, label: cstring, accent: _Theme_Accent) -> (active: bool) {
+		imgui.PushIDInt(auto_cast accent)
+		defer imgui.PopID()
+
+		active |= imgui.ColorEdit3(label, &t.accents[accent])
+		imgui.SameLine()
+		if imgui.Button("Random") {
+			active = true
+			t.accents[accent].rgb = {
+				rand.float32_range(0, 1), rand.float32_range(0, 1), rand.float32_range(0, 1)
+			}
+		}
+
+		return
+	}
+
+
+	imgui.SeparatorText("Quick edit")
+	imgui.PushID("##quick_edit")
+	accent_changed |= imgui.Button("Re-apply accent colors")
+	accent_changed |= edit_accent(t, "Fg. primary", .Fg1)
+	accent_changed |= edit_accent(t, "Fg. secondary", .Fg2)
+
+	changed |= imgui.ColorEdit4("Text", &colors[imgui.Col.Text])
+	changed |= imgui.ColorEdit4("Window bg.", &colors[imgui.Col.WindowBg])
+	changed |= imgui.ColorEdit4("Menu bar", &colors[imgui.Col.MenuBarBg])
+	changed |= imgui.ColorEdit4("Table headers", &colors[imgui.Col.TableHeaderBg])
+	imgui.PopID()
+
+	imgui.SeparatorText("RAT MP colors")
+	imgui.PushID("##ratmp_colors")
+	imx.color_edit_u32("Playing highlight", &t.colors[.PlayingHighlight])
+	imgui.PopID()
+
+	imgui.SeparatorText("ImGui colors")
+	imgui.PushID("##imgui_colors")
+	for col in imgui.Col {
+		if col == .COUNT do break
+		changed |= imgui.ColorEdit4(imgui.GetStyleColorName(col), &colors[col])
+	}
+	imgui.PopID()
+
+	/*if imgui.BeginTabItem("Sizes") {
+		defer imgui.EndTabItem()
+
+		changed |= imgui.SliderFloat2("Cell padding", &style.CellPadding, 0, 16, "%0.f")
+		changed |= imgui.SliderFloat("Child border size", &style.ChildBorderSize, 0, 2, "%.0f")
+		changed |= imgui.SliderFloat("Child rounding", &style.ChildRounding, 0, 12, "%0.f")
+		changed |= imgui.SliderFloat("Frame border size", &style.FrameBorderSize, 0, 1, "%.0f")
+		changed |= imgui.SliderFloat2("Frame padding", &style.FramePadding, 0, 16, "%0.f")
+		changed |= imgui.SliderFloat("Frame rounding", &style.FrameRounding, 0, 12, "%0.f")
+		changed |= imgui.SliderFloat("Image rounding", &style.ImageRounding, 0, 12, "%0.f")
+		changed |= imgui.SliderFloat("Tab bar border size", &style.TabBarBorderSize, 0, 1, "%.0f")
+		changed |= imgui.SliderFloat("Tab border size", &style.TabBorderSize, 0, 1, "%.0f")
+		changed |= imgui.SliderFloat("Tab rounding", &style.TabRounding, 0, 12, "%0.f")
+		changed |= imgui.SliderFloat("Window border size", &style.WindowBorderSize, 0, 2, "%0.f")
+		changed |= imgui.SliderFloat2("Window padding", &style.WindowPadding, 0, 16, "%0.f")
+		changed |= imgui.SliderFloat("Window rounding", &style.WindowRounding, 0, 12, "%0.f")
+	}*/
+
+	if accent_changed {
+		rgb_to_hsv :: proc(v: [3]f32) -> (hsv: [3]f32) {
+			imgui.ColorConvertRGBtoHSV(v.r, v.g, v.b, &hsv[0], &hsv[1], &hsv[2])
+			return
+		}
+
+		hsv_to_rgb :: proc(v: [3]f32) -> (rgb: [3]f32) {
+			imgui.ColorConvertHSVtoRGB(v[0], v[1], v[2], &rgb.r, &rgb.g, &rgb.b)
+			return
+		}
+
+		changed = true
+		_Accent_Color :: struct {
+			base: Maybe(_Theme_Accent),
+			hsv: [3]f32,
+		}
+
+		@static color_map: [imgui.Col]_Accent_Color = #partial {
+			.Button = {.Fg1, {1, 1, 1}},
+			.ButtonHovered = {.Fg1, {1, 0.9, 1}},
+			.ButtonActive = {.Fg1, {1, 1.2, 0.9}},
+			.FrameBg = {.Fg1, {1, 0.8, 0.5}},
+			.FrameBgHovered = {.Fg1, {1, 0.6, 0.9}},
+			.FrameBgActive = {.Fg1, {1, 0.6, 0.9}},
+			.Header = {.Fg1, {1, 0.9, 0.9}},
+			.HeaderHovered = {.Fg1, {1, 0.8, 1.1}},
+			.HeaderActive = {.Fg1, {1, 0.8, 1.0}},
+			.TabHovered = {.Fg1, {1, 0.8, 0.8}},
+			.Tab = {.Fg1, {1, 0.6, 0.5}},
+			.TabSelected = {.Fg1, {1, 0.8, 0.6}},
+			.TabSelectedOverline = {.Fg1, {1, 1, 1}},
+			.TabDimmed = {.Fg1, {1, 0.6, 0.3}},
+			.TabDimmedSelected = {.Fg1, {1, 0.6, 0.5}},
+			.TabDimmedSelectedOverline = {.Fg1, {1, 0, 0.7}},
+			.SliderGrab = {.Fg1, {1, 0.8, 0.8}},
+			.SliderGrabActive = {.Fg1, {1, 0.8, 0.9}},
+			.DockingPreview = {.Fg1, {1, 1.1, 1.1}},
+			.TableBorderStrong = {.Fg2, {1, 1, 0.8}},
+			.TableBorderLight = {.Fg2, {1, 0.8, 0.8}},
+			.CheckMark = {.Fg1, {1, 1, 1.1}},
+			.ResizeGrip = {.Fg1, {1, 1, 0.9}},
+			.ResizeGripHovered = {.Fg1, {1, 1, 0.9}},
+			.ResizeGripActive = {.Fg1, {1, 1, 0.9}},
+			.SeparatorHovered = {.Fg1, {1, 1, 0.6}},
+			.SeparatorActive = {.Fg1, {1, 1, 0.6}},
+			.TitleBgActive = {.Fg1, {1, 0.8, 0.2}},
+			.NavCursor = {.Fg1, {1, 1, 1.1}},
+		}
+
+		for col in imgui.Col {
+			if col == .COUNT do break
+			info := color_map[col]
+			accent := info.base.? or_continue
+			base := rgb_to_hsv(t.accents[accent].xyz)
+			hsv := base * info.hsv
+			colors[col].xyz = hsv_to_rgb(hsv)
+		}
+	}
+
+	return
+}
+
+_saved_theme_to_theme :: proc(s: _Saved_Theme, path: string, allocator: mem.Allocator) -> (t: _Theme, error: Error) {
+	t.accents = s.accents
+	t.colors = s.colors
+	t.imgui_colors = s.imgui_colors
+	copy(t.name[:len(t.name)-1], s.name)
+	t.path = strings.clone(path, allocator)
+	return
+}
+
+_saved_theme_delete :: proc(s: _Saved_Theme) {
+	delete(s.name)
+}
+
+_save_theme_to_file :: proc(path: string) -> Error {
+	t := &ui_theme
+
+	if t.name[0] == 0 {
+		return Custom_Error.InvalidName
+	}
+
+	saved: _Saved_Theme
+	saved.name = string_from_array(t.name[:])
+	saved.accents = t.accents
+	saved.colors = t.colors
+	saved.imgui_colors = t.imgui_colors
+
+	data := json.marshal(saved) or_return
+	defer delete(data)
+
+	file := os.create(path) or_return
+	defer os.close(file)
+
+	os.write(file, data)
+
+	return nil
+}
+
+_load_theme_from_file :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> (t: _Theme, error: Error) {
+	st: _Saved_Theme
+	data := os.read_entire_file_from_path(path, context.allocator) or_return
+	defer delete(data)
+
+	json.unmarshal(data, &st, allocator=ui.allocators.temp) or_return
+
+	t.accents = st.accents
+	t.colors = st.colors
+	copy(t.name[:len(t.name)-1], st.name)
+	t.imgui_colors = st.imgui_colors
+	t.path = strings.clone(path, allocator)
+
+	return
+}
+
+_load_themes :: proc(ui: ^UI) -> Error {
+	files := os.read_all_directory_by_path(ui.paths.theme_folder, context.allocator) or_return
+	clear(&ui.themes)
+	free_all(ui.allocators.theme_data)
+
+	for file in files {
+		t := _load_theme_from_file(ui, file.fullpath, ui.allocators.theme_data) or_continue
+		append(&ui.themes, t)
+	}
+
+	return nil
 }
 
 _table_select_row :: proc(table: ^$T, row_index: int) {

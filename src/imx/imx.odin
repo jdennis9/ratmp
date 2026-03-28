@@ -1,13 +1,9 @@
 package imx
 
 import "core:math/linalg"
-import "core:log"
-import "core:mem"
-import "base:runtime"
-import "core:slice"
 import "core:fmt"
-import "core:reflect"
 import imgui "src:thirdparty/odin-imgui"
+
 
 text_unformatted :: proc(str: string) {
 	base := raw_data(transmute([]u8) str)
@@ -23,7 +19,6 @@ textf :: proc($BUF_SIZE: uint, format: string, args: ..any) {
 	buf: [BUF_SIZE]u8
 	text_unformatted(fmt.bprintf(buf[:], format, ..args))
 }
-
 
 typeid_to_data_type :: proc(t: typeid) -> (s: imgui.DataType, ok: bool) {
 	ok = true
@@ -130,5 +125,15 @@ set_item_tooltip :: proc(str: string) {
 begin :: proc(title: cstring, p_open: ^bool = nil, flags: imgui.WindowFlags = {}) -> bool {
 	if imgui.Begin(title, p_open, flags) do return true
 	else do imgui.End()
+	return false
+}
+
+color_edit_u32 :: proc(label: cstring, color: ^u32, flags: imgui.ColorEditFlags = {}) -> bool {
+	v := imgui.ColorConvertU32ToFloat4(color^)
+	if imgui.ColorEdit4(label, &v, flags) {
+		color^ = imgui.GetColorU32ImVec4(v)
+		return true
+	}
+
 	return false
 }

@@ -16,7 +16,7 @@ _g: struct {
 }
 
 @(private="file")
-run :: proc() -> bool {
+run :: proc() -> Error {
 	context.logger = log.create_console_logger()
 
 	server: Server
@@ -44,8 +44,15 @@ run :: proc() -> bool {
 	// Get paths
 	// --------------------------------------------------------------------------
 	when ODIN_OS == .Linux && !ODIN_DEBUG {
-		global_paths.config_dir = os.user_config_dir(context.allocator)
-		global_paths.data_dir = os.user_data_dir(context.allocator)
+		config_dir := os.user_config_dir(context.allocator)
+		data_dir := os.user_data_dir(context.allocator)
+
+		global_paths.config_dir, _ = os.join({config_dir, PROGRAM_FOLDER_NAME}, context.allocator)
+		global_paths.data_dir, _ = os.join({data_dir, PROGRAM_FOLDER_NAME}, context.allocator)
+
+		delete(config_dir)
+		delete(data_dir)
+
 		defer delete(global_paths.config_dir)
 		defer delete(global_paths.data_dir)
 	}
