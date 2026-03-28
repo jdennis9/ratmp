@@ -1,5 +1,6 @@
 package main
 
+import "core:log"
 import "core:strings"
 
 import "src:bindings/ffmpeg"
@@ -129,20 +130,15 @@ decoder_fill_buffer :: proc(dec: ^Decoder, output: [][]f32, samplerate: int) -> 
 
 	if len(dec.overflow) > 0 {
 		overflow_frames := len(dec.overflow[0])
-		frames_to_copy := min(overflow_frames, len(output[0]))
+		frames_to_copy := min(overflow_frames, frames_wanted)
 
 		for ch in 0..<channels {
-			copy(output[ch], dec.overflow[ch][:frames_to_copy])
+			copy(output[ch][:frames_to_copy], dec.overflow[ch][:frames_to_copy])
 		}
 		
-		if overflow_frames < frames_wanted {
-			for ch in 0..<channels do remove_range(&dec.overflow[ch], 0, overflow_frames)
-		}
-		else {
-			for ch in 0..<channels do clear(&dec.overflow[ch])
-		}
+		for ch in 0..<channels do remove_range(&dec.overflow[ch], 0, frames_to_copy)
 		
-		frames_decoded += overflow_frames
+		frames_decoded += frames_to_copy
 	}
 
 	for (frames_decoded < frames_wanted) && status != .Eof {

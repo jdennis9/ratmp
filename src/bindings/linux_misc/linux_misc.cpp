@@ -120,8 +120,8 @@ extern "C" void linux_misc_systray_init(
 	app_indicator_set_menu(global_app_indicator, GTK_MENU(global_tray_menu));
 }
 
-extern "C" void linux_misc_update() {
-	gtk_main_iteration_do(true);
+extern "C" void linux_misc_gtk_main_iteration(bool blocking) {
+	gtk_main_iteration_do(blocking);
 }
 
 #endif

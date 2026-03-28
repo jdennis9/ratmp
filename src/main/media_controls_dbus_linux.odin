@@ -28,7 +28,7 @@ media_controls_use_dbus :: proc() {
 		defer delete(data)
 		defer delete(mime_type)
 
-		extension: string
+		extension: string		
 		switch mime_type {
 			case "image/jpeg": extension = "jpg"
 			case "image/png": extension = "png"

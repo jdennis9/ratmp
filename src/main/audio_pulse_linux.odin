@@ -1,6 +1,7 @@
 #+private file
 package main
 
+import "core:fmt"
 import "core:thread"
 import "core:sync"
 import "base:runtime"
@@ -142,8 +143,10 @@ _stream_write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userda
 
 	if !_check(pa.stream_begin_write(stream, &out_ptr, &nbytes)) {return}
 
+	assert(nbytes % size_of(f32) == 0)
+
 	out_buf = (cast([^]f32) out_ptr)[:nbytes/size_of(f32)]
-	for &f in out_buf {f = 0}
+	for &f in out_buf do f = 0
 
 	status := s.callback(s.callback_data, .Stream, out_buf, Audio_Spec{
 		channels = CHANNELS, samplerate = SAMPLERATE
@@ -151,6 +154,12 @@ _stream_write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userda
 
 	if status == .Finish {
 		s.callback(s.callback_data, .TrackFinised, nil, {})
+	}
+
+	// Clip output
+	for &f in out_buf {
+		if abs(f) > 1 do fmt.println(f)
+		f = clamp(f, -1, 1)
 	}
 
 	pa.stream_write(stream, out_ptr, nbytes, nil, 0, .RELATIVE)
@@ -173,6 +182,8 @@ _stream_session_thread :: proc(t: ^thread.Thread) {
 
 		messages := sync.atomic_load(&s.messages)
 		defer sync.atomic_store(&s.messages, {})
+
+		if messages != {} do log.debug(messages)
 
 		if .DropBuffer in messages {
 			pa.stream_flush(s.stream, nil, nil)

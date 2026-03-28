@@ -25,5 +25,5 @@ foreign lib {
 		buttons: [^]Tray_Button,
 		button_count: i32
 	) ---
-	update :: proc() ---
+	gtk_main_iteration :: proc(blocking: bool) ---
 }

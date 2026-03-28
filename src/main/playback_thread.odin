@@ -43,10 +43,10 @@ Playback_Thread_Params :: struct {
 }
 
 @(private="file")
-_next_power_of_2 :: proc(x: int) -> int {
+_pad_ring_buffer_size :: proc(x: int) -> int {
 	pow := 1
 	for pow < x do pow *= 2
-	return pow
+	return max(pow, 32<<10)
 }
 
 @(private="file")
@@ -74,7 +74,7 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		if !decoder_is_open(at.dec) do continue
 		
 		if at.frames_requested > len(at.ring_buffers[0].data) {
-			ring_buffer_size := _next_power_of_2(at.frames_requested)
+			ring_buffer_size := _pad_ring_buffer_size(at.frames_requested)
 			log.debug("Resizing ring buffer to", ring_buffer_size)
 
 			for &rb in at.ring_buffers[:at.channels] {

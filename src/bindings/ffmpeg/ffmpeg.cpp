@@ -184,7 +184,7 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 		ff->resampler_spec = output_spec;
 	}
 
-	while (avcodec_receive_frame(ff->decoder, ff->frame) >= 0) {
+	while (avcodec_receive_frame(ff->decoder, ff->frame) == 0) {
 		const float sample_ratio = (float)output_spec.samplerate / (float)ff->input_spec.samplerate;
 		int read_frames = ff->frame->nb_samples;
 		int write_frames = (int)floorf((float)read_frames * sample_ratio);

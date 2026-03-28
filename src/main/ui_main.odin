@@ -728,9 +728,9 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 		.File = "Disk"
 	}
 
-	row :: proc(name: string, args: ..any) -> (active: bool) {
+	row :: proc(name: string, args: ..any, sep := "") -> (active: bool) {
 		buf: [1024]u8
-		fmt.bprint(buf[:1023], ..args)
+		fmt.bprint(buf[:1023], ..args, sep=sep)
 		imgui.TableNextRow()
 		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
 		if imgui.TableSetColumnIndex(1) {
@@ -757,6 +757,7 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 	if track.artist != "" do row("Artist", track.artist)
 	if track.album != "" do row("Album", track.album)
 	if track.genre != "" do row("Genre", track.genre)
+	if track.samplerate != 0 do row("Sample rate", track.samplerate, "Hz", sep="")
 	if track.url != "" do row("Path", track.url)
 	row("From", protocol_string[track.protocol])
 

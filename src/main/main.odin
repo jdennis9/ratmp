@@ -44,11 +44,11 @@ run :: proc() -> Error {
 	// Get paths
 	// --------------------------------------------------------------------------
 	when ODIN_OS == .Linux && !ODIN_DEBUG {
-		config_dir := os.user_config_dir(context.allocator)
-		data_dir := os.user_data_dir(context.allocator)
+		config_dir := os.user_config_dir(context.allocator) or_return
+		data_dir := os.user_data_dir(context.allocator) or_return
 
-		global_paths.config_dir, _ = os.join({config_dir, PROGRAM_FOLDER_NAME}, context.allocator)
-		global_paths.data_dir, _ = os.join({data_dir, PROGRAM_FOLDER_NAME}, context.allocator)
+		global_paths.config_dir, _ = os.join_path({config_dir, PROGRAM_FOLDER_NAME}, context.allocator)
+		global_paths.data_dir, _ = os.join_path({data_dir, PROGRAM_FOLDER_NAME}, context.allocator)
 
 		delete(config_dir)
 		delete(data_dir)

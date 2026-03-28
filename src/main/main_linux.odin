@@ -24,6 +24,6 @@ sys_main_shutdown :: proc() {
 @(private="file")
 _run_background_loop :: proc(t: ^thread.Thread) {
 	for {
-		linux_misc.update()
+		linux_misc.gtk_main_iteration(true)
 	}
 }
