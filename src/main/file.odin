@@ -62,6 +62,21 @@ file_is_type :: proc(path: string, type: File_Type) -> bool {
 	return false
 }
 
+guess_file_mime_type :: proc(path: string) -> string {
+	ext := filepath.ext(path)
+
+	switch ext {
+	case ".jpg", ".jpeg": return "image/jpeg"
+	case ".png": return "image/png"
+	case ".webp": return "image/webp"
+	case ".tiff": return "image/tiff"
+	case ".tga": return "image/tga"
+	case ".bmp": return "image/bmp"
+	}
+
+	return ""
+}
+
 async_file_dialog_open :: proc(state: ^File_Dialog_State, file_type: File_Type, flags: File_Dialog_Flags) -> bool {
 	if state.thread != nil {
 		log.warn("Tried openning a file dialog in the background when there is already one running")

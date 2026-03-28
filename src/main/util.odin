@@ -24,7 +24,7 @@ format_duration :: proc(buf: []u8, seconds: int) {
 }
 
 @(deferred_out=_TIMED_SCOPE_EXIT)
-TIME_SCOPE :: proc(name_args: ..any, sep := "") -> (string, time.Tick) {
+TIME_SCOPE :: proc(name_args: ..any, sep := " ") -> (string, time.Tick) {
 	name := fmt.aprint(..name_args, sep=sep, allocator=context.allocator)
 	start := time.tick_now()
 	return name, start

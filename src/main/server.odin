@@ -154,6 +154,13 @@ Server :: struct {
 		genre: Track_Category,
 	},
 	track_category_serial: uint,
+	// Folder name hash -> cover art path
+	folder_cover_art: map[u64]string,
+}
+
+Server_Library_Save_Data :: struct {
+	tracks: [dynamic]Track,
+	folder_cover_art: map[u64]string,
 }
 
 hash_track_url :: proc(str: string) -> u64 {
@@ -232,6 +239,28 @@ track_clone :: proc(track: Track, allocator: mem.Allocator) -> (output: Track, e
 	return output, nil
 }
 
+server_scan_directory_for_cover_art :: proc(sv: ^Server, dir: string) {
+	hash := hash_string_64(dir)
+	if hash in sv.folder_cover_art do return
+
+	files, error := os.read_all_directory_by_path(dir, context.allocator)
+	if error != nil {
+		log.error(error)
+		return
+	}
+	defer os.file_info_slice_delete(files, context.allocator)
+
+	for file in files {
+		if file_is_type(file.fullpath, .Image) {
+			log.debug("Adding cover art", file.fullpath, "for folder", dir)
+			sv.folder_cover_art[hash] = strings.clone(file.fullpath, sv.track_allocator)
+			return
+		}
+	}
+
+	sv.folder_cover_art[hash] = ""
+}
+
 server_add_track :: proc(sv: ^Server, track: Track, update_existing := false) -> (Track_ID, bool) {
 	hash := hash_track_url(track.url)
 	if hash == 0 do return {}, false
@@ -249,6 +278,13 @@ server_add_track :: proc(sv: ^Server, track: Track, update_existing := false) ->
 		else if hm.is_valid(&sv.tracks, existing_handle) {
 			return existing_handle, true
 		}
+	}
+
+	if track.protocol == .File {
+		dir := filepath.dir(track.url)
+		defer delete(dir)
+
+		server_scan_directory_for_cover_art(sv, dir)
 	}
 
 	handle, error := hm.add(&sv.tracks, track)
@@ -340,6 +376,27 @@ find_track_thumbnail :: proc(
 	file := taglib_open(track.url)
 	if file == nil do return
 	defer taglib.file_free(file)
+
+	// Try find in folder cover arts
+	if track.protocol == .File {
+		dir := filepath.dir(track.url, context.allocator)
+		defer delete(dir)
+
+		hash := hash_string_64(dir)
+		path := sv.folder_cover_art[hash] or_else ""
+		if path != "" {
+			read_error: os.Error
+			data, read_error = os.read_entire_file_from_path(path, allocator)
+			if read_error != nil {
+				log.error("Error trying to read folder cover art:", read_error)
+			}
+			else {
+				mime_type = strings.clone(guess_file_mime_type(path), allocator)
+				found = true
+				return
+			}
+		}
+	}
 
 	picture_data: taglib.Complex_Property_Picture_Data
 	picture_prop := taglib.complex_property_get(file, "PICTURE")
@@ -535,6 +592,8 @@ server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Hand
 }
 
 server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
+	TIME_SCOPE("Save library", path)
+
 	file, file_error := os.create(path)
 	if file_error != nil {
 		log.error(file_error)
@@ -545,15 +604,16 @@ server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 	lib := server_get_all_tracks(sv, context.allocator)
 	defer delete(lib)
 
-	tracks: [dynamic]Track
-	defer delete(tracks)
+	data: Server_Library_Save_Data
+	defer delete(data.tracks)
+	data.folder_cover_art = sv.folder_cover_art
 
 	for track_id in lib {
 		t := get_track(sv, track_id) or_continue
-		append(&tracks, t^)
+		append(&data.tracks, t^)
 	}
 
-	error := cbor.marshal_into_writer(os.to_writer(file), tracks)
+	error := cbor.marshal_into_writer(os.to_writer(file), data)
 	if error != nil {
 		log.error(error)
 		return false
@@ -563,6 +623,8 @@ server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 }
 
 server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
+	TIME_SCOPE("Load library", path)
+
 	file, file_error := os.open(path)
 	if file_error != nil {
 		log.error(file_error)
@@ -570,16 +632,22 @@ server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
 	}
 	defer os.close(file)
 
-	tracks: []Track
-	defer delete(tracks)
+	data: Server_Library_Save_Data
+	defer delete(data.tracks)
+	defer delete(data.folder_cover_art)
 
-	error := cbor.unmarshal_from_reader(os.to_reader(file), &tracks)
+	error := cbor.unmarshal_from_reader(os.to_reader(file), &data)
 	if error != nil {
 		log.error(error)
 		return false
 	}
 
-	for track in tracks {
+	for key, val in data.folder_cover_art {
+		sv.folder_cover_art[key] = val
+		log.debug(key, val)
+	}
+
+	for track in data.tracks {
 		server_add_track(sv, track)
 	}
 
