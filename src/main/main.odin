@@ -13,6 +13,7 @@ import imgui "src:thirdparty/odin-imgui"
 
 _g: struct {
 	want_show_window: bool,
+	running: bool,
 }
 
 @(private="file")
@@ -162,7 +163,9 @@ run :: proc() -> Error {
 	ui_init(&ui, &server) or_return
 	defer ui_shutdown(&ui)
 
-	for {
+	_g.running = true
+	
+	for _g.running {
 		events: Platform_Events
 		ui_actions: UI_Actions
 
@@ -239,7 +242,7 @@ _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 		case .Resume: server_request_resume(sv)
 		case .Prev: server_request_previous_track(sv)
 		case .Next: server_request_next_track(sv)
-		case .Exit:
+		case .Exit: _g.running = false
 	}
 }
 

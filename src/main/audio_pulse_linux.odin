@@ -158,7 +158,6 @@ _stream_write_callback :: proc "c" (stream: ^pa.stream, length: c.size_t, userda
 
 	// Clip output
 	for &f in out_buf {
-		if abs(f) > 1 do fmt.println(f)
 		f = clamp(f, -1, 1)
 	}
 
