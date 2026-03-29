@@ -450,6 +450,10 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	media_controls_update_track(sv, track^)
 	platform_set_window_title(PROGRAM_NAME_AND_VERSION, "|", track.artist, "-", track.title)
 
+	if global_config.server.notify_new_track {
+		notify_send("Now playing:", track.artist, "-", track.album)
+	}
+
 	server_send_event(sv, {type = .UpdateState})
 
 	return true
@@ -467,6 +471,10 @@ server_handle_events :: proc(sv: ^Server) {
 	if sv.need_background_scan {
 		sv.need_background_scan = false
 		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
+
+		if global_config.server.notify_library_scan {
+			notify_send("Beginning library scan")
+		}
 	}
 
 	if sv.saved_library_serial != sv.tracks_serial {
@@ -506,6 +514,10 @@ server_handle_events :: proc(sv: ^Server) {
 			clear(&sv.background_scan.output)
 			mem.dynamic_arena_free_all(&sv.background_scan.output_arena)
 			sync.auto_reset_event_signal(&sv.background_scan.output_used_signal)
+
+			if global_config.server.notify_library_scan {
+				notify_send("Library scan complete")
+			}
 		
 		case .RequestSeek:
 			audio_drop_buffer()

@@ -1339,6 +1339,9 @@ _set_theme_by_name :: proc(ui: ^UI, name: string) {
 _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 	cfg := &global_config
 
+	// --------------------------------------------------------------------------
+	// Misc
+	// --------------------------------------------------------------------------
 	changed |= imx.select_enum("Window close policy", &cfg.ui.close_policy)
 
 	if imgui.BeginCombo("Default theme", cfg.ui.default_theme) {
@@ -1358,6 +1361,16 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 	}
 
+	// --------------------------------------------------------------------------
+	// Notifications
+	// --------------------------------------------------------------------------
+	imgui.SeparatorText("Notifications")
+	imgui.Checkbox("When a new track starts", &cfg.server.notify_new_track)
+	imgui.Checkbox("When a library scan starts/finishes", &cfg.server.notify_library_scan)
+
+	// --------------------------------------------------------------------------
+	// Font
+	// --------------------------------------------------------------------------
 	imgui.SeparatorText("Font")
 
 	changed |= imgui.DragFloat("Font size", &cfg.ui.font_size, 0.08, 8, 36, "%.0f")

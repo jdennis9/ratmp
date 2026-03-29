@@ -19,6 +19,10 @@ Config_Font :: struct {
 }
 
 Config :: struct {
+	server: struct {
+		notify_new_track: bool,
+		notify_library_scan: bool,
+	},
 	ui: struct {
 		background_buf: [512]u8 `json:"-"`,
 		default_theme_buf: [128]u8 `json:"-"`,

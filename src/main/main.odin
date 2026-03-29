@@ -127,6 +127,8 @@ run :: proc() -> Error {
 		else {
 			platform_init_glfw() or_return
 			font_init_fontconfig() or_return
+			notify_init_libnotify()
+			notify_send("This is a test message")
 		}
 	}
 
