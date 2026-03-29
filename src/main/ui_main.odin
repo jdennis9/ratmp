@@ -1489,6 +1489,7 @@ _refresh_fonts :: proc(ui: ^UI) -> Error {
 	for font in ui.system_fonts do font_free(font)
 	free_all(ui.allocators.font)
 	ui.system_fonts = font_list_system_fonts(ui.allocators.font) or_return
+
 	return nil
 }
 
