@@ -18,8 +18,6 @@ _g: struct {
 
 @(private="file")
 run :: proc() -> Error {
-	context.logger = log.create_console_logger()
-
 	server: Server
 	ui: UI
 
@@ -60,6 +58,16 @@ run :: proc() -> Error {
 	else {
 		global_paths.config_dir = "."
 		global_paths.data_dir = "."
+	}
+
+	global_paths.settings, _ = os.join_path({global_paths.config_dir, "settings.json"}, context.allocator)
+
+	// --------------------------------------------------------------------------
+	// Config
+	// --------------------------------------------------------------------------
+	{
+		config_init_strings(&global_config)
+		config_load(&global_config, global_paths.settings, context.allocator)
 	}
 
 	// --------------------------------------------------------------------------
@@ -176,6 +184,14 @@ run :: proc() -> Error {
 			platform_set_window_visible(true)
 		}
 
+		if global_config_dirty {
+			global_config_dirty = false
+			config_save(global_config, global_paths.settings)
+			if !command_opts.headless {
+				ui_apply_config(&ui, global_config)
+			}
+		}
+
 		if platform_is_window_visible() {
 			platform_imgui_new_frame()
 			video_imgui_new_frame()
@@ -269,5 +285,9 @@ _library_load_thread_proc :: proc(t: ^thread.Thread) {
 }
 
 main :: proc() {
-	run()
+	context.logger = log.create_console_logger()
+	error := run()
+	if error != nil {
+		log.error("run() exited with error", error)
+	}
 }

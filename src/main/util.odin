@@ -12,6 +12,10 @@ string_from_array :: proc(arr: []u8) -> string {
 	else do return string(arr[:])
 }
 
+set_cstring_buf :: proc(buf: []u8, str: string) {
+	copy(buf[:len(buf)-1], str)
+}
+
 hash_string_64 :: proc(str: string) -> u64 {
 	return xxhash.XXH3_64_default(transmute([]u8) str)
 }

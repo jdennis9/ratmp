@@ -173,6 +173,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.server = server
 	ui_theme.imgui_colors = imgui.GetStyle().Colors
 
+	
 	// --------------------------------------------------------------------------
 	// Allocators
 	// --------------------------------------------------------------------------
@@ -188,12 +189,37 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 		&ui.allocators.theme_data_arena, block_allocator=ui.base_allocator, block_size=4096
 	)
 	ui.allocators.theme_data = mem.dynamic_arena_allocator(&ui.allocators.theme_data_arena)
-
+	
 	mem.dynamic_arena_init(&ui.allocators.temp_arena, block_allocator=ui.base_allocator)
 	ui.allocators.temp = mem.dynamic_arena_allocator(&ui.allocators.temp_arena)
+	
+	// Theme defaults
+	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
+	
+	// Paths
+	ui.paths.theme_folder = filepath.join({global_paths.config_dir, "themes"}, context.allocator) or_return
+	ensure_dir(ui.paths.theme_folder)
+	
+	_load_themes(ui)
+
+	ui_apply_config(ui, global_config)
+
+	return nil
+}
+
+@private
+ui_shutdown :: proc(ui: ^UI) {
+}
+
+@private
+ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
+	cfg := the_cfg.ui
+
+	_set_background(ui, string(cfg.background), context.allocator)
+	_set_theme_by_name(ui, string(cfg.default_theme))
 
 	style := imgui.GetStyle()
-	style.FontSizeBase = 16
+	style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
 
 	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) -> Error {
 		font_buf := imgui.MemAlloc(len(buf))
@@ -217,46 +243,17 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 		return nil
 	}
 
-	add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false) or_return
-	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
-
-	// Theme defaults
-	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
-
-	// Paths
-	ui.paths.theme_folder = filepath.join({global_paths.config_dir, "themes"}, context.allocator) or_return
-	ensure_dir(ui.paths.theme_folder)
-
-	_load_themes(ui)
+	// @Temporary: Use fonts from memory until I support system fonts
+	//if len(cfg.fonts) == 0 {
+		add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false) or_return
+		add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
+	//}
 
 	return nil
 }
 
 @private
-ui_shutdown :: proc(ui: ^UI) {
-}
-
-@private
 ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
-	// @TODO: Half the programs memory usage comes from storing a large background image.
-	load_background :: proc(ui: ^UI) -> bool {
-		log.debug("Loading background", ui.background.path, "...")
-		
-		if ui.background.texture != nil {
-			texture_release(ui.background.texture.?)
-		}
-		
-		ui.background.texture = nil
-		h, width, height := texture_create_from_file(ui.background.path) or_return
-		ui.background.texture = h
-		ui.background.width = width
-		ui.background.height = height
-		
-		log.debugf("Loaded image with size: %dx%d (%M)", width, height, width*height*4)
-		
-		return true
-	}
-
 	defer free_all(ui.allocators.temp)
 	
 	sv := ui.server
@@ -290,10 +287,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 
 		if async_file_dialog_get_results(&ui.dialogs.set_background, &results) {
 			bg_path := string_from_array(results[0][:])
-			delete(ui.background.path)
-			ui.background.path = strings.clone(bg_path)
-
-			load_background(ui)
+			_set_background(ui, bg_path, context.allocator)
 		}
 	}
 
@@ -303,7 +297,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 
 	// Re-load background if graphics device was lost
 	if ui.background.texture != nil && texture_is_outdated(ui.background.texture.?) {
-		load_background(ui)
+		_set_background(ui, ui.background.path, context.allocator)
 	}
 
 	if ui.background.texture != nil {
@@ -395,7 +389,14 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	if _begin(ui, "Theme###theme") {
 		_show_theme_editor(ui)
 		imgui.End()
+	}
 
+	// --------------------------------------------------------------------------
+	// Settings
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Settings###settings") {
+		global_config_dirty |= _show_settings_editor(ui)
+		imgui.End()
 	}
 
 	return ui.actions
@@ -1227,19 +1228,6 @@ _show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
 	return
 }
 
-_saved_theme_to_theme :: proc(s: _Saved_Theme, path: string, allocator: mem.Allocator) -> (t: _Theme, error: Error) {
-	t.accents = s.accents
-	t.colors = s.colors
-	t.imgui_colors = s.imgui_colors
-	copy(t.name[:len(t.name)-1], s.name)
-	t.path = strings.clone(path, allocator)
-	return
-}
-
-_saved_theme_delete :: proc(s: _Saved_Theme) {
-	delete(s.name)
-}
-
 _save_theme_to_file :: proc(path: string) -> Error {
 	t := &ui_theme
 
@@ -1289,6 +1277,77 @@ _load_themes :: proc(ui: ^UI) -> Error {
 		t := _load_theme_from_file(ui, file.fullpath, ui.allocators.theme_data) or_continue
 		append(&ui.themes, t)
 	}
+
+	return nil
+}
+
+_set_theme :: proc(t: _Theme) {
+	ui_theme = t
+	imgui.GetStyle().Colors = t.imgui_colors
+}
+
+_set_theme_by_name :: proc(ui: ^UI, name: string) {
+	if name == "" do return
+	for &theme in ui.themes {
+		if string(cstring(&theme.name[0])) == name {
+			_set_theme(theme)
+		}
+	}
+}
+
+_show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
+	cfg := &global_config
+
+	changed |= imx.select_enum("Window close policy", &cfg.ui.close_policy)
+
+	if imgui.BeginCombo("Default theme", cfg.ui.default_theme) {
+		defer imgui.EndCombo()
+
+		for &theme in ui.themes {
+			name_cstr := cstring(&theme.name[0])
+
+			if imgui.MenuItem(name_cstr) {
+				set_cstring_buf(cfg.ui.default_theme_buf[:], string(name_cstr))
+				changed = true
+			}
+		}
+	}
+
+	if imgui.Button("Change background") {
+		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
+	}
+
+	changed |= imgui.DragFloat("Font size", &cfg.ui.font_size, 0.08, 8, 36, "%.0f")
+
+	return
+}
+
+_set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Error {
+	log.debug("Loading background", path, "...")
+
+	if ui.background.texture != nil && !texture_is_outdated(ui.background.texture.?) {
+		texture_release(ui.background.texture.?)
+	}
+
+	if ui.background.path != "" && ui.background.path != path {
+		delete(ui.background.path)
+		ui.background.path = ""
+	}
+
+	ui.background.texture = nil
+	h, width, height := texture_create_from_file(path) or_return
+	ui.background.width = width
+	ui.background.height = height
+	ui.background.texture = h
+
+	if ui.background.path != path {
+		ui.background.path = strings.clone(path, allocator)
+		global_config_dirty = true
+	}
+
+	set_cstring_buf(global_config.ui.background_buf[:], path)
+
+	log.debugf("Loaded image with size: %dx%d (%M)", width, height, width*height*4)
 
 	return nil
 }

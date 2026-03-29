@@ -33,4 +33,8 @@ global_command_opts: struct {
 global_paths: struct {
 	config_dir: string,
 	data_dir: string,
+	settings: string,
 }
+
+global_config: Config
+global_config_dirty: bool

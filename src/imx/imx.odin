@@ -1,5 +1,6 @@
 package imx
 
+import "core:reflect"
 import "core:math/linalg"
 import "core:fmt"
 import imgui "src:thirdparty/odin-imgui"
@@ -136,4 +137,26 @@ color_edit_u32 :: proc(label: cstring, color: ^u32, flags: imgui.ColorEditFlags 
 	}
 
 	return false
+}
+
+select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
+	buf: [128]u8
+	str := cstring(&buf[0])
+
+	copy(buf[:127], reflect.enum_name_from_value(v^) or_else "")
+
+	imgui.BeginCombo(label, str) or_return
+	defer imgui.EndCombo()
+
+	for e in E {
+		if e != v^ {
+			copy(buf[:127], reflect.enum_name_from_value(e) or_continue)
+			if imgui.MenuItem(cstring(&buf[0])) {
+				changed = true
+				v^ = e
+			}
+		}
+	}
+
+	return
 }
