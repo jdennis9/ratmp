@@ -1,6 +1,7 @@
 package main
 
 Sys_Tray_Button :: enum {
+	None,
 	Show,
 	Pause,
 	Resume,

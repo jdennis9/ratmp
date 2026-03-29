@@ -13,22 +13,23 @@ _glfw: struct {
 
 platform_init_glfw :: proc() -> bool {
 	log.debug("Using GLFW platform")
+
+	// libdecor will sometimes cause a crash when calling glfw.CreateWindow()
+	when ODIN_OS == .Linux {
+		glfw.WindowHint(glfw.WAYLAND_DISABLE_LIBDECOR, true)
+		glfw.WindowHint(glfw.WAYLAND_LIBDECOR, false)
+		glfw.WindowHint(glfw.WAYLAND_PREFER_LIBDECOR, false)
+	}
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0)
+
 	glfw.Init() or_return
 
-	
 	close_proc :: proc "c" (win: glfw.WindowHandle) {
 		_glfw.events.window_closed = true
 	}
 	
 	_platform_impl_make_window = proc() -> bool {
-		// libdecor will sometimes cause a crash when calling glfw.CreateWindow()
-		when ODIN_OS == .Linux {
-			glfw.WindowHint(glfw.WAYLAND_DISABLE_LIBDECOR, true)
-			glfw.WindowHint(glfw.WAYLAND_LIBDECOR, false)
-		}
-		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
-		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0)
-		
 		_glfw.window = glfw.CreateWindow(1600, 900, "RAT MP", nil, nil)
 		_glfw.video_impl = .OpenGL
 		
@@ -71,7 +72,7 @@ platform_init_glfw :: proc() -> bool {
 
 	_platform_impl_wait_events = proc() -> Platform_Events {
 		_glfw.events = {}
-		glfw.WaitEvents()
+		glfw.WaitEventsTimeout(0.1);
 		return _glfw.events
 	}
 

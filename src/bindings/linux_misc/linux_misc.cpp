@@ -101,10 +101,12 @@ extern "C" void linux_misc_systray_init(
 
 	systray_event_handler = event_handler;
 
+	global_app_indicator = app_indicator_new("ratmp", icon, APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
+
 	global_tray_menu = GTK_MENU_SHELL(gtk_menu_new());
-
+	
 	global_tray_button_count = button_count;
-
+	
 	for (int i = 0; i < button_count; ++i) {
 		Tray_Button butt = buttons[i];
 		global_tray_buttons[i] = butt;
@@ -113,8 +115,7 @@ extern "C" void linux_misc_systray_init(
 		gtk_menu_shell_append(global_tray_menu, item);
 		g_signal_connect(item, "activate", G_CALLBACK(tray_menu_callback), NULL);
 	}
-
-	global_app_indicator = app_indicator_new("ratmp", icon, APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
+	
 	app_indicator_set_status(global_app_indicator, APP_INDICATOR_STATUS_ACTIVE);
 	app_indicator_set_icon(global_app_indicator, icon);
 	app_indicator_set_menu(global_app_indicator, GTK_MENU(global_tray_menu));

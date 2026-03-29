@@ -180,6 +180,7 @@ run :: proc() -> Error {
 		ui_actions: UI_Actions
 
 		frame_start := time.tick_now()
+		sys_main_frame()
 
 		if _g.want_show_window {
 			_g.want_show_window = false
@@ -246,13 +247,14 @@ run :: proc() -> Error {
 		frame_time := time.tick_diff(frame_start, time.tick_now())
 	}
 
-	return true
+	return nil
 }
 
 @(private="file")
 _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 	sv := cast(^Server) data
 	switch button {
+		case .None: platform_flush_events()
 		case .Show:
 			_g.want_show_window = true
 			platform_flush_events()
@@ -296,5 +298,8 @@ main :: proc() {
 	error := run()
 	if error != nil {
 		log.error("run() exited with error", error)
+	}
+	else {
+		log.info("Program exited succesfully")
 	}
 }

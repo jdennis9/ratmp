@@ -15,6 +15,7 @@ sys_main_init :: proc() -> bool {
 }
 
 sys_main_frame :: proc() {
+	linux_misc.gtk_main_iteration(false)
 }
 
 sys_main_shutdown :: proc() {
@@ -23,7 +24,7 @@ sys_main_shutdown :: proc() {
 
 @(private="file")
 _run_background_loop :: proc(t: ^thread.Thread) {
-	for {
+	/*for {
 		linux_misc.gtk_main_iteration(true)
-	}
+	}*/
 }
