@@ -42,6 +42,7 @@ _Track_Table_Row :: struct {
 }
 
 _Track_Table :: struct {
+	sort_spec: Maybe(Track_Sort_Spec),
 	serial: uint,
 	playlist_uid: UID,
 	rows: [dynamic]_Track_Table_Row,
@@ -628,6 +629,10 @@ _track_table_show :: proc(
 			row := _track_table_row_from_track(sv, track) or_continue
 			append(&table.rows, row)
 		}
+
+		if table.sort_spec != nil {
+			_sort_track_table_rows(sv, table^, table.sort_spec.?)
+		}
 	}
 
 	// --------------------------------------------------------------------------
@@ -658,24 +663,62 @@ _track_table_show :: proc(
 	) or_return
 	defer imgui.EndTable()
 
+	// --------------------------------------------------------------------------
+	// Columns
+	// --------------------------------------------------------------------------
 	column_infos: [_Column_Index]struct {
 		flags: imgui.TableColumnFlags,
 		name: cstring,
+		sort_metric: Track_Sort_Metric,
 	} = {
-		.Title = {name = "Title", flags = {.NoHide}},
-		.Artist = {name = "Artist"},
-		.Album = {name = "Album"},
-		.Genre = {name = "Genre", flags = {.DefaultHide}},
-		.TrackNo = {name = "Track", flags = {.DefaultHide}},
-		.Duration = {name = "Duration"},
+		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
+		.Artist = {name = "Artist", sort_metric = .Artist},
+		.Album = {name = "Album", sort_metric = .Album},
+		.Genre = {name = "Genre", flags = {.DefaultHide}, sort_metric = .Genre},
+		.TrackNo = {name = "Track", flags = {.DefaultHide}, sort_metric = .Track},
+		.Duration = {name = "Duration", sort_metric = .Duration},
 	}
 
+	// --------------------------------------------------------------------------
+	// Display table
+	// --------------------------------------------------------------------------
 	for col in column_infos {
 		imgui.TableSetupColumn(col.name, col.flags, 1.0/f32(len(_Column_Index)))
 	}
 
 	imgui.TableSetupScrollFreeze(1, 1)
 	imgui.TableHeadersRow()
+
+	// --------------------------------------------------------------------------
+	// Sort
+	// --------------------------------------------------------------------------
+	if table_sort_specs := imgui.TableGetSortSpecs(); table_sort_specs != nil {
+		if specs := table_sort_specs.Specs; specs != nil && table_sort_specs.SpecsDirty {
+			table_sort_specs.SpecsDirty = false
+			s: Track_Sort_Spec
+
+			column := cast(_Column_Index) specs.ColumnIndex
+			switch specs.SortDirection {
+			case .None:
+				table.sort_spec = nil
+			case .Ascending:
+				table.sort_spec = Track_Sort_Spec {
+					metric = column_infos[column].sort_metric,
+					order = .Ascending,
+				}
+			case .Descending:
+				table.sort_spec = Track_Sort_Spec {
+					metric = column_infos[column].sort_metric,
+					order = .Descending
+				}
+			}
+
+			if table.sort_spec != nil {
+				_sort_track_table_rows(sv, table^, table.sort_spec.?)
+				log.debug("Sorting track table", name, "with by", table.sort_spec.?.metric)
+			}
+		}
+	}
 
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
 	defer imgui.ListClipper_End(&list_clipper)
@@ -764,6 +807,18 @@ _track_table_show :: proc(
 	}
 
 	return true
+}
+
+_sort_track_table_rows :: proc(sv: ^Server, table: _Track_Table, spec: Track_Sort_Spec) {
+	tracks := _track_table_get_tracks(table, context.allocator)
+	defer delete(tracks)
+
+	sort_tracks(sv, tracks, spec)
+
+	for track_id, i in tracks {
+		row := _track_table_row_from_track(sv, track_id) or_continue
+		table.rows[i] = row
+	}
 }
 
 _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {

@@ -1,5 +1,6 @@
 package main
 
+import "core:sort"
 import "core:encoding/cbor"
 import "core:time"
 import "core:path/slashpath"
@@ -859,4 +860,97 @@ track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from
 		entry.duration += track.duration_seconds
 		append(&entry.tracks, track.handle)
 	}
+}
+
+Sort_Order :: enum {
+	Ascending,
+	Descending,
+}
+
+Track_Sort_Metric :: enum {
+	Title,
+	Artist,
+	Album,
+	Genre,
+	Duration,
+	FileDate,
+	DateAdded,
+	Track,
+}
+
+Track_Sort_Spec :: struct {
+	order: Sort_Order,
+	// Name of field to sort by
+	metric: Track_Sort_Metric,
+}
+
+Track_Compare_Proc :: #type proc(a, b: Track) -> int
+
+TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
+	.Title = proc(a, b: Track) -> int {return strings.compare(a.title, b.title)},
+	.Artist = proc(a, b: Track) -> int {return strings.compare(a.artist, b.artist)},
+	.Album = proc(a, b: Track) -> int {return strings.compare(a.album, b.album)},
+	.Genre = proc(a, b: Track) -> int {return strings.compare(a.genre, b.genre)},
+	.Duration = proc(a, b: Track) -> int {return a.duration_seconds - b.duration_seconds},
+	.Track = proc(a, b: Track) -> int {return a.track_no - b.track_no},
+	.FileDate = proc(a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
+	.DateAdded = proc(a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
+}
+
+// Metrics to fall back to when a two tracks have the same value
+TRACK_METRIC_NEXT_METRIC := #partial [Track_Sort_Metric]Maybe(Track_Sort_Metric) {
+	.Artist = .Album,
+	.Album = .Title,
+	.Genre = .Album,
+	.FileDate = .Album,
+	.DateAdded = .Album,
+	.Track = .Album,
+}
+
+sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
+	Collection :: struct {
+		sv: ^Server,
+		tracks: []Track_ID,
+		metric: Track_Sort_Metric,
+	}
+
+	col := Collection {
+		sv = sv,
+		tracks = tracks,
+		metric = spec.metric,
+	}
+
+	iface := sort.Interface {
+		collection = &col,
+		len = proc(it: sort.Interface) -> int {
+			col := cast(^Collection) it.collection
+			return len(col.tracks)
+		},
+		less = proc(it: sort.Interface, a, b: int) -> bool {
+			col := cast(^Collection) it.collection
+			cmp_proc := TRACK_METRIC_COMPARE_PROCS[col.metric]
+			A := get_track(col.sv, col.tracks[a]) or_return
+			B := get_track(col.sv, col.tracks[b]) or_return
+
+			r: int
+
+			metric := col.metric
+			r = cmp_proc(A^, B^)
+
+			for abs(r) == 0 && TRACK_METRIC_NEXT_METRIC[metric] != nil {
+				metric = TRACK_METRIC_NEXT_METRIC[metric].?
+				cmp_proc = TRACK_METRIC_COMPARE_PROCS[metric]
+				r = cmp_proc(A^, B^)
+			}
+
+			return r < 0
+		},
+		swap = proc(it: sort.Interface, a, b: int) {
+			col := cast(^Collection) it.collection
+			col.tracks[a], col.tracks[b] = col.tracks[b], col.tracks[a]
+		},
+	}
+
+	if spec.order == .Descending do sort.reverse_sort(iface)
+	else do sort.sort(iface)
 }
