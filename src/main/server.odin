@@ -468,6 +468,15 @@ server_handle_events :: proc(sv: ^Server) {
 
 	sync.unlock(&sv.event_queue_lock)
 
+	_update_media_controls_state :: proc(sv: ^Server) {
+		media_controls_update_state(Media_Controls_State {
+			paused = sv.playback_state == .Paused,
+			have_track = sv.current_track_id != {},
+			shuffle_enabled = sv.playback.enable_shuffle,
+		})
+
+	}
+
 	if sv.need_background_scan {
 		sv.need_background_scan = false
 		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
@@ -499,11 +508,7 @@ server_handle_events :: proc(sv: ^Server) {
 		switch ev.type {
 
 		case .UpdateState:
-			media_controls_update_state(Media_Controls_State {
-				paused = audio_is_paused(),
-				have_track = sv.current_track_id != {},
-				shuffle_enabled = sv.playback.enable_shuffle,
-			})
+			_update_media_controls_state(sv)
 
 		case .BackgroundScanComplete:
 			tracks := sv.background_scan.output[:]
@@ -526,12 +531,20 @@ server_handle_events :: proc(sv: ^Server) {
 		case .RequestPlay:
 			if audio_resume() {
 				sv.playback_state = .Playing
-				server_send_event(sv, {type = .UpdateState})
+				_update_media_controls_state(sv)
+
+				if global_config.server.notify_background_playback_state && !platform_is_window_visible() {
+					notify_send("Playback resumed")
+				}
 			}
 		case .RequestPause:
 			if audio_pause() {
 				sv.playback_state = .Paused
-				server_send_event(sv, {type = .UpdateState})
+				_update_media_controls_state(sv)
+
+				if global_config.server.notify_background_playback_state && !platform_is_window_visible() {
+					notify_send("Playback paused")
+				}
 			}
 
 		case .RequestPlayPlaylist:
@@ -548,6 +561,8 @@ server_handle_events :: proc(sv: ^Server) {
 				track := playback_queue_set_pos(&sv.playback, 0) or_break
 				_play_track(sv, track)
 			}
+
+			_update_media_controls_state(sv)
 
 		case .RequestPlayTrack:
 			playback_thread_close_track(&sv.playback_thread)

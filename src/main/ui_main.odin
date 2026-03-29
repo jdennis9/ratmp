@@ -1367,6 +1367,7 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 	imgui.SeparatorText("Notifications")
 	imgui.Checkbox("When a new track starts", &cfg.server.notify_new_track)
 	imgui.Checkbox("When a library scan starts/finishes", &cfg.server.notify_library_scan)
+	imgui.Checkbox("When the playback state changes in the background", &cfg.server.notify_background_playback_state)
 
 	// --------------------------------------------------------------------------
 	// Font

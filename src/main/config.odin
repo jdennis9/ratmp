@@ -22,6 +22,7 @@ Config :: struct {
 	server: struct {
 		notify_new_track: bool,
 		notify_library_scan: bool,
+		notify_background_playback_state: bool,
 	},
 	ui: struct {
 		background_buf: [512]u8 `json:"-"`,

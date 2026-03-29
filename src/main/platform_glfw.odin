@@ -49,6 +49,7 @@ platform_init_glfw :: proc() -> bool {
 	_platform_impl_destroy_window = proc() {
 		log.debug("Cleaning up GLFW...")
 		imgui_glfw.Shutdown()
+		video_invalidate_textures()
 		video_shutdown_opengl()
 		glfw.DestroyWindow(_glfw.window)
 		_glfw.window = nil
@@ -96,6 +97,7 @@ platform_init_glfw :: proc() -> bool {
 	}
 
 	_platform_impl_set_window_title = proc(title: cstring) {
+		if _glfw.window == nil do return
 		glfw.SetWindowTitle(_glfw.window, title)
 	}
 

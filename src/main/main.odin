@@ -128,7 +128,6 @@ run :: proc() -> Error {
 			platform_init_glfw() or_return
 			font_init_fontconfig() or_return
 			notify_init_libnotify()
-			notify_send("This is a test message")
 		}
 	}
 
@@ -270,9 +269,14 @@ _media_controls_proc :: proc(data: rawptr, event: Media_Controls_Event) {
 	sv := cast(^Server) data
 
 	switch event {
-		case .Play: server_request_resume(sv)
+		case .Play:
+			server_request_resume(sv)
+			if global_config.server.notify_background_playback_state {
+				notify_send("Playback resumed")
+			}
 		case .Toggle:
-		case .Pause: server_request_pause(sv)
+		case .Pause:
+			server_request_pause(sv)
 		case .Stop:
 		case .Next: server_request_next_track(sv)
 		case .Prev: server_request_previous_track(sv)
