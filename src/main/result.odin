@@ -7,6 +7,8 @@ import "core:log"
 
 Custom_Error :: enum {
 	InvalidName,
+	InvalidInput,
+	NotFound,
 }
 
 Error :: union {

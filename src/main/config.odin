@@ -27,35 +27,57 @@ Config :: struct {
 		background: cstring,
 		default_theme: cstring,
 		font_size: f32,
+		// @TODO: Used fixed length dynamic array when those
+		// are added.
 		// Slice of fonts_buf
 		fonts: []Config_Font,
 		close_policy: Config_Close_Policy,
 	},
 }
 
-config_init_strings :: proc(cfg: ^Config) {
+config_init_buffers :: proc(cfg: ^Config) {
 	cfg.ui.default_theme = cstring(&cfg.ui.default_theme_buf[0])
 	cfg.ui.background = cstring(&cfg.ui.background_buf[0])
 
 	for &f in cfg.ui.fonts_buf {
 		f.name = cstring(&f.name_buf[0])
 	}
+
+	cfg.ui.fonts = cfg.ui.fonts_buf[:len(cfg.ui.fonts)]
 }
 
-config_add_font :: proc(cfg: ^Config, font: Config_Font) {
+config_add_font :: proc(cfg: ^Config, name: string) {
 	index := len(cfg.ui.fonts)
 	if index >= CONFIG_MAX_FONTS do return
 
 	cfg.ui.fonts = cfg.ui.fonts_buf[:index+1]
-	cfg.ui.fonts[index] = font
+	set_cstring_buf(cfg.ui.fonts[index].name_buf[:], name)
 }
 
 config_remove_font :: proc(cfg: ^Config, index: int) {
 	if index >= len(cfg.ui.fonts) do return
 	if index + 1 != len(cfg.ui.fonts) {
-		copy(cfg.ui.fonts[index:], cfg.ui.fonts[index+1:])
+		for i in index..<len(cfg.ui.fonts)-1 {
+			cfg.ui.fonts[i].name_buf = cfg.ui.fonts[i+1].name_buf
+		}
 	}
 	cfg.ui.fonts = cfg.ui.fonts_buf[:len(cfg.ui.fonts)-1]
+}
+
+config_move_font_up :: proc(cfg: ^Config, index: int) {
+	if index == 0 do return
+	src := index
+	dst := index-1
+	cfg.ui.fonts[dst].name_buf, cfg.ui.fonts[src].name_buf = 
+		cfg.ui.fonts[src].name_buf, cfg.ui.fonts[dst].name_buf
+}
+
+config_move_font_down :: proc(cfg: ^Config, index: int) {
+	if index == len(cfg.ui.fonts)-1 do return
+	src := index
+	dst := index+1
+	cfg.ui.fonts[dst].name_buf, cfg.ui.fonts[src].name_buf = 
+		cfg.ui.fonts[src].name_buf, cfg.ui.fonts[dst].name_buf
 }
 
 config_load :: proc(cfg_out: ^Config, path: string, allocator: mem.Allocator) -> (error: Error) {
@@ -69,9 +91,14 @@ config_load :: proc(cfg_out: ^Config, path: string, allocator: mem.Allocator) ->
 	delete(temp.ui.background)
 	copy(temp.ui.default_theme_buf[:], string(temp.ui.default_theme))
 	delete(temp.ui.default_theme)
+	for &f, i in temp.ui.fonts {
+		set_cstring_buf(temp.ui.fonts_buf[i].name_buf[:], string(f.name))
+		delete(f.name)
+	}
+	delete(temp.ui.fonts)
 
 	cfg_out^ = temp
-	config_init_strings(cfg_out)
+	config_init_buffers(cfg_out)
 
 	return
 }

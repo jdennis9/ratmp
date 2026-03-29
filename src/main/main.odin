@@ -66,7 +66,7 @@ run :: proc() -> Error {
 	// Config
 	// --------------------------------------------------------------------------
 	{
-		config_init_strings(&global_config)
+		config_init_buffers(&global_config)
 		config_load(&global_config, global_paths.settings, context.allocator)
 	}
 
@@ -126,6 +126,7 @@ run :: proc() -> Error {
 		}
 		else {
 			platform_init_glfw() or_return
+			font_init_fontconfig() or_return
 		}
 	}
 

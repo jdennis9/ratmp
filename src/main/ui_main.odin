@@ -106,6 +106,8 @@ UI :: struct {
 		theme_data: mem.Allocator,
 		temp_arena: mem.Dynamic_Arena,
 		temp: mem.Allocator,
+		font_arena: mem.Dynamic_Arena,
+		font: mem.Allocator,
 	},
 	windows: struct {
 		library: struct {
@@ -143,6 +145,7 @@ UI :: struct {
 	},
 	actions: UI_Actions,
 	window_state: map[imgui.ID]_Window_State,
+	system_fonts: []System_Font,
 }
 
 _Saved_Theme :: struct {
@@ -185,13 +188,19 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 		ui.base_allocator = context.allocator
 	}
 	
+	// Theme data
 	mem.dynamic_arena_init(
 		&ui.allocators.theme_data_arena, block_allocator=ui.base_allocator, block_size=4096
 	)
 	ui.allocators.theme_data = mem.dynamic_arena_allocator(&ui.allocators.theme_data_arena)
 	
+	// Temp
 	mem.dynamic_arena_init(&ui.allocators.temp_arena, block_allocator=ui.base_allocator)
 	ui.allocators.temp = mem.dynamic_arena_allocator(&ui.allocators.temp_arena)
+
+	// Fonts
+	mem.dynamic_arena_init(&ui.allocators.font_arena, block_allocator=ui.base_allocator)
+	ui.allocators.font = mem.dynamic_arena_allocator(&ui.allocators.font_arena)
 	
 	// Theme defaults
 	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
@@ -201,6 +210,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ensure_dir(ui.paths.theme_folder)
 	
 	_load_themes(ui)
+	_refresh_fonts(ui)
 
 	ui_apply_config(ui, global_config)
 
@@ -221,33 +231,64 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 	style := imgui.GetStyle()
 	style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
 
+	DEFAULT_FONT_CONFIG :: imgui.FontConfig {
+		FontDataOwnedByAtlas = true,
+		GlyphMaxAdvanceX = max(f32),
+		RasterizerMultiply = 1,
+		RasterizerDensity = 1,
+		ExtraSizeScale = 1,
+	}
+
+	imgui.FontAtlas_ClearFonts(imgui.GetIO().Fonts)
+
 	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) -> Error {
 		font_buf := imgui.MemAlloc(len(buf))
 		if font_buf == nil do return mem.Allocator_Error.Out_Of_Memory
 
 		mem.copy(font_buf, raw_data(buf), len(buf))
 		
-		cfg := imgui.FontConfig {
-			FontDataOwnedByAtlas = true,
-			GlyphMaxAdvanceX = max(f32),
-			RasterizerMultiply = 1,
-			RasterizerDensity = 1,
-			ExtraSizeScale = 1 + scale_mod,
-			MergeMode = merge
-		}
+		cfg := DEFAULT_FONT_CONFIG
+		cfg.ExtraSizeScale = 1 + scale_mod
+		cfg.MergeMode = merge
 
-		io := imgui.GetIO()
-		fonts := io.Fonts
-		imgui.FontAtlas_AddFontFromMemoryTTF(fonts, font_buf, auto_cast len(buf), font_cfg = &cfg)
+		imgui.FontAtlas_AddFontFromMemoryTTF(imgui.GetIO().Fonts, font_buf, auto_cast len(buf), font_cfg = &cfg)
 
 		return nil
 	}
 
-	// @Temporary: Use fonts from memory until I support system fonts
-	//if len(cfg.fonts) == 0 {
+	add_font_from_system_font :: proc(f: System_Font, merge: bool, scale_mod: f32 = 0) -> Error {
+		path := font_get_path(f, context.allocator) or_return
+		defer delete(path)
+
+		if !os.exists(path) do return Custom_Error.NotFound
+
+		buf: [512]u8
+		set_cstring_buf(buf[:], path) or_return
+		path_cstring := cstring(&buf[0])
+
+
+		cfg := DEFAULT_FONT_CONFIG
+		cfg.ExtraSizeScale = 1 + scale_mod
+		cfg.MergeMode = merge
+
+		imgui.FontAtlas_AddFontFromFileTTF(imgui.GetIO().Fonts, path_cstring, font_cfg = &cfg)
+
+		return nil
+	}
+
+	loaded_font_count := 0
+
+	for font in cfg.fonts {
+		f := font_from_name(ui.system_fonts, string(font.name)) or_continue
+		add_font_from_system_font(f, loaded_font_count > 0) or_continue
+		loaded_font_count += 1
+	}
+
+	if loaded_font_count == 0 {
 		add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false) or_return
-		add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
-	//}
+	}
+
+	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
 
 	return nil
 }
@@ -1317,17 +1358,67 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 	}
 
+	imgui.SeparatorText("Font")
+
 	changed |= imgui.DragFloat("Font size", &cfg.ui.font_size, 0.08, 8, 36, "%.0f")
+
+	if imgui.BeginCombo("##add_font", "Add font") {
+		defer imgui.EndCombo()
+
+		for sf, i in ui.system_fonts {
+			imgui.PushIDInt(auto_cast i)
+			defer imgui.PopID()
+
+			if imgui.MenuItem(sf.name) {
+				config_add_font(cfg, string(sf.name))
+				changed = true
+			}
+		}
+	}
+
+	if imgui.BeginListBox("Fonts") {
+		defer imgui.EndListBox()
+
+		for font, i in cfg.ui.fonts {
+			//imx.text_unformatted(string(font.name))
+			imgui.PushIDInt(auto_cast i)
+			defer imgui.PopID()
+
+			imgui.MenuItem(font.name)
+			if imgui.BeginPopupContextItem() {
+				defer imgui.EndPopup()
+
+				if imgui.MenuItem("Move up") {
+					config_move_font_up(cfg, i)
+					changed = true
+				}
+				if imgui.MenuItem("Move down") {
+					config_move_font_down(cfg, i)
+					changed = true
+				}
+				if imgui.MenuItem("Remove") {
+					config_remove_font(cfg, i)
+					changed = true
+					break
+				}
+			}
+		}
+	}
 
 	return
 }
 
 _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Error {
-	log.debug("Loading background", path, "...")
-
 	if ui.background.texture != nil && !texture_is_outdated(ui.background.texture.?) {
+		if ui.background.path == path {
+			// Background is already loaded
+			return nil
+		}
 		texture_release(ui.background.texture.?)
 	}
+
+	log.debug("Loading background", path, "...")
+	TIME_SCOPE("Load background", path)
 
 	if ui.background.path != "" && ui.background.path != path {
 		delete(ui.background.path)
@@ -1349,6 +1440,13 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 
 	log.debugf("Loaded image with size: %dx%d (%M)", width, height, width*height*4)
 
+	return nil
+}
+
+_refresh_fonts :: proc(ui: ^UI) -> Error {
+	for font in ui.system_fonts do font_free(font)
+	free_all(ui.allocators.font)
+	ui.system_fonts = font_list_system_fonts(ui.allocators.font) or_return
 	return nil
 }
 

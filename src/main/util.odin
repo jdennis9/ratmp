@@ -12,8 +12,11 @@ string_from_array :: proc(arr: []u8) -> string {
 	else do return string(arr[:])
 }
 
-set_cstring_buf :: proc(buf: []u8, str: string) {
+set_cstring_buf :: proc(buf: []u8, str: string) -> bool {
+	if len(str) > len(buf)-1 do return false
 	copy(buf[:len(buf)-1], str)
+	buf[len(str)] = 0
+	return true
 }
 
 hash_string_64 :: proc(str: string) -> u64 {
