@@ -21,6 +21,11 @@ platform_init_glfw :: proc() -> bool {
 	}
 	
 	_platform_impl_make_window = proc() -> bool {
+		// libdecor will sometimes cause a crash when calling glfw.CreateWindow()
+		when ODIN_OS == .Linux {
+			glfw.WindowHint(glfw.WAYLAND_DISABLE_LIBDECOR, true)
+			glfw.WindowHint(glfw.WAYLAND_LIBDECOR, false)
+		}
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
 		glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 0)
 		
