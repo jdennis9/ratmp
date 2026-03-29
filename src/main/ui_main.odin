@@ -1,6 +1,8 @@
 #+private file
 package main
 
+import "core:slice"
+import "core:sort"
 import "core:path/filepath"
 import "core:os"
 import "core:encoding/json"
@@ -145,6 +147,7 @@ UI :: struct {
 	},
 	actions: UI_Actions,
 	window_state: map[imgui.ID]_Window_State,
+	sorted_window_states: []imgui.ID,
 	system_fonts: []System_Font,
 }
 
@@ -466,7 +469,8 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		}
 
 		if imgui.BeginMenu("View") {
-			for _, &state in ui.window_state {
+			for window_id in ui.sorted_window_states {
+				state := (&ui.window_state[window_id]) or_continue
 				if imgui.MenuItem(state.name) {
 					state.bring_to_front = true
 					state.open = true
@@ -897,6 +901,30 @@ _begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.Wind
 			open = default_open
 		}
 		state = &ui.window_state[id]
+
+		// Sort windows by name
+		delete(ui.sorted_window_states)
+		ui.sorted_window_states, _ = slice.map_keys(ui.window_state)
+		sort.sort(
+			sort.Interface {
+				collection = ui,
+				len = proc(it: sort.Interface) -> int {
+					return len((cast(^UI) it.collection).sorted_window_states)
+				},
+				less = proc(it: sort.Interface, a, b: int) -> bool {
+					ui := cast(^UI) it.collection
+					A := ui.window_state[ui.sorted_window_states[a]] or_return
+					B := ui.window_state[ui.sorted_window_states[b]] or_return
+					return strings.compare(string(A.name), string(B.name)) < 0
+				},
+				swap = proc(it: sort.Interface, a, b: int) {
+					ui := cast(^UI) it.collection
+					ui.sorted_window_states[a], ui.sorted_window_states[b] = 
+						ui.sorted_window_states[b], ui.sorted_window_states[a]
+				}
+			},
+		)
+
 	}
 	else if !state.open do return false
 
