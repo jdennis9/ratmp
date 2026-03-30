@@ -1,5 +1,6 @@
 package main
 
+import "core:image"
 import "core:encoding/json"
 import "core:mem"
 import "core:os"
@@ -19,6 +20,7 @@ Error :: union {
 	mem.Allocator_Error,
 	json.Unmarshal_Error,
 	json.Marshal_Error,
+	image.Error,
 	Custom_Error,
 }
 

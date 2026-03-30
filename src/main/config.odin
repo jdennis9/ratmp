@@ -29,6 +29,7 @@ Config :: struct {
 		default_theme_buf: [128]u8 `json:"-"`,
 		fonts_buf: [CONFIG_MAX_FONTS]Config_Font `json:"-"`,
 		
+		background_fit_policy: Image_Fit_Policy,
 		background: cstring,
 		default_theme: cstring,
 		font_size: f32,

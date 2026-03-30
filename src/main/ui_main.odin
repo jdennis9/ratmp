@@ -136,7 +136,8 @@ UI :: struct {
 	},
 	background: struct {
 		texture: Maybe(Texture_Handle),
-		width, height: int,
+		policy: Image_Fit_Policy,
+		size: [2]f32,
 		path: string,
 	},
 	paths: struct {
@@ -229,11 +230,13 @@ ui_shutdown :: proc(ui: ^UI) {
 ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 	cfg := the_cfg.ui
 
+	
 	_set_background(ui, string(cfg.background), context.allocator)
 	_set_theme_by_name(ui, string(cfg.default_theme))
-
+	
 	style := imgui.GetStyle()
 	style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
+	ui.background.policy = cfg.background_fit_policy
 
 	DEFAULT_FONT_CONFIG :: imgui.FontConfig {
 		FontDataOwnedByAtlas = true,
@@ -347,10 +350,11 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 
 	if ui.background.texture != nil {
 		drawlist := imgui.GetBackgroundDrawList()
-
+		
 		if tex_ref, ok := texture_get_imgui_ref(ui.background.texture.?); ok {
 			size := imgui.GetIO().DisplaySize
-			imgui.DrawList_AddImage(drawlist, tex_ref, {0, 0}, size)
+			rect, uv := image_fit(ui.background.policy, {{0, 0}, size}, ui.background.size)
+			imgui.DrawList_AddImage(drawlist, tex_ref, rect.min, rect.max, uv.min, uv.max)
 		}
 	}
 	
@@ -495,6 +499,7 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				if imgui.MenuItem("Load library") {
 					ui.actions.debug.load_library = true
 				}
+				imx.select_enum("Background policy", &ui.background.policy)
 				imgui.EndMenu()
 			}
 		}
@@ -1442,6 +1447,8 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		}
 	}
 
+	imx.select_enum("Background fit policy", &ui.background.policy)
+
 	if imgui.Button("Change background") {
 		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 	}
@@ -1526,8 +1533,8 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 
 	ui.background.texture = nil
 	h, width, height := texture_create_from_file(path) or_return
-	ui.background.width = width
-	ui.background.height = height
+	ui.background.size.x = f32(width)
+	ui.background.size.y = f32(height)
 	ui.background.texture = h
 
 	if ui.background.path != path {

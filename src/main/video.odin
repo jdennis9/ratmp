@@ -99,14 +99,16 @@ texture_is_outdated :: proc(h: Texture_Handle) -> bool {
 	return false
 }
 
-texture_create_from_file :: proc(path: string) -> (handle: Texture_Handle, width, height: int, ok: bool) {
+texture_create_from_file :: proc(
+	path: string
+) -> (handle: Texture_Handle, width, height: int, error: Error) {
 	path_buf: [512]u8
 	path_cstr := cstring(&path_buf[0])
 	copy(path_buf[:511], path)
 
 	w, h: i32
 	image_data := stbi.load(path_cstr, &w, &h, nil, 4)
-	if image_data == nil do return
+	if image_data == nil do return {}, 0, 0, Custom_Error.NotFound
 	defer stbi.image_free(image_data)
 
 	width = auto_cast w
@@ -119,7 +121,6 @@ texture_create_from_file :: proc(path: string) -> (handle: Texture_Handle, width
 	}
 
 	handle = texture_create(desc) or_return
-	ok = true
 	return
 }
 
@@ -141,4 +142,10 @@ texture_create_from_memory :: proc(data: []byte) -> (handle: Texture_Handle, wid
 	handle = texture_create(desc) or_return
 	ok = true
 	return
+}
+
+@init @(private="file")
+_register_image_loaders :: proc "contextless" () {
+	//image.register(.JPEG, jpeg.load_from_bytes, jpeg.destroy)
+	//image.register(.PNG, png.load_from_bytes, png.destroy)
 }
