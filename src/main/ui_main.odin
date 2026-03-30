@@ -858,6 +858,8 @@ _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
 	if track.artist != "" do row("Artist", track.artist)
 	if track.album != "" do row("Album", track.album)
 	if track.genre != "" do row("Genre", track.genre)
+	rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
+	row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
 	if track.samplerate != 0 do row("Sample rate", track.samplerate, "Hz", sep="")
 	if track.url != "" do row("Path", track.url)
 	row("From", protocol_string[track.protocol])

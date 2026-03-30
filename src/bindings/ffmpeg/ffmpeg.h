@@ -38,6 +38,7 @@ FFMPEG_Context *ffmpeg_create_context();
 void ffmpeg_free_context(FFMPEG_Context *ff);
 bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info_out);
 void ffmpeg_close_input(FFMPEG_Context *ff);
+bool ffmpeg_probe_codec_and_format(const char *filename, char *codec, char *format, int buf_size);
 bool ffmpeg_is_open(FFMPEG_Context *ff);
 Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_spec, Packet *packet_out);
 void ffmpeg_free_packet(Packet *packet);

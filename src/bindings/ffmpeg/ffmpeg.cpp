@@ -268,3 +268,59 @@ bool ffmpeg_is_open(FFMPEG_Context *ff) {
 	return ff->demuxer != NULL;
 }
 
+
+bool ffmpeg_probe_codec_and_format(
+	const char *filename, char *codec_buf,
+	char *format_buf, int buf_size
+) {
+	bool found_stream = false;
+	const AVCodec *codec = NULL;
+	const AVStream *stream = NULL;
+	const AVCodecParameters *codecpar = NULL;
+	const AVInputFormat *input_format = NULL;
+	AVFormatContext *demuxer = NULL;
+	int stream_index = 0;
+
+	demuxer = avformat_alloc_context();
+	if (avformat_open_input(&demuxer, filename, NULL, NULL)) return false;
+	defer(avformat_free_context(demuxer));
+
+	avformat_find_stream_info(demuxer, NULL);
+
+	for (int i = 0; i < demuxer->nb_streams; ++i) {
+		if (demuxer->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+			stream_index = i;
+			found_stream = true;
+			break;
+		}
+	}
+
+
+	if (!found_stream) return false;
+
+	stream = demuxer->streams[stream_index];
+	input_format = demuxer->iformat;
+	codecpar = stream->codecpar;
+	codec = avcodec_find_decoder(codecpar->codec_id);
+	if (!codec) return false;
+
+	if (codec_buf) {
+		if (codec && codec->name) {
+			strncpy(codec_buf, codec->name, buf_size);
+		}
+		else {
+			strncpy(codec_buf, "UNKNOWN", buf_size);
+		}
+	}
+
+	if (format_buf) {
+		if (input_format && input_format->name) {
+			strncpy(format_buf, input_format->name, buf_size);
+		}
+		else {
+			strncpy(format_buf, "UNKNOWN", buf_size);
+		}
+	}
+
+	return true;
+}

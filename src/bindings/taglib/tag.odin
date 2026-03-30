@@ -76,6 +76,11 @@ foreign taglib {
 	file_audioproperties :: proc(file: File) -> Audio_Properties ---
 	file_save :: proc(file: File) -> BOOL ---
 
+	// Must be freed with property_free
+	property_keys :: proc(file: File) -> [^]cstring ---
+	property_get :: proc(file: File, name: cstring) -> [^]cstring ---
+	property_free :: proc(props: [^]cstring) ---
+
 	tag_title :: proc(tag: Tag) -> cstring ---
 	tag_artist :: proc(tag: Tag) -> cstring ---
 	tag_album :: proc(tag: Tag) -> cstring ---
@@ -84,7 +89,6 @@ foreign taglib {
 	tag_year :: proc(tag: Tag) -> c.uint ---
 	tag_track :: proc(tag: Tag) -> c.uint ---
 	tag_free_strings :: proc() ---
-
 
 	tag_set_title :: proc(tag: Tag, title: cstring) ---
 	tag_set_artist :: proc(tag: Tag, artist: cstring) ---

@@ -9,6 +9,8 @@ Custom_Error :: enum {
 	InvalidName,
 	InvalidInput,
 	NotFound,
+	// Error happening in third-party library
+	ThirdParty,
 }
 
 Error :: union {

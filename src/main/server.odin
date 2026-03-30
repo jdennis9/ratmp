@@ -1,5 +1,7 @@
 package main
 
+import "core:fmt"
+import "src:bindings/ffmpeg"
 import "core:sort"
 import "core:encoding/cbor"
 import "core:time"
@@ -56,6 +58,8 @@ Track :: struct {
 	album,
 	genre,
 	title: string,
+
+	format: Audio_File_Format,
 
 	duration_seconds,
 	track_no,
@@ -209,7 +213,7 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.background_scan.runner.init_context = context
 	thread.start(sv.background_scan.runner)
 
-	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.bin"}, context.allocator)
+	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
 
 	return true
 }
@@ -226,6 +230,7 @@ track_clone :: proc(track: Track, allocator: mem.Allocator) -> (output: Track, e
 	if track.artist != "" do output.artist = strings.clone(track.artist, allocator) or_return
 	if track.genre != "" do output.genre = strings.clone(track.genre, allocator) or_return
 	if track.title != "" do output.title = strings.clone(track.title, allocator) or_return
+	output.format = track.format
 	output.url = strings.clone(track.url, allocator)
 	output.bitrate_kbps = track.bitrate_kbps
 	output.channels = track.channels
@@ -315,10 +320,11 @@ taglib_open :: proc(path: string) -> taglib.File {
 }
 
 read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (track: Track, found: bool) {
-	if !file_is_type(path, .Audio) do return
+	track.format = audio_file_format_from_extension(filepath.ext(path)) or_return
+
+	TIME_SCOPE("TagLib probe")
 
 	file := taglib_open(path)
-
 	
 	if file == nil {
 		log.warn("Failed to open file", path)
@@ -622,30 +628,9 @@ server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Hand
 server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 	TIME_SCOPE("Save library", path)
 
-	file, file_error := os.create(path)
-	if file_error != nil {
-		log.error(file_error)
-		return false
-	}
-	defer os.close(file)
+	track_db_save(&sv.tracks, path)
 
-	lib := server_get_all_tracks(sv, context.allocator)
-	defer delete(lib)
-
-	data: Server_Library_Save_Data
-	defer delete(data.tracks)
-	data.folder_cover_art = sv.folder_cover_art
-
-	for track_id in lib {
-		t := get_track(sv, track_id) or_continue
-		append(&data.tracks, t^)
-	}
-
-	error := cbor.marshal_into_writer(os.to_writer(file), data)
-	if error != nil {
-		log.error(error)
-		return false
-	}
+	// @TODO: Save folder cover art
 
 	return true
 }
@@ -653,30 +638,9 @@ server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
 	TIME_SCOPE("Load library", path)
 
-	file, file_error := os.open(path)
-	if file_error != nil {
-		log.error(file_error)
-		return false
-	}
-	defer os.close(file)
+	track_db_load(&sv.tracks, &sv.track_url_hash_map, path, context.allocator)
 
-	data: Server_Library_Save_Data
-	defer delete(data.tracks)
-	defer delete(data.folder_cover_art)
-
-	error := cbor.unmarshal_from_reader(os.to_reader(file), &data)
-	if error != nil {
-		log.error(error)
-		return false
-	}
-
-	for key, val in data.folder_cover_art {
-		sv.folder_cover_art[key] = val
-	}
-
-	for track in data.tracks {
-		server_add_track(sv, track)
-	}
+	// @TODO: Load folder cover art
 
 	return true
 }
