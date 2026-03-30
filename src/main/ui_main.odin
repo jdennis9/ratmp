@@ -351,8 +351,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		
 		if tex_ref, ok := texture_get_imgui_ref(ui.background.texture.?); ok {
 			size := imgui.GetIO().DisplaySize
-			rect, uv := image_fit(ui.background.policy, {{0, 0}, size}, ui.background.size)
-			imgui.DrawList_AddImage(drawlist, tex_ref, rect.min, rect.max, uv.min, uv.max)
+			rect := image_fit_clip(ui.background.policy, {{0, 0}, size}, ui.background.size)
+			imgui.DrawList_AddImage(drawlist, tex_ref, rect.min, rect.max)
 		}
 	}
 	
@@ -931,17 +931,27 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 			imgui.PushStyleColor(.ButtonActive, 0)
 			defer imgui.PopStyleColor(3)
 
-			ratio := f32(w.cover_height) / f32(w.cover_width)
-			size := [2]f32{
-				avail_size.x,
-				avail_size.x * ratio,
+			if global_config.ui.crop_cover_art {
+				uv := image_fit_uv(.Fill, {{}, avail_size.xx}, {f32(w.cover_width), f32(w.cover_height)})
+				imgui.ImageButton("##cover", ref, avail_size.xx, uv.min, uv.max)
 			}
-			imgui.ImageButton("##cover", ref, size)
+			else {
+				ratio := f32(w.cover_height) / f32(w.cover_width)
+				imgui.ImageButton("##cover", ref, avail_size.xx * {1, ratio})
+			}
 
 			if imgui.BeginItemTooltip() {
 				imx.text(32, "Dimensions: ", w.cover_width, "x", w.cover_height, sep="")
 				imx.textf(32, "Size: %M", w.cover_file_size)
 				imgui.EndTooltip()
+			}
+
+			if imgui.BeginPopupContextItem("##cover") {
+				if imgui.MenuItem("Crop to square", nil, global_config.ui.crop_cover_art) {
+					global_config.ui.crop_cover_art = !global_config.ui.crop_cover_art
+					global_config_dirty = true
+				}
+				defer imgui.EndPopup()
 			}
 		}
 	}
@@ -1451,6 +1461,8 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 	}
 
+	imgui.Checkbox("Crop cover art to square", &cfg.ui.crop_cover_art)
+
 	// --------------------------------------------------------------------------
 	// Notifications
 	// --------------------------------------------------------------------------
@@ -1484,7 +1496,6 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		defer imgui.EndListBox()
 
 		for font, i in cfg.ui.fonts {
-			//imx.text_unformatted(string(font.name))
 			imgui.PushIDInt(auto_cast i)
 			defer imgui.PopID()
 
