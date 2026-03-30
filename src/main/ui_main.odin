@@ -249,14 +249,12 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 	imgui.FontAtlas_ClearFonts(imgui.GetIO().Fonts)
 
 	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) -> Error {
-		font_buf := imgui.MemAlloc(len(buf))
-		if font_buf == nil do return mem.Allocator_Error.Out_Of_Memory
-
-		mem.copy(font_buf, raw_data(buf), len(buf))
+		font_buf := raw_data(buf)
 		
 		cfg := DEFAULT_FONT_CONFIG
 		cfg.ExtraSizeScale = 1 + scale_mod
 		cfg.MergeMode = merge
+		cfg.FontDataOwnedByAtlas = false
 
 		imgui.FontAtlas_AddFontFromMemoryTTF(imgui.GetIO().Fonts, font_buf, auto_cast len(buf), font_cfg = &cfg)
 
