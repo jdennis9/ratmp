@@ -174,6 +174,8 @@ run :: proc() -> Error {
 	ui_init(&ui, &server) or_return
 	defer ui_shutdown(&ui)
 
+	if command_opts.profile_startup do return nil
+
 	_g.running = true
 	
 	for _g.running {

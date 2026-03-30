@@ -672,7 +672,6 @@ server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
 
 	for key, val in data.folder_cover_art {
 		sv.folder_cover_art[key] = val
-		log.debug(key, val)
 	}
 
 	for track in data.tracks {

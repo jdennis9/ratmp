@@ -28,6 +28,7 @@ global_command_opts: struct {
 	force_opengl: bool `usage:"(Windows) Force using OpenGL if DX11 is not supported on your device."`,
 	no_tray: bool `usage:"Don't create a system tray icon."`,
 	no_audio: bool `usage:"(Debug) Disable audio output."`,
+	profile_startup: bool `args:"hidden" usage:"(Profiling) Exit after initial startup."`,
 }
 
 global_paths: struct {
