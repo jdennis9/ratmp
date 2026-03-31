@@ -170,3 +170,6 @@ select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
 push_font_scale :: proc(scale: f32) {
 	imgui.PushFontFloat(nil, imgui.GetStyle().FontSizeBase * scale)
 }
+
+small_selectable :: proc(text: cstring, ) {
+}

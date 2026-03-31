@@ -146,6 +146,7 @@ UI :: struct {
 	themes: [dynamic]_Theme,
 	debug: struct {
 		show_style_editor: bool,
+		show_demo_window: bool,
 	},
 	actions: UI_Actions,
 	window_state: map[imgui.ID]_Window_State,
@@ -229,13 +230,10 @@ ui_shutdown :: proc(ui: ^UI) {
 @private
 ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 	cfg := the_cfg.ui
-
 	
 	_set_background(ui, string(cfg.background), context.allocator)
 	_set_theme_by_name(ui, string(cfg.default_theme))
 	
-	style := imgui.GetStyle()
-	style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
 	ui.background.policy = cfg.background_fit_policy
 
 	DEFAULT_FONT_CONFIG :: imgui.FontConfig {
@@ -248,7 +246,10 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 
 	imgui.FontAtlas_ClearFonts(imgui.GetIO().Fonts)
 
-	add_font_from_memory :: proc(buf: []byte, merge: bool, scale_mod: f32 = 0) -> Error {
+	add_font_from_memory :: proc(
+		buf: []byte, merge: bool,
+		scale_mod: f32 = 0,
+	) -> Error {
 		font_buf := raw_data(buf)
 		
 		cfg := DEFAULT_FONT_CONFIG
@@ -256,7 +257,9 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 		cfg.MergeMode = merge
 		cfg.FontDataOwnedByAtlas = false
 
-		imgui.FontAtlas_AddFontFromMemoryTTF(imgui.GetIO().Fonts, font_buf, auto_cast len(buf), font_cfg = &cfg)
+		imgui.FontAtlas_AddFontFromMemoryTTF(
+			imgui.GetIO().Fonts, font_buf, auto_cast len(buf), font_cfg = &cfg
+		)
 
 		return nil
 	}
@@ -293,7 +296,9 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 		add_font_from_memory(#load("data/NotoSans-SemiBold.ttf"), false) or_return
 	}
 
-	add_font_from_memory(#load("data/Font Awesome 7 Free-Solid-900.otf"), true, -0.2) or_return
+	add_font_from_memory(
+		#load("data/Font Awesome 7 Free-Solid-900.otf"), true, scale_mod = -0.2,
+	) or_return
 
 	return nil
 }
@@ -304,6 +309,13 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	
 	sv := ui.server
 	ui.actions = {}
+	
+	//style := imgui.GetStyle()
+	//style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
+	if global_config.ui.font_size != 0 {
+		imgui.PushFontFloat(nil, global_config.ui.font_size)
+	}
+	defer if global_config.ui.font_size != 0 do imgui.PopFont()
 
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.PushStyleColor(.WindowBg, 0)
@@ -370,6 +382,10 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 			imgui.ShowStyleEditor()
 		}
 		imgui.End()
+	}
+
+	if ui.debug.show_demo_window {
+		imgui.ShowDemoWindow(&ui.debug.show_demo_window)
 	}
 
 	// --------------------------------------------------------------------------
@@ -489,6 +505,9 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				if imgui.MenuItem("Style editor") {
 					ui.debug.show_style_editor = true
 				}
+				if imgui.MenuItem("Demo window") {
+					ui.debug.show_demo_window = true
+				}
 				if imgui.MenuItem("Force video reset") {
 					ui.actions.debug.force_device_reset = true
 				}
@@ -524,8 +543,8 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		imgui.Separator()
 		shuffled := server_is_shuffle_enabled(sv)
 
-		if imgui.SmallButton(
-			shuffled ? ICON_SHUFFLE + "###shuffle" : ICON_ARROW_RIGHT + "###shuffle"
+		if imgui.MenuItem(
+			ICON_SHUFFLE + "###shuffle", nil, shuffled
 		) {
 			if shuffled {
 				server_set_shuffle_enabled(sv, false)
@@ -535,25 +554,22 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 			}
 		}
 
-		if imgui.SmallButton(ICON_PREVIOUS_TRACK) {
+		if imgui.MenuItem(ICON_PREVIOUS_TRACK) {
 			server_request_previous_track(sv)
 		}
-
-		imgui.BeginDisabled(sv.playback_state == .Stopped)
 		
 		switch sv.playback_state {
 		case .Stopped, .Paused:
-			if imgui.SmallButton(ICON_PLAY + "###playback_state") {
+			if imgui.MenuItem(ICON_PLAY + "###playback_state", enabled=sv.playback_state != .Stopped) {
 				server_request_resume(sv)
 			}
 		case .Playing:
-			if imgui.SmallButton(ICON_PAUSE + "###playback_state") {
+			if imgui.MenuItem(ICON_PAUSE + "###playback_state", enabled=sv.playback_state != .Stopped) {
 				server_request_pause(sv)
 			}
 		}
-		imgui.EndDisabled()
 
-		if imgui.SmallButton(ICON_NEXT_TRACK) {
+		if imgui.MenuItem(ICON_NEXT_TRACK) {
 			server_request_next_track(sv)
 		}
 
@@ -1509,21 +1525,21 @@ _show_settings_editor :: proc(ui: ^UI) -> (changed: bool) {
 		}
 	}
 
-	imx.select_enum("Background fit policy", &ui.background.policy)
+	changed |= imx.select_enum("Background fit policy", &ui.background.policy)
 
 	if imgui.Button("Change background") {
 		async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 	}
 
-	imgui.Checkbox("Crop cover art to square", &cfg.ui.crop_cover_art)
+	changed |= imgui.Checkbox("Crop cover art to square", &cfg.ui.crop_cover_art)
 
 	// --------------------------------------------------------------------------
 	// Notifications
 	// --------------------------------------------------------------------------
 	imgui.SeparatorText("Notifications")
-	imgui.Checkbox("When a new track starts", &cfg.server.notify_new_track)
-	imgui.Checkbox("When a library scan starts/finishes", &cfg.server.notify_library_scan)
-	imgui.Checkbox("When the playback state changes in the background", &cfg.server.notify_background_playback_state)
+	changed |= imgui.Checkbox("When a new track starts", &cfg.server.notify_new_track)
+	changed |= imgui.Checkbox("When a library scan starts/finishes", &cfg.server.notify_library_scan)
+	changed |= imgui.Checkbox("When the playback state changes in the background", &cfg.server.notify_background_playback_state)
 
 	// --------------------------------------------------------------------------
 	// Font
