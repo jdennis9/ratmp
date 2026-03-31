@@ -642,7 +642,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 
 		imgui.Separator()
 		if channel_string, have_channel_string := audio_channels_to_string(
-			track.channels
+			auto_cast track.channels
 		); have_channel_string {
 			imx.text_unformatted(channel_string)
 		}

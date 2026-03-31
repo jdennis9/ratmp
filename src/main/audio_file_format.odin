@@ -2,7 +2,7 @@ package main
 
 import "core:strings"
 
-Audio_File_Format :: enum {
+Audio_File_Format :: enum u8 {
 	Wav,
 	Flac,
 	Ogg,

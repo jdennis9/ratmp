@@ -60,19 +60,20 @@ Track :: struct {
 	title: string,
 
 	format: Audio_File_Format,
+	flags: bit_set[Track_Flag; u8],
 
-	duration_seconds,
-	track_no,
-	release_year,
-	bitrate_kbps,
-	channels,
-	samplerate,
+	duration_seconds: i32,
+	track_no: i16,
+	channels: i16,
+	samplerate: i32,
+	release_year: i32,
+	bitrate_kbps: i32,
+
 	file_size: int,
 
 	file_date,
 	date_added: time.Time,
 
-	flags: bit_set[Track_Flag],
 }
 
 Track_Category_Entry :: struct {
@@ -841,7 +842,7 @@ track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from
 		}
 
 		entry := &cat.entries[entry_index]
-		entry.duration += track.duration_seconds
+		entry.duration += auto_cast track.duration_seconds
 		append(&entry.tracks, track.handle)
 	}
 }
@@ -879,8 +880,8 @@ TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
 	.Artist = proc(a, b: Track) -> int {return strings.compare(a.artist, b.artist)},
 	.Album = proc(a, b: Track) -> int {return strings.compare(a.album, b.album)},
 	.Genre = proc(a, b: Track) -> int {return strings.compare(a.genre, b.genre)},
-	.Duration = proc(a, b: Track) -> int {return a.duration_seconds - b.duration_seconds},
-	.Track = proc(a, b: Track) -> int {return a.track_no - b.track_no},
+	.Duration = proc(a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
+	.Track = proc(a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
 	.FileDate = proc(a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
 	.DateAdded = proc(a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
 }
