@@ -1842,10 +1842,16 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 	}
 
 	show_map :: proc(m: Allocator_Map) {
+		total_usage: i64
 		for name, entry in m {
 			imx.title_text(name)
 			show_info(entry.tracker^)
+			total_usage += entry.tracker.current_memory_allocated
 		}
+
+		imx.push_font_scale(1.2)
+		imx.textf(64, "Total usage: %M", total_usage)
+		imgui.PopFont()
 	}
 
 	imgui.BeginTabBar("##memory_tabs") or_return

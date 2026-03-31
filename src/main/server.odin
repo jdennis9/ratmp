@@ -135,8 +135,12 @@ Track_Map :: hm.Dynamic_Handle_Map(Track, Track_ID)
 
 Server :: struct {
 	allocator_map: Allocator_Map,
-	track_arena: mem.Dynamic_Arena,
-	track_allocator: mem.Allocator,
+	allocators: struct {
+		tracks: mem.Allocator,
+		genres: mem.Allocator,
+		albums: mem.Allocator,
+		artists: mem.Allocator,
+	},
 	playback_thread: Playback_Thread,
 	playback_state: Playback_State,
 	tracks: Track_Map,
@@ -211,7 +215,10 @@ server_init :: proc(sv: ^Server) -> bool {
 
 	//mem.dynamic_arena_init(&sv.track_arena)
 	//sv.track_allocator = mem.dynamic_arena_allocator(&sv.track_arena)
-	sv.track_allocator = allocator_map_add_dynamic_arena(&sv.allocator_map, "track_metadata")
+	sv.allocators.tracks = allocator_map_add_dynamic_arena(&sv.allocator_map, "track_metadata")
+	sv.allocators.artists = allocator_map_add_dynamic_arena(&sv.allocator_map, "artists")
+	sv.allocators.albums = allocator_map_add_dynamic_arena(&sv.allocator_map, "albums")
+	sv.allocators.genres = allocator_map_add_dynamic_arena(&sv.allocator_map, "genres")
 
 	playback_thread_init(&sv.playback_thread, {})
 
@@ -272,7 +279,7 @@ server_scan_directory_for_cover_art :: proc(sv: ^Server, dir: string) {
 	for file in files {
 		if file_is_type(file.fullpath, .Image) {
 			log.debug("Adding cover art", file.fullpath, "for folder", dir)
-			sv.folder_cover_art[hash] = strings.clone(file.fullpath, sv.track_allocator)
+			sv.folder_cover_art[hash] = strings.clone(file.fullpath, sv.allocators.tracks)
 			return
 		}
 	}
@@ -432,7 +439,7 @@ find_track_thumbnail :: proc(
 }
 
 server_add_track_from_file :: proc(sv: ^Server, path: string) -> (track_id: Track_ID, ok: bool) {
-	track := read_audio_file_metadata(path, sv.track_allocator) or_return
+	track := read_audio_file_metadata(path, sv.allocators.tracks) or_return
 	return server_add_track(sv, track)
 }
 
@@ -513,9 +520,9 @@ server_handle_events :: proc(sv: ^Server) {
 	}
 
 	if sv.track_category_serial != sv.tracks_serial {
-		track_category_build(&sv.categories.artist, &sv.tracks, "artist")
-		track_category_build(&sv.categories.album, &sv.tracks, "album")
-		track_category_build(&sv.categories.genre, &sv.tracks, "genre")
+		track_category_build(&sv.categories.artist, &sv.tracks, "artist", sv.allocators.artists)
+		track_category_build(&sv.categories.album, &sv.tracks, "album", sv.allocators.albums)
+		track_category_build(&sv.categories.genre, &sv.tracks, "genre", sv.allocators.genres)
 		sv.track_category_serial = sv.tracks_serial
 		log.debug(len(sv.categories.artist.entries), "artists")
 		log.debug(len(sv.categories.album.entries), "albums")
@@ -535,7 +542,7 @@ server_handle_events :: proc(sv: ^Server) {
 			for track in tracks {
 				path_hash := hash_string_64(track.url)
 				if path_hash in sv.track_url_hash_map do continue
-				cloned := track_clone(track, sv.track_allocator) or_continue
+				cloned := track_clone(track, sv.allocators.tracks) or_continue
 				server_add_track(sv, cloned)
 			}
 			clear(&sv.background_scan.output)
@@ -645,7 +652,7 @@ server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
 	TIME_SCOPE("Load library", path)
 
-	track_db_load(&sv.tracks, &sv.track_url_hash_map, path, sv.track_allocator)
+	track_db_load(&sv.tracks, &sv.track_url_hash_map, path, sv.allocators.tracks)
 
 	// @TODO: Load folder cover art
 
@@ -811,19 +818,55 @@ track_category_find_entry_by_name :: proc(
 	return track_category_find_entry_by_hash(cat, name_hash)
 }
 
-track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from_field: string) {
+track_category_build :: proc(
+	cat: ^Track_Category,
+	from_tracks: ^Track_Map,
+	from_field: string,
+	arena: mem.Allocator,
+) {
 	TIME_SCOPE("Build track category:", from_field)
 
-	mem.dynamic_arena_destroy(&cat.arena)
-	cat.arena = {}
-	mem.dynamic_arena_init(&cat.arena)
-	allocator := mem.dynamic_arena_allocator(&cat.arena)
+	free_all(arena)
 	clear(&cat.entries)
 
 	field := reflect.struct_field_by_name(Track, from_field)
 	assert(field.type.id == string)
 
+	_Entry :: struct {track_count: int, name: string}
+	entries: map[u32]_Entry
+
+	// Count tracks
 	it := hm.iterator_make(from_tracks)
+	for track, _ in hm.iterate(&it) {
+		field_val := reflect.struct_field_value(track^, field)
+		str := field_val.(string)
+		hash := hash_string_32(str)
+		if e := &entries[hash]; e != nil {
+			e.track_count += 1
+		}
+		else {
+			entries[hash] = _Entry {
+				track_count = 1,
+				name = str,
+			}
+		}
+	}
+
+	// Add tracks
+	cat.entries = make(#soa[dynamic]Track_Category_Entry, arena)
+	reserve(&cat.entries, len(entries))
+	
+	for hash, entry in entries {
+		e: Track_Category_Entry
+		e.tracks = make([dynamic]Track_ID, arena)
+		reserve(&e.tracks, entry.track_count)
+		e.name = entry.name
+		e.name_hash = hash
+		e.uid = generate_uid()
+		append(&cat.entries, e)
+	}
+	
+	it = hm.iterator_make(from_tracks)
 	for track, _ in hm.iterate(&it) {
 		entry_index: int
 		field_val := reflect.struct_field_value(track^, field)
@@ -833,12 +876,8 @@ track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from
 			entry_index = existing_index
 		}
 		else {
-			entry_index = len(cat.entries)
-			append(&cat.entries, Track_Category_Entry {
-				name = str,
-				name_hash = hash_string_32(str),
-				uid = generate_uid(),
-			})
+			log.warn(track)
+			continue
 		}
 
 		entry := &cat.entries[entry_index]
