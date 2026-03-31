@@ -904,6 +904,9 @@ Track_Sort_Metric :: enum {
 	FileDate,
 	DateAdded,
 	Track,
+	Bitrate,
+	Samplerate,
+	Format,
 }
 
 Track_Sort_Spec :: struct {
@@ -923,6 +926,14 @@ TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
 	.Track = proc(a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
 	.FileDate = proc(a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
 	.DateAdded = proc(a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
+	.Bitrate = proc(a, b: Track) -> int {return auto_cast (a.bitrate_kbps - b.bitrate_kbps)},
+	.Samplerate = proc(a, b: Track) -> int {return auto_cast (a.samplerate - b.samplerate)},
+	.Format = proc(a, b: Track) -> int {
+		return strings.compare(
+			reflect.enum_name_from_value(a.format) or_else "",
+			reflect.enum_name_from_value(b.format) or_else ""
+		)
+	},
 }
 
 // Metrics to fall back to when a two tracks have the same value

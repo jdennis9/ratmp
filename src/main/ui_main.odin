@@ -34,6 +34,9 @@ ICON_PLAY :: ""
 
 _Track_Table_Row :: struct {
 	album, artist, genre, title, url: string,
+	format: string,
+	samplerate: [12]u8,
+	bitrate: [9]u8,
 	duration: [9]u8,
 	year: [4]u8,
 	id: Track_ID,
@@ -712,6 +715,10 @@ _track_table_row_from_track :: proc(
 	if row.track_no != 0 do fmt.bprint(row.track_no[:], track.track_no)
 	fmt.bprint(row.year[:], track.release_year)
 
+	fmt.bprint(row.samplerate[:], track.samplerate, "Hz", sep="")
+	fmt.bprint(row.bitrate[:], track.bitrate_kbps, "kb/s", sep="")
+	row.format = AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long
+
 	return
 }
 
@@ -773,6 +780,9 @@ _track_table_show :: proc(
 		Album,
 		Genre,
 		Duration,
+		Bitrate,
+		Format,
+		Samplerate,
 	}
 
 	actions: struct {
@@ -796,16 +806,19 @@ _track_table_show :: proc(
 	// Columns
 	// --------------------------------------------------------------------------
 	column_infos: [_Column_Index]struct {
-		flags: imgui.TableColumnFlags,
 		name: cstring,
 		sort_metric: Track_Sort_Metric,
+		flags: imgui.TableColumnFlags,
 	} = {
-		.Title = {name = "Title", flags = {.NoHide}, sort_metric = .Title},
-		.Artist = {name = "Artist", sort_metric = .Artist},
-		.Album = {name = "Album", sort_metric = .Album},
-		.Genre = {name = "Genre", flags = {.DefaultHide}, sort_metric = .Genre},
-		.TrackNo = {name = "Track", flags = {.DefaultHide}, sort_metric = .Track},
-		.Duration = {name = "Duration", sort_metric = .Duration},
+		.Title =      {"Title",       .Title,      {.NoHide},    },
+		.Artist =     {"Artist",      .Artist,     {},           },
+		.Album =      {"Album",       .Album,      {},           },
+		.Genre =      {"Genre",       .Genre,      {.DefaultHide}},
+		.TrackNo =    {"Track",       .Track,      {.DefaultHide}},
+		.Duration =   {"Duration",    .Duration,   {},           },
+		.Bitrate =    {"Bitrate",     .Bitrate,    {.DefaultHide}},
+		.Format =     {"Format",      .Format,     {.DefaultHide}},
+		.Samplerate = {"Sample Rate", .Samplerate, {.DefaultHide}},
 	}
 
 	// --------------------------------------------------------------------------
@@ -925,6 +938,18 @@ _track_table_show :: proc(
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.TrackNo) {
 				imx.text_unformatted(string_from_array(row.track_no[:]))
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Format) {
+				imx.text_unformatted(row.format)
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Bitrate) {
+				imx.text_unformatted(string_from_array(row.bitrate[:]))
+			}
+
+			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Samplerate) {
+				imx.text_unformatted(string_from_array(row.samplerate[:]))
 			}
 		}
 	}
