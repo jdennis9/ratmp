@@ -1821,10 +1821,12 @@ _check_table_size :: proc() -> bool {
 // Debug
 // -----------------------------------------------------------------------------
 
-_show_memory_tracking :: proc(ui: ^UI) {
+_show_memory_tracking :: proc(ui: ^UI) -> bool {
+	sv := ui.server
+
 	if !global_command_opts.memory_debug {
 		imx.text_unformatted("Memory debugging is disabled. Launch program with -memory-debug argument.")
-		return
+		return false
 	}
 
 	show_info :: proc(t: mem.Tracking_Allocator) -> bool {
@@ -1835,6 +1837,7 @@ _show_memory_tracking :: proc(ui: ^UI) {
 		imx.kv_row("Free count", t.total_free_count)
 		imx.kv_rowf("Current allocated", "%M", t.current_memory_allocated)
 		imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
+		imx.kv_rowf("Peak usage", "%M", t.peak_memory_allocated)
 		return true
 	}
 
@@ -1845,5 +1848,18 @@ _show_memory_tracking :: proc(ui: ^UI) {
 		}
 	}
 
-	show_map(ui.allocator_map)
+	imgui.BeginTabBar("##memory_tabs") or_return
+	defer imgui.EndTabBar()
+
+	if imgui.BeginTabItem("UI") {
+		show_map(ui.allocator_map)
+		imgui.EndTabItem()
+	}
+
+	if imgui.BeginTabItem("Server") {
+		show_map(sv.allocator_map)
+		imgui.EndTabItem()
+	}
+
+	return true
 }

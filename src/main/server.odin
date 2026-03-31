@@ -133,6 +133,7 @@ Server_Background_Scan_State :: struct {
 Track_Map :: hm.Dynamic_Handle_Map(Track, Track_ID)
 
 Server :: struct {
+	allocator_map: Allocator_Map,
 	track_arena: mem.Dynamic_Arena,
 	track_allocator: mem.Allocator,
 	playback_thread: Playback_Thread,
@@ -203,8 +204,9 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.queue_uid = generate_uid()
 	sv.tracks_serial = 1
 
-	mem.dynamic_arena_init(&sv.track_arena)
-	sv.track_allocator = mem.dynamic_arena_allocator(&sv.track_arena)
+	//mem.dynamic_arena_init(&sv.track_arena)
+	//sv.track_allocator = mem.dynamic_arena_allocator(&sv.track_arena)
+	sv.track_allocator = allocator_map_add_dynamic_arena(&sv.allocator_map, "track_metadata")
 
 	playback_thread_init(&sv.playback_thread, {})
 
@@ -526,6 +528,8 @@ server_handle_events :: proc(sv: ^Server) {
 		case .BackgroundScanComplete:
 			tracks := sv.background_scan.output[:]
 			for track in tracks {
+				path_hash := hash_string_64(track.url)
+				if path_hash in sv.track_url_hash_map do continue
 				cloned := track_clone(track, sv.track_allocator) or_continue
 				server_add_track(sv, cloned)
 			}
@@ -636,7 +640,7 @@ server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 server_load_library_from_file :: proc(sv: ^Server, path: string) -> bool {
 	TIME_SCOPE("Load library", path)
 
-	track_db_load(&sv.tracks, &sv.track_url_hash_map, path, context.allocator)
+	track_db_load(&sv.tracks, &sv.track_url_hash_map, path, sv.track_allocator)
 
 	// @TODO: Load folder cover art
 

@@ -378,12 +378,13 @@ track_db_load :: proc(
 	// Convert models -> tracks for library
 	// --------------------------------------------------------------------------
 	for model in models {
-		track := _track_from_db_model(model, allocator) or_continue
 		path_hash := transmute(u64) model.path_hash
 		existing_handle, exists := url_hash_map[path_hash]
 
 		// Update the track?
 		if exists do continue
+
+		track := _track_from_db_model(model, allocator) or_continue
 
 		handle := handle_map.add(track_map, track) or_continue
 		url_hash_map[path_hash] = handle
