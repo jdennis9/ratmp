@@ -34,7 +34,7 @@ allocator_map_add :: proc(
 
 	if global_command_opts.memory_debug {
 		entry.tracker = new(mem.Tracking_Allocator)
-		mem.tracking_allocator_init(entry.tracker, iface)
+		mem.tracking_allocator_init(entry.tracker, iface, runtime.heap_allocator())
 		iface = mem.tracking_allocator(entry.tracker)
 	}
 

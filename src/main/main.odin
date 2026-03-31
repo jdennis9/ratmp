@@ -1,5 +1,6 @@
 package main
 
+import "core:mem"
 import "core:path/filepath"
 import "core:time"
 import "core:thread"
@@ -14,6 +15,11 @@ import imgui "src:thirdparty/odin-imgui"
 _g: struct {
 	want_show_window: bool,
 	running: bool,
+	tracking_allocator: mem.Tracking_Allocator,
+}
+
+get_global_tracking_allocator :: proc() -> mem.Tracking_Allocator {
+	return _g.tracking_allocator
 }
 
 @(private="file")
@@ -39,6 +45,16 @@ run :: proc() -> Error {
 	}
 
 	command_opts := global_command_opts
+
+	// --------------------------------------------------------------------------
+	// Set up allocators
+	// --------------------------------------------------------------------------
+	if command_opts.memory_debug {
+		mem.tracking_allocator_init(&_g.tracking_allocator, context.allocator)
+	}
+
+	context.allocator = 
+		command_opts.memory_debug ? mem.tracking_allocator(&_g.tracking_allocator) : context.allocator
 
 	// --------------------------------------------------------------------------
 	// Get paths

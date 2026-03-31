@@ -30,6 +30,7 @@ Decoder :: struct {
 	frame_count: int,
 	duration_seconds: i64,
 	is_open: bool,
+	packet_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 }
 
 decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_Info) -> (ok: bool) {
@@ -122,8 +123,9 @@ decoder_fill_buffer :: proc(dec: ^Decoder, output: [][]f32, samplerate: int) -> 
 
 	if !decoder_is_open(dec^) do return .NoFile
 
-	packet: [AUDIO_MAX_CHANNELS][dynamic]f32
-	defer for ch in 0..<channels do delete(packet[ch])
+	//packet: [AUDIO_MAX_CHANNELS][dynamic]f32
+	//defer for ch in 0..<channels do delete(packet[ch])
+	packet := &dec.packet_buffer
 
 	frames_wanted := len(output[0])
 	frames_decoded := 0

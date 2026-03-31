@@ -164,6 +164,8 @@ Server :: struct {
 	track_category_serial: uint,
 	// Folder name hash -> cover art path
 	folder_cover_art: map[u64]string,
+
+	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 }
 
 Server_Library_Save_Data :: struct {
@@ -183,8 +185,10 @@ server_audio_callback :: proc(
 	if event == .Stream {
 		frame_count := len(buf) / spec.channels
 		output: [AUDIO_MAX_CHANNELS][]f32
-		for ch in 0..<spec.channels do output[ch] = make([]f32, frame_count)
-		defer for ch in 0..<spec.channels do delete(output[ch])
+		for ch in 0..<spec.channels {
+			resize(&sv.audio_buffer[ch], frame_count)
+			output[ch] = sv.audio_buffer[ch][:]
+		}
 
 		status := playback_thread_request_frames(&sv.playback_thread, output[:spec.channels], spec.samplerate)
 		dsp.interlace(output[:spec.channels], buf)

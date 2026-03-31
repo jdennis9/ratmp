@@ -36,6 +36,8 @@ Playback_Thread :: struct {
 	// Set by playback_thread_request_frames
 	frames_requested: int,
 	samplerate, channels: int,
+
+	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 }
 
 Playback_Thread_Params :: struct {
@@ -93,8 +95,10 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 
 		if frames_required <= 0 do continue
 		
-		for ch in 0..<at.channels do deinterlaced[ch] = make([]f32, frames_required)
-		defer for d in deinterlaced do delete(d)
+		for ch in 0..<at.channels {
+			resize(&at.audio_buffer[ch], frames_required)
+			deinterlaced[ch] = at.audio_buffer[ch][:]
+		}
 
 		at.decode_status = decoder_fill_buffer(&at.dec, deinterlaced[:at.channels], at.samplerate)
 

@@ -1851,6 +1851,15 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 	imgui.BeginTabBar("##memory_tabs") or_return
 	defer imgui.EndTabBar()
 
+	if imgui.BeginTabItem("Misc") {
+		t := get_global_tracking_allocator()
+		show_info(t)
+		for ptr, e in t.allocation_map {
+			imx.textf(256, "%t: %M", e.location, e.size)
+		}
+		imgui.EndTabItem()
+	}
+
 	if imgui.BeginTabItem("UI") {
 		show_map(ui.allocator_map)
 		imgui.EndTabItem()
