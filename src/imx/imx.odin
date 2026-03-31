@@ -16,7 +16,7 @@ text_unformatted_ex :: proc(str: string, flags: imgui.TextFlags = {}) {
 	imgui.TextEx(cstring(base), cstring(&base[len(str)]), flags)
 }
 
-text :: proc($BUF_SIZE: uint, args: ..any, sep := "") {
+text :: proc($BUF_SIZE: uint, args: ..any, sep := " ") {
 	buf: [BUF_SIZE]u8
 	text_unformatted(fmt.bprint(buf[:], ..args, sep=sep))
 }
@@ -24,6 +24,14 @@ text :: proc($BUF_SIZE: uint, args: ..any, sep := "") {
 textf :: proc($BUF_SIZE: uint, format: string, args: ..any) {
 	buf: [BUF_SIZE]u8
 	text_unformatted(fmt.bprintf(buf[:], format, ..args))
+}
+
+title_text :: proc(args: ..any, sep := " ") {
+	buf: [256]u8
+	fmt.bprint(buf[:], ..args, sep=sep)
+	push_font_scale(1.2)
+	imgui.SeparatorText(cstring(&buf[0]))
+	imgui.PopFont()
 }
 
 typeid_to_data_type :: proc(t: typeid) -> (s: imgui.DataType, ok: bool) {
@@ -171,5 +179,37 @@ push_font_scale :: proc(scale: f32) {
 	imgui.PushFontFloat(nil, imgui.GetStyle().FontSizeBase * scale)
 }
 
-small_selectable :: proc(text: cstring, ) {
+is_item_double_clicked :: proc(button := imgui.MouseButton.Left) -> bool {
+	return imgui.IsItemClicked(button) && imgui.IsMouseDoubleClicked(button)
+}
+
+begin_kv_table :: proc(str_id: cstring, flags: imgui.TableFlags) -> bool {
+	return imgui.BeginTable(str_id, 2, flags)
+}
+
+kv_row :: proc(name: string, args: ..any, sep := "") -> (active: bool) {
+	buf: [1024]u8
+	fmt.bprint(buf[:1023], ..args, sep=sep)
+	imgui.TableNextRow()
+	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
+	if imgui.TableSetColumnIndex(1) {
+		active |= imgui.Selectable(cstring(&buf[0]))
+	}
+	return
+}
+
+kv_rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
+	buf: [1024]u8
+	fmt.bprintf(buf[:1023], format, ..args)
+	imgui.TableNextRow()
+	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
+	if imgui.TableSetColumnIndex(1) {
+		active |= imgui.Selectable(cstring(&buf[0]))
+	}
+	return
+}
+
+
+end_kv_table :: proc() {
+	imgui.EndTable()
 }

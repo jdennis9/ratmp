@@ -23,6 +23,7 @@ run :: proc() -> Error {
 
 	// --------------------------------------------------------------------------
 	// Parse command-line
+	// This needs to happen first because it affects many things!
 	// --------------------------------------------------------------------------
 	if len(os.args) > 1 {
 		error := flags.parse(&global_command_opts, os.args[1:])

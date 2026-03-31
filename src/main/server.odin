@@ -86,6 +86,7 @@ Track_Category_Entry :: struct {
 Track_Category_Entry_Ptr :: #soa^#soa[dynamic]Track_Category_Entry
 
 Track_Category :: struct {
+	name: string,
 	arena: mem.Dynamic_Arena,
 	entries: #soa[dynamic]Track_Category_Entry,
 }
@@ -215,6 +216,10 @@ server_init :: proc(sv: ^Server) -> bool {
 	thread.start(sv.background_scan.runner)
 
 	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
+
+	sv.categories.album.name = "Album"
+	sv.categories.artist.name = "Artist"
+	sv.categories.genre.name = "Genre"
 
 	return true
 }
@@ -618,21 +623,6 @@ server_request_next_track :: proc(sv: ^Server) {
 	server_send_event(sv, {type = .NextTrackRequested})
 }
 
-server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Handle, ok: bool) {
-	pl := Playlist {
-		uid = generate_uid(),
-		name_cstring = strings.clone_to_cstring(name),
-		serial = 1,
-	}
-	pl.name = string(pl.name_cstring)
-
-	handle = hm.add(&sv.playlists, pl) or_return
-	sv.playlists_serial += 1
-	
-	ok = true
-	return
-}
-
 server_save_library_to_file :: proc(sv: ^Server, path: string) -> bool {
 	TIME_SCOPE("Save library", path)
 
@@ -790,6 +780,10 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Track categorizing
+// -----------------------------------------------------------------------------
+
 track_category_find_entry_by_hash :: proc(
 	cat: ^Track_Category, hash: u32
 ) -> (index: int, found: bool) {
@@ -843,6 +837,10 @@ track_category_build :: proc(cat: ^Track_Category, from_tracks: ^Track_Map, from
 		append(&entry.tracks, track.handle)
 	}
 }
+
+// -----------------------------------------------------------------------------
+// Track sorting
+// -----------------------------------------------------------------------------
 
 Sort_Order :: enum {
 	Ascending,
@@ -935,4 +933,43 @@ sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
 
 	if spec.order == .Descending do sort.reverse_sort(iface)
 	else do sort.sort(iface)
+}
+
+// -----------------------------------------------------------------------------
+// Playlist management
+// -----------------------------------------------------------------------------
+
+Cant_Add_Playlist_Reason :: enum {
+	None,
+	NameExists,
+	NameEmpty,
+}
+
+server_can_add_playlist :: proc(sv: ^Server, name: string) -> Cant_Add_Playlist_Reason {
+	if name == "" do return .NameEmpty
+	it := hm.iterator_make(&sv.playlists)
+	for playlist, _ in hm.iterate(&it) {
+		if name == playlist.name do return .NameExists
+	}
+
+	return .None
+}
+
+server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Handle, ok: bool) {
+	pl := Playlist {
+		uid = generate_uid(),
+		name_cstring = strings.clone_to_cstring(name),
+		serial = 1,
+	}
+	pl.name = string(pl.name_cstring)
+
+	handle = hm.add(&sv.playlists, pl) or_return
+	sv.playlists_serial += 1
+	
+	ok = true
+	return
+}
+
+server_get_playlist :: proc(sv: ^Server, handle: Playlist_Handle) -> (playlist: ^Playlist, found: bool) {
+	return hm.get(&sv.playlists, handle)
 }

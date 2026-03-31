@@ -29,6 +29,7 @@ global_command_opts: struct {
 	no_tray: bool `usage:"Don't create a system tray icon."`,
 	no_audio: bool `usage:"(Debug) Disable audio output."`,
 	profile_startup: bool `args:"hidden" usage:"(Profiling) Exit after initial startup."`,
+	memory_debug: bool `usage:"(Debug) Enable memory tracking"`,
 }
 
 global_paths: struct {
@@ -39,3 +40,4 @@ global_paths: struct {
 
 global_config: Config
 global_config_dirty: bool
+

@@ -28,9 +28,9 @@ ICON_PAUSE :: ""
 ICON_STOP :: ""
 ICON_PLAY :: ""
 
-_Theme_Color :: enum {
-	PlayingHighlight,
-}
+// -----------------------------------------------------------------------------
+// Track table
+// -----------------------------------------------------------------------------
 
 _Track_Table_Row :: struct {
 	album, artist, genre, title, url: string,
@@ -48,6 +48,10 @@ _Track_Table :: struct {
 	rows: [dynamic]_Track_Table_Row,
 }
 
+// -----------------------------------------------------------------------------
+// Windows
+// -----------------------------------------------------------------------------
+
 _Metadata_Window :: struct {
 	displayed_track: Track_ID,
 	cover_art: Maybe(Texture_Handle),
@@ -57,18 +61,13 @@ _Metadata_Window :: struct {
 	comment: string,
 }
 
-_Playlist_Table_Row :: struct {
-	uid: UID,
-	title: string,
-	duration: [9]u8,
-	length: [7]u8,
-	tracks: []Track_ID,
-	selected: bool,
-}
-
-_Playlist_Table :: struct {
-	serial: uint,
-	rows: [dynamic]_Playlist_Table_Row,
+_Playlists_Window :: struct {
+	new_playlist_name: [128]u8,
+	playlist_table: _Playlist_Table,
+	track_table: _Track_Table,
+	viewing_playlist: Maybe(Playlist_Handle),
+	playlist_handles: [dynamic]Playlist_Handle,
+	cant_add_playlist_reason: Cant_Add_Playlist_Reason,
 }
 
 _Track_Category_Window :: struct {
@@ -77,11 +76,38 @@ _Track_Category_Window :: struct {
 	track_table: _Track_Table,
 }
 
+// -----------------------------------------------------------------------------
+// Playlist table
+// -----------------------------------------------------------------------------
+
+_Playlist_Table_Row :: struct {
+	uid: UID,
+	title: string,
+	duration: [9]u8,
+	length: [7]u8,
+	tracks: []Track_ID,
+	selected: bool,
+	serial: uint,
+}
+
+_Playlist_Table :: struct {
+	serial: uint,
+	rows: [dynamic]_Playlist_Table_Row,
+}
+
+// -----------------------------------------------------------------------------
+// Tracked window state
+// -----------------------------------------------------------------------------
+
 _Window_State :: struct {
 	name: cstring,
 	open: bool,
 	bring_to_front: bool,
 }
+
+// -----------------------------------------------------------------------------
+// Public types
+// -----------------------------------------------------------------------------
 
 @private
 UI_Actions :: struct {
@@ -95,22 +121,15 @@ UI_Actions :: struct {
 	}
 }
 
-_UI_Allocator_ID :: enum {
-	ThemeData,
-}
-
 @private
 UI :: struct {
 	server: ^Server,
-	base_tracking_allocator: mem.Tracking_Allocator,
-	base_allocator: mem.Allocator,
+	allocator_map: Allocator_Map,
 	allocators: struct {
-		theme_data_arena: mem.Dynamic_Arena,
-		theme_data: mem.Allocator,
-		temp_arena: mem.Dynamic_Arena,
-		temp: mem.Allocator,
-		font_arena: mem.Dynamic_Arena,
-		font: mem.Allocator,
+		per_frame: mem.Allocator,
+		themes: mem.Allocator,
+		fonts: mem.Allocator,
+		lazy: mem.Allocator,
 	},
 	windows: struct {
 		library: struct {
@@ -123,6 +142,8 @@ UI :: struct {
 			serial: uint,
 			track_table: _Track_Table,
 		},
+
+		playlists: _Playlists_Window,
 
 		artists: _Track_Category_Window,
 		albums: _Track_Category_Window,
@@ -147,6 +168,7 @@ UI :: struct {
 	debug: struct {
 		show_style_editor: bool,
 		show_demo_window: bool,
+		show_memory_tracking: bool,
 	},
 	actions: UI_Actions,
 	window_state: map[imgui.ID]_Window_State,
@@ -159,6 +181,15 @@ _Saved_Theme :: struct {
 	accents: [_Theme_Accent][3]f32,
 	colors: [_Theme_Color]u32,
 	imgui_colors: [imgui.Col.COUNT][4]f32,
+}
+
+
+// -----------------------------------------------------------------------------
+// Theme
+// -----------------------------------------------------------------------------
+
+_Theme_Color :: enum {
+	PlayingHighlight,
 }
 
 _Theme_Accent :: enum {
@@ -180,33 +211,14 @@ ui_theme: _Theme
 @private
 ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.server = server
-	ui_theme.imgui_colors = imgui.GetStyle().Colors
 
-	
-	// --------------------------------------------------------------------------
 	// Allocators
-	// --------------------------------------------------------------------------
-	when ODIN_DEBUG {
-		mem.tracking_allocator_init(&ui.base_tracking_allocator, context.allocator)
-		ui.base_allocator = mem.tracking_allocator(&ui.base_tracking_allocator)
-	}
-	else {
-		ui.base_allocator = context.allocator
-	}
-	
-	// Theme data
-	mem.dynamic_arena_init(
-		&ui.allocators.theme_data_arena, block_allocator=ui.base_allocator, block_size=4096
-	)
-	ui.allocators.theme_data = mem.dynamic_arena_allocator(&ui.allocators.theme_data_arena)
-	
-	// Temp
-	mem.dynamic_arena_init(&ui.allocators.temp_arena, block_allocator=ui.base_allocator)
-	ui.allocators.temp = mem.dynamic_arena_allocator(&ui.allocators.temp_arena)
+	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame")
+	ui.allocators.fonts = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
+	ui.allocators.themes = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
+	ui.allocators.lazy = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
 
-	// Fonts
-	mem.dynamic_arena_init(&ui.allocators.font_arena, block_allocator=ui.base_allocator)
-	ui.allocators.font = mem.dynamic_arena_allocator(&ui.allocators.font_arena)
+	ui_theme.imgui_colors = imgui.GetStyle().Colors
 	
 	// Theme defaults
 	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
@@ -304,11 +316,11 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 }
 
 @private
-ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
-	defer free_all(ui.allocators.temp)
-	
+ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {	
 	sv := ui.server
 	ui.actions = {}
+
+	defer free_all(ui.allocators.per_frame)
 	
 	//style := imgui.GetStyle()
 	//style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
@@ -388,6 +400,13 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		imgui.ShowDemoWindow(&ui.debug.show_demo_window)
 	}
 
+	defer if ui.debug.show_memory_tracking {
+		if imgui.Begin("[Debug] Memory tracking", &ui.debug.show_memory_tracking) {
+			_show_memory_tracking(ui)
+		}
+		imgui.End()
+	}
+
 	// --------------------------------------------------------------------------
 	// Library
 	// --------------------------------------------------------------------------
@@ -401,7 +420,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		}
 
 		_track_table_show(
-			sv, "##library", &w.track_table, w.serial, w.tracks, {}, 0
+			ui, "##library", &w.track_table, w.serial, w.tracks, {}, 0
 		)
 
 		imgui.End()
@@ -414,7 +433,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		w := &ui.windows.queue
 
 		_track_table_show(
-			sv, "##queue", &w.track_table, sv.playback.serial,
+			ui, "##queue", &w.track_table, sv.playback.serial,
 			server_get_queue(sv), {.IsQueue}, sv.queue_uid,
 		)
 
@@ -433,17 +452,17 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// Categories
 	// --------------------------------------------------------------------------
 	if _begin(ui, "Artists###artists") {
-		_track_category_window_show_focused(sv, &ui.windows.artists, &sv.categories.artist)
+		_track_category_window_show_focused(ui, &ui.windows.artists, &sv.categories.artist)
 		imgui.End()
 	}
 
 	if _begin(ui, "Albums###albums") {
-		_track_category_window_show_focused(sv, &ui.windows.albums, &sv.categories.album)
+		_track_category_window_show_focused(ui, &ui.windows.albums, &sv.categories.album)
 		imgui.End()
 	}
 
 	if _begin(ui, "Genres###genres") {
-		_track_category_window_show_focused(sv, &ui.windows.genres, &sv.categories.genre)
+		_track_category_window_show_focused(ui, &ui.windows.genres, &sv.categories.genre)
 		imgui.End()
 	}
 
@@ -460,6 +479,14 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	if _begin(ui, "Settings###settings") {
 		global_config_dirty |= _show_settings_editor(ui)
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Playlists
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Playlists###playlists") {
+		_playlists_window_show_focused(sv, &ui.windows.playlists)
 		imgui.End()
 	}
 
@@ -507,6 +534,9 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				}
 				if imgui.MenuItem("Demo window") {
 					ui.debug.show_demo_window = true
+				}
+				if imgui.MenuItem("Show memory tracking") {
+					ui.debug.show_memory_tracking = true
 				}
 				if imgui.MenuItem("Force video reset") {
 					ui.actions.debug.force_device_reset = true
@@ -676,10 +706,18 @@ _track_table_get_tracks :: proc(t: _Track_Table, allocator: mem.Allocator) -> []
 	return out
 }
 
+_track_table_get_selection :: proc(t: _Track_Table, allocator: mem.Allocator) -> []Track_ID {
+	out: [dynamic]Track_ID
+	for row, i in t.rows {
+		if row.selected do append(&out, row.id)
+	}
+	return out[:]
+}
+
 _Track_Table_Flag :: enum {IsQueue, NoRemove}
 
 _track_table_show :: proc(
-	sv: ^Server,
+	ui: ^UI,
 	name: cstring,
 	table: ^_Track_Table,
 	serial: uint,
@@ -687,6 +725,7 @@ _track_table_show :: proc(
 	flags: bit_set[_Track_Table_Flag],
 	playlist_id: UID,
 ) -> bool {
+	sv := ui.server
 
 	// --------------------------------------------------------------------------
 	// Update if needed
@@ -702,7 +741,7 @@ _track_table_show :: proc(
 		}
 
 		if table.sort_spec != nil {
-			_sort_track_table_rows(sv, table^, table.sort_spec.?)
+			_sort_track_table_rows(ui, table^, table.sort_spec.?)
 		}
 	}
 
@@ -720,6 +759,7 @@ _track_table_show :: proc(
 
 	actions: struct {
 		play_track: Maybe(Track_ID),
+		add_to_playlist: Maybe(Playlist_Handle),
 	}
 
 	list_clipper: imgui.ListClipper
@@ -785,7 +825,7 @@ _track_table_show :: proc(
 			}
 
 			if table.sort_spec != nil {
-				_sort_track_table_rows(sv, table^, table.sort_spec.?)
+				_sort_track_table_rows(ui, table^, table.sort_spec.?)
 				log.debug("Sorting track table", name, "with by", table.sort_spec.?.metric)
 			}
 		}
@@ -823,10 +863,11 @@ _track_table_show :: proc(
 					imgui.EndTooltip()
 				}
 
-				if imgui.IsItemClicked(.Middle) {
+				if imgui.IsItemClicked(.Middle) || imx.is_item_double_clicked() {
 					actions.play_track = row.id
 				}
 
+				// Context menu
 				if imgui.BeginPopupContextItem() {
 					defer imgui.EndPopup()
 
@@ -834,6 +875,10 @@ _track_table_show :: proc(
 
 					if imgui.MenuItem("Play") {
 						actions.play_track = row.id
+					}
+
+					if add_to_playlist, yes := _show_playlist_selector_menu(sv, "Add to playlist"); yes {
+						actions.add_to_playlist = add_to_playlist
 					}
 
 					if .NoRemove not_in flags {
@@ -866,23 +911,32 @@ _track_table_show :: proc(
 		}
 	}
 	
+	// --------------------------------------------------------------------------
+	// Process actions
+	// --------------------------------------------------------------------------
 	if actions.play_track != nil {
 		if .IsQueue in flags {
 			server_move_queue_to_track(sv, actions.play_track.?)
 		}
 		else {
-			tracks := _track_table_get_tracks(table^, context.allocator)
-			defer delete(tracks)
+			tracks := _track_table_get_tracks(table^, ui.allocators.per_frame)
 			server_request_play_playlist(sv, tracks, playlist_id, actions.play_track.?)
+		}
+	}
+
+	if actions.add_to_playlist != nil {
+		h := actions.add_to_playlist.?
+		if playlist, ok := server_get_playlist(sv, h); ok {
+			playlist_add(sv, playlist, _track_table_get_selection(table^, ui.allocators.per_frame))
 		}
 	}
 
 	return true
 }
 
-_sort_track_table_rows :: proc(sv: ^Server, table: _Track_Table, spec: Track_Sort_Spec) {
-	tracks := _track_table_get_tracks(table, context.allocator)
-	defer delete(tracks)
+_sort_track_table_rows :: proc(ui: ^UI, table: _Track_Table, spec: Track_Sort_Spec) {
+	sv := ui.server
+	tracks := _track_table_get_tracks(table, ui.allocators.per_frame)
 
 	sort_tracks(sv, tracks, spec)
 
@@ -893,50 +947,28 @@ _sort_track_table_rows :: proc(sv: ^Server, table: _Track_Table, spec: Track_Sor
 }
 
 _show_track_metadata_table :: proc(str_id: cstring, track: Track) -> bool {
-	imgui.BeginTable(str_id, 2, imgui.TableFlags_RowBg) or_return
-	defer imgui.EndTable()
+	imx.begin_kv_table(str_id, imgui.TableFlags_RowBg) or_return
+	defer imx.end_kv_table()
 
 	protocol_string := [Track_Protocol]string {
 		.File = "Disk"
 	}
 
-	row :: proc(name: string, args: ..any, sep := "") -> (active: bool) {
-		buf: [1024]u8
-		fmt.bprint(buf[:1023], ..args, sep=sep)
-		imgui.TableNextRow()
-		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
-		if imgui.TableSetColumnIndex(1) {
-			active |= imgui.Selectable(cstring(&buf[0]))
-		}
-		return
-	}
-
-	rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
-		buf: [1024]u8
-		fmt.bprintf(buf[:1023], format, ..args)
-		imgui.TableNextRow()
-		if imgui.TableSetColumnIndex(0) do imx.text_unformatted(name)
-		if imgui.TableSetColumnIndex(1) {
-			active |= imgui.Selectable(cstring(&buf[0]))
-		}
-		return
-	}
-
 	imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
 	imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
 	
-	if track.title != "" do row("Title", track.title)
-	if track.artist != "" do row("Artist", track.artist)
-	if track.album != "" do row("Album", track.album)
-	if track.genre != "" do row("Genre", track.genre)
-	rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
-	row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
-	if track.samplerate != 0 do row("Sample rate", track.samplerate, "Hz", sep="")
-	if track.url != "" do row("Path", track.url)
-	row("From", protocol_string[track.protocol])
+	if track.title != "" do imx.kv_row("Title", track.title)
+	if track.artist != "" do imx.kv_row("Artist", track.artist)
+	if track.album != "" do imx.kv_row("Album", track.album)
+	if track.genre != "" do imx.kv_row("Genre", track.genre)
+	imx.kv_rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
+	imx.kv_row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
+	if track.samplerate != 0 do imx.kv_row("Sample rate", track.samplerate, "Hz", sep="")
+	if track.url != "" do imx.kv_row("Path", track.url)
+	imx.kv_row("From", protocol_string[track.protocol])
 
 	if track.protocol == .File {
-		rowf("File size", "%M", track.file_size)
+		imx.kv_rowf("File size", "%M", track.file_size)
 	}
 
 	return true
@@ -1074,8 +1106,9 @@ _begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.Wind
 }
 
 _track_category_window_show_playlists :: proc(
-	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+	ui: ^UI, w: ^_Track_Category_Window, cat: ^Track_Category,
 ) -> (shown: bool) {
+	sv := ui.server
 	entry_index, have_entry := track_category_find_entry_by_hash(cat, w.displayed_entry_hash)
 	entry: Track_Category_Entry_Ptr
 
@@ -1102,6 +1135,8 @@ _track_category_window_show_playlists :: proc(
 		}
 	}
 
+	imx.title_text(cat.name)
+
 	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 	if result.selected_row != nil {
 		w.displayed_entry_hash = hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
@@ -1115,8 +1150,9 @@ _track_category_window_show_playlists :: proc(
 }
 
 _track_category_window_show_tracks :: proc(
-	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+	ui: ^UI, w: ^_Track_Category_Window, cat: ^Track_Category
 ) -> bool {
+	sv := ui.server
 	entry_index, have_entry := track_category_find_entry_by_hash(cat, w.displayed_entry_hash)
 	entry: Track_Category_Entry_Ptr
 
@@ -1127,8 +1163,17 @@ _track_category_window_show_tracks :: proc(
 		return false
 	}
 
+	if entry.name == "" {
+		imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))
+		imx.title_text(cat.name, ": None", sep="")
+		imgui.PopStyleColor()
+	}
+	else {
+		imx.title_text(cat.name, ": ", entry.name, sep="")
+	}
+
 	_track_table_show(
-		sv, "##tracks", &w.track_table, sv.track_category_serial,
+		ui, "##tracks", &w.track_table, sv.track_category_serial,
 		entry.tracks[:], {.NoRemove}, entry.uid
 	)
 
@@ -1136,16 +1181,16 @@ _track_category_window_show_tracks :: proc(
 }
 
 _track_category_window_show_focused :: proc(
-	sv: ^Server, w: ^_Track_Category_Window, cat: ^Track_Category
+	ui: ^UI, w: ^_Track_Category_Window, cat: ^Track_Category,
 ) {
 	if w.displayed_entry_hash != 0 {
 		if imgui.Button("Back") {
 			w.displayed_entry_hash = 0
 		}
-		_track_category_window_show_tracks(sv, w, cat)
+		_track_category_window_show_tracks(ui, w, cat)
 	}
 	else {
-		_track_category_window_show_playlists(sv, w, cat)
+		_track_category_window_show_playlists(ui, w, cat)
 	}
 }
 
@@ -1262,17 +1307,15 @@ _show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
 				buf: [64]u8
 				id := rand.uint64()
 				file_name := fmt.bprint(buf[:], id, ".json", sep="")
-				path, _ := os.join_path({ui.paths.theme_folder, file_name}, context.allocator)
-				defer delete(path)
+				path, _ := os.join_path({ui.paths.theme_folder, file_name}, ui.allocators.per_frame)
 
 				for os.exists(path) {
-					delete(path)
 					id = rand.uint64()
 					file_name = fmt.bprint(buf[:], id, ".json", sep="")
-					path, _ = os.join_path({ui.paths.theme_folder, file_name}, context.allocator)
+					path, _ = os.join_path({ui.paths.theme_folder, file_name}, ui.allocators.per_frame)
 				}
 
-				t.path = strings.clone(path, ui.allocators.theme_data)
+				t.path = strings.clone(path, ui.allocators.themes)
 			}
 
 			_save_theme_to_file(t.path)
@@ -1287,7 +1330,7 @@ _show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
 	if t.path != "" {
 		imgui.SameLine()
 		if imgui.Button("Load") {
-			t^, _ = _load_theme_from_file(ui, t.path, ui.allocators.theme_data)
+			t^, _ = _load_theme_from_file(ui, t.path, ui.allocators.themes)
 			changed = true
 		}
 
@@ -1466,7 +1509,7 @@ _load_theme_from_file :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -
 	data := os.read_entire_file_from_path(path, context.allocator) or_return
 	defer delete(data)
 
-	json.unmarshal(data, &st, allocator=ui.allocators.temp) or_return
+	json.unmarshal(data, &st, allocator=ui.allocators.per_frame) or_return
 
 	t.accents = st.accents
 	t.colors = st.colors
@@ -1479,11 +1522,12 @@ _load_theme_from_file :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -
 
 _load_themes :: proc(ui: ^UI) -> Error {
 	files := os.read_all_directory_by_path(ui.paths.theme_folder, context.allocator) or_return
+	defer os.file_info_slice_delete(files, context.allocator)
 	clear(&ui.themes)
-	free_all(ui.allocators.theme_data)
+	free_all(ui.allocators.themes)
 
 	for file in files {
-		t := _load_theme_from_file(ui, file.fullpath, ui.allocators.theme_data) or_continue
+		t := _load_theme_from_file(ui, file.fullpath, ui.allocators.themes) or_continue
 		append(&ui.themes, t)
 	}
 
@@ -1628,19 +1672,141 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 	return nil
 }
 
-_refresh_fonts :: proc(ui: ^UI) -> Error {
-	for font in ui.system_fonts do font_free(font)
-	free_all(ui.allocators.font)
-	ui.system_fonts = font_list_system_fonts(ui.allocators.font) or_return
 
-	return nil
+// -----------------------------------------------------------------------------
+// Playlists window
+// -----------------------------------------------------------------------------
+_playlists_window_show_playlists :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+	// --------------------------------------------------------------------------
+	// Update rows
+	// --------------------------------------------------------------------------
+	need_update := false
+	
+	need_update |= sv.playlists_serial != w.playlist_table.serial
+	
+	if need_update {
+		clear(&w.playlist_table.rows)
+		clear(&w.playlist_handles)
+		w.playlist_table.serial = sv.playlists_serial
+
+		it := handle_map.iterator_make(&sv.playlists)
+		for _, handle in handle_map.iterate(&it) {
+			append(&w.playlist_handles, handle)
+			append(&w.playlist_table.rows, _Playlist_Table_Row{})
+		}
+	}
+
+	for &row, row_index in w.playlist_table.rows {
+		playlist := server_get_playlist(sv, w.playlist_handles[row_index]) or_continue
+		if row.serial != playlist.serial {
+			row.uid = playlist.uid
+			row.title = playlist.name
+			row.serial = playlist.serial
+			row.tracks = playlist.tracks[:]
+			fmt.bprint(row.length[:], len(playlist.tracks))
+			format_duration(row.duration[:], playlist.duration)
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// New playlist
+	// --------------------------------------------------------------------------
+	commit_new_playlist := false
+
+	// Playlist name input
+	commit_new_playlist |= imgui.InputTextWithHint(
+		"##new_playlist", "New playlist name", cstring(&w.new_playlist_name[0]),
+		auto_cast len(w.new_playlist_name),
+		{.EnterReturnsTrue}
+	)
+
+	// Validate playlist name
+	if need_update || imgui.IsItemActive() {
+		w.cant_add_playlist_reason = server_can_add_playlist(
+			sv, string(cstring(&w.new_playlist_name[0]))
+		)
+	}
+	imgui.SameLine()
+
+	// Add button
+	imgui.BeginDisabled(w.cant_add_playlist_reason != .None)
+	commit_new_playlist |= imgui.Button("+ New playlist")
+	imgui.EndDisabled()
+
+	// Show reason if we can't add the playlist
+	switch (w.cant_add_playlist_reason) {
+	case .None:
+	case .NameExists: imx.set_item_tooltip("Name already used")
+	case .NameEmpty: imx.set_item_tooltip("Must enter a name")
+	}
+
+	// Add playlist
+	if commit_new_playlist && w.cant_add_playlist_reason == .None {
+		server_add_playlist(sv, string(cstring(&w.new_playlist_name[0])))
+		for &r in w.new_playlist_name do r = 0
+	}
+
+	// --------------------------------------------------------------------------
+	// Show table
+	// --------------------------------------------------------------------------
+
+	imx.title_text("Playlists")
+	actions, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
+
+	return true
 }
+
+_playlists_window_show_tracks :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+
+	return true
+}
+
+_playlists_window_show_focused :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+	if w.viewing_playlist != nil {
+	}
+	else {
+		_playlists_window_show_playlists(sv, w)
+	}
+
+	return true
+}
+
+_show_playlist_selector_menu :: proc(
+	sv: ^Server, label: cstring, exclude: Maybe(Playlist_Handle) = nil
+) -> (handle: Playlist_Handle, selected: bool) {
+	imgui.BeginMenu(label) or_return
+	defer imgui.EndMenu()
+
+	it := handle_map.iterator_make(&sv.playlists)
+	for it_playlist, h in handle_map.iterate(&it) {
+		playlist: ^Playlist = it_playlist
+		if exclude != nil && h == exclude.? do continue
+		if imgui.MenuItem(playlist.name_cstring) {
+			handle = h
+			selected = true
+		}
+	}
+
+	return
+}
+
+// -----------------------------------------------------------------------------
+// Misc
+// -----------------------------------------------------------------------------
 
 _table_select_row :: proc(table: ^$T, row_index: int) {
 	if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
 		for &row in table.rows do row.selected = false
 	}
 	table.rows[row_index].selected = true
+}
+
+_refresh_fonts :: proc(ui: ^UI) -> Error {
+	for font in ui.system_fonts do font_free(font)
+	free_all(ui.allocators.fonts)
+	ui.system_fonts = font_list_system_fonts(ui.allocators.fonts) or_return
+
+	return nil
 }
 
 // Ensure that there is enough space for a resizable table to 
@@ -1651,3 +1817,33 @@ _check_table_size :: proc() -> bool {
 	return s.x >= 50 && s.y >= 20
 }
 
+// -----------------------------------------------------------------------------
+// Debug
+// -----------------------------------------------------------------------------
+
+_show_memory_tracking :: proc(ui: ^UI) {
+	if !global_command_opts.memory_debug {
+		imx.text_unformatted("Memory debugging is disabled. Launch program with -memory-debug argument.")
+		return
+	}
+
+	show_info :: proc(t: mem.Tracking_Allocator) -> bool {
+		imx.begin_kv_table("##kv", {}) or_return
+		defer imx.end_kv_table()
+
+		imx.kv_row("Allocation count", t.total_allocation_count)
+		imx.kv_rowf("Free count", "%M", t.total_free_count)
+		imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
+		imx.kv_rowf("Current allocated", "%M", t.current_memory_allocated)
+		return true
+	}
+
+	show_map :: proc(m: Allocator_Map) {
+		for name, entry in m {
+			imx.title_text(name)
+			show_info(entry.tracker^)
+		}
+	}
+
+	show_map(ui.allocator_map)
+}
