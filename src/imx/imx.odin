@@ -29,7 +29,7 @@ textf :: proc($BUF_SIZE: uint, format: string, args: ..any) {
 title_text :: proc(args: ..any, sep := " ") {
 	buf: [256]u8
 	fmt.bprint(buf[:], ..args, sep=sep)
-	push_font_scale(1.2)
+	push_font_scale(1.25)
 	imgui.SeparatorText(cstring(&buf[0]))
 	imgui.PopFont()
 }

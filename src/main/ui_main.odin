@@ -507,7 +507,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// Playlists
 	// --------------------------------------------------------------------------
 	if _begin(ui, "Playlists###playlists") {
-		_playlists_window_show_focused(sv, &ui.windows.playlists)
+		_playlists_window_show_focused(ui, &ui.windows.playlists)
 		imgui.End()
 	}
 
@@ -788,6 +788,8 @@ _track_table_show :: proc(
 	actions: struct {
 		play_track: Maybe(Track_ID),
 		add_to_playlist: Maybe(Playlist_Handle),
+		play_selection: bool,
+		context_menu_target: Track_ID,
 	}
 
 	list_clipper: imgui.ListClipper
@@ -884,7 +886,7 @@ _track_table_show :: proc(
 				}
 
 				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
-					_table_select_row(table, row_index)
+					_table_select_row(table, row_index, false)
 				}
 
 				if imgui.BeginItemTooltip() {
@@ -902,14 +904,17 @@ _track_table_show :: proc(
 				if imgui.BeginPopupContextItem() {
 					defer imgui.EndPopup()
 
-					_table_select_row(table, row_index)
+					actions.context_menu_target = row.id
 
-					if imgui.MenuItem("Play") {
-						actions.play_track = row.id
-					}
+					_table_select_row(table, row_index, true)
+
 
 					if add_to_playlist, yes := _show_playlist_selector_menu(sv, "Add to playlist"); yes {
 						actions.add_to_playlist = add_to_playlist
+					}
+
+					if imgui.MenuItem("Play selection") {
+						actions.play_selection = true
 					}
 
 					if .NoRemove not_in flags {
@@ -965,6 +970,11 @@ _track_table_show :: proc(
 			tracks := _track_table_get_tracks(table^, ui.allocators.per_frame)
 			server_request_play_playlist(sv, tracks, playlist_id, actions.play_track.?)
 		}
+	}
+
+	if actions.play_selection {
+		sel := _track_table_get_selection(table^, ui.allocators.per_frame)
+		server_request_play_playlist(sv, sel, table.playlist_uid)
 	}
 
 	if actions.add_to_playlist != nil {
@@ -1352,7 +1362,7 @@ _playlist_table_show :: proc(
 				
 				if imgui.Selectable(cstring(&buf[0]), row.selected, {.SpanAllColumns}) {
 					if .MultiSelect in flags {
-						_table_select_row(table, row_index)
+						_table_select_row(table, row_index, false)
 					}
 					else {
 						result.selected_row = row_index
@@ -1777,7 +1787,8 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 // -----------------------------------------------------------------------------
 // Playlists window
 // -----------------------------------------------------------------------------
-_playlists_window_show_playlists :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+_playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
+	sv := ui.server
 	// --------------------------------------------------------------------------
 	// Update rows
 	// --------------------------------------------------------------------------
@@ -1858,19 +1869,37 @@ _playlists_window_show_playlists :: proc(sv: ^Server, w: ^_Playlists_Window) -> 
 	imx.title_text("Playlists")
 	actions, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 
+	if actions.selected_row != nil {
+		w.viewing_playlist = w.playlist_handles[actions.selected_row.?]
+	}
+
 	return true
 }
 
-_playlists_window_show_tracks :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+_playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 
 	return true
 }
 
-_playlists_window_show_focused :: proc(sv: ^Server, w: ^_Playlists_Window) -> bool {
+_playlists_window_show_focused :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: bool) {
+	sv := ui.server
+
+	defer if !ok do w.viewing_playlist = nil
+
 	if w.viewing_playlist != nil {
+		if imgui.Button("Back") {
+			return false
+		}
+
+		playlist := server_get_playlist(sv, w.viewing_playlist.?) or_return
+
+		imx.title_text("Playlist:", playlist.name)
+		_track_table_show(
+			ui, "##tracks", &w.track_table, playlist.serial, playlist.tracks[:], {}, playlist.uid
+		)
 	}
 	else {
-		_playlists_window_show_playlists(sv, w)
+		_playlists_window_show_playlists(ui, w)
 	}
 
 	return true
@@ -1899,11 +1928,44 @@ _show_playlist_selector_menu :: proc(
 // Misc
 // -----------------------------------------------------------------------------
 
-_table_select_row :: proc(table: ^$T, row_index: int) {
-	if !imgui.IsKeyDown(.ImGuiMod_Ctrl) {
-		for &row in table.rows do row.selected = false
+_table_select_row :: proc(table: ^$T, row_index: int, keep_selection: bool) {
+	row := &table.rows[row_index]
+	rows := table.rows[:]
+
+	ctrl := imgui.IsKeyDown(.ImGuiMod_Ctrl)
+	shift := imgui.IsKeyDown(.ImGuiMod_Shift)
+
+	if !ctrl && !shift {
+		if !keep_selection || !row.selected {
+			for &r in rows do r.selected = false
+		}
+		row.selected = true
 	}
-	table.rows[row_index].selected = true
+	else if (ctrl && shift) || shift {
+		lo := max(int)
+		hi := -1
+		for r, i in rows {
+			if r.selected {
+				if i < row_index do lo = min(lo, i)
+				if i > row_index do hi = max(hi, i)
+			}
+		}
+
+		if lo == max(int) && hi == -1 {
+			for &r in rows[0:row_index+1] do r.selected = true
+		} else if hi == -1 {
+			for &r in rows[lo:row_index+1] do r.selected = true
+		} else if lo == max(int) {
+			for &r in rows[row_index+1:hi] do r.selected = true
+		} else if (hi-row_index) < (row_index-lo) {
+			for &r in rows[row_index:hi+1] do r.selected = true
+		} else {
+			for &r in rows[lo:row_index+1] do r.selected = true
+		}
+	}
+	else if ctrl {
+		row.selected = true
+	}
 }
 
 _refresh_fonts :: proc(ui: ^UI) -> Error {
