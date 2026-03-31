@@ -37,14 +37,14 @@ playback_queue_next :: proc(p: ^Playback_Queue) -> (Track_ID, bool) {
 	return playback_queue_set_pos(p, p.pos + 1)
 }
 
-playback_queue_add :: proc(p: ^Playback_Queue, tracks: []Track_ID, from_playlist: UID) -> bool {
+playback_queue_add :: proc(p: ^Playback_Queue, tracks: []Track_ID, from_playlist: UID, assume_unique := false) -> bool {
 	if len(p.tracks) == 0 do p.playlist_uid = from_playlist
 	else do p.playlist_uid = 0
 
 	for track_id in tracks {
 		if track_id == {} do continue
 
-		if !slice.contains(p.tracks[:], track_id) {
+		if assume_unique || !slice.contains(p.tracks[:], track_id) {
 			append(&p.tracks, track_id)
 		}
 	}

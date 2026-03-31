@@ -357,9 +357,10 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	}
 	
 	// --------------------------------------------------------------------------
-	// Main menu bar
+	// Main menu & status bars
 	// --------------------------------------------------------------------------
 	_main_menu_bar(sv, ui)
+	_status_bar(sv, ui)
 
 	// --------------------------------------------------------------------------
 	// Debug
@@ -573,6 +574,57 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 			}
 		}
 	}
+}
+
+_status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
+	imgui.BeginViewportSideBar(
+		"##status", imgui.GetMainViewport(), .Down, imgui.GetFrameHeight(), {
+			.MenuBar, .NoSavedSettings, .NoScrollbar
+		}
+	) or_return
+	imgui.BeginMenuBar() or_return
+	defer imgui.End()
+	defer imgui.EndMenuBar()
+
+	// --------------------------------------------------------------------------
+	// Track info
+	// --------------------------------------------------------------------------
+	if track, have_track := get_track(sv, sv.current_track_id); have_track {
+		imx.text(512, track.artist, " - ", track.title)
+		imgui.Separator()
+		imx.text_unformatted_ex(track.album != "" ? track.album : "<no album>")
+
+		imgui.Separator()
+		if channel_string, have_channel_string := audio_channels_to_string(
+			track.channels
+		); have_channel_string {
+			imx.text_unformatted(channel_string)
+		}
+		else {
+			imx.text(32, track.channels, " channels")
+		}
+
+		imgui.Separator()
+		imx.text(32, track.samplerate, "Hz")
+		imgui.Separator()
+		imx.text(32, track.bitrate_kbps, "kb/s")
+
+		imgui.Separator()
+	}
+
+	// --------------------------------------------------------------------------
+	// Scan progress
+	// --------------------------------------------------------------------------
+	if server_is_doing_background_scan(sv) {
+		total, scanned := server_get_background_scan_progress(sv)
+		progress := f32(scanned) / f32(total)
+		imgui.ProgressBar(progress, {160, 0})
+		imx.text(64, "Scanning metadata (", scanned, "/", total, ")")
+
+		imgui.Separator()
+	}
+
+	return true
 }
 
 _track_table_row_from_track :: proc(
@@ -947,16 +999,18 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 			}
 
 			if imgui.BeginPopupContextItem("##cover") {
+				defer imgui.EndPopup()
 				if imgui.MenuItem("Crop to square", nil, global_config.ui.crop_cover_art) {
 					global_config.ui.crop_cover_art = !global_config.ui.crop_cover_art
 					global_config_dirty = true
 				}
-				defer imgui.EndPopup()
 			}
 		}
 	}
 
+	imx.push_font_scale(1.2)
 	imgui.SeparatorText("Metadata")
+	imgui.PopFont()
 	_show_track_metadata_table("##metadata", md^)
 
 	return true

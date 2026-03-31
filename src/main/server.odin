@@ -120,6 +120,7 @@ Server_Background_Scan_State :: struct {
 	output_used_signal: sync.Auto_Reset_Event,
 	total_file_count: int,
 	scanned_count: int,
+	scanning: bool,
 	runner: ^thread.Thread,
 	queue_arena: mem.Dynamic_Arena,
 	queue: [dynamic]string,
@@ -555,14 +556,21 @@ server_handle_events :: proc(sv: ^Server) {
 			}
 
 		case .RequestPlayPlaylist:
+			log.debug("close track")
 			playback_thread_close_track(&sv.playback_thread)
+			log.debug("drop buffer")
 			audio_drop_buffer()
+			log.debug("clear queue")
 			playback_queue_clear(&sv.playback)
-			playback_queue_add(&sv.playback, ev.tracks, ev.playlist_uid)
+			log.debug("add to queue")
+			playback_queue_add(&sv.playback, ev.tracks, ev.playlist_uid, assume_unique=true)
 
 			if ev.initial_track != nil {
+				log.debug("set track")
 				playback_queue_set_track(&sv.playback, ev.initial_track.?)
+				log.debug("play track")
 				_play_track(sv, ev.initial_track.?)
+				log.debug("done")
 			}
 			else {
 				track := playback_queue_set_pos(&sv.playback, 0) or_break
@@ -575,7 +583,7 @@ server_handle_events :: proc(sv: ^Server) {
 			playback_thread_close_track(&sv.playback_thread)
 			audio_drop_buffer()
 			_play_track(sv, ev.track)
-
+			
 		case .PrevTrackRequested:
 			playback_thread_close_track(&sv.playback_thread)
 			track_id := playback_queue_prev(&sv.playback) or_break
@@ -701,6 +709,14 @@ server_queue_for_background_scan :: proc(sv: ^Server, path: string) {
 	server_send_empty_event(sv)
 }
 
+server_is_doing_background_scan :: proc(sv: ^Server) -> bool {
+	return sv.background_scan.scanning
+}
+
+server_get_background_scan_progress :: proc(sv: ^Server) -> (total_files, files_scanned: int) {
+	return sv.background_scan.total_file_count, sv.background_scan.scanned_count
+}
+
 @(private="file")
 _background_scan_proc :: proc(t: ^thread.Thread) {
 	sv := cast(^Server) t.data
@@ -731,26 +747,28 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 		mem.dynamic_arena_free_all(&state.queue_arena)
 		sync.unlock(&state.queue_lock)
 
+		state.scanning = true
+
 		// Collect files
 		files: [dynamic]os.File_Info
 		defer delete(files)
 
-		add_files :: proc(dir: string, output: ^[dynamic]os.File_Info, allocator: mem.Allocator) -> os.Error {
+		add_files :: proc(dir: string, output: ^[dynamic]os.File_Info, counter: ^int, allocator: mem.Allocator) -> os.Error {
 			df := os.read_all_directory_by_path(dir, allocator) or_return
 			for file in df {
 				if file.type == .Regular {
 					append(output, file)
+					counter^ += 1
 				}
 				else if file.type == .Directory {
-					add_files(file.fullpath, output, allocator)
+					add_files(file.fullpath, output, counter, allocator)
 				}
 			}
 			return nil
 		}
 
 		for i in input {
-			add_files(i, &files, allocator)
-			state.total_file_count = len(files)
+			add_files(i, &files, &state.total_file_count, allocator)
 		}
 		log.debug("Scanning", state.total_file_count, "files...")
 
@@ -766,6 +784,7 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 
 		server_send_event(sv, {type = .BackgroundScanComplete})
 		sync.auto_reset_event_wait(&state.output_used_signal)
+		state.scanning = false
 		state.total_file_count = 0
 		state.scanned_count = 0
 	}

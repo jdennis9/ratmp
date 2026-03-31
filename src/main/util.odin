@@ -53,3 +53,11 @@ ensure_dir :: proc(path: string) {
 	os.make_directory_all(path)
 }
 
+audio_channels_to_string :: proc(ch: int) -> (string, bool) {
+	switch ch {
+		case 1: return "Mono", true
+		case 2: return "Stereo", true
+	}
+
+	return "", false
+}

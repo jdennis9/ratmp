@@ -11,6 +11,11 @@ text_unformatted :: proc(str: string) {
 	imgui.TextUnformatted(cstring(base), cstring(&base[len(str)]))
 }
 
+text_unformatted_ex :: proc(str: string, flags: imgui.TextFlags = {}) {
+	base := raw_data(transmute([]u8) str)
+	imgui.TextEx(cstring(base), cstring(&base[len(str)]), flags)
+}
+
 text :: proc($BUF_SIZE: uint, args: ..any, sep := "") {
 	buf: [BUF_SIZE]u8
 	text_unformatted(fmt.bprint(buf[:], ..args, sep=sep))
@@ -160,4 +165,8 @@ select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
 	}
 
 	return
+}
+
+push_font_scale :: proc(scale: f32) {
+	imgui.PushFontFloat(nil, imgui.GetStyle().FontSizeBase * scale)
 }
