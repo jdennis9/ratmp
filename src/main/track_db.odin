@@ -385,7 +385,8 @@ track_db_load :: proc(
 		// Update the track?
 		if exists do continue
 
-		_ = handle_map.add(track_map, track) or_continue
+		handle := handle_map.add(track_map, track) or_continue
+		url_hash_map[path_hash] = handle
 	}
 
 	return nil

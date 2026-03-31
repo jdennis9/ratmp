@@ -1832,9 +1832,9 @@ _show_memory_tracking :: proc(ui: ^UI) {
 		defer imx.end_kv_table()
 
 		imx.kv_row("Allocation count", t.total_allocation_count)
-		imx.kv_rowf("Free count", "%M", t.total_free_count)
-		imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
+		imx.kv_row("Free count", t.total_free_count)
 		imx.kv_rowf("Current allocated", "%M", t.current_memory_allocated)
+		imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
 		return true
 	}
 
