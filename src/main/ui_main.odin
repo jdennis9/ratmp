@@ -88,11 +88,29 @@ _Playlist_Table_Row :: struct {
 	tracks: []Track_ID,
 	selected: bool,
 	serial: uint,
+	length_i: i32,
+	duration_i: i32,
+}
+
+_Playlist_Compare_Proc :: #type proc(a, b: _Playlist_Table_Row) -> int
+
+_Playlist_Sort_Metric :: enum {Name, Length, Duration}
+
+_PLAYLIST_SORT_METRIC_PROCS := [_Playlist_Sort_Metric]_Playlist_Compare_Proc {
+	.Name = proc(a, b: _Playlist_Table_Row) -> int {return strings.compare(a.title, b.title)},
+	.Length = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.length_i - b.length_i)},
+	.Duration = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.duration_i - b.duration_i)},
+}
+
+_Playlist_Sort_Spec :: struct {
+	metric: _Playlist_Sort_Metric,
+	order: Sort_Order,
 }
 
 _Playlist_Table :: struct {
 	serial: uint,
 	rows: [dynamic]_Playlist_Table_Row,
+	sort_spec: Maybe(_Playlist_Sort_Spec),
 }
 
 // -----------------------------------------------------------------------------
@@ -770,7 +788,7 @@ _track_table_show :: proc(
 		imgui.TableFlags_Hideable|imgui.TableFlags_Reorderable|
 		imgui.TableFlags_ScrollY|imgui.TableFlags_Resizable|
 		imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Sortable|
-		imgui.TableFlags_SortTristate|imgui.TableFlags_ScrollX
+		imgui.TableFlags_ScrollX
 	) or_return
 	defer imgui.EndTable()
 
@@ -1126,6 +1144,8 @@ _track_category_window_show_playlists :: proc(
 				uid = e.uid,
 				title = e.name,
 				tracks = e.tracks[:],
+				duration_i = auto_cast e.duration,
+				length_i = auto_cast len(e.tracks),
 			}
 
 			format_duration(row.duration[:], e.duration)
@@ -1133,6 +1153,8 @@ _track_category_window_show_playlists :: proc(
 
 			append(&w.playlist_table.rows, row)
 		}
+
+		_playlist_table_sort(&w.playlist_table)
 	}
 
 	imx.title_text(cat.name)
@@ -1202,6 +1224,34 @@ _Playlist_Table_Actions :: struct {
 _Playlist_Table_Flag :: enum {MultiSelect}
 _Playlist_Table_Flags :: bit_set[_Playlist_Table_Flag]
 
+_playlist_table_sort :: proc(
+	table: ^_Playlist_Table
+) {
+	if table.sort_spec == nil do return
+
+	spec := table.sort_spec.?
+
+	iface := sort.Interface {
+		collection = table,
+		len = proc(it: sort.Interface) -> int {
+			table := cast(^_Playlist_Table) it.collection
+			return len(table.rows)
+		},
+		less = proc(it: sort.Interface, a, b: int) -> bool {
+			table := cast(^_Playlist_Table) it.collection
+			cmp := _PLAYLIST_SORT_METRIC_PROCS[table.sort_spec.?.metric]
+			return cmp(table.rows[a], table.rows[b]) < 0
+		},
+		swap = proc(it: sort.Interface, a, b: int) {
+			table := cast(^_Playlist_Table) it.collection
+			table.rows[a], table.rows[b] = table.rows[b], table.rows[a]
+		},
+	}
+
+	if spec.order == .Ascending do sort.sort(iface)
+	else do sort.reverse_sort(iface)
+}
+
 _playlist_table_show :: proc(
 	str_id: cstring, sv: ^Server, table: ^_Playlist_Table,
 	flags: _Playlist_Table_Flags,
@@ -1216,7 +1266,8 @@ _playlist_table_show :: proc(
 		str_id, 3,
 		imgui.TableFlags_BordersInner|imgui.TableFlags_Resizable|
 		imgui.TableFlags_SizingStretchProp|imgui.TableFlags_Reorderable|
-		imgui.TableFlags_ScrollX|imgui.TableFlags_ScrollY
+		imgui.TableFlags_ScrollX|imgui.TableFlags_ScrollY|imgui.TableFlags_Sortable/*|
+		imgui.TableFlags_SortTristate*/
 	) or_return
 	defer imgui.EndTable()
 
@@ -1226,6 +1277,31 @@ _playlist_table_show :: proc(
 
 	imgui.TableSetupScrollFreeze(1, 1)
 	imgui.TableHeadersRow()
+
+	if table_ss := imgui.TableGetSortSpecs(); table_ss != nil {
+		if ss := table_ss.Specs; ss != nil && table_ss.SpecsDirty {
+			if ss.SortDirection == .None {
+				table.sort_spec = nil
+			}
+			else {
+				spec := _Playlist_Sort_Spec{}
+				switch ss.ColumnIndex {
+				case 0: spec.metric = .Name
+				case 1: spec.metric = .Duration
+				case 2: spec.metric = .Length
+				}
+
+				switch ss.SortDirection {
+				case .None: 
+				case .Ascending: spec.order = .Ascending
+				case .Descending: spec.order = .Descending
+				}
+				
+				table.sort_spec = spec
+				_playlist_table_sort(table)
+			}
+		}
+	}
 
 	list_clipper: imgui.ListClipper
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
@@ -1694,6 +1770,8 @@ _playlists_window_show_playlists :: proc(sv: ^Server, w: ^_Playlists_Window) -> 
 			append(&w.playlist_handles, handle)
 			append(&w.playlist_table.rows, _Playlist_Table_Row{})
 		}
+
+		_playlist_table_sort(&w.playlist_table)
 	}
 
 	for &row, row_index in w.playlist_table.rows {
@@ -1703,6 +1781,8 @@ _playlists_window_show_playlists :: proc(sv: ^Server, w: ^_Playlists_Window) -> 
 			row.title = playlist.name
 			row.serial = playlist.serial
 			row.tracks = playlist.tracks[:]
+			row.duration_i = auto_cast playlist.duration
+			row.length_i = auto_cast len(playlist.tracks)
 			fmt.bprint(row.length[:], len(playlist.tracks))
 			format_duration(row.duration[:], playlist.duration)
 		}
