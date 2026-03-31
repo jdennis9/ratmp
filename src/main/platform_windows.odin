@@ -16,6 +16,7 @@ _win: struct {
 	hwnd: win.HWND,
 	events: Platform_Events,
 	icon: win.HICON,
+	resize: Maybe([2]int),
 }
 
 @private
@@ -49,7 +50,7 @@ platform_init_win32 :: proc() -> bool {
 		win.UpdateWindow(_win.hwnd) or_return
 
 		imgui_win32.Init(_win.hwnd) or_return
-		video_init_dx11(_win.hwnd) or_return
+		video_dx11_init(_win.hwnd) or_return
 
 
 		return true
@@ -92,6 +93,11 @@ platform_init_win32 :: proc() -> bool {
 			win.DispatchMessageW(&msg)
 		}
 
+		if _win.resize != nil {
+			rs := _win.resize.?
+			video_resize_swapchain(rs.x, rs.y)
+		}
+
 		return _win.events
 	}
 
@@ -116,6 +122,9 @@ platform_init_win32 :: proc() -> bool {
 			utf16.encode_string(buf[:1023], string(title))
 			win.SetWindowTextW(_win.hwnd, cstring16(&buf[0]))
 		}
+	}
+
+	_platform_impl_set_window_size = proc(w, h: int) {
 	}
 
 	_win.hinstance = cast(win.HINSTANCE) win.GetModuleHandleW(nil)
@@ -145,6 +154,11 @@ _wnd_proc :: proc "system" (
 	case win.WM_CLOSE:
 		if hwnd == _win.hwnd do _win.events.window_closed = true
 		return 0
+	case win.WM_SIZE:
+		_win.resize = [2]int {
+			auto_cast win.LOWORD(lparam),
+			auto_cast win.HIWORD(lparam),
+		}
 	}
 
 	return win.DefWindowProcW(hwnd, msg, wparam, lparam)

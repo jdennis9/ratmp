@@ -84,5 +84,7 @@ video_init_opengl :: proc(set_gl_proc_address: gl.Set_Proc_Address_Type) -> bool
 		return
 	}
 
+	_video_impl_resize_swapchain = proc(w, h: int) {}
+
 	return true
 }

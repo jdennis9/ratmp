@@ -24,6 +24,7 @@ _platform_impl_is_window_visible: proc() -> bool
 _platform_impl_set_window_visible: proc(visible: bool)
 _platform_impl_flush_events: proc()
 _platform_impl_set_window_title: proc(title: cstring)
+_platform_impl_set_window_size: proc(w, h: int)
 
 platform_make_window :: proc() -> bool {
 	return _platform_impl_make_window()
@@ -70,4 +71,8 @@ platform_set_window_title :: proc(args: ..any) {
 	buf: [1024]u8
 	str := fmt.bprint(buf[:1023], ..args)
 	_platform_impl_set_window_title(strings.unsafe_string_to_cstring(str))
+}
+
+platform_set_window_size :: proc(w, h: int) {
+	_platform_impl_set_window_size(w, h)
 }

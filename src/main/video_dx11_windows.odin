@@ -25,7 +25,7 @@ video_shutdown_dx11:: proc() {
 }
 
 @private
-video_init_dx11 :: proc(hwnd: win.HWND) -> bool {
+video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	_init(hwnd) or_return
 
 	_video_impl_render_frame = proc() {
@@ -160,13 +160,20 @@ video_init_dx11 :: proc(hwnd: win.HWND) -> bool {
 		}, true
 	}
 
-	_video_impl_resize_window = proc(width, height: int) {
+	_video_impl_resize_swapchain = proc(width, height: int) {
 		_destroy_render_target()
 		_dx.swapchain->ResizeBuffers(1, auto_cast width, auto_cast height, .UNKNOWN, {})
 		_create_render_target()
 	}
 
 	return true
+}
+
+@private
+video_dx11_resize_window :: proc(w, h: int) {
+	_destroy_render_target()
+	_dx.swapchain->ResizeBuffers(1, auto_cast w, auto_cast h, .UNKNOWN, {})
+	_create_render_target()
 }
 
 _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {

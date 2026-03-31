@@ -31,7 +31,7 @@ _video_impl_create_texture: proc(desc: Texture_Desc) -> (rawptr, bool)
 _video_impl_destroy_texture: proc(ptr: rawptr)
 // Returns false if the texture has been destroyed or the device has been lost/reset
 _video_impl_get_texture_imgui_ref: proc(ptr: rawptr) -> (imgui.TextureRef, bool)
-_video_impl_resize_window: proc(width, height: int)
+_video_impl_resize_swapchain: proc(width, height: int)
 
 video_imgui_new_frame :: proc() {
 	_video_impl_imgui_new_frame()
@@ -47,6 +47,10 @@ video_invalidate_textures :: proc() {
 		_video_impl_destroy_texture(tex.impl)
 	}
 	hm.clear(&_video.textures)
+}
+
+video_resize_swapchain :: proc(w, h: int) {
+	_video_impl_resize_swapchain(w, h)
 }
 
 handle_graphics_device_lost :: proc() -> bool {

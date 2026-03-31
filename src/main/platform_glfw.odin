@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:log"
 import "vendor:glfw"
 import imgui_glfw "src:thirdparty/odin-imgui/imgui_impl_glfw"
@@ -28,6 +29,11 @@ platform_init_glfw :: proc() -> bool {
 	close_proc :: proc "c" (win: glfw.WindowHandle) {
 		_glfw.events.window_closed = true
 	}
+
+	size_proc :: proc "c" (win: glfw.WindowHandle, w, h: i32) {
+		context = runtime.default_context()
+		video_resize_swapchain(auto_cast w, auto_cast h)
+	}
 	
 	_platform_impl_make_window = proc() -> bool {
 		_glfw.window = glfw.CreateWindow(1600, 900, "RAT MP", nil, nil)
@@ -36,6 +42,7 @@ platform_init_glfw :: proc() -> bool {
 		glfw.MakeContextCurrent(_glfw.window)
 		
 		glfw.SetWindowCloseCallback(_glfw.window, close_proc)
+		glfw.SetWindowSizeCallback(_glfw.window, size_proc)
 		
 		imgui_glfw.InitForOpenGL(_glfw.window, true) or_return
 		
@@ -72,8 +79,14 @@ platform_init_glfw :: proc() -> bool {
 
 	_platform_impl_wait_events = proc() -> Platform_Events {
 		_glfw.events = {}
-		glfw.WaitEventsTimeout(0.1);
+		glfw.WaitEventsTimeout(0.1)
 		return _glfw.events
+	}
+	
+	_platform_impl_set_window_size = proc(w, h: int) {
+		if _glfw.window != nil {
+			glfw.SetWindowSize(_glfw.window, auto_cast w, auto_cast h)
+		}
 	}
 
 	_platform_impl_flush_events = proc() {
