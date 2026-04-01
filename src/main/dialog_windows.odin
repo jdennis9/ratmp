@@ -37,14 +37,6 @@ dialog_init_windows :: proc() {
 			case win.IDNO: res = .No
 			}
 			return
-		case .YesNoCancel:
-			r := win.MessageBoxW(nil, message_u16, title_u16, icon | win.MB_YESNOCANCEL)
-			switch r {
-			case win.IDYES: res = .OkYes
-			case win.IDNO: res = .No
-			case win.IDCANCEL: res = .Cancel
-			}
-			return
 		}
 
 

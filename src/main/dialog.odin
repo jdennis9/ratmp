@@ -5,7 +5,6 @@ Message_Box_Type :: enum {
 	Message,
 	OkCancel,
 	YesNo,
-	YesNoCancel,
 }
 
 Message_Box_Urgency :: enum {

@@ -570,9 +570,9 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				}
 				if imgui.MenuItem("Test message boxes") {
 					show_message_box(.Message, .Info, "Info Test", "This is a message")
-					show_message_box(.YesNoCancel, .Question, "Question Test", "Yes, no, cancel?")
-					show_message_box(.OkCancel, .Warning, "Warning Test", "Ok, cancel?")
-					show_message_box(.YesNo, .Error, "Error Test", "Yes, no?")
+					show_message_box(.YesNo, .Question, "Question Test", "Yes or no?")
+					show_message_box(.OkCancel, .Warning, "Warning Test", "Ok or cancel?")
+					show_message_box(.Message, .Error, "Error Test", "Error!")
 				}
 				imx.select_enum("Background policy", &ui.background.policy)
 				imgui.EndMenu()

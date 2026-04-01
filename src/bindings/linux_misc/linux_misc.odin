@@ -5,10 +5,22 @@ import "core:c"
 foreign import lib "../bindings.a"
 
 Message_Type :: enum c.int {
-	Info,
-	Warning,
+	Message,
 	YesNo,
 	OkCancel,
+}
+
+Urgency :: enum c.int {
+	Info,
+	Question,
+	Warning,
+	Error,
+}
+
+Message_Response :: enum c.int {
+	OkYes,
+	No,
+	Cancel,
 }
 
 Tray_Button :: struct {
@@ -19,7 +31,7 @@ Tray_Button :: struct {
 @(link_prefix="linux_misc_")
 foreign lib {
 	init :: proc() ---
-	message_box :: proc(message: cstring, type: Message_Type) -> bool ---
+	message_box :: proc(message: cstring, type: Message_Type, urgency: Urgency) -> Message_Response ---
 	systray_init :: proc(
 		event_handler: proc "c" (button: i32),
 		buttons: [^]Tray_Button,

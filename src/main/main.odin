@@ -147,6 +147,7 @@ run :: proc() -> Error {
 			platform_init_glfw() or_return
 			font_init_fontconfig() or_return
 			notify_init_libnotify()
+			dialog_init_gtk()
 		}
 	}
 

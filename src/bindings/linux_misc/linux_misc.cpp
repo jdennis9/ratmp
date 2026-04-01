@@ -7,40 +7,55 @@
 
 enum {
 	MESSAGE_TYPE_INFO,
-	MESSAGE_TYPE_WARNING,
 	MESSAGE_TYPE_YES_NO,
 	MESSAGE_TYPE_OK_CANCEL,
+	MESSAGE_TYPE_YES_NO_CANCEL,
+};
+
+enum {
+	URGENCY_INFO,
+	URGENCY_QUESTION,
+	URGENCY_WARNING,
+	URGENCY_ERROR,
 };
 
 extern "C" void linux_misc_init() {
 	gtk_init(NULL, NULL);
 }
 
-extern "C" bool linux_misc_message_box(
+extern "C" int linux_misc_message_box(
 	const char *message,
-	int type
+	int type, int urgency
 ) {
 	GtkMessageType message_type;
 	GtkButtonsType buttons;
 
 	switch (type) {
-		case MESSAGE_TYPE_INFO:
-			message_type = GTK_MESSAGE_INFO;
-			buttons = GTK_BUTTONS_NONE;
-			break;
-		case MESSAGE_TYPE_WARNING:
-			message_type = GTK_MESSAGE_WARNING;
-			buttons = GTK_BUTTONS_NONE;
-			break;
-		case MESSAGE_TYPE_YES_NO:
-			message_type = GTK_MESSAGE_QUESTION;
-			buttons = GTK_BUTTONS_YES_NO;
-			break;
-		case MESSAGE_TYPE_OK_CANCEL:
-			message_type = GTK_MESSAGE_QUESTION;
-			buttons = GTK_BUTTONS_OK_CANCEL;
-			break;
-		default: return false;
+	case MESSAGE_TYPE_INFO:
+		buttons = GTK_BUTTONS_OK;
+		break;
+	case MESSAGE_TYPE_YES_NO:
+		buttons = GTK_BUTTONS_YES_NO;
+		break;
+	case MESSAGE_TYPE_OK_CANCEL:
+		buttons = GTK_BUTTONS_OK_CANCEL;
+		break;
+	default: return false;
+	}
+
+	switch (urgency) {
+	case URGENCY_INFO:
+		message_type = GTK_MESSAGE_INFO;
+		break;
+	case URGENCY_QUESTION:
+		message_type = GTK_MESSAGE_QUESTION;
+		break;
+	case URGENCY_WARNING:
+		message_type = GTK_MESSAGE_WARNING;
+		break;
+	case URGENCY_ERROR:
+		message_type = GTK_MESSAGE_ERROR;
+		break;
 	}
 
 	GtkWidget *dialog = gtk_message_dialog_new(
