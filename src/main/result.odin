@@ -10,6 +10,7 @@ Custom_Error :: enum {
 	InvalidName,
 	InvalidInput,
 	NotFound,
+	NotImplemented,
 	// Error happening in third-party library
 	ThirdParty,
 }

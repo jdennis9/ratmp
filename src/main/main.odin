@@ -141,6 +141,7 @@ run :: proc() -> Error {
 		when ODIN_OS == .Windows {
 			platform_init_win32() or_return
 			font_init_windows()
+			dialog_init_windows()
 		}
 		else {
 			platform_init_glfw() or_return

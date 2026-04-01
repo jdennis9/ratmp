@@ -568,6 +568,12 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				if imgui.MenuItem("Load library") {
 					ui.actions.debug.load_library = true
 				}
+				if imgui.MenuItem("Test message boxes") {
+					show_message_box(.Message, .Info, "Info Test", "This is a message")
+					show_message_box(.YesNoCancel, .Question, "Question Test", "Yes, no, cancel?")
+					show_message_box(.OkCancel, .Warning, "Warning Test", "Ok, cancel?")
+					show_message_box(.YesNo, .Error, "Error Test", "Yes, no?")
+				}
 				imx.select_enum("Background policy", &ui.background.policy)
 				imgui.EndMenu()
 			}
