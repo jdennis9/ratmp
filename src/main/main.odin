@@ -203,6 +203,7 @@ run :: proc() -> Error {
 
 		frame_start := time.tick_now()
 		sys_main_frame()
+		update_async_dialogs()
 
 		if _g.want_show_window {
 			_g.want_show_window = false
