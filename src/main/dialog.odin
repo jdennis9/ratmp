@@ -1,11 +1,11 @@
 package main
 
 import "core:fmt"
+
 Message_Box_Type :: enum {
 	Message,
 	OkCancel,
 	YesNo,
-	YesNoCancel,
 }
 
 Message_Box_Urgency :: enum {
@@ -16,10 +16,12 @@ Message_Box_Urgency :: enum {
 }
 
 Message_Box_Response :: enum {
+	None,
 	OkYes,
 	No,
 	Cancel,
 }
+
 
 _dialog_impl_show_message_box: proc(
 	type: Message_Box_Type, urgency: Message_Box_Urgency, title, body: cstring

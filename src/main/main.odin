@@ -147,6 +147,7 @@ run :: proc() -> Error {
 			platform_init_glfw() or_return
 			font_init_fontconfig() or_return
 			notify_init_libnotify()
+			dialog_init_gtk()
 		}
 	}
 
@@ -202,6 +203,7 @@ run :: proc() -> Error {
 
 		frame_start := time.tick_now()
 		sys_main_frame()
+		update_async_dialogs()
 
 		if _g.want_show_window {
 			_g.want_show_window = false
