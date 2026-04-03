@@ -67,7 +67,7 @@ _Track_DB_Model :: struct {
 	date_added: i64,
 }
 
-_track_to_db_model :: proc(t: Track, allocator: mem.Allocator) -> (model: _Track_DB_Model, error: Error) {
+_track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (model: _Track_DB_Model, error: Error) {
 	protocol := strings.clone_to_cstring(
 		reflect.enum_name_from_value(t.protocol) or_else "File", allocator
 	) or_return
@@ -81,9 +81,9 @@ _track_to_db_model :: proc(t: Track, allocator: mem.Allocator) -> (model: _Track
 		protocol         = protocol,
 		url              = strings.clone_to_cstring(t.url, allocator) or_return,
 		format           = format,
-		artist           = strings.clone_to_cstring(t.artist, allocator) or_return,
-		album            = strings.clone_to_cstring(t.album, allocator) or_return,
-		genre            = strings.clone_to_cstring(t.genre, allocator) or_return,
+		artist           = strings.clone_to_cstring(library_get_artist_name(l, t.artist), allocator) or_return,
+		album            = strings.clone_to_cstring(library_get_album_name(l, t.album), allocator) or_return,
+		genre            = strings.clone_to_cstring(library_get_genre_name(l, t.genre), allocator) or_return,
 		title            = strings.clone_to_cstring(t.title, allocator) or_return,
 		duration_seconds = auto_cast t.duration_seconds,
 		track_no         = auto_cast t.track_no,
@@ -97,8 +97,8 @@ _track_to_db_model :: proc(t: Track, allocator: mem.Allocator) -> (model: _Track
 	}, nil
 }
 
-_track_from_db_model :: proc(t: _Track_DB_Model, allocator: mem.Allocator) -> (ret: Track, error: Error) {
-	return Track {
+_track_from_db_model :: proc(t: _Track_DB_Model, allocator: mem.Allocator) -> (ret: Track_Data, error: Error) {
+	return Track_Data {
 		protocol         = reflect.enum_from_name(Track_Protocol, string(t.protocol)) or_else .File,
 		url              = strings.clone(string(t.url), allocator) or_return,
 		format           = reflect.enum_from_name(Audio_File_Format, string(t.format)) or_else .Wav,
@@ -154,8 +154,10 @@ _get_columns :: proc() -> []_Column {
 }
 
 @private
-track_db_save :: proc(track_map: ^Track_Map, path: string) -> Error {
+track_db_save :: proc(l: ^Library, path: string) -> Error {
 	TIME_SCOPE("Save library to SQL database")
+
+	track_map := &l.tracks
 
 	columns := _get_columns()
 	defer delete(columns)
@@ -217,7 +219,7 @@ track_db_save :: proc(track_map: ^Track_Map, path: string) -> Error {
 		for track, _ in handle_map.iterate(&it) {
 			append(
 				&tracks,
-				_track_to_db_model(track^, temp_allocator) or_continue
+				_track_to_db_model(l^, track^, temp_allocator) or_continue
 			)
 		}
 	}
@@ -278,10 +280,14 @@ track_db_save :: proc(track_map: ^Track_Map, path: string) -> Error {
 
 @private
 track_db_load :: proc(
-	track_map: ^Track_Map, url_hash_map: ^map[u64]Track_ID,
-	path: string, allocator: mem.Allocator
+	l: ^Library, path: string
 ) -> Error {
 	TIME_SCOPE("Load SQL library")
+
+	arena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&arena)
+	defer mem.dynamic_arena_destroy(&arena)
+	allocator := mem.dynamic_arena_allocator(&arena)
 
 	columns := _get_columns()
 	defer delete(columns)
@@ -379,15 +385,15 @@ track_db_load :: proc(
 	// --------------------------------------------------------------------------
 	for model in models {
 		path_hash := transmute(u64) model.path_hash
-		existing_handle, exists := url_hash_map[path_hash]
+		existing_handle, exists := l.url_hash_map[path_hash]
 
 		// Update the track?
 		if exists do continue
 
 		track := _track_from_db_model(model, allocator) or_continue
 
-		handle := handle_map.add(track_map, track) or_continue
-		url_hash_map[path_hash] = handle
+		//handle := handle_map.add(track_map, track) or_continue
+		library_add_track(l, track)
 	}
 
 	return nil

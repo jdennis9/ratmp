@@ -246,11 +246,11 @@ run :: proc() -> Error {
 		// Handle UI actions
 		// -----------------------------------------------------------------------
 		if ui_actions.debug.save_library {
-			server_save_library_to_file(&server, server.library_path)
+			library_save(&server.library, server.library_path)
 		}
 
 		if ui_actions.debug.load_library {
-			server_load_library_from_file(&server, server.library_path)
+			library_load(&server.library, server.library_path)
 		}
 
 		if ui_actions.debug.force_device_reset {
@@ -311,7 +311,7 @@ _media_controls_proc :: proc(data: rawptr, event: Media_Controls_Event) {
 @(private="file")
 _library_load_thread_proc :: proc(t: ^thread.Thread) {
 	sv := cast(^Server) t.data
-	server_load_library_from_file(sv, sv.library_path)
+	library_load(&sv.library, sv.library_path)
 }
 
 main :: proc() {
