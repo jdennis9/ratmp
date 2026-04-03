@@ -280,13 +280,13 @@ _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 		case .None: platform_flush_events()
 		case .Show:
 			_g.want_show_window = true
-			platform_flush_events()
 		case .Pause: server_request_pause(sv)
 		case .Resume: server_request_resume(sv)
 		case .Prev: server_request_previous_track(sv)
 		case .Next: server_request_next_track(sv)
 		case .Exit: _g.running = false
 	}
+	platform_flush_events()
 }
 
 @(private="file")
