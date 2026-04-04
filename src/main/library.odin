@@ -95,6 +95,9 @@ Library :: struct {
 	artists: Track_Group,
 	albums: Track_Group,
 	genres: Track_Group,
+
+	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
+	playlists_serial: uint,
 	
 	folder_cover_art: map[u64]string,
 	
@@ -251,6 +254,47 @@ library_load :: proc(l: ^Library, path: string) -> bool {
 library_get_track :: proc(l: ^Library, handle: Track_ID) -> (track: ^Track, found: bool) {
 	return hm.get(&l.tracks, handle)
 }
+
+
+// -----------------------------------------------------------------------------
+// Playlist management
+// -----------------------------------------------------------------------------
+
+Cant_Add_Playlist_Reason :: enum {
+	None,
+	NameExists,
+	NameEmpty,
+}
+
+library_can_add_playlist :: proc(l: ^Library, name: string) -> Cant_Add_Playlist_Reason {
+	if name == "" do return .NameEmpty
+	it := hm.iterator_make(&l.playlists)
+	for playlist, _ in hm.iterate(&it) {
+		if name == playlist.name do return .NameExists
+	}
+
+	return .None
+}
+
+library_add_playlist :: proc(l: ^Library, name: string) -> (handle: Playlist_Handle, ok: bool) {
+	pl := Playlist {
+		uid = generate_uid(),
+		name_cstring = strings.clone_to_cstring(name),
+		serial = 1,
+	}
+	pl.name = string(pl.name_cstring)
+
+	handle = hm.add(&l.playlists, pl) or_return
+	l.playlists_serial += 1
+	
+	ok = true
+	return
+}
+
+library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist: ^Playlist, found: bool) {
+	return hm.get(&l.playlists, handle)
+}
+
 
 // -----------------------------------------------------------------------------
 // Track groups

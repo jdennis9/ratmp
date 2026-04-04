@@ -102,15 +102,13 @@ Server :: struct {
 	queue_uid:            UID,
 	track_info:           Audio_File_Info,
 	current_track_id:     Track_ID,
-	playlists:            hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
-	playlists_serial:     uint,
 	background_scan:      Server_Background_Scan_State,
 	need_background_scan: bool,
 	library_path:         string,
 	saved_library_serial: uint,
-	// Folder name hash -> cover art path
-	folder_cover_art: map[u64]string,
 
+	// Used by the audio callback for storing samples
+	// without the need to reallocate every frame
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 }
 
@@ -690,43 +688,4 @@ sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
 
 	if spec.order == .Descending do sort.reverse_sort(iface)
 	else do sort.sort(iface)
-}
-
-// -----------------------------------------------------------------------------
-// Playlist management
-// -----------------------------------------------------------------------------
-
-Cant_Add_Playlist_Reason :: enum {
-	None,
-	NameExists,
-	NameEmpty,
-}
-
-server_can_add_playlist :: proc(sv: ^Server, name: string) -> Cant_Add_Playlist_Reason {
-	if name == "" do return .NameEmpty
-	it := hm.iterator_make(&sv.playlists)
-	for playlist, _ in hm.iterate(&it) {
-		if name == playlist.name do return .NameExists
-	}
-
-	return .None
-}
-
-server_add_playlist :: proc(sv: ^Server, name: string) -> (handle: Playlist_Handle, ok: bool) {
-	pl := Playlist {
-		uid = generate_uid(),
-		name_cstring = strings.clone_to_cstring(name),
-		serial = 1,
-	}
-	pl.name = string(pl.name_cstring)
-
-	handle = hm.add(&sv.playlists, pl) or_return
-	sv.playlists_serial += 1
-	
-	ok = true
-	return
-}
-
-server_get_playlist :: proc(sv: ^Server, handle: Playlist_Handle) -> (playlist: ^Playlist, found: bool) {
-	return hm.get(&sv.playlists, handle)
 }

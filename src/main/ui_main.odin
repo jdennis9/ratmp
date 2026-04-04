@@ -667,7 +667,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// Track info
 	// --------------------------------------------------------------------------
 	if track, have_track := get_track(sv, sv.current_track_id); have_track {
-		imx.text(512, track.artist, " - ", track.title)
+		imx.text(512, get_artist_name(sv^, track.artist), " - ", track.title)
 		imgui.Separator()
 
 		imx.text_unformatted_ex(track.album != 0 ? get_album_name(sv^, track.album) : "<no album>")
@@ -681,6 +681,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 		else {
 			imx.text(32, track.channels, " channels")
 		}
+		
 
 		imgui.Separator()
 		imx.text(32, track.samplerate, "Hz")
@@ -990,7 +991,7 @@ _track_table_show :: proc(
 
 	if actions.add_to_playlist != nil {
 		h := actions.add_to_playlist.?
-		if playlist, ok := server_get_playlist(sv, h); ok {
+		if playlist, ok := library_get_playlist(&sv.library, h); ok {
 			playlist_add(sv, playlist, _track_table_get_selection(table^, ui.allocators.per_frame))
 		}
 	}
@@ -1823,14 +1824,14 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	// --------------------------------------------------------------------------
 	need_update := false
 	
-	need_update |= sv.playlists_serial != w.playlist_table.serial
+	need_update |= sv.library.playlists_serial != w.playlist_table.serial
 	
 	if need_update {
 		clear(&w.playlist_table.rows)
 		clear(&w.playlist_handles)
-		w.playlist_table.serial = sv.playlists_serial
+		w.playlist_table.serial = sv.library.playlists_serial
 
-		it := handle_map.iterator_make(&sv.playlists)
+		it := handle_map.iterator_make(&sv.library.playlists)
 		for _, handle in handle_map.iterate(&it) {
 			append(&w.playlist_handles, handle)
 			append(&w.playlist_table.rows, _Playlist_Table_Row{})
@@ -1840,7 +1841,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	}
 
 	for &row, row_index in w.playlist_table.rows {
-		playlist := server_get_playlist(sv, w.playlist_handles[row_index]) or_continue
+		playlist := library_get_playlist(&sv.library, w.playlist_handles[row_index]) or_continue
 		if row.serial != playlist.serial {
 			row = _make_playlist_row(
 				&sv.library, playlist.uid, playlist.name, playlist.serial, playlist.tracks[:]
@@ -1862,8 +1863,8 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	// Validate playlist name
 	if need_update || imgui.IsItemActive() {
-		w.cant_add_playlist_reason = server_can_add_playlist(
-			sv, string(cstring(&w.new_playlist_name[0]))
+		w.cant_add_playlist_reason = library_can_add_playlist(
+			&sv.library, string(cstring(&w.new_playlist_name[0]))
 		)
 	}
 	imgui.SameLine()
@@ -1882,7 +1883,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	// Add playlist
 	if commit_new_playlist && w.cant_add_playlist_reason == .None {
-		server_add_playlist(sv, string(cstring(&w.new_playlist_name[0])))
+		library_add_playlist(&sv.library, string(cstring(&w.new_playlist_name[0])))
 		for &r in w.new_playlist_name do r = 0
 	}
 
@@ -1901,6 +1902,14 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 }
 
 _playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
+	sv := ui.server
+
+	playlist := library_get_playlist(&sv.library, w.viewing_playlist.?) or_return
+
+	imx.title_text("Playlist:", playlist.name)
+	_track_table_show(
+		ui, "##tracks", &w.track_table, playlist.serial, playlist.tracks[:], {}, playlist.uid
+	)
 
 	return true
 }
@@ -1915,12 +1924,7 @@ _playlists_window_show_focused :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: b
 			return false
 		}
 
-		playlist := server_get_playlist(sv, w.viewing_playlist.?) or_return
-
-		imx.title_text("Playlist:", playlist.name)
-		_track_table_show(
-			ui, "##tracks", &w.track_table, playlist.serial, playlist.tracks[:], {}, playlist.uid
-		)
+		_playlists_window_show_tracks(ui, w)
 	}
 	else {
 		_playlists_window_show_playlists(ui, w)
@@ -1935,7 +1939,7 @@ _show_playlist_selector_menu :: proc(
 	imgui.BeginMenu(label) or_return
 	defer imgui.EndMenu()
 
-	it := handle_map.iterator_make(&sv.playlists)
+	it := handle_map.iterator_make(&sv.library.playlists)
 	for it_playlist, h in handle_map.iterate(&it) {
 		playlist: ^Playlist = it_playlist
 		if exclude != nil && h == exclude.? do continue

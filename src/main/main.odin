@@ -277,7 +277,7 @@ run :: proc() -> Error {
 _tray_callback :: proc(data: rawptr, button: Sys_Tray_Button) {
 	sv := cast(^Server) data
 	switch button {
-		case .None: platform_flush_events()
+		case .None:
 		case .Show:
 			_g.want_show_window = true
 		case .Pause: server_request_pause(sv)
