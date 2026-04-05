@@ -77,7 +77,7 @@ _track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (m
 	) or_return
 
 	return _Track_DB_Model {
-		path_hash        = transmute(i64) hash_string_64(t.url),
+		path_hash        = transmute(i64) stable_hash_string_64(t.url),
 		protocol         = protocol,
 		url              = strings.clone_to_cstring(t.url, allocator) or_return,
 		format           = format,

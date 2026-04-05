@@ -1,5 +1,6 @@
 package main
 
+import "src:main/common"
 import "src:bindings/taglib"
 import "core:os"
 import "core:slice"
@@ -84,7 +85,8 @@ Track_Group :: struct {
 Library :: struct {
 	allocator_map: Allocator_Map,
 	allocators: struct {
-		tracks: mem.Allocator,
+		track_data: mem.Allocator,
+		track_map: mem.Allocator,
 		// Freed after event handling
 		temp: mem.Allocator,
 	},
@@ -107,7 +109,8 @@ Library :: struct {
 }
 
 library_init :: proc(l: ^Library) {
-	l.allocators.tracks = allocator_map_add_dynamic_arena(&l.allocator_map, "tracks")
+	l.allocators.track_data = allocator_map_add_dynamic_arena(&l.allocator_map, "track_data")
+	l.allocators.track_map = allocator_map_add_heap(&l.allocator_map, "track_map")
 	l.allocators.temp = allocator_map_add_dynamic_arena(&l.allocator_map, "temp")
 	track_group_init(&l.artists)
 	track_group_init(&l.albums)
@@ -116,6 +119,8 @@ library_init :: proc(l: ^Library) {
 	l.albums.name = "Album"
 	l.genres.name = "Genre"
 	l.serial = 1
+
+	hm.dynamic_init(&l.tracks, l.allocators.track_map)
 }
 
 library_destroy :: proc(l: ^Library) {
@@ -136,7 +141,7 @@ library_update :: proc(l: ^Library) {
 
 library_add_track :: proc(
 	l: ^Library, data: Track_Data, update_existing := false
-) -> (id: Track_ID, ok: bool) {
+) -> (handle: Track_ID, error: Error) {
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
 
@@ -155,8 +160,12 @@ library_add_track :: proc(
 		}
 	}*/
 
-	if extisting_handle, exists := l.url_hash_map[hash]; exists  {
-		return extisting_handle, true
+	if existing_handle, exists := l.url_hash_map[hash]; exists  {
+		if !update_existing do return existing_handle, true
+		handle = existing_handle
+	}
+	else {
+		handle = hm.add(&l.tracks, Track{}) or_return
 	}
 
 	if data.protocol == .File {
@@ -164,13 +173,6 @@ library_add_track :: proc(
 		defer delete(dir)
 
 		library_scan_directory_for_cover_art(l, dir)
-	}
-
-	handle, error := hm.add(&l.tracks, Track{})
-	
-	if error != nil {
-		log.error(error)
-		return {}, false
 	}
 
 	ptr := hm.get(&l.tracks, handle) or_return
@@ -184,8 +186,8 @@ library_add_track :: proc(
 	ptr.flags            = auto_cast data.flags
 	ptr.format           = data.format
 	ptr.samplerate       = auto_cast data.samplerate
-	ptr.title            = strings.clone(data.title, l.allocators.tracks)
-	ptr.url              = strings.clone(data.url, l.allocators.tracks)
+	ptr.title            = strings.clone(data.title, l.allocators.track_data)
+	ptr.url              = strings.clone(data.url, l.allocators.track_data)
 	ptr.date_added       = time.now()
 	ptr.file_date        = data.file_date
 	ptr.protocol         = data.protocol
@@ -193,8 +195,7 @@ library_add_track :: proc(
 	l.url_hash_map[hash] = handle
 	l.serial += 1
 
-
-	return handle, true
+	return
 }
 
 library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Track_ID, ok: bool) {
@@ -310,14 +311,14 @@ track_group_init :: proc(tg: ^Track_Group) {
 	mem.dynamic_arena_init(&tg.arena)
 	append(&tg.entries, Track_Group_Entry {
 		name = "",
-		name_hash = hash_string_32(""),
+		name_hash = stable_hash_string_32(""),
 	})
 }
 
 track_group_add_track :: proc(
 	tg: ^Track_Group, str: string, track_id: Track_ID
 ) -> int {
-	hash := hash_string_32(str)
+	hash := stable_hash_string_32(str)
 	index := track_group_get_entry(tg, hash) or_else -1
 	allocator := mem.dynamic_arena_allocator(&tg.arena)
 
@@ -325,7 +326,7 @@ track_group_add_track :: proc(
 		index = len(tg.entries)
 		append(&tg.entries, Track_Group_Entry{
 			name = strings.clone(str, allocator),
-			name_hash = hash_string_32(str),
+			name_hash = stable_hash_string_32(str),
 			uid = generate_uid(),
 		})
 	}
@@ -403,7 +404,7 @@ find_track_thumbnail :: proc(
 		dir := filepath.dir(track.url, context.allocator)
 		defer delete(dir)
 
-		hash := hash_string_64(dir)
+		hash := stable_hash_string_64(dir)
 		path := l.folder_cover_art[hash] or_else ""
 		if path != "" {
 			read_error: os.Error
@@ -433,7 +434,7 @@ find_track_thumbnail :: proc(
 }
 
 library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) {
-	hash := hash_string_64(dir)
+	hash := stable_hash_string_64(dir)
 	if hash in l.folder_cover_art do return
 
 	files, error := os.read_all_directory_by_path(dir, context.allocator)
@@ -446,7 +447,7 @@ library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) {
 	for file in files {
 		if file_is_type(file.fullpath, .Image) {
 			log.debug("Adding cover art", file.fullpath, "for folder", dir)
-			l.folder_cover_art[hash] = strings.clone(file.fullpath, l.allocators.tracks)
+			l.folder_cover_art[hash] = strings.clone(file.fullpath, l.allocators.track_data)
 			return
 		}
 	}

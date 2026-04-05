@@ -706,6 +706,10 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	return true
 }
 
+// -----------------------------------------------------------------------------
+// Track table
+// -----------------------------------------------------------------------------
+
 _track_table_row_from_track :: proc(
 	sv: ^Server, handle: Track_ID
 ) -> (row: _Track_Table_Row, ok: bool) {
@@ -1011,6 +1015,10 @@ _sort_track_table_rows :: proc(ui: ^UI, table: _Track_Table, spec: Track_Sort_Sp
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Metadata window
+// -----------------------------------------------------------------------------
+
 _show_track_metadata_table :: proc(str_id: cstring, sv: Server, track: Track) -> bool {
 	imx.begin_kv_table(str_id, imgui.TableFlags_RowBg) or_return
 	defer imx.end_kv_table()
@@ -1129,46 +1137,9 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 	return true
 }
 
-_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
-	id := imgui.GetID(title)
-	state := &ui.window_state[id]
-	if state == nil {
-		ui.window_state[id] = _Window_State {
-			name = title,
-			open = default_open
-		}
-		state = &ui.window_state[id]
-
-		// Sort windows by name
-		delete(ui.sorted_window_states)
-		ui.sorted_window_states, _ = slice.map_keys(ui.window_state)
-		sort.sort(
-			sort.Interface {
-				collection = ui,
-				len = proc(it: sort.Interface) -> int {
-					return len((cast(^UI) it.collection).sorted_window_states)
-				},
-				less = proc(it: sort.Interface, a, b: int) -> bool {
-					ui := cast(^UI) it.collection
-					A := ui.window_state[ui.sorted_window_states[a]] or_return
-					B := ui.window_state[ui.sorted_window_states[b]] or_return
-					return strings.compare(string(A.name), string(B.name)) < 0
-				},
-				swap = proc(it: sort.Interface, a, b: int) {
-					ui := cast(^UI) it.collection
-					ui.sorted_window_states[a], ui.sorted_window_states[b] = 
-						ui.sorted_window_states[b], ui.sorted_window_states[a]
-				}
-			},
-		)
-
-	}
-	else if !state.open do return false
-
-	if state.bring_to_front do imgui.SetNextWindowFocus()
-	state.bring_to_front = false
-	return imx.begin(title, &state.open, flags)
-}
+// -----------------------------------------------------------------------------
+// Track group table
+// -----------------------------------------------------------------------------
 
 _track_group_windows_show_groups :: proc(
 	ui: ^UI, w: ^_Track_Category_Window, tg: ^Track_Group,
@@ -1199,11 +1170,11 @@ _track_group_windows_show_groups :: proc(
 
 	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 	if result.selected_row != nil {
-		w.displayed_entry_hash = hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
+		w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
 	}
 
 	if result.played_row != nil {
-		w.displayed_entry_hash = hash_string_32(w.playlist_table.rows[result.played_row.?].title)
+		w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.played_row.?].title)
 	}
 
 	return true
@@ -1253,6 +1224,10 @@ _track_group_window_show_focused :: proc(
 		_track_group_windows_show_groups(ui, w, tg)
 	}
 }
+
+// -----------------------------------------------------------------------------
+// Playlist table
+// -----------------------------------------------------------------------------
 
 _Playlist_Table_Actions :: struct {
 	selected_row: Maybe(int),
@@ -1406,6 +1381,34 @@ _playlist_table_show :: proc(
 	shown = true
 	return
 }
+
+
+_make_playlist_row :: proc(
+	l: ^Library,
+	uid: UID,
+	title: string,
+	serial: uint,
+	tracks: []Track_ID,
+) -> _Playlist_Table_Row {
+	row := _Playlist_Table_Row {
+		uid = uid,
+		serial = serial,
+		tracks = tracks,
+		title = title,
+		totals = calculate_track_totals(l, tracks),
+	}
+
+	format_duration(row.duration[:], auto_cast row.totals.duration)
+	fmt.bprint(row.length[:], len(row.tracks))
+	fmt.bprintf(row.file_size[:], "%M", row.totals.file_size)
+
+	return row
+}
+
+
+// -----------------------------------------------------------------------------
+// Themes
+// -----------------------------------------------------------------------------
 
 _show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
 	accent_changed: bool
@@ -1791,29 +1794,6 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 
 	return nil
 }
-
-_make_playlist_row :: proc(
-	l: ^Library,
-	uid: UID,
-	title: string,
-	serial: uint,
-	tracks: []Track_ID,
-) -> _Playlist_Table_Row {
-	row := _Playlist_Table_Row {
-		uid = uid,
-		serial = serial,
-		tracks = tracks,
-		title = title,
-		totals = calculate_track_totals(l, tracks),
-	}
-
-	format_duration(row.duration[:], auto_cast row.totals.duration)
-	fmt.bprint(row.length[:], len(row.tracks))
-	fmt.bprintf(row.file_size[:], "%M", row.totals.file_size)
-
-	return row
-}
-
 // -----------------------------------------------------------------------------
 // Playlists window
 // -----------------------------------------------------------------------------
@@ -1955,6 +1935,47 @@ _show_playlist_selector_menu :: proc(
 // -----------------------------------------------------------------------------
 // Misc
 // -----------------------------------------------------------------------------
+
+_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
+	id := imgui.GetID(title)
+	state := &ui.window_state[id]
+	if state == nil {
+		ui.window_state[id] = _Window_State {
+			name = title,
+			open = default_open
+		}
+		state = &ui.window_state[id]
+
+		// Sort windows by name
+		delete(ui.sorted_window_states)
+		ui.sorted_window_states, _ = slice.map_keys(ui.window_state)
+		sort.sort(
+			sort.Interface {
+				collection = ui,
+				len = proc(it: sort.Interface) -> int {
+					return len((cast(^UI) it.collection).sorted_window_states)
+				},
+				less = proc(it: sort.Interface, a, b: int) -> bool {
+					ui := cast(^UI) it.collection
+					A := ui.window_state[ui.sorted_window_states[a]] or_return
+					B := ui.window_state[ui.sorted_window_states[b]] or_return
+					return strings.compare(string(A.name), string(B.name)) < 0
+				},
+				swap = proc(it: sort.Interface, a, b: int) {
+					ui := cast(^UI) it.collection
+					ui.sorted_window_states[a], ui.sorted_window_states[b] = 
+						ui.sorted_window_states[b], ui.sorted_window_states[a]
+				}
+			},
+		)
+
+	}
+	else if !state.open do return false
+
+	if state.bring_to_front do imgui.SetNextWindowFocus()
+	state.bring_to_front = false
+	return imx.begin(title, &state.open, flags)
+}
 
 _table_select_row :: proc(table: ^$T, row_index: int, keep_selection: bool) {
 	row := &table.rows[row_index]

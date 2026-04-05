@@ -54,3 +54,7 @@ allocator_map_add_dynamic_arena :: proc(
 
 	return allocator_map_add(m, name, arena, allocator)
 }
+
+allocator_map_add_heap :: proc(m: ^Allocator_Map, name: string) -> mem.Allocator {
+	return allocator_map_add(m, name, nil, runtime.heap_allocator())
+}

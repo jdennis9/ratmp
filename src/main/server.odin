@@ -177,27 +177,6 @@ server_shutdown :: proc(sv: ^Server) {
 	sv.event_queue = nil
 }
 
-/*track_clone :: proc(track: Track_Data, allocator: mem.Allocator) -> (output: Track_Data, error: mem.Allocator_Error) {
-	if track.album != "" do output.album = strings.clone(track.album, allocator) or_return
-	if track.artist != "" do output.artist = strings.clone(track.artist, allocator) or_return
-	if track.genre != "" do output.genre = strings.clone(track.genre, allocator) or_return
-	if track.title != "" do output.title = strings.clone(track.title, allocator) or_return
-	output.format = track.format
-	output.url = strings.clone(track.url, allocator)
-	output.bitrate_kbps = track.bitrate_kbps
-	output.channels = track.channels
-	output.duration_seconds = track.duration_seconds
-	output.flags = track.flags
-	output.release_year = track.release_year
-	output.samplerate = track.samplerate
-	output.track_no = track.track_no
-	output.file_size = track.file_size
-	output.file_date = track.file_date
-	output.protocol = track.protocol
-	return output, nil
-}*/
-
-
 taglib_open :: proc(path: string) -> taglib.File {
 	when ODIN_OS == .Windows {
 		path_utf16: [512]u16
@@ -347,7 +326,7 @@ server_handle_events :: proc(sv: ^Server) {
 		case .BackgroundScanComplete:
 			tracks := sv.background_scan.output[:]
 			for track in tracks {
-				path_hash := hash_string_64(track.url)
+				path_hash := stable_hash_string_64(track.url)
 				if path_hash in sv.library.url_hash_map do continue
 				library_add_track(&sv.library, track)
 			}

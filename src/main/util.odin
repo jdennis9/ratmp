@@ -5,7 +5,10 @@ import "core:os"
 import "core:fmt"
 import "core:log"
 import "core:time"
-import "core:hash/xxhash"
+import "core:hash"
+
+HASH_ALGO_64 :: "fnv64a"
+HASH_ALGO_32 :: "fnv32a"
 
 string_from_array :: proc(arr: []u8) -> string {
 	if arr[len(arr)-1] == 0 do return string(cstring(raw_data(arr)))
@@ -19,12 +22,12 @@ set_cstring_buf :: proc(buf: []u8, str: string) -> bool {
 	return true
 }
 
-hash_string_64 :: proc(str: string) -> u64 {
-	return xxhash.XXH3_64_default(transmute([]u8) str)
+stable_hash_string_64 :: proc(str: string) -> u64 {
+	return hash.fnv64a(transmute([]byte) str)
 }
 
-hash_string_32 :: proc(str: string) -> u32 {
-	return xxhash.XXH32(transmute([]u8) str)
+stable_hash_string_32 :: proc(str: string) -> u32 {
+	return hash.fnv32a(transmute([]byte) str)
 }
 
 format_duration :: proc(buf: []u8, seconds: int) {
