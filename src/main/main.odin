@@ -248,7 +248,7 @@ run :: proc() -> Error {
 		// Handle UI actions
 		// -----------------------------------------------------------------------
 		if ui_actions.debug.save_library {
-			library_save(&server.library, server.library_path)
+			library_save(server.library, server.library_path)
 		}
 
 		if ui_actions.debug.load_library {

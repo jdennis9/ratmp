@@ -404,7 +404,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		if w.serial != sv.library.serial {
 			delete(w.tracks)
 			w.serial = sv.library.serial
-			w.tracks = library_get_all_tracks(&sv.library, context.allocator) or_else nil
+			w.tracks = library_get_all_tracks(sv.library, context.allocator) or_else nil
 		}
 
 		_track_table_show(

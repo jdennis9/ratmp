@@ -196,7 +196,7 @@ library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Tra
 	return library_add_track(l, track)
 }
 
-library_get_all_tracks :: proc(l: ^Library, allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
+library_get_all_tracks :: proc(l: Library, allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
 	keys = slice.map_keys(l.tracks, allocator) or_return
 	return
 }
@@ -213,7 +213,7 @@ library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {
 	return l.genres.entries[id].name
 }
 
-library_save :: proc(l: ^Library, path: string) -> bool {
+library_save :: proc(l: Library, path: string) -> bool {
 	TIME_SCOPE("Save library", path)
 
 	track_db_save(l, path)

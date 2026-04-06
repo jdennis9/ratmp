@@ -154,10 +154,10 @@ _get_columns :: proc() -> []_Column {
 }
 
 @private
-track_db_save :: proc(l: ^Library, path: string) -> Error {
+track_db_save :: proc(l: Library, path: string) -> Error {
 	TIME_SCOPE("Save library to SQL database")
 
-	track_map := &l.tracks
+	track_map := l.tracks
 
 	columns := _get_columns()
 	defer delete(columns)
@@ -218,7 +218,7 @@ track_db_save :: proc(l: ^Library, path: string) -> Error {
 		for _, track in l.tracks {
 			append(
 				&tracks,
-				_track_to_db_model(l^, track, temp_allocator) or_continue
+				_track_to_db_model(l, track, temp_allocator) or_continue
 			)
 		}
 	}

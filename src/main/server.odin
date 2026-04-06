@@ -306,7 +306,7 @@ server_handle_events :: proc(sv: ^Server) {
 	if sv.library.serial != sv.saved_library_serial {
 		// @TODO: Do this asynchronously somehow
 		log.debug(sv.library.serial, sv.saved_library_serial)
-		library_save(&sv.library, sv.library_path)
+		library_save(sv.library, sv.library_path)
 		sv.saved_library_serial = sv.library.serial
 	}
 
