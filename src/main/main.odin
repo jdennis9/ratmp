@@ -196,6 +196,7 @@ run :: proc() -> Error {
 	if command_opts.profile_startup do return nil
 
 	_g.running = true
+	global_delta_time = 1.0/60.0
 	
 	for _g.running {
 		events: Platform_Events
@@ -268,6 +269,8 @@ run :: proc() -> Error {
 		}
 
 		frame_time := time.tick_diff(frame_start, time.tick_now())
+		global_uptime += time.duration_seconds(frame_time)
+		global_delta_time = f32(time.duration_seconds(frame_time))
 	}
 
 	return nil

@@ -1,5 +1,6 @@
 package main
 
+import "core:math"
 import "core:fmt"
 import "src:bindings/ffmpeg"
 import "core:sort"
@@ -21,6 +22,8 @@ import "base:intrinsics"
 import "core:reflect"
 import hm "core:container/handle_map"
 import "src:dsp"
+
+OUTPUT_RING_BUFFER_SIZE :: 64<<10
 
 // 0 means none
 // Index into array
@@ -85,6 +88,8 @@ Server :: struct {
 	allocators: struct {
 		scan_output: mem.Allocator,
 		scan_queue: mem.Allocator,
+		analysis: mem.Allocator,
+		playback_thread: mem.Allocator,
 	},
 
 	library: Library,
@@ -102,6 +107,8 @@ Server :: struct {
 	need_background_scan: bool,
 	library_path:         string,
 	saved_library_serial: uint,
+	output_ring_buffers:  [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
+	output_spec:          Audio_Spec,
 
 	// Used by the audio callback for storing samples
 	// without the need to reallocate every frame
@@ -131,6 +138,17 @@ server_audio_callback :: proc(
 		}
 
 		status := playback_thread_request_frames(&sv.playback_thread, output[:spec.channels], spec.samplerate)
+
+		sv.output_spec = spec
+
+		for ch in 0..<spec.channels {
+			if sv.output_ring_buffers[ch].data == nil {
+				rb_init(&sv.output_ring_buffers[ch], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
+			}
+
+			rb_produce(&sv.output_ring_buffers[ch], output[ch])
+		}
+
 		dsp.interlace(output[:spec.channels], buf)
 
 		if status == .Eof {
@@ -139,6 +157,12 @@ server_audio_callback :: proc(
 	}
 	else if event == .TrackFinised {
 		server_send_event(sv, {type = .TrackFinished})
+	}
+	else if event == .BufferDropped {
+		log.debug("Buffer dropped")
+		for ch in 0..<AUDIO_MAX_CHANNELS {
+			rb_reset(&sv.output_ring_buffers[ch])
+		}
 	}
 
 	return .Continue
@@ -151,9 +175,11 @@ server_init :: proc(sv: ^Server) -> bool {
 	//sv.track_allocator = mem.dynamic_arena_allocator(&sv.track_arena)
 	sv.allocators.scan_output = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_output")
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
+	sv.allocators.analysis = allocator_map_add_heap(&sv.allocator_map, "analysis")
+	sv.allocators.playback_thread = allocator_map_add_heap(&sv.allocator_map, "playback_thread")
 
 	library_init(&sv.library)
-	playback_thread_init(&sv.playback_thread, {})
+	playback_thread_init(&sv.playback_thread, {}, sv.allocators.playback_thread)
 
 	sv.background_scan.runner = thread.create(_background_scan_proc)
 	sv.background_scan.runner.data = sv
@@ -161,6 +187,9 @@ server_init :: proc(sv: ^Server) -> bool {
 	thread.start(sv.background_scan.runner)
 
 	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
+
+	rb_init(&sv.output_ring_buffers[0], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
+	rb_init(&sv.output_ring_buffers[1], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
 
 
 	return true
@@ -475,6 +504,16 @@ server_is_doing_background_scan :: proc(sv: ^Server) -> bool {
 
 server_get_background_scan_progress :: proc(sv: ^Server) -> (total_files, files_scanned: int) {
 	return sv.background_scan.total_file_count, sv.background_scan.scanned_count
+}
+
+server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) -> Audio_Spec {
+	consume_frames := int(math.ceil(timespan * f32(sv.output_spec.samplerate)))
+	
+	for ch in 0..<sv.output_spec.channels {
+		rb_consume(&sv.output_ring_buffers[ch], buf[ch], consume_frames)
+	}
+
+	return sv.output_spec
 }
 
 @(private="file")

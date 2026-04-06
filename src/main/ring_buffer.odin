@@ -17,6 +17,7 @@
 */
 package main
 
+import "core:mem"
 import "core:slice"
 import "core:sync"
 
@@ -31,16 +32,18 @@ Ring_Buffer :: struct($T: typeid) {
 	data: []T,
 	producer_index: int,
 	consumer_index: int,
+	allocator: mem.Allocator,
 }
 
-rb_init :: proc(buf: ^Ring_Buffer($T), size: int) {
+rb_init :: proc(buf: ^Ring_Buffer($T), size: int, allocator: mem.Allocator) {
 	buf.consumer_index = size-1
-	buf.data = make([]T, size)
+	buf.allocator = allocator
+	buf.data = make([]T, size, allocator)
 }
 
 rb_resize :: proc(buf: ^Ring_Buffer($T), size: int) {
-	delete(buf.data)
-	buf.data = make([]T, size)
+	delete(buf.data, buf.allocator)
+	buf.data = make([]T, size, buf.allocator)
 	rb_reset(buf)
 }
 
@@ -114,7 +117,7 @@ import "core:fmt"
 @test
 test_ring_buffer :: proc(t: ^testing.T) {
 	buf: Ring_Buffer(f32)
-	rb_init(&buf, 16)
+	rb_init(&buf, 16, context.allocator)
 	defer rb_destroy(&buf)
 
 	for i in 0..<32 {

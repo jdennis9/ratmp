@@ -41,3 +41,6 @@ global_paths: struct {
 global_config: Config
 global_config_dirty: bool
 
+global_delta_time: f32
+global_uptime: f64
+

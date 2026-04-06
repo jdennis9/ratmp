@@ -1,5 +1,6 @@
 package main
 
+import "core:mem"
 // =============================================================================
 // Procedures to create and interact with an asynchronous playback stream.
 // Exists to keep decoding and post-processing away from the main audio thread,
@@ -20,6 +21,7 @@ Playback_Thread_Status :: enum {
 
 Playback_Thread :: struct {
 	runner: ^thread.Thread,
+	allocator: mem.Allocator,
 	ring_buffers: [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
 	ring_buffer_channels: int,
 	ring_buffer_samplerate: int,
@@ -80,8 +82,13 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 			log.debug("Resizing ring buffer to", ring_buffer_size)
 
 			for &rb in at.ring_buffers[:at.channels] {
-				rb_reset(&rb)
-				rb_resize(&rb, ring_buffer_size)
+				if rb.data == nil {
+					rb_init(&rb, ring_buffer_size, at.allocator)
+				}
+				else {
+					rb_reset(&rb)
+					rb_resize(&rb, ring_buffer_size)
+				}
 			}
 		}	
 
@@ -113,8 +120,9 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 	}
 }
 
-playback_thread_init :: proc(at: ^Playback_Thread, params: Playback_Thread_Params) {
+playback_thread_init :: proc(at: ^Playback_Thread, params: Playback_Thread_Params, allocator: mem.Allocator) {
 	//at.post_process_hook = params.post_process_hook
+	at.allocator = allocator
 	at.runner = thread.create(_thread_proc)
 	at.runner.data = at
 	at.runner.init_context = context

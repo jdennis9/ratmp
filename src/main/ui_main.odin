@@ -1,6 +1,7 @@
 #+private file
 package main
 
+import "src:dsp"
 import "core:slice"
 import "core:sort"
 import "core:path/filepath"
@@ -27,6 +28,8 @@ ICON_NEXT_TRACK :: ""
 ICON_PAUSE :: ""
 ICON_STOP :: ""
 ICON_PLAY :: ""
+
+_ANALYSIS_BUFFER_SIZE :: (32<<10)
 
 // -----------------------------------------------------------------------------
 // Track table
@@ -83,6 +86,11 @@ _Track_Category_Window :: struct {
 	track_table: _Track_Table,
 }
 
+_Oscilloscope_Window :: struct {
+	window_size: int,
+	position_buf: [][2]f32,
+}
+
 // -----------------------------------------------------------------------------
 // Tracked window state
 // -----------------------------------------------------------------------------
@@ -118,6 +126,7 @@ UI :: struct {
 		themes: mem.Allocator,
 		fonts: mem.Allocator,
 		lazy: mem.Allocator,
+		analysis: mem.Allocator,
 	},
 	windows: struct {
 		library: struct {
@@ -138,6 +147,8 @@ UI :: struct {
 		genres: _Track_Category_Window,
 
 		metadata: _Metadata_Window,
+
+		oscilloscope: _Oscilloscope_Window,
 	},
 	dialogs: struct {
 		add_folder: File_Dialog_State,
@@ -151,6 +162,10 @@ UI :: struct {
 	},
 	paths: struct {
 		theme_folder: string,
+	},
+	analysis: struct {
+		output_buffer: [AUDIO_MAX_CHANNELS][]f32,
+		window_mult: []f32,
 	},
 	themes: [dynamic]_Theme,
 	debug: struct {
@@ -205,6 +220,7 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.allocators.fonts = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
 	ui.allocators.themes = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
 	ui.allocators.lazy = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
+	ui.allocators.analysis = allocator_map_add_heap(&ui.allocator_map, "analysis")
 
 	ui_theme.imgui_colors = imgui.GetStyle().Colors
 	
@@ -310,6 +326,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 
 	defer free_all(ui.allocators.per_frame)
 	
+	_update_analysis(ui)
+
 	//style := imgui.GetStyle()
 	//style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
 	if global_config.ui.font_size != 0 {
@@ -475,6 +493,14 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	if _begin(ui, "Playlists###playlists") {
 		_playlists_window_show_focused(ui, &ui.windows.playlists)
+		imgui.End()
+	}
+
+	// --------------------------------------------------------------------------
+	// Visualizers
+	// --------------------------------------------------------------------------
+	if _begin(ui, "Oscilloscope###oscilloscope") {
+		_show_oscilloscope_window(ui, &ui.windows.oscilloscope)
 		imgui.End()
 	}
 
@@ -1791,9 +1817,11 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 
 	return nil
 }
+
 // -----------------------------------------------------------------------------
 // Playlists window
 // -----------------------------------------------------------------------------
+
 _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 	sv := ui.server
 	// --------------------------------------------------------------------------
@@ -1927,6 +1955,62 @@ _show_playlist_selector_menu :: proc(
 	}
 
 	return
+}
+
+// -----------------------------------------------------------------------------
+// Analysis
+// -----------------------------------------------------------------------------
+
+_update_analysis :: proc(ui: ^UI) {
+	sv := ui.server
+	state := &ui.analysis
+	output_spec := sv.output_spec
+
+	for ch in 0..<output_spec.channels {
+		if state.output_buffer[ch] == nil {
+			state.output_buffer[ch] = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
+		}
+	}
+
+	if state.window_mult == nil {
+		state.window_mult = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
+		dsp.make_window_hann(state.window_mult)
+	}
+
+	server_consume_audio_output(sv, state.output_buffer[:output_spec.channels], global_delta_time)
+}
+
+_show_oscilloscope_window :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) {
+	if imgui.BeginPopupContextWindow() {
+		if imgui.MenuItem("512", nil, osc.window_size == 512) do osc.window_size = 512
+		if imgui.MenuItem("1024", nil, osc.window_size == 1024) do osc.window_size = 1024
+		if imgui.MenuItem("2048", nil, osc.window_size == 2048) do osc.window_size = 2048
+		if imgui.MenuItem("4096", nil, osc.window_size == 4096) do osc.window_size = 4096
+		if imgui.MenuItem("8192", nil, osc.window_size == 8192) do osc.window_size = 8192
+		if imgui.MenuItem("16384", nil, osc.window_size == 16384) do osc.window_size = 16384
+		imgui.EndPopup()
+	}
+
+	osc.window_size = clamp(osc.window_size, 512, 16384)
+
+	if len(osc.position_buf) != osc.window_size {
+		log.debug(len(osc.position_buf), osc.window_size)
+		delete(osc.position_buf, ui.allocators.analysis)
+		osc.position_buf = make([][2]f32, osc.window_size, ui.allocators.analysis)
+	}
+
+	input := ui.analysis.output_buffer
+	drawlist := imgui.GetWindowDrawList()
+	size := imgui.GetContentRegionAvail()
+	center := imgui.GetCursorScreenPos() + {0, size.y*0.5}
+	gap := size.x / f32(osc.window_size)
+
+	for i in 0..<osc.window_size {
+		p := input[0][i]
+		osc.position_buf[i] = center + {gap * f32(i), size.y * 0.5 * p}
+	}
+
+	imgui.DrawList_AddPolyline(drawlist, raw_data(osc.position_buf), auto_cast len(osc.position_buf), max(u32), {}, 1)
 }
 
 // -----------------------------------------------------------------------------

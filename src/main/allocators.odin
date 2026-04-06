@@ -31,6 +31,7 @@ allocator_map_add :: proc(
 ) -> mem.Allocator {
 	iface := iface
 	entry: Allocator_Map_Entry
+	entry.allocator = allocator
 
 	if global_command_opts.memory_debug {
 		entry.tracker = new(mem.Tracking_Allocator)
@@ -56,5 +57,5 @@ allocator_map_add_dynamic_arena :: proc(
 }
 
 allocator_map_add_heap :: proc(m: ^Allocator_Map, name: string) -> mem.Allocator {
-	return allocator_map_add(m, name, nil, runtime.heap_allocator())
+	return allocator_map_add(m, name, nil, runtime.default_allocator())
 }
