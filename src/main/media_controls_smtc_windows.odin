@@ -37,7 +37,7 @@ media_controls_use_smtc :: proc() {
 
 	_media_controls_impl_update_track = proc(sv: ^Server, track: Track) {
 		cover_data, mime_type, have_cover_data := find_track_thumbnail(
-			&sv.library, track.handle, context.allocator
+			sv.library, track.handle, context.allocator
 		)
 		defer {
 			delete(cover_data)

@@ -215,11 +215,10 @@ track_db_save :: proc(l: ^Library, path: string) -> Error {
 	defer delete(tracks)
 
 	{
-		it := handle_map.iterator_make(track_map)
-		for track, _ in handle_map.iterate(&it) {
+		for _, track in l.tracks {
 			append(
 				&tracks,
-				_track_to_db_model(l^, track^, temp_allocator) or_continue
+				_track_to_db_model(l^, track, temp_allocator) or_continue
 			)
 		}
 	}

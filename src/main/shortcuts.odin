@@ -1,7 +1,7 @@
 package main
 
-get_track :: proc(sv: ^Server, id: Track_ID) -> (track: ^Track, found: bool) {
-	return library_get_track(&sv.library, id)
+get_track :: proc(sv: ^Server, id: Track_ID) -> (track: Track, found: bool) {
+	return library_get_track(sv.library, id)
 }
 
 get_artist_name :: proc(sv: Server, id: Artist_ID) -> string {

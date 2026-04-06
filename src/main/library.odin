@@ -1,6 +1,5 @@
 package main
 
-import "src:main/common"
 import "src:bindings/taglib"
 import "core:os"
 import "core:slice"
@@ -11,6 +10,8 @@ import "core:log"
 import "core:path/filepath"
 import hm "core:container/handle_map"
 import "core:mem"
+
+Track_ID :: distinct u32
 
 // High-level storage of track data
 Track_Data :: struct {
@@ -40,23 +41,23 @@ Track_Data :: struct {
 
 // Raw storage of track data in the server
 Track :: struct {
-	handle: Track_ID,
-	artist: Artist_ID,
-	album: Album_ID,
-	genre: Genre_ID,
-	url: string,
-	title: string,
-	format: Audio_File_Format,
-	protocol: Track_Protocol,
-	flags: bit_set[Track_Flag; u8],
+	url:              string,
+	title:            string,
+	file_date,        date_added: time.Time,
+	file_size:        i64,
+	handle:           Track_ID,
 	duration_seconds: i32,
-	release_year: i32,
-	samplerate: i32,
-	track_no: i16,
-	channels: i16,
-	bitrate_kbps: i16,
-	file_size: i64,
-	file_date, date_added: time.Time,
+	release_year:     i32,
+	samplerate:       i32,
+	artist:           Artist_ID,
+	album:            Album_ID,
+	genre:            Genre_ID,
+	track_no:         i16,
+	channels:         i16,
+	bitrate_kbps:     i16,
+	format:           Audio_File_Format,
+	flags:            bit_set[Track_Flag; u8],
+	protocol:         Track_Protocol,
 }
 
 Track_Group_Entry :: struct {
@@ -91,7 +92,8 @@ Library :: struct {
 		temp: mem.Allocator,
 	},
 
-	tracks: hm.Dynamic_Handle_Map(Track, Track_ID),
+	last_track_id: Track_ID,
+	tracks: map[Track_ID]Track,
 	url_hash_map: map[u64]Track_ID,
 
 	artists: Track_Group,
@@ -109,6 +111,8 @@ Library :: struct {
 }
 
 library_init :: proc(l: ^Library) {
+	log.debug("size_of(Track) =", size_of(Track))
+
 	l.allocators.track_data = allocator_map_add_dynamic_arena(&l.allocator_map, "track_data")
 	l.allocators.track_map = allocator_map_add_heap(&l.allocator_map, "track_map")
 	l.allocators.temp = allocator_map_add_dynamic_arena(&l.allocator_map, "temp")
@@ -120,11 +124,12 @@ library_init :: proc(l: ^Library) {
 	l.genres.name = "Genre"
 	l.serial = 1
 
-	hm.dynamic_init(&l.tracks, l.allocators.track_map)
+	l.tracks = make_map_cap(map[Track_ID]Track, 4096, l.allocators.track_map)
+	l.url_hash_map = make_map_cap(map[u64]Track_ID, 4096, l.allocators.track_map)
 }
 
 library_destroy :: proc(l: ^Library) {
-	hm.dynamic_destroy(&l.tracks)
+	delete(l.tracks)
 	delete(l.folder_cover_art)
 	delete(l.url_hash_map)
 }
@@ -141,31 +146,19 @@ library_update :: proc(l: ^Library) {
 
 library_add_track :: proc(
 	l: ^Library, data: Track_Data, update_existing := false
-) -> (handle: Track_ID, error: Error) {
+) -> (id: Track_ID, error: Error) {
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
 
-	/*if existing_handle, exists := sv.track_url_hash_map[hash]; exists {
-		if update_existing {
-			if ptr, found := hm.get(&sv.tracks, existing_handle); found {
-				ptr^ = stored
-				return existing_handle, true
-			}
-			else {
-				delete_key(&sv.track_url_hash_map, hash)
-			}
-		}
-		else if hm.is_valid(&sv.tracks, existing_handle) {
-			return existing_handle, true
-		}
-	}*/
-
-	if existing_handle, exists := l.url_hash_map[hash]; exists  {
-		if !update_existing do return existing_handle, true
-		handle = existing_handle
+	if existing_id, exists := l.url_hash_map[hash]; exists  {
+		if !update_existing do return existing_id, nil
+		id = existing_id
 	}
 	else {
-		handle = hm.add(&l.tracks, Track{}) or_return
+		//id = hm.add(&l.tracks, Track{}) or_return
+		l.last_track_id += 1
+		id = l.last_track_id
+		l.tracks[id] = Track{}
 	}
 
 	if data.protocol == .File {
@@ -175,10 +168,10 @@ library_add_track :: proc(
 		library_scan_directory_for_cover_art(l, dir)
 	}
 
-	ptr := hm.get(&l.tracks, handle) or_return
-	ptr.album            = library_get_or_add_album(l, data.album, handle)
-	ptr.artist           = library_get_or_add_artist(l, data.artist, handle)
-	ptr.genre            = library_get_or_add_genre(l, data.genre, handle)
+	ptr := (&l.tracks[id]) or_return
+	ptr.album            = library_get_or_add_album(l, data.album, id)
+	ptr.artist           = library_get_or_add_artist(l, data.artist, id)
+	ptr.genre            = library_get_or_add_genre(l, data.genre, id)
 	ptr.bitrate_kbps     = auto_cast data.bitrate_kbps
 	ptr.channels         = auto_cast data.channels
 	ptr.duration_seconds = auto_cast data.duration_seconds
@@ -192,27 +185,20 @@ library_add_track :: proc(
 	ptr.file_date        = data.file_date
 	ptr.protocol         = data.protocol
 
-	l.url_hash_map[hash] = handle
+	l.url_hash_map[hash] = id
 	l.serial += 1
 
 	return
 }
 
-library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Track_ID, ok: bool) {
+library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Track_ID, error: Error) {
 	track := read_audio_file_metadata(path, l.allocators.temp) or_return
 	return library_add_track(l, track)
 }
 
-library_get_all_tracks :: proc(l: ^Library, allocator: mem.Allocator) -> []Track_ID {
-	out := make([]Track_ID, hm.len(l.tracks), allocator)
-	it := hm.iterator_make(&l.tracks)
-	i := 0
-	for track, _ in hm.iterate(&it) {
-		out[i] = track.handle
-		i += 1
-	}
-
-	return out[:i]
+library_get_all_tracks :: proc(l: ^Library, allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
+	keys = slice.map_keys(l.tracks, allocator) or_return
+	return
 }
 
 library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {
@@ -252,8 +238,8 @@ library_load :: proc(l: ^Library, path: string) -> bool {
 }
 
 
-library_get_track :: proc(l: ^Library, handle: Track_ID) -> (track: ^Track, found: bool) {
-	return hm.get(&l.tracks, handle)
+library_get_track :: proc(l: Library, id: Track_ID) -> (track: Track, found: bool) {
+	return l.tracks[id]
 }
 
 
@@ -392,7 +378,7 @@ library_get_or_add_genre :: proc(l: ^Library, name: string, track_id: Track_ID) 
 }
 
 find_track_thumbnail :: proc(
-	l: ^Library, track_id: Track_ID, allocator: mem.Allocator
+	l: Library, track_id: Track_ID, allocator: mem.Allocator
 ) -> (data: []byte, mime_type: string, found: bool) {
 	track := library_get_track(l, track_id) or_return
 	file := taglib_open(track.url)
@@ -460,7 +446,7 @@ Track_List_Totals :: struct {
 	file_size: i64,
 }
 
-calculate_track_totals :: proc(l: ^Library, tracks: []Track_ID) -> Track_List_Totals {
+calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Totals {
 	t: Track_List_Totals
 
 	for track_id in tracks {

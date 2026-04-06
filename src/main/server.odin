@@ -22,8 +22,6 @@ import "core:reflect"
 import hm "core:container/handle_map"
 import "src:dsp"
 
-Track_ID :: hm.Handle32
-
 // 0 means none
 // Index into array
 Artist_ID :: distinct i16
@@ -41,7 +39,7 @@ Track_Flag :: enum {
 	Missing,
 }
 
-Track_Protocol :: enum {
+Track_Protocol :: enum u8 {
 	File,
 }
 
@@ -81,8 +79,6 @@ Server_Background_Scan_State :: struct {
 	queue_lock: sync.Mutex,
 	output: [dynamic]Track_Data,
 }
-
-Track_Map :: hm.Dynamic_Handle_Map(Track, Track_ID)
 
 Server :: struct {				
 	allocator_map: Allocator_Map,
@@ -257,14 +253,14 @@ server_wait_events :: proc(sv: ^Server) {
 @(private="file")
 _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	sv.current_track_id = track_id
-	track := library_get_track(&sv.library, track_id) or_return
+	track := library_get_track(sv.library, track_id) or_return
 
 	playback_thread_load_track(&sv.playback_thread, track.url, &sv.track_info)
 
 	audio_resume()
 
 	sv.playback_state = .Playing
-	media_controls_update_track(sv, track^)
+	media_controls_update_track(sv, track)
 	platform_set_window_title(
 		PROGRAM_NAME_AND_VERSION, "|", get_artist_name(sv^, track.artist), "-", track.title
 	)
@@ -643,18 +639,18 @@ sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
 		less = proc(it: sort.Interface, a, b: int) -> bool {
 			col := cast(^Collection) it.collection
 			cmp_proc := TRACK_METRIC_COMPARE_PROCS[col.metric]
-			A := library_get_track(&col.sv.library, col.tracks[a]) or_return
-			B := library_get_track(&col.sv.library, col.tracks[b]) or_return
+			A := library_get_track(col.sv.library, col.tracks[a]) or_return
+			B := library_get_track(col.sv.library, col.tracks[b]) or_return
 
 			r: int
 
 			metric := col.metric
-			r = cmp_proc(col.sv.library, A^, B^)
+			r = cmp_proc(col.sv.library, A, B)
 
 			for abs(r) == 0 && TRACK_METRIC_NEXT_METRIC[metric] != nil {
 				metric = TRACK_METRIC_NEXT_METRIC[metric].?
 				cmp_proc = TRACK_METRIC_COMPARE_PROCS[metric]
-				r = cmp_proc(col.sv.library, A^, B^)
+				r = cmp_proc(col.sv.library, A, B)
 			}
 
 			return r < 0

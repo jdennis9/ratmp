@@ -33,16 +33,17 @@ ICON_PLAY :: ""
 // -----------------------------------------------------------------------------
 
 _Track_Table_Row :: struct {
-	album:      Album_ID,
+	title:      string,
+	url:        string,
+	id:         Track_ID,
 	artist:     Artist_ID,
 	genre:      Genre_ID,
-	title,      url: string,
-	format:     string,
-	samplerate: [12]u8,
-	bitrate:    [9]u8,
-	duration:   [9]u8,
+	album:      Album_ID,
+	format:     Audio_File_Format,
+	samplerate: [8]u8,
+	duration:   [8]u8,
 	year:       [4]u8,
-	id:         Track_ID,
+	bitrate:    [9]u8,
 	track_no:   [3]u8,
 	selected:   bool,
 }
@@ -80,44 +81,6 @@ _Track_Category_Window :: struct {
 	displayed_entry_hash: u32,
 	playlist_table: _Playlist_Table,
 	track_table: _Track_Table,
-}
-
-// -----------------------------------------------------------------------------
-// Playlist table
-// -----------------------------------------------------------------------------
-
-_Playlist_Table_Row :: struct {
-	uid: UID,
-	title: string,
-	file_size: [12]u8,
-	duration: [9]u8,
-	length: [8]u8,
-	tracks: []Track_ID,
-	selected: bool,
-	serial: uint,
-	totals: Track_List_Totals,
-}
-
-_Playlist_Compare_Proc :: #type proc(a, b: _Playlist_Table_Row) -> int
-
-_Playlist_Sort_Metric :: enum {Name, Length, Duration, FileSize}
-
-_PLAYLIST_SORT_METRIC_PROCS := [_Playlist_Sort_Metric]_Playlist_Compare_Proc {
-	.Name = proc(a, b: _Playlist_Table_Row) -> int {return strings.compare(a.title, b.title)},
-	.Length = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (len(a.tracks) - len(b.tracks))},
-	.Duration = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.duration - b.totals.duration)},
-	.FileSize = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.file_size - b.totals.file_size)}
-}
-
-_Playlist_Sort_Spec :: struct {
-	metric: _Playlist_Sort_Metric,
-	order: Sort_Order,
-}
-
-_Playlist_Table :: struct {
-	serial: uint,
-	rows: [dynamic]_Playlist_Table_Row,
-	sort_spec: Maybe(_Playlist_Sort_Spec),
 }
 
 // -----------------------------------------------------------------------------
@@ -441,7 +404,7 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		if w.serial != sv.library.serial {
 			delete(w.tracks)
 			w.serial = sv.library.serial
-			w.tracks = library_get_all_tracks(&sv.library, context.allocator)
+			w.tracks = library_get_all_tracks(&sv.library, context.allocator) or_else nil
 		}
 
 		_track_table_show(
@@ -681,13 +644,13 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 		else {
 			imx.text(32, track.channels, " channels")
 		}
-		
 
+		imgui.Separator()
+		imx.text(32, AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
 		imgui.Separator()
 		imx.text(32, track.samplerate, "Hz")
 		imgui.Separator()
 		imx.text(32, track.bitrate_kbps, "kb/s")
-
 		imgui.Separator()
 	}
 
@@ -733,7 +696,7 @@ _track_table_row_from_track :: proc(
 
 	fmt.bprint(row.samplerate[:], track.samplerate, "Hz", sep="")
 	fmt.bprint(row.bitrate[:], track.bitrate_kbps, "kb/s", sep="")
-	row.format = AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long
+	row.format = track.format
 
 	return
 }
@@ -772,6 +735,8 @@ _track_table_show :: proc(
 	// Update if needed
 	// --------------------------------------------------------------------------
 	if serial != table.serial || table.playlist_uid != playlist_id {
+		TIME_SCOPE("Build track table", name)
+
 		table.serial = serial
 		table.playlist_uid = playlist_id
 		clear(&table.rows)
@@ -907,7 +872,7 @@ _track_table_show :: proc(
 
 				if imgui.BeginItemTooltip() {
 					if track, got_track := get_track(sv, row.id); got_track {
-						_show_track_metadata_table("##metadata", sv^, track^)
+						_show_track_metadata_table("##metadata", sv^, track)
 					}
 					imgui.EndTooltip()
 				}
@@ -962,7 +927,7 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Format) {
-				imx.text_unformatted(row.format)
+				imx.text_unformatted(AUDIO_FILE_FORMAT_DISPLAY_NAMES[row.format].long)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Bitrate) {
@@ -1055,7 +1020,7 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 		}
 
 		cover_data, mime_type := find_track_thumbnail(
-			&sv.library, w.displayed_track, context.allocator
+			sv.library, w.displayed_track, context.allocator
 		) or_return
 
 		delete(mime_type)
@@ -1132,7 +1097,7 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 	imx.push_font_scale(1.2)
 	imgui.SeparatorText("Metadata")
 	imgui.PopFont()
-	_show_track_metadata_table("##metadata", sv^, md^)
+	_show_track_metadata_table("##metadata", sv^, md)
 
 	return true
 }
@@ -1159,7 +1124,7 @@ _track_group_windows_show_groups :: proc(
 
 		
 		for e in tg.entries {
-			row := _make_playlist_row(&sv.library, e.uid, e.name, e.serial, e.tracks[:])
+			row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
 			append(&w.playlist_table.rows, row)
 		}
 
@@ -1228,6 +1193,40 @@ _track_group_window_show_focused :: proc(
 // -----------------------------------------------------------------------------
 // Playlist table
 // -----------------------------------------------------------------------------
+
+_Playlist_Table_Row :: struct {
+	uid: UID,
+	title: string,
+	file_size: [12]u8,
+	duration: [9]u8,
+	length: [8]u8,
+	tracks: []Track_ID,
+	selected: bool,
+	serial: uint,
+	totals: Track_List_Totals,
+}
+
+_Playlist_Compare_Proc :: #type proc(a, b: _Playlist_Table_Row) -> int
+
+_Playlist_Sort_Metric :: enum {Name, Length, Duration, FileSize}
+
+_PLAYLIST_SORT_METRIC_PROCS := [_Playlist_Sort_Metric]_Playlist_Compare_Proc {
+	.Name = proc(a, b: _Playlist_Table_Row) -> int {return strings.compare(a.title, b.title)},
+	.Length = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (len(a.tracks) - len(b.tracks))},
+	.Duration = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.duration - b.totals.duration)},
+	.FileSize = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.file_size - b.totals.file_size)}
+}
+
+_Playlist_Sort_Spec :: struct {
+	metric: _Playlist_Sort_Metric,
+	order: Sort_Order,
+}
+
+_Playlist_Table :: struct {
+	serial: uint,
+	rows: [dynamic]_Playlist_Table_Row,
+	sort_spec: Maybe(_Playlist_Sort_Spec),
+}
 
 _Playlist_Table_Actions :: struct {
 	selected_row: Maybe(int),
@@ -1382,9 +1381,8 @@ _playlist_table_show :: proc(
 	return
 }
 
-
 _make_playlist_row :: proc(
-	l: ^Library,
+	l: Library,
 	uid: UID,
 	title: string,
 	serial: uint,
@@ -1404,7 +1402,6 @@ _make_playlist_row :: proc(
 
 	return row
 }
-
 
 // -----------------------------------------------------------------------------
 // Themes
@@ -1824,7 +1821,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 		playlist := library_get_playlist(&sv.library, w.playlist_handles[row_index]) or_continue
 		if row.serial != playlist.serial {
 			row = _make_playlist_row(
-				&sv.library, playlist.uid, playlist.name, playlist.serial, playlist.tracks[:]
+				sv.library, playlist.uid, playlist.name, playlist.serial, playlist.tracks[:]
 			)
 		}
 	}
