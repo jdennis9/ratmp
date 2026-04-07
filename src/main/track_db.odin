@@ -177,7 +177,7 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 	defer sql.close(db)
 	
 	// --------------------------------------------------------------------------
-	// Create table
+	// Create tracks table
 	// --------------------------------------------------------------------------
 	{
 		exec_error: cstring
@@ -195,9 +195,16 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 		}
 		strings.write_string(&b, ")")
 
-		log.debug(strings.to_string(b))
-
 		_check(sql.exec(db, strings.to_cstring(&b), nil, nil, &exec_error), exec_error)
+	}
+
+	// --------------------------------------------------------------------------
+	// Create cover art table
+	// --------------------------------------------------------------------------
+	{
+		exec_error: cstring
+		statement :: `CREATE TABLE cover_art (folder_hash BIGINT, cover_path VARCHAR(512))`
+		_check(sql.exec(db, statement, nil, nil, &exec_error), exec_error)
 	}
 
 	// --------------------------------------------------------------------------
@@ -222,9 +229,13 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 			)
 		}
 	}
+	
+	_check(sql.exec(db, VERSION_STATEMENT, nil, nil, nil)) or_return
+	_check(sql.exec(db, "BEGIN TRANSACTION", nil, nil, nil)) or_return
+	defer _check(sql.exec(db, "END TRANSACTION", nil, nil, nil))
 
 	// --------------------------------------------------------------------------
-	// Write rows
+	// Write track rows
 	// --------------------------------------------------------------------------
 	{
 		b: strings.Builder
@@ -241,9 +252,6 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 		log.debug(strings.to_string(b))
 		
 		prepare_statement := strings.to_cstring(&b) or_return
-		
-		_check(sql.exec(db, VERSION_STATEMENT, nil, nil, nil)) or_return
-		_check(sql.exec(db, "BEGIN TRANSACTION", nil, nil, nil)) or_return
 		
 		for track in tracks {
 			stmt: ^sql.Statement
@@ -271,9 +279,26 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 			_check(sql.step(stmt))
 		}
 
-		_check(sql.exec(db, "END TRANSACTION", nil, nil, nil)) or_return
 	}
 
+	// --------------------------------------------------------------------------
+	// Write cover art rows
+	// --------------------------------------------------------------------------
+	{
+		log.debug("Writing cover art to DB...")
+
+		for folder_hash, art_path in l.folder_cover_art {
+			stmt: ^sql.Statement
+			_check(sql.prepare_v2(db, "INSERT INTO cover_art VALUES (?, ?)", -1, &stmt, nil))
+			defer sql.finalize(stmt)
+
+			sql.bind_int64(stmt, 1, auto_cast folder_hash)
+			sql.bind_text(stmt, 2, cstring(raw_data(art_path)), auto_cast len(art_path), {})
+
+			_check(sql.step(stmt))
+		}
+	}
+	
 	return nil
 }
 
@@ -330,12 +355,42 @@ track_db_load :: proc(
 		version = auto_cast user_version
 	}
 
-	models: [dynamic]_Track_DB_Model
-	defer delete(models)
+
+	// --------------------------------------------------------------------------
+	// Cover art
+	// --------------------------------------------------------------------------
+	{
+		stmt: ^sql.Statement
+		_check(sql.prepare_v2(db, "SELECT * from cover_art", -1, &stmt, nil))
+
+		for {
+			folder_hash: i64
+			cover_path: cstring
+
+			result := sql.step(stmt)
+			_check(result)
+			if result != .Row do break
+
+			folder_hash = sql.column_int64(stmt, 0)
+			cover_path = sql.column_text(stmt, 1)
+
+			if cover_path != nil {
+				l.folder_cover_art[u64(folder_hash)] = strings.clone(string(cover_path), l.allocators.track_data)
+			}
+			else {
+				l.folder_cover_art[u64(folder_hash)] = ""
+			}
+
+			log.debug(folder_hash, cover_path)
+		}
+	}
 
 	// --------------------------------------------------------------------------
 	// Load tracks in model format
 	// --------------------------------------------------------------------------
+	
+	models: [dynamic]_Track_DB_Model
+	defer delete(models)
 	{
 		stmt: ^sql.Statement
 		defer sql.finalize(stmt)

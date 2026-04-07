@@ -361,8 +361,6 @@ track_group_pseudo_sort :: proc(tg: ^Track_Group) {
 	}
 
 	sort.sort(iface)
-
-	log.debug(tg.sorted_indices[:])
 }
 
 library_get_or_add_artist :: proc(l: ^Library, name: string, track_id: Track_ID) -> Artist_ID {
