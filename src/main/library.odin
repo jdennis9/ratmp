@@ -1,5 +1,7 @@
 package main
 
+import "core:unicode"
+import "core:unicode/utf8"
 import "src:bindings/taglib"
 import "core:os"
 import "core:slice"
@@ -62,6 +64,7 @@ Track :: struct {
 
 Track_Group_Entry :: struct {
 	name: string,
+	lower_case_name: string,
 	name_hash: u32,
 	// Index of the entry in the sorted entry array.
 	// Use to compare tracks
@@ -201,17 +204,13 @@ library_get_all_tracks :: proc(l: Library, allocator: mem.Allocator) -> (keys: [
 	return
 }
 
-library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {
-	return l.artists.entries[id].name
-}
+library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {return l.artists.entries[id].name}
+library_get_album_name :: proc(l: Library, id: Album_ID) -> string {return l.albums.entries[id].name}
+library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {return l.genres.entries[id].name}
 
-library_get_album_name :: proc(l: Library, id: Album_ID) -> string {
-	return l.albums.entries[id].name
-}
-
-library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {
-	return l.genres.entries[id].name
-}
+library_get_artist_name_lower :: proc(l: Library, id: Artist_ID) -> string {return l.artists.entries[id].lower_case_name}
+library_get_album_name_lower :: proc(l: Library, id: Album_ID) -> string {return l.albums.entries[id].lower_case_name}
+library_get_genre_name_lower :: proc(l: Library, id: Genre_ID) -> string {return l.genres.entries[id].lower_case_name}
 
 library_save :: proc(l: Library, path: string) -> bool {
 	TIME_SCOPE("Save library", path)
@@ -312,6 +311,7 @@ track_group_add_track :: proc(
 		index = len(tg.entries)
 		append(&tg.entries, Track_Group_Entry{
 			name = strings.clone(str, allocator),
+			lower_case_name = strings.to_lower(str, allocator),
 			name_hash = stable_hash_string_32(str),
 			uid = generate_uid(),
 		})
@@ -454,4 +454,74 @@ calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Tot
 	}
 
 	return t
+}
+
+Track_Filter_Metric :: enum {
+	Artist,
+	Album,
+	Genre,
+	Title,
+	Url,
+	Format,
+}
+
+Track_Filter_Spec :: struct {
+	metrics: bit_set[Track_Filter_Metric],
+	filter_string: string,
+}
+
+filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Track_Filter_Metric], temp_allocator: mem.Allocator) -> bool {
+	if .Artist in metrics {
+		if strings.contains(library_get_artist_name_lower(l, t.artist), filter) do return true
+	}
+
+	if .Album in metrics {
+		if strings.contains(library_get_album_name_lower(l, t.album), filter) do return true
+	}
+
+	if .Genre in metrics {
+		if strings.contains(library_get_genre_name_lower(l, t.genre), filter) do return true
+	}
+
+	if .Title in metrics {
+		lower := strings.to_lower(t.title, temp_allocator)
+		if strings.contains(lower, filter) do return true
+	}
+
+	if .Url in metrics {
+		lower := strings.to_lower(t.url, temp_allocator)
+		if strings.contains(lower, filter) do return true
+	}
+
+	if .Format in metrics {
+		lower := strings.to_lower(AUDIO_FILE_FORMAT_DISPLAY_NAMES[t.format].short, temp_allocator)
+		if strings.contains(lower, filter) do return true
+		lower = strings.to_lower(AUDIO_FILE_FORMAT_DISPLAY_NAMES[t.format].long, temp_allocator)
+		if strings.contains(lower, filter) do return true
+	}
+
+	return false
+}
+
+filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID, spec: Track_Filter_Spec) -> (kept: int) {
+	TIME_SCOPE("Filter", len(input), "tracks with metrics", spec.metrics)
+
+	arena: mem.Dynamic_Arena
+
+	mem.dynamic_arena_init(&arena)
+	defer mem.dynamic_arena_destroy(&arena)
+
+	temp_allocator := mem.dynamic_arena_allocator(&arena)
+
+	lower_filter := strings.to_lower(spec.filter_string, temp_allocator)
+
+	for track_id in input {
+		track := library_get_track(l, track_id) or_continue
+
+		if filter_track(l, track, lower_filter, spec.metrics, temp_allocator) {
+			append(output, track_id)
+		}
+	}
+
+	return
 }

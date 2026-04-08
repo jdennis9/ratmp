@@ -52,6 +52,9 @@ _Track_Table_Row :: struct {
 }
 
 _Track_Table :: struct {
+	filter_buf: [512]u8,
+	filter_metrics: bit_set[Track_Filter_Metric],
+	filter_hash: u32,
 	sort_spec: Maybe(Track_Sort_Spec),
 	serial: uint,
 	playlist_uid: UID,
@@ -757,17 +760,35 @@ _track_table_show :: proc(
 ) -> bool {
 	sv := ui.server
 
+	filter_spec := Track_Filter_Spec {
+		metrics = ~{.Url, .Format},
+		filter_string = string(cstring(&table.filter_buf[0])),
+	}
+
+	filter_hash := stable_hash_string_32(filter_spec.filter_string)
+
 	// --------------------------------------------------------------------------
 	// Update if needed
 	// --------------------------------------------------------------------------
-	if serial != table.serial || table.playlist_uid != playlist_id {
+	if serial != table.serial || table.playlist_uid != playlist_id || filter_hash != table.filter_hash {
 		TIME_SCOPE("Build track table", name)
+		filtered_tracks: []Track_ID
+		table.filter_hash = stable_hash_string_32(filter_spec.filter_string)
+
+		if table.filter_buf[0] == 0 {
+			filtered_tracks = track_ids
+		}
+		else {
+			buf := make_dynamic_array_len_cap([dynamic]Track_ID, 0, len(track_ids), ui.allocators.per_frame)
+			filter_tracks(sv.library, &buf, track_ids, filter_spec)
+			filtered_tracks = buf[:]
+		}
 
 		table.serial = serial
 		table.playlist_uid = playlist_id
 		clear(&table.rows)
 
-		for track in track_ids {
+		for track in filtered_tracks {
 			row := _track_table_row_from_track(sv, track) or_continue
 			append(&table.rows, row)
 		}
@@ -776,6 +797,11 @@ _track_table_show :: proc(
 			_sort_track_table_rows(ui, table^, table.sort_spec.?)
 		}
 	}
+
+	// --------------------------------------------------------------------------
+	// Filter
+	// --------------------------------------------------------------------------
+	imgui.InputText("Filter", cstring(&table.filter_buf[0]), auto_cast len(table.filter_buf))
 
 	// --------------------------------------------------------------------------
 	// Show
