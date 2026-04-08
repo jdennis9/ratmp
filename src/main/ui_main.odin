@@ -83,10 +83,12 @@ _Playlists_Window :: struct {
 	cant_add_playlist_reason: Cant_Add_Playlist_Reason,
 }
 
-_Track_Category_Window :: struct {
-	displayed_entry_hash: u32,
+_Track_Group_Window :: struct {
 	playlist_table: _Playlist_Table,
 	track_table: _Track_Table,
+	filter_buf: [128]u8,
+	filter_hash: u32,
+	displayed_entry_hash: u32,
 }
 
 _Oscilloscope_Window :: struct {
@@ -145,9 +147,9 @@ UI :: struct {
 
 		playlists: _Playlists_Window,
 
-		artists: _Track_Category_Window,
-		albums: _Track_Category_Window,
-		genres: _Track_Category_Window,
+		artists: _Track_Group_Window,
+		albums: _Track_Group_Window,
+		genres: _Track_Group_Window,
 
 		metadata: _Metadata_Window,
 
@@ -801,7 +803,11 @@ _track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	// Filter
 	// --------------------------------------------------------------------------
-	imgui.InputText("Filter", cstring(&table.filter_buf[0]), auto_cast len(table.filter_buf))
+	imgui.SetNextItemWidth(500)
+	if _is_key_chord_pressed_in_window(.ImGuiMod_Ctrl, .F) {
+		imgui.SetKeyboardFocusHere()
+	}
+	imgui.InputTextWithHint("##filter", "Filter", cstring(&table.filter_buf[0]), auto_cast len(table.filter_buf))
 
 	// --------------------------------------------------------------------------
 	// Show
@@ -1158,26 +1164,45 @@ _show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track
 // Track group table
 // -----------------------------------------------------------------------------
 
-_track_group_windows_show_groups :: proc(
-	ui: ^UI, w: ^_Track_Category_Window, tg: ^Track_Group,
+_track_group_window_show_groups :: proc(
+	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set,
 ) -> (shown: bool) {
 	sv := ui.server
 	entry_index, have_entry := track_group_get_entry(tg, w.displayed_entry_hash)
-	entry: Track_Group_Entry_Ptr
+	entry: Track_Group_Ptr
 
 	if have_entry do entry = &tg.entries[entry_index]
+
+	imgui.SetNextItemWidth(500)
+	if _is_key_chord_pressed_in_window(.ImGuiMod_Ctrl, .F) {
+		imgui.SetKeyboardFocusHere()
+	}
+	imgui.InputTextWithHint("##filter", "Filter", cstring(&w.filter_buf[0]), auto_cast len(w.filter_buf))
+	filter_string := string(cstring(&w.filter_buf[0]))
+	filter_hash := stable_hash_string_32(filter_string)
 
 	// --------------------------------------------------------------------------
 	// Rebuild playlist table
 	// --------------------------------------------------------------------------
-	if w.playlist_table.serial != tg.serial {
+	if w.playlist_table.serial != tg.serial || w.filter_hash != filter_hash {
 		clear(&w.playlist_table.rows)
 		w.playlist_table.serial = tg.serial
-
+		w.filter_hash = filter_hash
 		
-		for e in tg.entries {
-			row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
-			append(&w.playlist_table.rows, row)
+		if w.filter_buf[0] == 0 {
+			for e in tg.entries {
+				row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
+				append(&w.playlist_table.rows, row)
+			}
+		}
+		else {
+			lower_filter := strings.to_lower(filter_string, ui.allocators.per_frame)
+			for e in tg.entries {
+				if strings.contains(e.lower_case_name, lower_filter) {
+					row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
+					append(&w.playlist_table.rows, row)
+				}
+			}
 		}
 
 		_playlist_table_sort(&w.playlist_table)
@@ -1198,11 +1223,11 @@ _track_group_windows_show_groups :: proc(
 }
 
 _track_group_window_show_tracks :: proc(
-	ui: ^UI, w: ^_Track_Category_Window, tg: ^Track_Group
+	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set
 ) -> bool {
 	sv := ui.server
 	entry_index, have_entry := track_group_get_entry(tg, w.displayed_entry_hash)
-	entry: Track_Group_Entry_Ptr
+	entry: Track_Group_Ptr
 
 	if have_entry do entry = &tg.entries[entry_index]
 	else {
@@ -1229,7 +1254,7 @@ _track_group_window_show_tracks :: proc(
 }
 
 _track_group_window_show_focused :: proc(
-	ui: ^UI, w: ^_Track_Category_Window, tg: ^Track_Group,
+	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set,
 ) {
 	if w.displayed_entry_hash != 0 {
 		if imgui.Button("Back") {
@@ -1238,7 +1263,7 @@ _track_group_window_show_focused :: proc(
 		_track_group_window_show_tracks(ui, w, tg)
 	}
 	else {
-		_track_group_windows_show_groups(ui, w, tg)
+		_track_group_window_show_groups(ui, w, tg)
 	}
 }
 
@@ -2138,6 +2163,14 @@ _refresh_fonts :: proc(ui: ^UI) -> Error {
 _check_table_size :: proc() -> bool {
 	s := imgui.GetContentRegionAvail()
 	return s.x >= 50 && s.y >= 20
+}
+
+_is_key_chord_pressed_in_window :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
+	return imgui.IsWindowFocused({.ChildWindows}) && imgui.IsKeyChordPressed(auto_cast (mods | key))
+}
+
+_is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
+	return imgui.IsKeyChordPressed(auto_cast (mods | key))
 }
 
 // -----------------------------------------------------------------------------

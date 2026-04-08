@@ -62,7 +62,7 @@ Track :: struct {
 	protocol:         Track_Protocol,
 }
 
-Track_Group_Entry :: struct {
+Track_Group :: struct {
 	name: string,
 	lower_case_name: string,
 	name_hash: u32,
@@ -74,14 +74,14 @@ Track_Group_Entry :: struct {
 	tracks: [dynamic]Track_ID,
 }
 
-Track_Group_Entry_Ptr :: #soa^#soa[dynamic]Track_Group_Entry
+Track_Group_Ptr :: #soa^#soa[dynamic]Track_Group
 
 // Entries never get removed or rearranged for the duration of the program
 // so it is safe to store an index into the entries array
-Track_Group :: struct {
+Track_Group_Set :: struct {
 	name: string,
 	arena: mem.Dynamic_Arena,
-	entries: #soa[dynamic]Track_Group_Entry,
+	entries: #soa[dynamic]Track_Group,
 	sorted_indices: [dynamic]int,
 	serial: uint,
 }
@@ -99,9 +99,9 @@ Library :: struct {
 	tracks: map[Track_ID]Track,
 	url_hash_map: map[u64]Track_ID,
 
-	artists: Track_Group,
-	albums: Track_Group,
-	genres: Track_Group,
+	artists: Track_Group_Set,
+	albums: Track_Group_Set,
+	genres: Track_Group_Set,
 
 	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
 	playlists_serial: uint,
@@ -285,23 +285,23 @@ library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist:
 // -----------------------------------------------------------------------------
 // Track groups
 // -----------------------------------------------------------------------------
-track_group_get_entry :: proc(tg: ^Track_Group, hash: u32) -> (index: int, found: bool) {
+track_group_get_entry :: proc(tg: ^Track_Group_Set, hash: u32) -> (index: int, found: bool) {
 	for h, i in tg.entries.name_hash[:len(tg.entries)] {
 		if h == hash do return i, true
 	}
 	return
 }
 
-track_group_init :: proc(tg: ^Track_Group) {
+track_group_init :: proc(tg: ^Track_Group_Set) {
 	mem.dynamic_arena_init(&tg.arena)
-	append(&tg.entries, Track_Group_Entry {
+	append(&tg.entries, Track_Group {
 		name = "",
 		name_hash = stable_hash_string_32(""),
 	})
 }
 
 track_group_add_track :: proc(
-	tg: ^Track_Group, str: string, track_id: Track_ID
+	tg: ^Track_Group_Set, str: string, track_id: Track_ID
 ) -> int {
 	hash := stable_hash_string_32(str)
 	index := track_group_get_entry(tg, hash) or_else -1
@@ -309,7 +309,7 @@ track_group_add_track :: proc(
 
 	if index == -1 {
 		index = len(tg.entries)
-		append(&tg.entries, Track_Group_Entry{
+		append(&tg.entries, Track_Group{
 			name = strings.clone(str, allocator),
 			lower_case_name = strings.to_lower(str, allocator),
 			name_hash = stable_hash_string_32(str),
@@ -326,7 +326,7 @@ track_group_add_track :: proc(
 	return index
 }
 
-track_group_remove_track :: proc(tg: ^Track_Group, entry_index: int, id: Track_ID) -> bool {
+track_group_remove_track :: proc(tg: ^Track_Group_Set, entry_index: int, id: Track_ID) -> bool {
 	entry := &tg.entries[entry_index]
 	index := slice.linear_search(entry.tracks[:], id) or_return
 	ordered_remove(&entry.tracks, index)
@@ -335,7 +335,7 @@ track_group_remove_track :: proc(tg: ^Track_Group, entry_index: int, id: Track_I
 }
 
 // Broken, but keep for future
-track_group_pseudo_sort :: proc(tg: ^Track_Group) {
+track_group_pseudo_sort :: proc(tg: ^Track_Group_Set) {
 	resize(&tg.sorted_indices, len(tg.entries))
 
 	for &e, i in tg.entries {
@@ -345,15 +345,15 @@ track_group_pseudo_sort :: proc(tg: ^Track_Group) {
 	iface := sort.Interface {
 		collection = tg,
 		len = proc(it: sort.Interface) -> int {
-			tg := cast(^Track_Group) it.collection
+			tg := cast(^Track_Group_Set) it.collection
 			return len(tg.entries)
 		},
 		swap = proc(it: sort.Interface, a, b: int) {
-			tg := cast(^Track_Group) it.collection
+			tg := cast(^Track_Group_Set) it.collection
 			tg.sorted_indices[a], tg.sorted_indices[b] = tg.sorted_indices[b], tg.sorted_indices[a]
 		},
 		less = proc(it: sort.Interface, a, b: int) -> bool {
-			tg := cast(^Track_Group) it.collection
+			tg := cast(^Track_Group_Set) it.collection
 			A := tg.sorted_indices[a]
 			B := tg.sorted_indices[b]
 			return strings.compare(tg.entries[A].name, tg.entries[B].name) < 0
@@ -503,7 +503,7 @@ filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Trac
 	return false
 }
 
-filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID, spec: Track_Filter_Spec) -> (kept: int) {
+filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID, spec: Track_Filter_Spec) {
 	TIME_SCOPE("Filter", len(input), "tracks with metrics", spec.metrics)
 
 	arena: mem.Dynamic_Arena
@@ -522,6 +522,15 @@ filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID,
 			append(output, track_id)
 		}
 	}
+}
 
-	return
+filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: Track_Group_Set, filter: string) {
+	lower_filter := strings.to_lower(filter, l.allocators.temp)
+	defer delete(lower_filter)
+
+	for entry in tg.entries {
+		if strings.contains(entry.lower_case_name, lower_filter) {
+			append(output, entry)
+		}
+	}
 }
