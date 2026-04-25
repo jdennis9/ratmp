@@ -78,7 +78,7 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		if !decoder_is_open(at.dec) do continue
 		
 		if at.frames_requested > len(at.ring_buffers[0].data) {
-			ring_buffer_size := _pad_ring_buffer_size(at.frames_requested)
+			ring_buffer_size := _pad_ring_buffer_size(at.frames_requested*2)
 			log.debug("Resizing ring buffer to", ring_buffer_size)
 
 			for &rb in at.ring_buffers[:at.channels] {
@@ -141,17 +141,15 @@ playback_thread_request_frames :: proc(
 	iter_count := 0
 
 	for frames_read < frames_wanted {
-		iter_count += 1
-
 		{
 			sync.lock(&at.lock)
 			defer sync.unlock(&at.lock)
-
+			
 			if !decoder_is_open(at.dec) do return .NoInput
-
+			
 			// Help the thread proc to know what to size the ring buffers
 			at.frames_requested = frames_wanted
-
+			
 			if at.ring_buffer_channels == len(output) && at.ring_buffer_samplerate == samplerate {
 				frames_copied: int
 				
@@ -161,6 +159,7 @@ playback_thread_request_frames :: proc(
 				}
 				
 				frames_read += frames_copied
+				iter_count += 1
 			}
 			else {
 				at.channels = len(output)

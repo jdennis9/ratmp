@@ -23,6 +23,13 @@ OUT_EVENT_READY :: 0
 OUT_EVENT_STOPPED :: 1
 OUT_EVENT__COUNT :: 2
 
+_In_Event :: enum {
+	Pause,
+	Resume,
+	DropBuffer,
+	Kill,
+}
+
 _wasapi: struct {
 	callback: Audio_Callback,
 	callback_data: rawptr,
@@ -33,11 +40,17 @@ _wasapi: struct {
 	spec: Audio_Spec,
 	volume: f32,
 	is_paused: b32,
-	in_events: [IN_EVENT__COUNT]win.HANDLE,
+	//in_events: [IN_EVENT__COUNT]win.HANDLE,
+	in_events: bit_set[_In_Event],
+	interrupt_event: win.HANDLE,
 	out_events: [OUT_EVENT__COUNT]win.HANDLE,
 }
 
-_send_event :: proc(ev: int) {win.SetEvent(_wasapi.in_events[ev])}
+//_send_event :: proc(ev: int) {win.SetEvent(_wasapi.in_events[ev])}
+_send_event :: proc(ev: _In_Event) {
+	_wasapi.in_events |= {ev}
+	win.SetEvent(_wasapi.interrupt_event)
+}
 _wait_event :: proc(ev: int) {win.WaitForSingleObject(_wasapi.out_events[ev], win.INFINITE)}
 
 @private
@@ -50,8 +63,9 @@ use_audio_wasapi :: proc() {
 			)
 		) or_return
 		
-		for &ev in _wasapi.in_events do ev = win.CreateEventW(nil, false, false, nil)
+		//for &ev in _wasapi.in_events do ev = win.CreateEventW(nil, true, false, nil)
 		for &ev in _wasapi.out_events do ev = win.CreateEventW(nil, false, false, nil)
+		_wasapi.interrupt_event = win.CreateEventW(nil, false, false, nil)
 
 		_wasapi.callback = cb
 		_wasapi.callback_data = cb_data
@@ -62,7 +76,7 @@ use_audio_wasapi :: proc() {
 	_audio_impl_shutdown = proc() {
 		_audio_impl_stop()
 		win32_safe_release(&_wasapi.device_enumerator)
-		for ev in _wasapi.in_events do win.CloseHandle(ev)
+		//for ev in _wasapi.in_events do win.CloseHandle(ev)
 		for ev in _wasapi.out_events do win.CloseHandle(ev)
 	}
 
@@ -86,23 +100,27 @@ use_audio_wasapi :: proc() {
 		w := &_wasapi
 		if w.session_thread == nil do return
 
-		_send_event(IN_EVENT_KILL)
+		//_send_event(IN_EVENT_KILL)
+		_send_event(.Kill)
 		_wait_event(OUT_EVENT_STOPPED)
 		thread.join(w.session_thread)
 		thread.destroy(w.session_thread)
 
 		w.session_thread = nil
+		w.in_events = {}
 	}
 
 	_audio_impl_drop_buffer = proc() {
 		w := &_wasapi
-		_send_event(IN_EVENT_DROP_BUFFER)
+		//_send_event(IN_EVENT_DROP_BUFFER)
+		_send_event(.DropBuffer)
 	}
 
 	_audio_impl_pause = proc() -> bool {
 		w := &_wasapi
 		if !w.is_paused {
-			_send_event(IN_EVENT_PAUSE)
+			//_send_event(IN_EVENT_PAUSE)
+			_send_event(.Pause)
 			return true
 		}
 		return false
@@ -111,7 +129,8 @@ use_audio_wasapi :: proc() {
 	_audio_impl_resume = proc() -> bool {
 		w := &_wasapi
 		if w.is_paused {
-			_send_event(IN_EVENT_RESUME)
+			//_send_event(IN_EVENT_RESUME)
+			_send_event(.Resume)
 			return true
 		}
 		return false
@@ -204,31 +223,22 @@ _run_session :: proc() -> (ok: bool) {
 		frame_padding: u32
 		avail_frames: u32
 
-		if obj := win.WaitForMultipleObjects(IN_EVENT__COUNT, raw_data(&w.in_events), false, buffer_duration_ms/2); obj != win.WAIT_TIMEOUT {
-			if obj == win.WAIT_OBJECT_0 + IN_EVENT_KILL {
-				audio_client->Stop()
-
-				break
+		if win.WaitForSingleObject(w.interrupt_event, buffer_duration_ms/2) != win.WAIT_TIMEOUT {
+			if .Kill in w.in_events {
 			}
-			else if obj == win.WAIT_OBJECT_0 + IN_EVENT_DROP_BUFFER {
+			
+			if .DropBuffer in w.in_events {
+				w.callback(w.callback_data, .BufferDropped, nil, {})
 				audio_client->Stop()
 				audio_client->Reset()
-				w.callback(w.callback_data, .BufferDropped, nil, {})
 				audio_client->Start()
 			}
-			else if obj == win.WAIT_OBJECT_0 + IN_EVENT_PAUSE {
-				w.is_paused = true
-				audio_client->Stop()
-				
-				w.callback(w.callback_data, .Paused, nil, {})
 
-				win.WaitForSingleObject(w.in_events[IN_EVENT_RESUME], win.INFINITE)
-				w.is_paused = false
-
-				w.callback(w.callback_data, .Resumed, nil, {})
-				
-				audio_client->Start()
+			if .Pause in w.in_events {
+				win.WaitForSingleObject(w.interrupt_event, win.INFINITE)
 			}
+
+			w.in_events = {}
 		}
 		
 		if status == .Finish {
@@ -266,7 +276,7 @@ _audio_thread_proc :: proc(thread_data: ^thread.Thread) {
 
 	for {
 		_run_session()
-		_reset_events(w.in_events[:])
+		//_reset_events(w.in_events[:])
 		_reset_events(w.out_events[:])
 		if w.status == .FailedToStart || w.status == .Ok {
 			return

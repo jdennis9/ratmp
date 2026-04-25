@@ -29,7 +29,7 @@ ICON_PAUSE :: ""
 ICON_STOP :: ""
 ICON_PLAY :: ""
 
-_ANALYSIS_BUFFER_SIZE :: (32<<10)
+_ANALYSIS_BUFFER_SIZE :: 65536
 
 // -----------------------------------------------------------------------------
 // Track table
@@ -2028,7 +2028,9 @@ _update_analysis :: proc(ui: ^UI) {
 		dsp.make_window_hann(state.window_mult)
 	}
 
-	server_consume_audio_output(sv, state.output_buffer[:output_spec.channels], global_delta_time)
+	if !server_is_paused(sv) {
+		server_consume_audio_output(sv, state.output_buffer[:output_spec.channels], global_delta_time)
+	}
 }
 
 _show_oscilloscope_window :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) {
@@ -2056,7 +2058,7 @@ _show_oscilloscope_window :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) {
 	center := imgui.GetCursorScreenPos() + {0, size.y*0.5}
 	gap := size.x / f32(osc.window_size)
 
-	for i in 0..<osc.window_size {
+	for i in 0..<min(osc.window_size, len(input[0])) {
 		p := input[0][i]
 		osc.position_buf[i] = center + {gap * f32(i), size.y * 0.5 * p}
 	}

@@ -124,12 +124,24 @@ hash_track_url :: proc(str: string) -> u64 {
 	return xxhash.XXH3_64_default(transmute([]u8) str)
 }
 
+@(private="file")
+_reset_ring_buffers :: proc(sv: ^Server) {
+	for ch in 0..<AUDIO_MAX_CHANNELS {
+		rb_reset(&sv.output_ring_buffers[ch])
+	}
+}
+
 server_audio_callback :: proc(
 	data: rawptr, event: Audio_Callback_Event, buf: []f32, spec: Audio_Spec
 ) -> Audio_Callback_Status {
 	sv := cast(^Server) data
 
 	if event == .Stream {
+		if !playback_thread_has_track(sv.playback_thread) {
+			slice.zero(buf)
+			return .Continue
+		}
+
 		frame_count := len(buf) / spec.channels
 		output: [AUDIO_MAX_CHANNELS][]f32
 		for ch in 0..<spec.channels {
@@ -145,7 +157,7 @@ server_audio_callback :: proc(
 			if sv.output_ring_buffers[ch].data == nil {
 				rb_init(&sv.output_ring_buffers[ch], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
 			}
-
+			
 			rb_produce(&sv.output_ring_buffers[ch], output[ch])
 		}
 
@@ -159,10 +171,6 @@ server_audio_callback :: proc(
 		server_send_event(sv, {type = .TrackFinished})
 	}
 	else if event == .BufferDropped {
-		log.debug("Buffer dropped")
-		for ch in 0..<AUDIO_MAX_CHANNELS {
-			rb_reset(&sv.output_ring_buffers[ch])
-		}
 	}
 
 	return .Continue
@@ -171,8 +179,6 @@ server_audio_callback :: proc(
 server_init :: proc(sv: ^Server) -> bool {
 	sv.queue_uid = generate_uid()
 
-	//mem.dynamic_arena_init(&sv.track_arena)
-	//sv.track_allocator = mem.dynamic_arena_allocator(&sv.track_arena)
 	sv.allocators.scan_output = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_output")
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
 	sv.allocators.analysis = allocator_map_add_heap(&sv.allocator_map, "analysis")
@@ -364,8 +370,9 @@ server_handle_events :: proc(sv: ^Server) {
 			}
 		
 		case .RequestSeek:
-			audio_drop_buffer()
 			playback_thread_seek(&sv.playback_thread, ev.seek_target)
+			_reset_ring_buffers(sv)
+			audio_drop_buffer()
 
 		case .RequestPlay:
 			if audio_resume() {
@@ -388,10 +395,9 @@ server_handle_events :: proc(sv: ^Server) {
 
 		case .RequestPlayPlaylist:
 			playback_thread_close_track(&sv.playback_thread)
-			audio_drop_buffer()
 			playback_queue_clear(&sv.playback)
 			playback_queue_add(&sv.playback, ev.tracks, ev.playlist_uid, assume_unique=true)
-
+			
 			if ev.initial_track != nil {
 				playback_queue_set_track(&sv.playback, ev.initial_track.?)
 				_play_track(sv, ev.initial_track.?)
@@ -400,22 +406,26 @@ server_handle_events :: proc(sv: ^Server) {
 				track := playback_queue_set_pos(&sv.playback, 0) or_break
 				_play_track(sv, track)
 			}
-
+			
+			audio_drop_buffer()
 			_update_media_controls_state(sv)
 
 		case .RequestPlayTrack:
 			playback_thread_close_track(&sv.playback_thread)
-			audio_drop_buffer()
 			_play_track(sv, ev.track)
+			audio_drop_buffer()
 			
 		case .PrevTrackRequested:
 			playback_thread_close_track(&sv.playback_thread)
 			track_id := playback_queue_prev(&sv.playback) or_break
 			_play_track(sv, track_id)
+			audio_drop_buffer()
 
 		case .NextTrackRequested:
+			playback_thread_close_track(&sv.playback_thread)
+			track_id := playback_queue_next(&sv.playback) or_break
+			_play_track(sv, track_id)
 			audio_drop_buffer()
-			fallthrough
 		case .TrackFinished:
 			playback_thread_close_track(&sv.playback_thread)
 			track_id := playback_queue_next(&sv.playback) or_break
@@ -444,6 +454,10 @@ server_request_next_track :: proc(sv: ^Server) {
 
 server_is_shuffle_enabled :: proc(sv: ^Server) -> bool {
 	return sv.playback.enable_shuffle
+}
+
+server_is_paused :: proc(sv: ^Server) -> bool {
+	return !playback_thread_has_track(sv.playback_thread) || audio_is_paused()
 }
 
 server_set_shuffle_enabled :: proc(sv: ^Server, enabled: bool) {
