@@ -171,6 +171,7 @@ server_audio_callback :: proc(
 		server_send_event(sv, {type = .TrackFinished})
 	}
 	else if event == .BufferDropped {
+		_reset_ring_buffers(sv)
 	}
 
 	return .Continue

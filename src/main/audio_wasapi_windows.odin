@@ -235,7 +235,13 @@ _run_session :: proc() -> (ok: bool) {
 			}
 
 			if .Pause in w.in_events {
+				log.debug("Waiting for resume..")
+				w.is_paused = true
+				audio_client->Stop()
 				win.WaitForSingleObject(w.interrupt_event, win.INFINITE)
+				log.debug("Resuming")
+				w.is_paused = false
+				audio_client->Start()
 			}
 
 			w.in_events = {}
