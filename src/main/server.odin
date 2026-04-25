@@ -431,6 +431,7 @@ server_handle_events :: proc(sv: ^Server) {
 			playback_thread_close_track(&sv.playback_thread)
 			track_id := playback_queue_next(&sv.playback) or_break
 			_play_track(sv, track_id)
+			audio_drop_buffer()
 		}
 	}
 
