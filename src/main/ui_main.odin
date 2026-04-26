@@ -2017,6 +2017,8 @@ _update_analysis :: proc(ui: ^UI) {
 	state := &ui.analysis
 	output_spec := sv.output_spec
 
+	if output_spec.channels == 0 do return
+
 	for ch in 0..<output_spec.channels {
 		if state.output_buffer[ch] == nil {
 			state.output_buffer[ch] = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)

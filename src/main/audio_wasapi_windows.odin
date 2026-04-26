@@ -1,6 +1,7 @@
 #+private file
 package main
 
+import "core:time"
 import "core:thread"
 import "src:bindings/wasapi"
 import win "core:sys/windows"
@@ -40,16 +41,15 @@ _wasapi: struct {
 	spec: Audio_Spec,
 	volume: f32,
 	is_paused: b32,
-	//in_events: [IN_EVENT__COUNT]win.HANDLE,
-	in_events: bit_set[_In_Event],
+	in_events: [_In_Event]int,
 	interrupt_event: win.HANDLE,
 	out_events: [OUT_EVENT__COUNT]win.HANDLE,
+	event_semaphore: sync.Sema,
 }
 
-//_send_event :: proc(ev: int) {win.SetEvent(_wasapi.in_events[ev])}
 _send_event :: proc(ev: _In_Event) {
-	_wasapi.in_events |= {ev}
-	win.SetEvent(_wasapi.interrupt_event)
+	_wasapi.in_events[ev] += 1
+	sync.sema_post(&_wasapi.event_semaphore)
 }
 _wait_event :: proc(ev: int) {win.WaitForSingleObject(_wasapi.out_events[ev], win.INFINITE)}
 
@@ -63,9 +63,7 @@ use_audio_wasapi :: proc() {
 			)
 		) or_return
 		
-		//for &ev in _wasapi.in_events do ev = win.CreateEventW(nil, true, false, nil)
 		for &ev in _wasapi.out_events do ev = win.CreateEventW(nil, false, false, nil)
-		_wasapi.interrupt_event = win.CreateEventW(nil, false, false, nil)
 
 		_wasapi.callback = cb
 		_wasapi.callback_data = cb_data
@@ -219,30 +217,33 @@ _run_session :: proc() -> (ok: bool) {
 	log.debug("Buffer duration:", buffer_duration_ms, "ms")
 
 	audio_client->Start()
-	for {
+	main_loop: for {
 		frame_padding: u32
 		avail_frames: u32
 
-		if win.WaitForSingleObject(w.interrupt_event, buffer_duration_ms/2) != win.WAIT_TIMEOUT {
-			if .Kill in w.in_events {
+		if sync.sema_wait_with_timeout(&w.event_semaphore, time.Millisecond * auto_cast(buffer_duration_ms/2)) {
+			if w.in_events[.Kill] > 0 {
+				break main_loop
 			}
 			
-			if .DropBuffer in w.in_events {
-				w.callback(w.callback_data, .BufferDropped, nil, {})
+			if w.in_events[.DropBuffer] > 0 {
 				audio_client->Stop()
 				audio_client->Reset()
+				w.callback(w.callback_data, .BufferDropped, nil, {})
 				audio_client->Start()
+				w.in_events[.DropBuffer] -= 1
 			}
 
-			if .Pause in w.in_events {
+			if w.in_events[.Pause] > 0 {
 				w.is_paused = true
 				audio_client->Stop()
-				win.WaitForSingleObject(w.interrupt_event, win.INFINITE)
+				sync.sema_wait(&w.event_semaphore)
 				w.is_paused = false
 				audio_client->Start()
+				w.in_events[.Pause] = 0
+				w.in_events[.Resume] = 0
 			}
 
-			w.in_events = {}
 		}
 		
 		if status == .Finish {
@@ -280,7 +281,6 @@ _audio_thread_proc :: proc(thread_data: ^thread.Thread) {
 
 	for {
 		_run_session()
-		//_reset_events(w.in_events[:])
 		_reset_events(w.out_events[:])
 		if w.status == .FailedToStart || w.status == .Ok {
 			return

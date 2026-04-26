@@ -59,6 +59,18 @@ _reset_ring_buffers :: proc(at: ^Playback_Thread) {
 }
 
 @(private="file")
+_post_process :: proc(at: ^Playback_Thread, audio: [][]f32) {
+	TIME_SCOPE("Post process")
+
+	// Clipping
+	for ch in audio {
+		for &f in ch {
+			f = clamp(f, -1, 1)
+		}
+	}
+}
+
+@(private="file")
 _thread_proc :: proc(thr: ^thread.Thread) {
 	at := cast(^Playback_Thread) thr.data
 
@@ -113,6 +125,7 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		/*if at.post_process_hook.process != nil do at.post_process_hook.process(
 			at.post_process_hook.data, deinterlaced[:at.channels], at.samplerate
 		)*/
+		_post_process(at, deinterlaced[:at.channels])
 
 		for d, ch in deinterlaced[:at.channels] {
 			frames_copied = rb_produce(&at.ring_buffers[ch], d)

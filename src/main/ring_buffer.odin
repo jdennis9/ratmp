@@ -59,7 +59,6 @@ rb_resize :: proc(buf: ^Ring_Buffer($T), size: int) {
 rb_reset :: proc(buf: ^Ring_Buffer($T)) {
 	slice.zero(buf.data)
 	buf.producer_index = 0
-	//buf.consumer_index = len(buf.data)-1
 	buf.consumer_index = 0
 }
 
@@ -73,13 +72,12 @@ rb_produce :: proc(buf: ^Ring_Buffer($T), data: []T, loc := #caller_location) ->
 	buf_size := len(buf.data)
 	if buf_size == 0 do return
 	producer := sync.atomic_load(&buf.producer_index)
-	consumer := sync.atomic_load(&buf.consumer_index)
 
-	write_end := _wrap(consumer-1, buf_size)
+	write_end := _wrap(producer-1, buf_size)
 
 	if producer > write_end {
 		copied += copy(buf.data[producer:], data[:])
-		if copied != len(data) {
+		if copied < len(data) {
 			copied += copy(buf.data[:write_end], data[copied:])
 		}
 	}

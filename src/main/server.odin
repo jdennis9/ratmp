@@ -1,12 +1,8 @@
 package main
 
 import "core:math"
-import "core:fmt"
-import "src:bindings/ffmpeg"
 import "core:sort"
-import "core:encoding/cbor"
 import "core:time"
-import "core:path/slashpath"
 import "core:hash/xxhash"
 import "core:path/filepath"
 import "core:thread"
@@ -18,9 +14,7 @@ import "core:strings"
 import "core:mem"
 import "src:bindings/taglib"
 import "core:log"
-import "base:intrinsics"
 import "core:reflect"
-import hm "core:container/handle_map"
 import "src:dsp"
 
 OUTPUT_RING_BUFFER_SIZE :: 64<<10
@@ -113,6 +107,8 @@ Server :: struct {
 	// Used by the audio callback for storing samples
 	// without the need to reallocate every frame
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
+	// Tell audio callback to reset output ring buffers when streaming
+	audio_buffer_was_dropped: bool,
 }
 
 Server_Library_Save_Data :: struct {
@@ -142,6 +138,11 @@ server_audio_callback :: proc(
 			return .Continue
 		}
 
+		if sv.audio_buffer_was_dropped {
+			sv.audio_buffer_was_dropped = false
+			_reset_ring_buffers(sv)
+		}
+
 		frame_count := len(buf) / spec.channels
 		output: [AUDIO_MAX_CHANNELS][]f32
 		for ch in 0..<spec.channels {
@@ -154,12 +155,15 @@ server_audio_callback :: proc(
 		sv.output_spec = spec
 
 		for ch in 0..<spec.channels {
-			if sv.output_ring_buffers[ch].data == nil {
-				rb_init(&sv.output_ring_buffers[ch], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
+			rb := &sv.output_ring_buffers[ch]
+
+			if rb.data == nil {
+				rb_init(rb, OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
 			}
 			
-			rb_produce(&sv.output_ring_buffers[ch], output[ch])
+			rb_produce(rb, output[ch])
 		}
+
 
 		dsp.interlace(output[:spec.channels], buf)
 
@@ -171,7 +175,7 @@ server_audio_callback :: proc(
 		server_send_event(sv, {type = .TrackFinished})
 	}
 	else if event == .BufferDropped {
-		_reset_ring_buffers(sv)
+		sv.audio_buffer_was_dropped = true
 	}
 
 	return .Continue
@@ -372,7 +376,6 @@ server_handle_events :: proc(sv: ^Server) {
 		
 		case .RequestSeek:
 			playback_thread_seek(&sv.playback_thread, ev.seek_target)
-			_reset_ring_buffers(sv)
 			audio_drop_buffer()
 
 		case .RequestPlay:
