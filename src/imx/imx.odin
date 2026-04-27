@@ -100,7 +100,6 @@ scrubber :: proc(
 
 	// Scrubber
 	scrubber_size := [2]f32{size.y*0.8, size.y}
-	scrubber_padding := [2]f32{2, 2}
 
 	imgui.DrawList_AddCircleFilled(
 		drawlist, {cursor.x + frac * size.x, cursor.y + size.y / 2}, scrubber_size.y,

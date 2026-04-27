@@ -1,7 +1,5 @@
 package main
 
-import "core:unicode"
-import "core:unicode/utf8"
 import "src:bindings/taglib"
 import "core:os"
 import "core:slice"
@@ -338,7 +336,7 @@ track_group_remove_track :: proc(tg: ^Track_Group_Set, entry_index: int, id: Tra
 track_group_pseudo_sort :: proc(tg: ^Track_Group_Set) {
 	resize(&tg.sorted_indices, len(tg.entries))
 
-	for &e, i in tg.entries {
+	for _, i in tg.entries {
 		tg.sorted_indices[i] = i
 	}
 

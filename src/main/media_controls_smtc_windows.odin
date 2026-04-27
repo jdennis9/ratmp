@@ -39,7 +39,7 @@ media_controls_use_smtc :: proc() {
 		cover_data, mime_type, have_cover_data := find_track_thumbnail(
 			sv.library, track.handle, context.allocator
 		)
-		defer {
+		defer if have_cover_data {
 			delete(cover_data)
 			delete(mime_type)
 		}

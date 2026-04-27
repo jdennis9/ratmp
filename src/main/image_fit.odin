@@ -1,7 +1,5 @@
 package main
 
-import "core:math/linalg"
-import "core:log"
 Rect :: struct {min, max: [2]f32}
 
 Image_Fit_Policy :: enum {
@@ -56,7 +54,6 @@ image_fit_clip :: proc(
 image_fit_uv :: proc(
 	policy: Image_Fit_Policy, target: Rect, size: [2]f32
 ) -> (uv: Rect) {
-	target_size := target.max - target.min
 	rect := image_fit_clip(policy, target, size)
 	rect_size := rect.max - rect.min
 	uv.min = (target.min / rect_size) - (rect.min / rect_size)

@@ -1,6 +1,5 @@
 package main
 
-import "core:log"
 import "core:strings"
 
 import "src:bindings/ffmpeg"

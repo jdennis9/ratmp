@@ -4,7 +4,7 @@ import "core:image"
 import "core:encoding/json"
 import "core:mem"
 import "core:os"
-import "core:log"
+//import "core:log"
 
 Custom_Error :: enum {
 	InvalidName,
@@ -25,7 +25,7 @@ Error :: union {
 	Custom_Error,
 }
 
-check_error_0 :: proc(r: $R) -> bool {
+/*check_error_0 :: proc(r: $R) -> bool {
 	if r != nil {
 		log.error(r)
 		return false
@@ -58,4 +58,4 @@ check_error :: proc {
 	check_error_0,
 	check_error_1,
 	check_error_2,
-}
+}*/

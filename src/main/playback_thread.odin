@@ -8,7 +8,6 @@ import "core:mem"
 // =============================================================================
 
 import "core:math"
-import "src:dsp"
 import "core:log"
 import "core:sync"
 import "core:thread"
@@ -77,7 +76,6 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 	for {
 		frames_copied: int
 		frames_required: int
-		buffer: []f32
 		deinterlaced: [AUDIO_MAX_CHANNELS][]f32
 
 		sync.auto_reset_event_wait(&at.request_fill_signal)

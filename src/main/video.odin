@@ -76,7 +76,7 @@ texture_create :: proc(desc: Texture_Desc) -> (handle: Texture_Handle, ok: bool)
 
 texture_ref :: proc(h: Texture_Handle) -> bool {
 	tex := hm.get(&_video.textures, h) or_return
-
+	tex.ref_count += 1
 	return true
 }
 

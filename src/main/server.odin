@@ -80,9 +80,9 @@ Server_Background_Scan_State :: struct {
 Server :: struct {				
 	allocator_map: Allocator_Map,
 	allocators: struct {
-		scan_output: mem.Allocator,
-		scan_queue: mem.Allocator,
-		analysis: mem.Allocator,
+		scan_output:     mem.Allocator,
+		scan_queue:      mem.Allocator,
+		analysis:        mem.Allocator,
 		playback_thread: mem.Allocator,
 	},
 

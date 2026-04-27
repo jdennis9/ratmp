@@ -6,7 +6,6 @@ import sa "core:container/small_array"
 import "core:sync"
 import "core:fmt"
 import "core:thread"
-import hm "core:container/handle_map"
 
 Message_Box_Handle :: UID
 
@@ -31,7 +30,7 @@ _responses: sa.Small_Array(20, _Message_Response)
 _message_box_thread :: proc(t: ^thread.Thread) {
 	state := cast(^_Message_Thread) t.data
 
-	response, error := _dialog_impl_show_message_box(
+	response, _ := _dialog_impl_show_message_box(
 		state.type,
 		state.urgency,
 		cstring(&state.title[0]),
@@ -39,12 +38,11 @@ _message_box_thread :: proc(t: ^thread.Thread) {
 	)
 
 	if state.type != .Message {
-		sync.lock(&_response_lock)
+		sync.guard(&_response_lock)
 		sa.append(&_responses, _Message_Response {
 			id = state.id,
 			res = response,
 		})
-		sync.unlock(&_response_lock)
 	}
 }
 

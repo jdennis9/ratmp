@@ -17,7 +17,6 @@ Playlist :: struct {
 playlist_add :: proc(sv: ^Server, pl: ^Playlist, tracks: []Track_ID) {
 	for track_id in tracks {
 		if slice.contains(pl.tracks[:], track_id) do continue
-		track := get_track(sv, track_id) or_continue
 		append(&pl.tracks, track_id)
 	}
 
@@ -25,11 +24,8 @@ playlist_add :: proc(sv: ^Server, pl: ^Playlist, tracks: []Track_ID) {
 }
 
 playlist_remove :: proc(sv: ^Server, pl: ^Playlist, tracks: []Track_ID) {
-	need_recalc_duration := false
-
 	for track_id in tracks {
 		index := slice.linear_search(pl.tracks[:], track_id) or_continue
-		track, track_found := get_track(sv, track_id)
 		ordered_remove(&pl.tracks, index)
 	}
 

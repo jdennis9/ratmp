@@ -1,7 +1,6 @@
 package main
 
 import "base:runtime"
-import sa "core:container/small_array"
 import "core:mem"
 
 _Any_Allocator :: union {

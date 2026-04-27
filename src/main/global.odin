@@ -1,6 +1,5 @@
 package main
 
-import "core:mem"
 PROGRAM_VERSION_STRING :: "0.5.0"
 PROGRAM_NAME :: "RAT MP"
 PROGRAM_ID :: "ratmp"
@@ -23,14 +22,14 @@ generate_uid :: proc() -> UID {
 }
 
 global_command_opts: struct {
-	headless: bool `usage:"Run without UI."`,
+	headless:          bool `usage:"Run without UI."`,
 	no_media_controls: bool `usage:"Don't use system media controls."`,
-	force_opengl: bool `usage:"(Windows) Force using OpenGL if DX11 is not supported on your device."`,
-	no_tray: bool `usage:"Don't create a system tray icon."`,
-	no_audio: bool `usage:"(Debug) Disable audio output."`,
-	profile_startup: bool `args:"hidden" usage:"(Profiling) Exit after initial startup."`,
-	memory_debug: bool `usage:"(Debug) Enable memory tracking"`,
-	heap_alloc_log: bool `usage:"(Debug) Logs heap memory allocations to the console."`,
+	force_opengl:      bool `usage:"(Windows) Force using OpenGL if DX11 is not supported on your device."`,
+	no_tray:           bool `usage:"Don't display a system tray icon."`,
+	no_audio:          bool `usage:"(Debug) Disable audio output."`,
+	profile_startup:   bool `args:"hidden" usage:"(Profiling) Exit after initial startup."`,
+	memory_debug:      bool `usage:"(Debug) Enable memory tracking"`,
+	heap_alloc_log:    bool `usage:"(Debug) Logs heap memory allocations to the console."`,
 }
 
 global_paths: struct {

@@ -5,10 +5,8 @@ import "base:runtime"
 import "core:strconv"
 import "core:slice"
 import "core:time"
-import "core:fmt"
 import "core:log"
 import "core:os"
-import "core:container/handle_map"
 import "core:reflect"
 import "core:mem"
 import "core:strings"
@@ -77,7 +75,7 @@ _track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (m
 	) or_return
 
 	return _Track_DB_Model {
-		path_hash        = transmute(i64) stable_hash_string_64(t.url),
+		path_hash        = auto_cast stable_hash_string_64(t.url),
 		protocol         = protocol,
 		url              = strings.clone_to_cstring(t.url, allocator) or_return,
 		format           = format,
@@ -157,12 +155,8 @@ _get_columns :: proc() -> []_Column {
 track_db_save :: proc(l: Library, path: string) -> Error {
 	TIME_SCOPE("Save library to SQL database")
 
-	track_map := l.tracks
-
 	columns := _get_columns()
 	defer delete(columns)
-
-	sr: sql.Result_Code
 	
 	path_cstring := strings.clone_to_cstring(path)
 	defer delete(path_cstring)
@@ -244,7 +238,7 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 		// Build insert string
 		// @TODO: Insert into columns by name
 		strings.write_string(&b, "INSERT INTO tracks VALUES (")
-		for col, i in columns {
+		for _, i in columns {
 			if i != len(columns)-1 do strings.write_string(&b, "?, ")
 			else do strings.write_string(&b, "?")
 		}
@@ -438,8 +432,8 @@ track_db_load :: proc(
 	// Convert models -> tracks for library
 	// --------------------------------------------------------------------------
 	for model in models {
-		path_hash := transmute(u64) model.path_hash
-		existing_handle, exists := l.url_hash_map[path_hash]
+		path_hash := cast(u64) model.path_hash
+		_, exists := l.url_hash_map[path_hash]
 
 		// Update the track?
 		if exists do continue

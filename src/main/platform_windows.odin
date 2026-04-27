@@ -1,7 +1,6 @@
 #+private file
 package main
 
-import "core:os"
 import "core:unicode/utf16"
 import win "core:sys/windows"
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
@@ -102,7 +101,6 @@ platform_init_win32 :: proc() -> bool {
 	}
 
 	_platform_impl_wait_events = proc() -> Platform_Events {
-		msg: win.MSG
 		win.WaitMessage()
 		return platform_poll_events()
 	}

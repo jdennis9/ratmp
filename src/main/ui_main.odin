@@ -5,7 +5,6 @@ import "base:runtime"
 import "core:strconv"
 import "core:reflect"
 import "src:dsp"
-import "core:slice"
 import "core:sort"
 import "core:path/filepath"
 import "core:os"
@@ -20,17 +19,17 @@ import imgui "src:thirdparty/odin-imgui"
 import "core:time"
 import "core:fmt"
 
-ICON_VOLUME_OFF :: ""
-ICON_VOLUME_LOW :: ""
-ICON_VOLUME_MEDIUM :: ""
-ICON_VOLUME_HIGH :: ""
-ICON_SHUFFLE :: ""
-ICON_ARROW_RIGHT :: ""
+ICON_VOLUME_OFF     :: ""
+ICON_VOLUME_LOW     :: ""
+ICON_VOLUME_MEDIUM  :: ""
+ICON_VOLUME_HIGH    :: ""
+ICON_SHUFFLE        :: ""
+ICON_ARROW_RIGHT    :: ""
 ICON_PREVIOUS_TRACK :: ""
-ICON_NEXT_TRACK :: ""
-ICON_PAUSE :: ""
-ICON_STOP :: ""
-ICON_PLAY :: ""
+ICON_NEXT_TRACK     :: ""
+ICON_PAUSE          :: ""
+ICON_STOP           :: ""
+ICON_PLAY           :: ""
 
 _ANALYSIS_BUFFER_SIZE :: 65536
 
@@ -55,13 +54,13 @@ _Track_Table_Row :: struct {
 }
 
 _Track_Table :: struct {
-	filter_buf: [512]u8,
+	filter_buf:     [512]u8,
 	filter_metrics: bit_set[Track_Filter_Metric],
-	filter_hash: u32,
-	sort_spec: Maybe(Track_Sort_Spec),
-	serial: uint,
-	playlist_uid: UID,
-	rows: [dynamic]_Track_Table_Row,
+	filter_hash:    u32,
+	sort_spec:      Maybe(Track_Sort_Spec),
+	serial:         uint,
+	playlist_uid:   UID,
+	rows:           [dynamic]_Track_Table_Row,
 }
 
 // -----------------------------------------------------------------------------
@@ -94,11 +93,10 @@ _Window_Args :: union {
 }
 
 _Window_Info :: struct {
-	title, internal_name: cstring,
-	flags: _Window_Flags,
-	imgui_flags: imgui.WindowFlags,
-
-	show_proc: proc(ui: ^UI) -> bool,
+	title,              internal_name: cstring,
+	flags:              _Window_Flags,
+	imgui_flags:        imgui.WindowFlags,
+	show_proc:          proc(ui: ^UI) -> bool,
 	settings_load_proc: proc(ui: ^UI, key, value: string) -> Error,
 	settings_save_proc: proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error,
 }
@@ -212,27 +210,28 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 
 _Metadata_Window :: struct {
 	displayed_track: Track_ID,
-	cover_art: Maybe(Texture_Handle),
-	cover_width, cover_height: int,
+	cover_art:       Maybe(Texture_Handle),
+	cover_width:     int,
+	cover_height:    int,
 	cover_file_size: int,
 	should_crop_art: bool,
-	comment: string,
+	comment:         string,
 }
 
 _Playlists_Window :: struct {
-	new_playlist_name: [128]u8,
-	playlist_table: _Playlist_Table,
-	track_table: _Track_Table,
-	viewing_playlist: Maybe(Playlist_Handle),
-	playlist_handles: [dynamic]Playlist_Handle,
+	new_playlist_name:        [128]u8,
+	playlist_table:           _Playlist_Table,
+	track_table:              _Track_Table,
+	viewing_playlist:         Maybe(Playlist_Handle),
+	playlist_handles:         [dynamic]Playlist_Handle,
 	cant_add_playlist_reason: Cant_Add_Playlist_Reason,
 }
 
 _Track_Group_Window :: struct {
-	playlist_table: _Playlist_Table,
-	track_table: _Track_Table,
-	filter_buf: [128]u8,
-	filter_hash: u32,
+	playlist_table:       _Playlist_Table,
+	track_table:          _Track_Table,
+	filter_buf:           [128]u8,
+	filter_hash:          u32,
 	displayed_entry_hash: u32,
 }
 
@@ -243,9 +242,9 @@ _Oscilloscope_Display_Mode :: enum {
 }
 
 _Oscilloscope_Window :: struct {
-	window_size: int,
+	window_size:  int,
 	position_buf: [][2]f32,
-	pinch_ends: bool,
+	pinch_ends:   bool,
 	display_mode: _Oscilloscope_Display_Mode,
 }
 
@@ -254,9 +253,9 @@ _Oscilloscope_Window :: struct {
 // -----------------------------------------------------------------------------
 
 _Window_State :: struct {
-	open: bool,
+	open:           bool,
 	bring_to_front: bool,
-	imgui_flags: imgui.WindowFlags,
+	imgui_flags:    imgui.WindowFlags,
 }
 
 // -----------------------------------------------------------------------------
@@ -266,81 +265,80 @@ _Window_State :: struct {
 @private
 UI_Actions :: struct {
 	minimize_to_tray: bool,
-	exit: bool,
+	exit:             bool,
 
 	debug: struct {
 		force_device_reset: bool,
-		load_library: bool,
-		save_library: bool,
+		load_library:       bool,
+		save_library:       bool,
 	}
 }
 
 @private
 UI :: struct {
-	server: ^Server,
-	allocator_map: Allocator_Map,
+	server:               ^Server,
+	allocator_map:        Allocator_Map,
+	actions:              UI_Actions,
+	window_state:         [_Window_ID]_Window_State,
+	sorted_window_states: []imgui.ID,
+	system_fonts:         []System_Font,
+
 	allocators: struct {
-		per_frame: mem.Allocator,
-		themes: mem.Allocator,
-		fonts: mem.Allocator,
-		lazy: mem.Allocator,
-		analysis: mem.Allocator,
+		per_frame:  mem.Allocator,
+		themes:     mem.Allocator,
+		fonts:      mem.Allocator,
+		lazy:       mem.Allocator,
+		analysis:   mem.Allocator,
 	},
+
 	windows: struct {
 		library: struct {
 			track_table: _Track_Table,
-			tracks: []Track_ID,
-			serial: uint,
+			tracks:      []Track_ID,
+			serial:      uint,
 		},
 
 		queue: struct {
-			serial: uint,
+			serial:     uint,
 			track_table: _Track_Table,
 		},
 
-		playlists: _Playlists_Window,
-
-		artists: _Track_Group_Window,
-		albums: _Track_Group_Window,
-		genres: _Track_Group_Window,
-
-		metadata: _Metadata_Window,
-
+		playlists:    _Playlists_Window,
+		artists:      _Track_Group_Window,
+		albums:       _Track_Group_Window,
+		genres:       _Track_Group_Window,
+		metadata:     _Metadata_Window,
 		oscilloscope: _Oscilloscope_Window,
 	},
 	dialogs: struct {
-		add_folder: File_Dialog_State,
+		add_folder:     File_Dialog_State,
 		set_background: File_Dialog_State,
 	},
 	background: struct {
 		texture: Maybe(Texture_Handle),
-		policy: Image_Fit_Policy,
-		size: [2]f32,
-		path: string,
+		policy:  Image_Fit_Policy,
+		size:    [2]f32,
+		path:    string,
 	},
 	paths: struct {
 		theme_folder: string,
 	},
 	analysis: struct {
 		output_buffer: [AUDIO_MAX_CHANNELS][]f32,
-		window_mult: []f32,
+		window_mult:   []f32,
 	},
 	themes: [dynamic]_Theme,
 	debug: struct {
-		show_style_editor: bool,
-		show_demo_window: bool,
+		show_style_editor:    bool,
+		show_demo_window:     bool,
 		show_memory_tracking: bool,
 	},
-	actions: UI_Actions,
-	window_state: [_Window_ID]_Window_State,
-	sorted_window_states: []imgui.ID,
-	system_fonts: []System_Font,
 }
 
 _Saved_Theme :: struct {
-	name: string,
-	accents: [_Theme_Accent][3]f32,
-	colors: [_Theme_Color]u32,
+	name:         string,
+	accents:      [_Theme_Accent][3]f32,
+	colors:       [_Theme_Color]u32,
 	imgui_colors: [imgui.Col.COUNT][4]f32,
 }
 
@@ -373,7 +371,7 @@ ui_theme: _Theme
 
 _THEME_COLOR_DEFAULTS := [_Theme_Color]u32 {
 	.PlayingHighlight = 0xff0568fc,
-	.LeftChannelWave = 0xffffffff,
+	.LeftChannelWave  = 0xffffffff,
 	.RightChannelWave = 0xff00ffff,
 }
 
@@ -383,10 +381,10 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 
 	// Allocators
 	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame", flags={.IsTemp})
-	ui.allocators.fonts = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
-	ui.allocators.themes = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
-	ui.allocators.lazy = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
-	ui.allocators.analysis = allocator_map_add_heap(&ui.allocator_map, "analysis")
+	ui.allocators.fonts =     allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
+	ui.allocators.themes =    allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
+	ui.allocators.lazy =      allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
+	ui.allocators.analysis =  allocator_map_add_heap(&ui.allocator_map, "analysis")
 
 	// Theme defaults
 	ui_theme.imgui_colors = imgui.GetStyle().Colors
@@ -414,9 +412,9 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 			ReadLineFn = _imgui_settings_read_line_proc,
 			WriteAllFn = _imgui_settings_write_proc,
 			ReadOpenFn = _imgui_settings_open_proc,
-			UserData = ui,
-			TypeHash = imgui.cImHashStr(PROGRAM_ID),
-			TypeName = PROGRAM_ID,
+			UserData   = ui,
+			TypeHash   = imgui.cImHashStr(PROGRAM_ID),
+			TypeName   = PROGRAM_ID,
 		}
 
 		imgui.AddSettingsHandler(&handler)
@@ -890,7 +888,7 @@ _track_table_get_tracks :: proc(t: _Track_Table, allocator: mem.Allocator) -> []
 
 _track_table_get_selection :: proc(t: _Track_Table, allocator: mem.Allocator) -> []Track_ID {
 	out: [dynamic]Track_ID
-	for row, i in t.rows {
+	for row in t.rows {
 		if row.selected do append(&out, row.id)
 	}
 	return out[:]
@@ -1025,7 +1023,6 @@ _track_table_show :: proc(
 	if table_sort_specs := imgui.TableGetSortSpecs(); table_sort_specs != nil {
 		if specs := table_sort_specs.Specs; specs != nil && table_sort_specs.SpecsDirty {
 			table_sort_specs.SpecsDirty = false
-			s: Track_Sort_Spec
 
 			column := cast(_Column_Index) specs.ColumnIndex
 			switch specs.SortDirection {
@@ -1374,7 +1371,6 @@ _track_group_window_show_groups :: proc(
 _track_group_window_show_tracks :: proc(
 	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set
 ) -> bool {
-	sv := ui.server
 	entry_index, have_entry := track_group_get_entry(tg, w.displayed_entry_hash)
 	entry: Track_Group_Ptr
 
@@ -2128,8 +2124,6 @@ _playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 }
 
 _playlists_window_show :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: bool) {
-	sv := ui.server
-
 	defer if !ok do w.viewing_playlist = nil
 
 	if w.viewing_playlist != nil {
@@ -2306,7 +2300,7 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 		pos := imgui.GetCursorScreenPos()
 		wave_height := size.y / f32(channels)
 
-		for ch, i in input {
+		for ch in input {
 			draw_wave(
 				ui, drawlist, ch[:window_size],
 				pos, {size.x, wave_height},
@@ -2464,8 +2458,6 @@ _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 _imgui_settings_open_proc :: proc "c" (
 	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, name: cstring
 ) -> rawptr {
-	ui := cast(^UI) handler.UserData
-
 	for info, id in _WINDOW_INFO {
 		if string(info.internal_name) == string(name) {
 			return cast(rawptr) cast(uintptr) id
@@ -2576,7 +2568,7 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 	if imgui.BeginTabItem("Misc") {
 		t := get_global_tracking_allocator()
 		show_info(t, {})
-		for ptr, e in t.allocation_map {
+		for _, e in t.allocation_map {
 			imx.textf(256, "%t: %M", e.location, e.size)
 		}
 		imgui.EndTabItem()

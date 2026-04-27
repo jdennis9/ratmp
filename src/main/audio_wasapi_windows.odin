@@ -98,7 +98,6 @@ use_audio_wasapi :: proc() {
 		w := &_wasapi
 		if w.session_thread == nil do return
 
-		//_send_event(IN_EVENT_KILL)
 		_send_event(.Kill)
 		_wait_event(OUT_EVENT_STOPPED)
 		thread.join(w.session_thread)
@@ -109,15 +108,12 @@ use_audio_wasapi :: proc() {
 	}
 
 	_audio_impl_drop_buffer = proc() {
-		w := &_wasapi
-		//_send_event(IN_EVENT_DROP_BUFFER)
 		_send_event(.DropBuffer)
 	}
 
 	_audio_impl_pause = proc() -> bool {
 		w := &_wasapi
 		if !w.is_paused {
-			//_send_event(IN_EVENT_PAUSE)
 			_send_event(.Pause)
 			return true
 		}

@@ -17,8 +17,6 @@
 */
 package main
 
-import "core:container/queue"
-import "core:log"
 import "core:mem"
 import "core:slice"
 import "core:sync"

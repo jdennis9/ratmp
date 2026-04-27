@@ -1,14 +1,10 @@
 package main
 
 import "core:mem"
-import "core:path/filepath"
 import "core:time"
 import "core:thread"
-import "core:fmt"
 import "core:os"
 import "core:flags"
-import "core:sync"
-import "vendor:glfw"
 import "core:log"
 import imgui "src:thirdparty/odin-imgui"
 
