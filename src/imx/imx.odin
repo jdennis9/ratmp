@@ -1,5 +1,6 @@
 package imx
 
+import "core:strconv"
 import "core:reflect"
 import "core:math/linalg"
 import "core:fmt"
@@ -204,12 +205,42 @@ kv_rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
 	if imgui.TableSetColumnIndex(1) {
-		active |= imgui.Selectable(cstring(&buf[0]))
+		active |= imgui.Selectable(cstring(&buf[0]), )
 	}
 	return
 }
 
-
 end_kv_table :: proc() {
 	imgui.EndTable()
+}
+
+number_picker :: proc(label: cstring, options: []int, current: ^int) -> (changed: bool) {
+	preview: [16]u8
+	strconv.write_int(preview[:15], auto_cast current^, 10)
+
+	imgui.BeginCombo(label, cstring(&preview[0])) or_return
+	defer imgui.EndCombo()
+
+	changed |= number_picker_menu_items(options, current)
+
+	return
+}
+
+number_picker_menu_items :: proc(options: []int, current: ^int) -> (changed: bool) {
+	for opt in options {
+		buf: [16]u8
+		strconv.write_int(buf[:15], auto_cast opt, 10)
+
+		if imgui.MenuItem(cstring(&buf[0]), nil, opt == current^) {
+			current^ = opt
+			changed = true
+		}
+	}
+
+	return
+}
+
+string_to_ptrs :: proc(str: string) -> (cstring, cstring) {
+	base := raw_data(str)
+	return cstring(base), cstring(&base[len(str)])
 }

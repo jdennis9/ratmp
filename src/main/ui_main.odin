@@ -1,6 +1,9 @@
 #+private file
 package main
 
+import "base:runtime"
+import "core:strconv"
+import "core:reflect"
 import "src:dsp"
 import "core:slice"
 import "core:sort"
@@ -65,6 +68,148 @@ _Track_Table :: struct {
 // Windows
 // -----------------------------------------------------------------------------
 
+_Window_ID :: enum {
+	Library,
+	Queue,
+	Playlists,
+	Artists,
+	Albums,
+	Genres,
+	Metadata,
+	ThemeEditor,
+	Oscilloscope,
+}
+
+_Window_Category :: enum {
+	Music,
+	Visualizers,
+	Settings,
+}
+
+_Window_Flag :: enum {DefaultShow, AlwaysShow}
+_Window_Flags :: bit_set[_Window_Flag]
+
+_Window_Args :: union {
+	Track_ID, // Metadata window
+}
+
+_Window_Info :: struct {
+	title, internal_name: cstring,
+	flags: _Window_Flags,
+	imgui_flags: imgui.WindowFlags,
+
+	show_proc: proc(ui: ^UI) -> bool,
+	settings_load_proc: proc(ui: ^UI, key, value: string) -> Error,
+	settings_save_proc: proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error,
+}
+
+
+_WINDOW_INFO := [_Window_ID]_Window_Info {
+	.Library = {
+		title = "Library",
+		internal_name = "_library",
+		flags = {.DefaultShow, .AlwaysShow},
+
+		show_proc = proc(ui: ^UI) -> bool {
+			sv := ui.server
+			w := &ui.windows.library
+
+			if w.serial != sv.library.serial {
+				delete(w.tracks)
+				w.serial = sv.library.serial
+				w.tracks = library_get_all_tracks(sv.library, context.allocator) or_else nil
+			}
+
+			_track_table_show(
+				ui, "##library", &w.track_table, sv.library.serial, w.tracks, {}, 0
+			)
+
+			return true
+		},
+	},
+	.Queue = {
+		title = "Queue",
+		internal_name = "_queue",
+		flags = {.DefaultShow},
+
+		show_proc = proc(ui: ^UI) -> bool {
+			sv := ui.server
+			w := &ui.windows.queue
+
+			_track_table_show(
+				ui, "##queue", &w.track_table, sv.playback.serial,
+				server_get_queue(sv), {.IsQueue}, sv.queue_uid,
+			)
+
+			return true
+		}
+
+	},
+	.Playlists = {
+		title = "Playlists",
+		internal_name = "_playlists",
+		flags = {.DefaultShow},
+		show_proc = proc(ui: ^UI) -> bool {
+			return _playlists_window_show(ui, &ui.windows.playlists)
+		},
+	},
+	.Artists = {
+		title = "Artists",
+		internal_name = "_artists",
+		show_proc = proc(ui: ^UI) -> bool {
+			sv := ui.server
+			_track_group_window_show_focused(ui, &ui.windows.artists, &sv.library.artists)
+			return true
+		},
+	},
+	.Albums = {
+		title = "Albums",
+		internal_name = "_albums",
+		flags = {.DefaultShow},
+		show_proc = proc(ui: ^UI) -> bool {
+			sv := ui.server
+			_track_group_window_show_focused(ui, &ui.windows.albums, &sv.library.albums)
+			return true
+		},
+	},
+	.Genres = {
+		title = "Genres",
+		internal_name = "_genres",
+		show_proc = proc(ui: ^UI) -> bool {
+			sv := ui.server
+			_track_group_window_show_focused(ui, &ui.windows.genres, &sv.library.genres)
+			return true
+		},
+	},
+	.Metadata = {
+		title = "Metadata",
+		internal_name = "_metadata",
+		flags = {.DefaultShow},
+		imgui_flags = {.AlwaysVerticalScrollbar},
+		show_proc = proc(ui: ^UI) -> bool {
+			return _metadata_window_show(ui, &ui.windows.metadata, ui.server.current_track_id)
+		},
+	},
+	.ThemeEditor = {
+		title = "Edit Theme",
+		internal_name = "_theme_editor",
+		show_proc = _theme_editor_show,
+	},
+	.Oscilloscope = {
+		title = "Oscilloscope",
+		internal_name = "_oscilloscope",
+		show_proc = proc(ui: ^UI) -> bool {
+			return _oscilloscope_window_show(ui, &ui.windows.oscilloscope)
+		},
+		settings_save_proc = proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error {
+			return _oscilloscope_window_get_settings(ui, &ui.windows.oscilloscope, output, allocator)
+		},
+		settings_load_proc = proc(ui: ^UI, key, value: string) -> Error {
+			return _oscilloscope_window_load_setting(ui, &ui.windows.oscilloscope, key, value)
+		},
+	},
+}
+
 _Metadata_Window :: struct {
 	displayed_track: Track_ID,
 	cover_art: Maybe(Texture_Handle),
@@ -91,9 +236,17 @@ _Track_Group_Window :: struct {
 	displayed_entry_hash: u32,
 }
 
+_Oscilloscope_Display_Mode :: enum {
+	Average,
+	Layered,
+	Stacked,
+}
+
 _Oscilloscope_Window :: struct {
 	window_size: int,
 	position_buf: [][2]f32,
+	pinch_ends: bool,
+	display_mode: _Oscilloscope_Display_Mode,
 }
 
 // -----------------------------------------------------------------------------
@@ -101,9 +254,9 @@ _Oscilloscope_Window :: struct {
 // -----------------------------------------------------------------------------
 
 _Window_State :: struct {
-	name: cstring,
 	open: bool,
 	bring_to_front: bool,
+	imgui_flags: imgui.WindowFlags,
 }
 
 // -----------------------------------------------------------------------------
@@ -179,7 +332,7 @@ UI :: struct {
 		show_memory_tracking: bool,
 	},
 	actions: UI_Actions,
-	window_state: map[imgui.ID]_Window_State,
+	window_state: [_Window_ID]_Window_State,
 	sorted_window_states: []imgui.ID,
 	system_fonts: []System_Font,
 }
@@ -198,6 +351,8 @@ _Saved_Theme :: struct {
 
 _Theme_Color :: enum {
 	PlayingHighlight,
+	LeftChannelWave,
+	RightChannelWave,
 }
 
 _Theme_Accent :: enum {
@@ -216,21 +371,26 @@ _Theme :: struct {
 
 ui_theme: _Theme
 
+_THEME_COLOR_DEFAULTS := [_Theme_Color]u32 {
+	.PlayingHighlight = 0xff0568fc,
+	.LeftChannelWave = 0xffffffff,
+	.RightChannelWave = 0xff00ffff,
+}
+
 @private
 ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.server = server
 
 	// Allocators
-	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame")
+	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame", flags={.IsTemp})
 	ui.allocators.fonts = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
 	ui.allocators.themes = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
 	ui.allocators.lazy = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
 	ui.allocators.analysis = allocator_map_add_heap(&ui.allocator_map, "analysis")
 
-	ui_theme.imgui_colors = imgui.GetStyle().Colors
-	
 	// Theme defaults
-	ui_theme.colors[.PlayingHighlight] = 0xff0568fc
+	ui_theme.imgui_colors = imgui.GetStyle().Colors
+	ui_theme.colors = _THEME_COLOR_DEFAULTS
 	
 	// Paths
 	ui.paths.theme_folder = filepath.join({global_paths.config_dir, "themes"}, context.allocator) or_return
@@ -240,6 +400,27 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	_refresh_fonts(ui)
 
 	ui_apply_config(ui, global_config)
+
+	// Windows
+	for info, id in _WINDOW_INFO {
+		if .DefaultShow in info.flags {
+			ui.window_state[id].open = true
+		}
+	}
+
+	// Settings handler
+	{
+		handler := imgui.SettingsHandler {
+			ReadLineFn = _imgui_settings_read_line_proc,
+			WriteAllFn = _imgui_settings_write_proc,
+			ReadOpenFn = _imgui_settings_open_proc,
+			UserData = ui,
+			TypeHash = imgui.cImHashStr(PROGRAM_ID),
+			TypeName = PROGRAM_ID,
+		}
+
+		imgui.AddSettingsHandler(&handler)
+	}
 
 	return nil
 }
@@ -419,94 +600,34 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	}
 
 	// --------------------------------------------------------------------------
-	// Library
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Library###library", default_open = true) {
-		w := &ui.windows.library
-
-		if w.serial != sv.library.serial {
-			delete(w.tracks)
-			w.serial = sv.library.serial
-			w.tracks = library_get_all_tracks(sv.library, context.allocator) or_else nil
-		}
-
-		_track_table_show(
-			ui, "##library", &w.track_table, sv.library.serial, w.tracks, {}, 0
-		)
-
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Queue
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Queue###queue", default_open = true) {
-		w := &ui.windows.queue
-
-		_track_table_show(
-			ui, "##queue", &w.track_table, sv.playback.serial,
-			server_get_queue(sv), {.IsQueue}, sv.queue_uid,
-		)
-
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Metadata
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Metadata###metadata", default_open = true) {
-		_show_metadata_window(sv, &ui.windows.metadata, sv.current_track_id)
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Categories
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Artists###artists") {
-		_track_group_window_show_focused(ui, &ui.windows.artists, &sv.library.artists)
-		imgui.End()
-	}
-
-	if _begin(ui, "Albums###albums") {
-		_track_group_window_show_focused(ui, &ui.windows.albums, &sv.library.albums)
-		imgui.End()
-	}
-
-	if _begin(ui, "Genres###genres") {
-		_track_group_window_show_focused(ui, &ui.windows.genres, &sv.library.genres)
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
-	// Theme editor
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Theme###theme") {
-		_show_theme_editor(ui)
-		imgui.End()
-	}
-
-	// --------------------------------------------------------------------------
 	// Settings
 	// --------------------------------------------------------------------------
-	if _begin(ui, "Settings###settings") {
+	if imx.begin("Settings###settings") {
 		global_config_dirty |= _show_settings_editor(ui)
 		imgui.End()
 	}
 
-	// --------------------------------------------------------------------------
-	// Playlists
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Playlists###playlists") {
-		_playlists_window_show_focused(ui, &ui.windows.playlists)
-		imgui.End()
-	}
+	for win, id in _WINDOW_INFO {
+		name_buf: [512]u8
+		state := &ui.window_state[id]
 
-	// --------------------------------------------------------------------------
-	// Visualizers
-	// --------------------------------------------------------------------------
-	if _begin(ui, "Oscilloscope###oscilloscope") {
-		_show_oscilloscope_window(ui, &ui.windows.oscilloscope)
-		imgui.End()
+		if state.bring_to_front {
+			state.open = true
+		}
+		
+		if !state.open do continue
+		if win.show_proc == nil do continue
+		fmt.bprintf(name_buf[:511], "%s###%s", win.title, win.internal_name)
+		
+		if state.bring_to_front {
+			state.bring_to_front = false
+			imgui.SetNextWindowFocus()
+		}
+
+		if imx.begin(cstring(&name_buf[0]), &state.open, win.imgui_flags | state.imgui_flags) {
+			win.show_proc(ui)
+			imgui.End()
+		}
 	}
 
 	return ui.actions
@@ -535,15 +656,41 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		}
 
 		if imgui.BeginMenu("View") {
-			for window_id in ui.sorted_window_states {
-				state := (&ui.window_state[window_id]) or_continue
-				if imgui.MenuItem(state.name) {
-					state.bring_to_front = true
-					state.open = true
-				}
+			defer imgui.EndMenu()
+
+			category_names := [_Window_Category]cstring {
+				.Music = "Music",
+				.Visualizers = "Visualizers",
+				.Settings = "Settings",
 			}
 
-			imgui.EndMenu()
+			window_items := [_Window_Category][]_Window_ID {
+				.Music = {
+					.Albums,
+					.Artists,
+					.Genres,
+					.Library,
+					.Playlists,
+					.Queue,
+				},
+				.Visualizers = {
+					.Oscilloscope,
+				},
+				.Settings = {
+					.ThemeEditor,
+				},
+			}
+
+			for section, category in window_items {
+				imgui.SeparatorText(category_names[category])
+				for id in section {
+					info := _WINDOW_INFO[id]
+					state := &ui.window_state[id]
+					if imgui.MenuItem(info.title) {
+						state.bring_to_front = true
+					}
+				}
+			}
 		}
 
 		when ODIN_DEBUG {
@@ -1070,7 +1217,9 @@ _show_track_metadata_table :: proc(str_id: cstring, sv: Server, track: Track) ->
 	return true
 }
 
-_show_metadata_window :: proc(sv: ^Server, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
+_metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID) -> bool {
+	sv := ui.server
+
 	load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
 		if w.cover_art != nil {
 			texture_release(w.cover_art.?)
@@ -1484,7 +1633,7 @@ _make_playlist_row :: proc(
 // Themes
 // -----------------------------------------------------------------------------
 
-_show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
+_theme_editor_show :: proc(ui: ^UI) -> (changed: bool) {
 	accent_changed: bool
 
 	t := &ui_theme
@@ -1587,6 +1736,8 @@ _show_theme_editor :: proc(ui: ^UI) -> (changed: bool) {
 	imgui.SeparatorText("RAT MP colors")
 	imgui.PushID("##ratmp_colors")
 	imx.color_edit_u32("Playing highlight", &t.colors[.PlayingHighlight])
+	imx.color_edit_u32("Left channel wave", &t.colors[.LeftChannelWave])
+	imx.color_edit_u32("Right channel wave", &t.colors[.RightChannelWave])
 	imgui.PopID()
 
 	imgui.SeparatorText("ImGui colors")
@@ -1713,6 +1864,12 @@ _load_theme_from_file :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -
 	copy(t.name[:len(t.name)-1], st.name)
 	t.imgui_colors = st.imgui_colors
 	t.path = strings.clone(path, allocator)
+
+	for &color, color_id in t.colors {
+		if color == 0 {
+			color = _THEME_COLOR_DEFAULTS[color_id]
+		}
+	}
 
 	return
 }
@@ -1970,7 +2127,7 @@ _playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 	return true
 }
 
-_playlists_window_show_focused :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: bool) {
+_playlists_window_show :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: bool) {
 	sv := ui.server
 
 	defer if !ok do w.viewing_playlist = nil
@@ -2035,44 +2192,167 @@ _update_analysis :: proc(ui: ^UI) {
 	}
 }
 
-_show_oscilloscope_window :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) {
+// -----------------------------------------------------------------------------
+// Oscilloscope
+// -----------------------------------------------------------------------------
+
+_oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
+	// --------------------------------------------------------------------------
+	// Settings
+	// --------------------------------------------------------------------------
 	if imgui.BeginPopupContextWindow() {
-		if imgui.MenuItem("512", nil, osc.window_size == 512) do osc.window_size = 512
-		if imgui.MenuItem("1024", nil, osc.window_size == 1024) do osc.window_size = 1024
-		if imgui.MenuItem("2048", nil, osc.window_size == 2048) do osc.window_size = 2048
-		if imgui.MenuItem("4096", nil, osc.window_size == 4096) do osc.window_size = 4096
-		if imgui.MenuItem("8192", nil, osc.window_size == 8192) do osc.window_size = 8192
-		if imgui.MenuItem("16384", nil, osc.window_size == 16384) do osc.window_size = 16384
+		size_settings := []int {512, 1024, 2048, 4096, 8192, 16<<10}
+		imgui.SeparatorText("Samples")
+		imx.number_picker_menu_items(size_settings, &osc.window_size)
+		imgui.SeparatorText("Options")
+		imgui.MenuItemBoolPtr("Pinch ends", nil, &osc.pinch_ends)
+		if imgui.BeginMenu("Mode") {
+			if imgui.MenuItem("Average of channels", nil, osc.display_mode == .Average) {
+				osc.display_mode = .Average
+			}
+			imx.set_item_tooltip("One wave which is the average volume of all channels.")
+
+			if imgui.MenuItem("Layered channels", nil, osc.display_mode == .Layered) {
+				osc.display_mode = .Layered
+			}
+			imx.set_item_tooltip("All channel waves layered on top of each other.")
+
+			if imgui.MenuItem("Stacked channels", nil, osc.display_mode == .Stacked) {
+				osc.display_mode = .Stacked
+			}
+			imx.set_item_tooltip("Separate wave for each channel.")
+
+			imgui.EndMenu()
+		}
+
 		imgui.EndPopup()
 	}
 
-	osc.window_size = clamp(osc.window_size, 512, 16384)
-
-	if len(osc.position_buf) != osc.window_size {
-		log.debug(len(osc.position_buf), osc.window_size)
-		delete(osc.position_buf, ui.allocators.analysis)
-		osc.position_buf = make([][2]f32, osc.window_size, ui.allocators.analysis)
-	}
+	osc.window_size = clamp(osc.window_size, 512, 16<<10)
 
 	input := ui.analysis.output_buffer
 	drawlist := imgui.GetWindowDrawList()
-	size := imgui.GetContentRegionAvail()
-	center := imgui.GetCursorScreenPos() + {0, size.y*0.5}
-	gap := size.x / f32(osc.window_size)
 
-	for i in 0..<min(osc.window_size, len(input[0])) {
-		p := input[0][i]
-		osc.position_buf[i] = center + {gap * f32(i), size.y * 0.5 * p}
+	draw_wave :: proc(
+		ui: ^UI,
+		drawlist: ^imgui.DrawList,
+		samples: []f32,
+		pos: [2]f32,
+		size: [2]f32,
+		pinch: bool,
+		color: u32,
+	) {
+		window_size := len(samples)
+		positions := make([][2]f32, len(samples), ui.allocators.per_frame)
+		center := pos + {0, size.y*0.5}
+		gap := size.x / f32(window_size)
+		fade_size := window_size / 8
+
+		for i in 0..<window_size {
+			m: f32 = 1
+			p := samples[i]
+
+			if pinch {
+				if i < fade_size {
+					m = f32(i) / f32(fade_size)
+				}
+				else if i > (window_size - fade_size - 1) {
+					m = f32(window_size - i - 1) / f32(fade_size)
+				}
+			}
+
+			positions[i] = center + {gap * f32(i), size.y * 0.5 * p * m}
+		}
+
+		imgui.DrawList_AddPolyline(drawlist, raw_data(positions), auto_cast len(positions), color, {}, 2)
 	}
 
-	imgui.DrawList_AddPolyline(drawlist, raw_data(osc.position_buf), auto_cast len(osc.position_buf), max(u32), {}, 1)
+	window_size := min(len(input[0]), osc.window_size)
+	channels := len(input)
+	channel_colors := [AUDIO_MAX_CHANNELS]u32 {
+		ui_theme.colors[.LeftChannelWave],
+		ui_theme.colors[.RightChannelWave],
+	}
+
+	switch osc.display_mode {
+	case .Average:
+		avg := make([]f32, window_size, ui.allocators.per_frame)
+		for frame in 0..<window_size {
+			sum: f32
+			for ch in 0..<channels {
+				sum += input[ch][frame]
+			}
+			avg[frame] = sum / f32(channels)
+		}
+		draw_wave(
+			ui, drawlist, avg,
+			imgui.GetCursorScreenPos(),
+			imgui.GetContentRegionAvail(),
+			osc.pinch_ends,
+			ui_theme.colors[.LeftChannelWave],
+		)
+	case .Layered:
+		for ch, i in input {
+			draw_wave(
+				ui, drawlist, ch[:window_size],
+				imgui.GetCursorScreenPos(),
+				imgui.GetContentRegionAvail(),
+				osc.pinch_ends,
+				channel_colors[i]
+			)
+		}
+	case .Stacked:
+		size := imgui.GetContentRegionAvail()
+		pos := imgui.GetCursorScreenPos()
+		wave_height := size.y / f32(channels)
+
+		for ch, i in input {
+			draw_wave(
+				ui, drawlist, ch[:window_size],
+				pos, {size.x, wave_height},
+				osc.pinch_ends,
+				ui_theme.colors[.LeftChannelWave],
+			)
+			pos.y += wave_height
+		}
+	}
+
+	return true
+}
+
+_oscilloscope_window_get_settings :: proc(
+	ui: ^UI, osc: ^_Oscilloscope_Window,
+	m: ^map[string]string, allocator: mem.Allocator
+) -> Error {
+	m["Mode"] = reflect.enum_name_from_value(osc.display_mode) or_else "Average"
+	m["WindowSize"] = fmt.aprint(osc.window_size, allocator=allocator)
+	m["PinchEnds"] = fmt.aprint(osc.pinch_ends, allocator=allocator)
+
+	return nil
+}
+
+_oscilloscope_window_load_setting :: proc(ui: ^UI, osc: ^_Oscilloscope_Window, key, value: string) -> Error {
+
+	switch key {
+	case "Mode":
+		osc.display_mode = reflect.enum_from_name(_Oscilloscope_Display_Mode, value) or_return
+		return true
+	case "WindowSize":
+		osc.window_size = strconv.parse_int(value) or_return
+		return true
+	case "PinchEnds":
+		osc.pinch_ends = strconv.parse_bool(value) or_return
+		return true
+	}
+
+	return false
 }
 
 // -----------------------------------------------------------------------------
 // Misc
 // -----------------------------------------------------------------------------
 
-_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
+/*_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
 	id := imgui.GetID(title)
 	state := &ui.window_state[id]
 	if state == nil {
@@ -2111,7 +2391,7 @@ _begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.Wind
 	if state.bring_to_front do imgui.SetNextWindowFocus()
 	state.bring_to_front = false
 	return imx.begin(title, &state.open, flags)
-}
+}*/
 
 _table_select_row :: proc(table: ^$T, row_index: int, keep_selection: bool) {
 	row := &table.rows[row_index]
@@ -2178,6 +2458,80 @@ _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 }
 
 // -----------------------------------------------------------------------------
+// Layout
+// -----------------------------------------------------------------------------
+
+_imgui_settings_open_proc :: proc "c" (
+	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, name: cstring
+) -> rawptr {
+	ui := cast(^UI) handler.UserData
+
+	for info, id in _WINDOW_INFO {
+		if string(info.internal_name) == string(name) {
+			return cast(rawptr) cast(uintptr) id
+		}
+	}
+
+	return nil
+}
+
+_imgui_settings_read_line_proc :: proc "c" (
+	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, entry: rawptr, line: cstring
+) {
+	context = runtime.default_context()
+	ui := cast(^UI) handler.UserData
+	id := cast(_Window_ID) cast(uintptr) entry
+	if !reflect.enum_value_has_name(id) do return
+
+	tokens := strings.split_n(string(line), "=", 2, ui.allocators.per_frame)
+	if len(tokens) < 2 do return
+
+	state := &ui.window_state[id]
+	info := _WINDOW_INFO[id]
+
+	if info.settings_load_proc == nil do return
+
+	if tokens[0] != "_Open" {
+		info.settings_load_proc(ui, tokens[0], tokens[1])
+	}
+	else {
+		state.open = strconv.parse_bool(tokens[1]) or_else state.open
+	}
+}
+
+_imgui_settings_write_proc :: proc "c" (
+	ctx: ^imgui.Context, handler: ^imgui.SettingsHandler, out_buf: ^imgui.TextBuffer
+) {
+	context = runtime.default_context()
+	ui := cast(^UI) handler.UserData
+	allocator := ui.allocators.per_frame
+
+	for state, id in ui.window_state {
+		info := _WINDOW_INFO[id]
+		m: map[string]string
+
+		
+		imgui.TextBuffer_append(out_buf,
+			imx.string_to_ptrs(fmt.aprintln(
+				"["+PROGRAM_ID+"][", info.internal_name, "]", sep="", allocator=allocator
+			))
+		)
+		imgui.TextBuffer_append(out_buf, 
+			imx.string_to_ptrs(fmt.aprintln("_Open=", state.open, sep="", allocator=allocator))
+		)
+
+		if info.settings_save_proc == nil do continue
+		
+		info.settings_save_proc(ui, &m, allocator)
+
+		for k, v in m {
+			str := fmt.aprintln(k, "=", v, sep="", allocator=allocator)
+			imgui.TextBuffer_append(out_buf, imx.string_to_ptrs(str))
+		}
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Debug
 // -----------------------------------------------------------------------------
 
@@ -2189,14 +2543,16 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 		return false
 	}
 
-	show_info :: proc(t: mem.Tracking_Allocator) -> bool {
+	show_info :: proc(t: mem.Tracking_Allocator, flags: Allocator_Map_Entry_Flags) -> bool {
 		imx.begin_kv_table("##kv", {}) or_return
 		defer imx.end_kv_table()
 
-		imx.kv_row("Allocation count", t.total_allocation_count)
-		imx.kv_row("Free count", t.total_free_count)
-		imx.kv_rowf("Current allocated", "%M", t.current_memory_allocated)
-		imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
+		if .IsTemp not_in flags {
+			imx.kv_row("Allocation count", t.total_allocation_count)
+			imx.kv_row("Free count", t.total_free_count)
+			imx.kv_rowf("Current allocated", "%M", t.current_memory_allocated)
+			imx.kv_rowf("Total allocated", "%M", t.total_memory_allocated)
+		}
 		imx.kv_rowf("Peak usage", "%M", t.peak_memory_allocated)
 		return true
 	}
@@ -2205,7 +2561,7 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 		total_usage: i64
 		for name, entry in m {
 			imx.title_text(name)
-			show_info(entry.tracker^)
+			show_info(entry.tracker^, entry.flags)
 			total_usage += entry.tracker.current_memory_allocated
 		}
 
@@ -2219,7 +2575,7 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 
 	if imgui.BeginTabItem("Misc") {
 		t := get_global_tracking_allocator()
-		show_info(t)
+		show_info(t, {})
 		for ptr, e in t.allocation_map {
 			imx.textf(256, "%t: %M", e.location, e.size)
 		}

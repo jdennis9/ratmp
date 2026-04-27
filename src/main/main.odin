@@ -16,6 +16,7 @@ _g: struct {
 	want_show_window: bool,
 	running: bool,
 	tracking_allocator: mem.Tracking_Allocator,
+	logging_allocator: log.Log_Allocator,
 }
 
 get_global_tracking_allocator :: proc() -> mem.Tracking_Allocator {
@@ -55,6 +56,13 @@ run :: proc() -> Error {
 
 	context.allocator = 
 		command_opts.memory_debug ? mem.tracking_allocator(&_g.tracking_allocator) : context.allocator
+
+	if command_opts.heap_alloc_log {
+		log.log_allocator_init(&_g.logging_allocator, .Debug, .Human, context.allocator)
+	}
+	
+	context.allocator =
+		command_opts.heap_alloc_log ? log.log_allocator(&_g.logging_allocator) : context.allocator
 
 	// --------------------------------------------------------------------------
 	// Get paths

@@ -16,9 +16,13 @@ _allocator_destroy :: proc(a: _Any_Allocator) {
 	}
 }
 
+Allocator_Map_Entry_Flag :: enum {IsTemp}
+Allocator_Map_Entry_Flags :: bit_set[Allocator_Map_Entry_Flag]
+
 Allocator_Map_Entry :: struct {
 	allocator: _Any_Allocator,
 	tracker: ^mem.Tracking_Allocator,
+	flags: Allocator_Map_Entry_Flags,
 }
 
 Allocator_Map :: map[string]Allocator_Map_Entry
@@ -27,11 +31,13 @@ allocator_map_add :: proc(
 	m: ^Allocator_Map,
 	name: string,
 	allocator: _Any_Allocator,
-	iface: mem.Allocator
+	iface: mem.Allocator,
+	flags: Allocator_Map_Entry_Flags,
 ) -> mem.Allocator {
 	iface := iface
 	entry: Allocator_Map_Entry
 	entry.allocator = allocator
+	entry.flags = flags
 
 	if global_command_opts.memory_debug {
 		entry.tracker = new(mem.Tracking_Allocator)
@@ -48,14 +54,15 @@ allocator_map_add_dynamic_arena :: proc(
 	m: ^Allocator_Map,
 	name: string,
 	block_size := mem.DYNAMIC_ARENA_BLOCK_SIZE_DEFAULT,
+	flags: Allocator_Map_Entry_Flags = {},
 ) -> mem.Allocator {
 	arena := new(mem.Dynamic_Arena)
 	mem.dynamic_arena_init(arena, block_size=block_size)
 	allocator := mem.dynamic_arena_allocator(arena)
 
-	return allocator_map_add(m, name, arena, allocator)
+	return allocator_map_add(m, name, arena, allocator, flags)
 }
 
-allocator_map_add_heap :: proc(m: ^Allocator_Map, name: string) -> mem.Allocator {
-	return allocator_map_add(m, name, nil, runtime.default_allocator())
+allocator_map_add_heap :: proc(m: ^Allocator_Map, name: string, flags: Allocator_Map_Entry_Flags = {}) -> mem.Allocator {
+	return allocator_map_add(m, name, nil, runtime.default_allocator(), flags)
 }

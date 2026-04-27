@@ -30,6 +30,7 @@ global_command_opts: struct {
 	no_audio: bool `usage:"(Debug) Disable audio output."`,
 	profile_startup: bool `args:"hidden" usage:"(Profiling) Exit after initial startup."`,
 	memory_debug: bool `usage:"(Debug) Enable memory tracking"`,
+	heap_alloc_log: bool `usage:"(Debug) Logs heap memory allocations to the console."`,
 }
 
 global_paths: struct {
