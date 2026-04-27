@@ -243,3 +243,12 @@ string_to_ptrs :: proc(str: string) -> (cstring, cstring) {
 	base := raw_data(str)
 	return cstring(base), cstring(&base[len(str)])
 }
+
+color_hue_shift :: proc(col: [3]f32, shift: f32) -> [3]f32 {
+	h, s, v: f32
+	out: [3]f32
+	imgui.ColorConvertRGBtoHSV(col.r, col.g, col.b, &h, &s, &v)
+	h += shift
+	imgui.ColorConvertHSVtoRGB(h, s, v, &out.r, &out.g, &out.b)
+	return out
+}

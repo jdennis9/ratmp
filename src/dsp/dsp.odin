@@ -63,7 +63,7 @@ Calc_Peaks_State :: struct {
 	}
 }*/
 
-calc_spectrum_frequencies :: proc(output: []f32) {
+distribute_band_frequencies :: proc(output: []f32) {
 	// = the nth root of (20,000 / 50) where n is the number of bands
 	freq_mul := math.pow(f32(400), f32(1.0/f32(len(output)-1)))
 
@@ -80,33 +80,18 @@ calc_spectrum_frequencies :: proc(output: []f32) {
 _fftw_plan_lock: sync.Mutex
 
 FFT_State :: struct {
-	complex_buffer: []fftw.complex,
-	real_buffer: []f32,
-	window_size: int,
+	complex_buffer: [dynamic]fftw.complex,
+	real_buffer: [dynamic]f32,
 	plan: fftw.plan,
 	plan_window_size: int,
 }
 
-fft_init :: proc(state: ^FFT_State, window_size: int) {
-	state.complex_buffer = make([]fftw.complex, (window_size/2) + 1)
-	state.real_buffer = make([]f32, (window_size/2) + 1)
-	state.window_size = window_size
-}
-
-fft_set_window_size :: proc(state: ^FFT_State, window_size: int) {
-	delete(state.complex_buffer)
-	delete(state.real_buffer)
-	state.complex_buffer = make([]fftw.complex, (window_size/2) + 1)
-	state.real_buffer = make([]f32, (window_size/2) + 1)
-	state.window_size = window_size
-}
-
 fft_process :: proc(state: ^FFT_State, input: []f32) {
-	assert(len(input) == state.window_size)
-	assert(state.complex_buffer != nil)
-	assert(state.real_buffer != nil)
-
+	dft_size := (len(input)/2) + 1
 	frame_count := len(input)
+
+	resize(&state.complex_buffer, dft_size)
+	resize(&state.real_buffer, dft_size)
 
 	msb :: proc "contextless" (x: i32) -> u32 {
 		return bits.log2(u32(x))
@@ -128,7 +113,7 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		return ln(x)/math.LN10
 	}
 
-	if state.plan == nil || state.window_size != state.plan_window_size {
+	if state.plan == nil || len(input) != state.plan_window_size {
 		sync.lock(&_fftw_plan_lock)
 		state.plan = fftw.plan_dft_r2c_1d(
 			auto_cast frame_count, raw_data(input), raw_data(state.complex_buffer)
@@ -136,7 +121,7 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		sync.unlock(&_fftw_plan_lock)
 
 		if state.plan == nil do return
-		state.plan_window_size = state.window_size
+		state.plan_window_size = len(input)
 		fftw.execute(state.plan)
 	}
 	else {
@@ -164,7 +149,7 @@ fft_extract_bands_from_slice :: proc(fft: []f32, window_size: int, frequencies: 
 }
 
 fft_extract_bands :: proc(fft: FFT_State, frequencies: []f32, samplerate: f32, output: []f32) {
-	fft_extract_bands_from_slice(fft.real_buffer[:], fft.window_size, frequencies, samplerate, output)
+	fft_extract_bands_from_slice(fft.real_buffer[:], fft.plan_window_size, frequencies, samplerate, output)
 }
 
 fft_destroy :: proc(fft: ^FFT_State) {
@@ -287,6 +272,21 @@ make_window_osc :: proc(output: []f32) {
 
 invert_window :: proc(w: []f32) {
 	for &v in w do v = 1 / v
+}
+
+to_mono :: proc(input: [][]f32, output: []f32) {
+	assert(len(output) == len(input[0]))
+	M := 1 / f32(len(input))
+
+	for ch in 0..<len(input) {
+		for frame in 0..<len(output) {
+			output[frame] += input[ch][frame]
+		}
+	}
+
+	for &o in output {
+		o *= M
+	}
 }
 
 /*get_sdk_impl :: proc() -> sdk.Analysis_Procs {

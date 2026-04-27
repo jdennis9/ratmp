@@ -1,6 +1,7 @@
 #+private file
 package main
 
+import "core:math/linalg"
 import "base:runtime"
 import "core:strconv"
 import "core:reflect"
@@ -31,7 +32,7 @@ ICON_PAUSE          :: ""
 ICON_STOP           :: ""
 ICON_PLAY           :: ""
 
-_ANALYSIS_BUFFER_SIZE :: 65536
+_ANALYSIS_BUFFER_SIZE :: (32<<10)
 
 // -----------------------------------------------------------------------------
 // Track table
@@ -77,6 +78,7 @@ _Window_ID :: enum {
 	Metadata,
 	ThemeEditor,
 	Oscilloscope,
+	Spectrum,
 }
 
 _Window_Category :: enum {
@@ -100,7 +102,6 @@ _Window_Info :: struct {
 	settings_load_proc: proc(ui: ^UI, key, value: string) -> Error,
 	settings_save_proc: proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error,
 }
-
 
 _WINDOW_INFO := [_Window_ID]_Window_Info {
 	.Library = {
@@ -206,6 +207,13 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			return _oscilloscope_window_load_setting(ui, &ui.windows.oscilloscope, key, value)
 		},
 	},
+	.Spectrum = {
+		title = "Spectrum",
+		internal_name = "_spectrum",
+		show_proc = proc(ui: ^UI) -> bool {
+			return _spectrum_window_show(ui, &ui.windows.spectrum)
+		},
+	},
 }
 
 _Metadata_Window :: struct {
@@ -246,6 +254,23 @@ _Oscilloscope_Window :: struct {
 	position_buf: [][2]f32,
 	pinch_ends:   bool,
 	display_mode: _Oscilloscope_Display_Mode,
+}
+
+_Spectrum_Display_Mode :: enum {
+	Histogram,
+	Heat,
+	Line,
+}
+
+SPECTRUM_MAX_BANDS :: 160
+
+_Spectrum_Window :: struct {
+	bands:        [dynamic; SPECTRUM_MAX_BANDS]f32,
+	band_freqs:   [dynamic; SPECTRUM_MAX_BANDS]f32,
+	window_w:     [dynamic]f32,
+	band_gap:     f32,
+	fft:          dsp.FFT_State,
+	display_mode: _Spectrum_Display_Mode,
 }
 
 // -----------------------------------------------------------------------------
@@ -309,6 +334,7 @@ UI :: struct {
 		genres:       _Track_Group_Window,
 		metadata:     _Metadata_Window,
 		oscilloscope: _Oscilloscope_Window,
+		spectrum:     _Spectrum_Window,
 	},
 	dialogs: struct {
 		add_folder:     File_Dialog_State,
@@ -324,8 +350,10 @@ UI :: struct {
 		theme_folder: string,
 	},
 	analysis: struct {
-		output_buffer: [AUDIO_MAX_CHANNELS][]f32,
-		window_mult:   []f32,
+		raw_output: [AUDIO_MAX_CHANNELS][]f32,
+		avg_output: []f32, // Average of all channels for each frame
+		samplerate: f32,
+		channels:   int,
 	},
 	themes: [dynamic]_Theme,
 	debug: struct {
@@ -351,6 +379,8 @@ _Theme_Color :: enum {
 	PlayingHighlight,
 	LeftChannelWave,
 	RightChannelWave,
+	VolumeLow,
+	VolumeHigh,
 }
 
 _Theme_Accent :: enum {
@@ -373,6 +403,8 @@ _THEME_COLOR_DEFAULTS := [_Theme_Color]u32 {
 	.PlayingHighlight = 0xff0568fc,
 	.LeftChannelWave  = 0xffffffff,
 	.RightChannelWave = 0xff00ffff,
+	.VolumeLow        = 0xff00ff00,
+	.VolumeHigh       = 0xff0000ff,
 }
 
 @private
@@ -673,6 +705,7 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				},
 				.Visualizers = {
 					.Oscilloscope,
+					.Spectrum,
 				},
 				.Settings = {
 					.ThemeEditor,
@@ -2167,22 +2200,24 @@ _update_analysis :: proc(ui: ^UI) {
 	sv := ui.server
 	state := &ui.analysis
 	output_spec := sv.output_spec
+	state.samplerate = f32(output_spec.samplerate)
+	state.channels = output_spec.channels
 
 	if output_spec.channels == 0 do return
 
 	for ch in 0..<output_spec.channels {
-		if state.output_buffer[ch] == nil {
-			state.output_buffer[ch] = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
+		if state.raw_output[ch] == nil {
+			state.raw_output[ch] = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
 		}
 	}
 
-	if state.window_mult == nil {
-		state.window_mult = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
-		dsp.make_window_hann(state.window_mult)
+	if state.avg_output == nil {
+		state.avg_output = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
 	}
 
 	if !server_is_paused(sv) {
-		server_consume_audio_output(sv, state.output_buffer[:output_spec.channels], global_delta_time)
+		server_consume_audio_output(sv, state.raw_output[:output_spec.channels], global_delta_time)
+		dsp.to_mono(state.raw_output[:state.channels], state.avg_output)
 	}
 }
 
@@ -2191,6 +2226,8 @@ _update_analysis :: proc(ui: ^UI) {
 // -----------------------------------------------------------------------------
 
 _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
+	if ui.analysis.channels == 0 do return false
+
 	// --------------------------------------------------------------------------
 	// Settings
 	// --------------------------------------------------------------------------
@@ -2224,7 +2261,7 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 
 	osc.window_size = clamp(osc.window_size, 512, 16<<10)
 
-	input := ui.analysis.output_buffer
+	raw_output := ui.analysis.raw_output[:ui.analysis.channels]
 	drawlist := imgui.GetWindowDrawList()
 
 	draw_wave :: proc(
@@ -2261,8 +2298,8 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 		imgui.DrawList_AddPolyline(drawlist, raw_data(positions), auto_cast len(positions), color, {}, 2)
 	}
 
-	window_size := min(len(input[0]), osc.window_size)
-	channels := len(input)
+	window_size := min(len(raw_output[0]), osc.window_size)
+	channels := len(raw_output)
 	channel_colors := [AUDIO_MAX_CHANNELS]u32 {
 		ui_theme.colors[.LeftChannelWave],
 		ui_theme.colors[.RightChannelWave],
@@ -2270,23 +2307,15 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 
 	switch osc.display_mode {
 	case .Average:
-		avg := make([]f32, window_size, ui.allocators.per_frame)
-		for frame in 0..<window_size {
-			sum: f32
-			for ch in 0..<channels {
-				sum += input[ch][frame]
-			}
-			avg[frame] = sum / f32(channels)
-		}
 		draw_wave(
-			ui, drawlist, avg,
+			ui, drawlist, ui.analysis.avg_output[:window_size],
 			imgui.GetCursorScreenPos(),
 			imgui.GetContentRegionAvail(),
 			osc.pinch_ends,
 			ui_theme.colors[.LeftChannelWave],
 		)
 	case .Layered:
-		for ch, i in input {
+		for ch, i in raw_output {
 			draw_wave(
 				ui, drawlist, ch[:window_size],
 				imgui.GetCursorScreenPos(),
@@ -2298,12 +2327,13 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 	case .Stacked:
 		size := imgui.GetContentRegionAvail()
 		pos := imgui.GetCursorScreenPos()
+		spacing: f32 = 4
 		wave_height := size.y / f32(channels)
 
-		for ch in input {
+		for ch in raw_output {
 			draw_wave(
 				ui, drawlist, ch[:window_size],
-				pos, {size.x, wave_height},
+				{pos.x, pos.y + spacing}, {size.x, wave_height - spacing},
 				osc.pinch_ends,
 				ui_theme.colors[.LeftChannelWave],
 			)
@@ -2340,6 +2370,95 @@ _oscilloscope_window_load_setting :: proc(ui: ^UI, osc: ^_Oscilloscope_Window, k
 	}
 
 	return false
+}
+
+// -----------------------------------------------------------------------------
+// Spectrum
+// -----------------------------------------------------------------------------
+
+_spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
+	analysis := &ui.analysis
+	if len(analysis.raw_output) == 0 do return false
+	if len(analysis.raw_output[0]) == 0 do return false
+
+	size := imgui.GetContentRegionAvail()
+	pos := imgui.GetCursorScreenPos()
+	window_size := 8<<10
+
+	draw_histogram :: proc(
+		pos, size: [2]f32,
+		peaks: []f32,
+		spacing: f32,
+	) {
+		drawlist    := imgui.GetWindowDrawList()
+		quiet_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeLow])
+		loud_color  := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeHigh])
+
+		bar_width := (size.x / f32(len(peaks)) - spacing)
+		bar_height := size.y
+		pos := pos
+
+		for peak in peaks {
+			color := linalg.lerp(quiet_color, loud_color, clamp(peak, 0, 1))
+
+			imgui.DrawList_AddRectFilled(
+				drawlist,
+				{pos.x, pos.y + bar_height * (1 - peak)},
+				{pos.x + bar_width, pos.y + bar_height}, imgui.GetColorU32ImVec4(color)
+			)
+			pos.x += bar_width + spacing
+		}
+	}
+
+
+	band_count := clamp(len(state.bands), 40, SPECTRUM_MAX_BANDS)
+	
+	if imgui.BeginPopupContextWindow() {
+		defer imgui.EndPopup()
+
+		size_options := []int {10, 20, 40, 60, 80, 100, 140, 160}
+		imgui.SeparatorText("No. Bands")
+		imx.number_picker_menu_items(size_options, &band_count)
+		imgui.SeparatorText("Band Gap")
+		imgui.SliderFloat("##band_gap", &state.band_gap, -8, 8, "%.0f")
+	}
+
+	// Distribute band frequencies
+	if len(state.bands) != band_count {
+		resize(&state.bands, band_count)
+		resize(&state.band_freqs, band_count)
+		dsp.distribute_band_frequencies(state.band_freqs[:])
+	}
+
+	for &b in state.bands do b = 0
+
+	// Make window
+	if len(state.window_w) != window_size {
+		resize(&state.window_w, window_size)
+		dsp.make_window_hann(state.window_w[:])
+	}
+
+	output := &analysis.raw_output
+	windowed_output: [AUDIO_MAX_CHANNELS][]f32
+	mono_output := make([]f32, window_size, ui.allocators.per_frame)
+	
+	// Apply window to output
+	for ch in 0..<analysis.channels {
+		windowed_output[ch] = make([]f32, window_size, ui.allocators.per_frame)
+
+		for frame in 0..<window_size {
+			windowed_output[ch][frame] = analysis.raw_output[ch][frame] * state.window_w[frame]
+		}
+	}
+
+	dsp.to_mono(windowed_output[:analysis.channels], mono_output)
+
+	dsp.fft_process(&state.fft, mono_output)
+	dsp.fft_extract_bands(state.fft, state.band_freqs[:], analysis.samplerate, state.bands[:])
+
+	draw_histogram(pos, size, state.bands[:], state.band_gap)
+
+	return true
 }
 
 // -----------------------------------------------------------------------------
