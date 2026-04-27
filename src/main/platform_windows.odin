@@ -25,15 +25,11 @@ platform_init_win32 :: proc() -> bool {
 	}
 
 	_platform_impl_make_window = proc() -> bool {
-		// -----------------------------------------------------------------------
-		// Window & DX11
-		// -----------------------------------------------------------------------
 		_win.hwnd = win.CreateWindowExW(
 			0, WINDOW_CLASS_NAME, PROGRAM_NAME_AND_VERSION, win.WS_OVERLAPPEDWINDOW, win.CW_USEDEFAULT,
 			win.CW_USEDEFAULT, win.CW_USEDEFAULT, win.CW_USEDEFAULT, nil, nil, _win.hinstance, nil
 		)
 
-		assert(_win.hwnd != nil)
 		if _win.hwnd == nil do return false
 
 		// Dark mode
@@ -45,21 +41,17 @@ platform_init_win32 :: proc() -> bool {
 			)
 		}
 
-		win.ShowWindow(_win.hwnd, win.SW_SHOWDEFAULT)
+		win.ShowWindow(_win.hwnd, win.SW_SHOW)
 		win.UpdateWindow(_win.hwnd) or_return
 
 		imgui_win32.Init(_win.hwnd) or_return
 		video_dx11_init(_win.hwnd) or_return
 
-
 		return true
 	}
 
 	_platform_impl_destroy_window = proc() {
-		if _win.hwnd != nil {
-			// Tray icon
-		
-			// ImGui & window
+		if _win.hwnd != nil {		
 			video_shutdown_dx11()
 			imgui_win32.Shutdown()
 			win.DestroyWindow(_win.hwnd)

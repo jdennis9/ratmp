@@ -87,7 +87,7 @@ scrubber :: proc(
 	if avail_size.x <= 4 || avail_size.y <= 4 {return false}
 
 	// Button
-	imgui.InvisibleButton(str_id, avail_size)
+	imgui.InvisibleButton(str_id, size + style.FramePadding)
 	if imgui.IsItemActive() || imgui.IsItemDeactivated() {
 		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
 	}

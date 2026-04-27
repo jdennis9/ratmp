@@ -11,25 +11,25 @@ Decode_Status :: enum {
 }
 
 Audio_File_Info :: struct {
-	codec: [64]u8,
+	codec:       [64]u8,
 	format_name: [64]u8,
-	samplerate: int,
-	channels: int,
-	duration: int,
+	samplerate:  int,
+	channels:    int,
+	duration:    int,
 }
 
 Decoder :: struct {
-	ff: ^ffmpeg.Context,
-	overflow: [AUDIO_MAX_CHANNELS][dynamic]f32,
+	ff:                  ^ffmpeg.Context,
+	overflow:            [AUDIO_MAX_CHANNELS][dynamic]f32,
 	overflow_samplerate: int,
-	overflow_channels: int,
-	samplerate: int,
-	channels: int,
-	frame_index: int,
-	frame_count: int,
-	duration_seconds: i64,
-	is_open: bool,
-	packet_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
+	overflow_channels:   int,
+	samplerate:          int,
+	channels:            int,
+	frame_index:         int,
+	frame_count:         int,
+	duration_seconds:    i64,
+	is_open:             bool,
+	packet_buffer:       [AUDIO_MAX_CHANNELS][dynamic]f32,
 }
 
 decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_Info) -> (ok: bool) {

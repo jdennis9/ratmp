@@ -2,7 +2,6 @@
 package main
 
 import "core:mem"
-import sa "core:container/small_array"
 import "core:sync"
 import "core:fmt"
 import "core:thread"
@@ -25,7 +24,7 @@ _Message_Response :: struct {
 
 _open_messages: [20]_Message_Thread
 _response_lock: sync.Mutex
-_responses: sa.Small_Array(20, _Message_Response)
+_responses: [dynamic; 20]_Message_Response
 
 _message_box_thread :: proc(t: ^thread.Thread) {
 	state := cast(^_Message_Thread) t.data
@@ -39,7 +38,7 @@ _message_box_thread :: proc(t: ^thread.Thread) {
 
 	if state.type != .Message {
 		sync.guard(&_response_lock)
-		sa.append(&_responses, _Message_Response {
+		append(&_responses, _Message_Response {
 			id = state.id,
 			res = response,
 		})
@@ -90,9 +89,9 @@ message_box_get_response :: proc(
 	sync.lock(&_response_lock)
 	defer sync.unlock(&_response_lock)
 
-	for r, i in _responses.data[:_responses.len] {
+	for r, i in _responses {
 		if r.id == h {
-			sa.unordered_remove(&_responses, i)
+			unordered_remove(&_responses, i)
 			return r.res, true
 		}
 	}
