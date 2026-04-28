@@ -30,7 +30,7 @@ _wrap :: proc(i, N: int) -> int {
 	/*if i >= 0 && i < N do return i
 	else if i < 0 do return N+i
 	else if i >= N do return i - ((i/N)*N)*/
-	return i % N
+	return i %% N
 }
 
 Ring_Buffer :: struct($T: typeid) {

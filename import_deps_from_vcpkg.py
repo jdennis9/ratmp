@@ -67,6 +67,8 @@ def main():
 		["swresample.lib", "src\\bindings\\ffmpeg"],
 		["swscale.lib", "src\\bindings\\ffmpeg"],
 
+		["samplerate.lib", "src\\bindings\\samplerate"],
+
 		["avcodec.lib", "lib"],
 		["avutil.lib", "lib"],
 		["avformat.lib", "lib"],
@@ -94,6 +96,7 @@ def main():
 		"libavformat.dll",
 		"libswresample.dll",
 		"libswscale.dll",
+		"samplerate.dll",
 		"zlib.dll",
 		"tag.dll",
 		"tag_c.dll",

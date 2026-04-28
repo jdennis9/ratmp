@@ -249,9 +249,13 @@ _Oscilloscope_Display_Mode :: enum {
 	Stacked,
 }
 
+_OSCILLOSCOPE_MIN_SAMPLES :: 100
+_OSCILLOSCOPE_MAX_SAMPLES :: 16000
+
 _Oscilloscope_Window :: struct {
 	window_size:  int,
 	position_buf: [][2]f32,
+	audio_ring:   Ring_Buffer(f32),
 	pinch_ends:   bool,
 	display_mode: _Oscilloscope_Display_Mode,
 }
@@ -2207,13 +2211,13 @@ _show_playlist_selector_menu :: proc(
 _update_analysis :: proc(ui: ^UI) {
 	sv := ui.server
 	state := &ui.analysis
-	output_spec := sv.output_spec
-	state.samplerate = f32(output_spec.samplerate)
-	state.channels = output_spec.channels
+	channels := sv.analysis.channels
+	state.samplerate = ANALYSIS_SAMPLE_RATE
+	state.channels = channels
 
-	if output_spec.channels == 0 do return
+	if channels == 0 do return
 
-	for ch in 0..<output_spec.channels {
+	for ch in 0..<channels {
 		if state.raw_output[ch] == nil {
 			state.raw_output[ch] = make([]f32, _ANALYSIS_BUFFER_SIZE, ui.allocators.analysis)
 		}
@@ -2224,7 +2228,7 @@ _update_analysis :: proc(ui: ^UI) {
 	}
 
 	if !server_is_paused(sv) {
-		server_consume_audio_output(sv, state.raw_output[:output_spec.channels], global_delta_time)
+		server_consume_audio_output(sv, state.raw_output[:channels], global_delta_time)
 		dsp.to_mono(state.raw_output[:state.channels], state.avg_output)
 	}
 }
@@ -2235,14 +2239,21 @@ _update_analysis :: proc(ui: ^UI) {
 
 _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 	if ui.analysis.channels == 0 do return false
+	analysis := &ui.analysis
 
 	// --------------------------------------------------------------------------
 	// Settings
 	// --------------------------------------------------------------------------
 	if imgui.BeginPopupContextWindow() {
-		size_settings := []int {512, 1024, 2048, 4096, 8192, 16<<10}
-		imgui.SeparatorText("Samples")
-		imx.number_picker_menu_items(size_settings, &osc.window_size)
+		imgui.SeparatorText("Window length")
+
+		current_window_ms := (f32(osc.window_size) / analysis.samplerate) * 1000
+		min_window_ms := (_OSCILLOSCOPE_MIN_SAMPLES / analysis.samplerate) * 1000
+		max_window_ms := (_OSCILLOSCOPE_MAX_SAMPLES / analysis.samplerate) * 1000
+		if imgui.SliderFloat("##window_size", &current_window_ms, min_window_ms, max_window_ms, "%.0fms") {
+			osc.window_size = int((current_window_ms / 1000) * analysis.samplerate)
+		}
+
 		imgui.SeparatorText("Options")
 		imgui.MenuItemBoolPtr("Pinch ends", nil, &osc.pinch_ends)
 		if imgui.BeginMenu("Mode") {
@@ -2267,7 +2278,7 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 		imgui.EndPopup()
 	}
 
-	osc.window_size = clamp(osc.window_size, 512, 16<<10)
+	osc.window_size = clamp(osc.window_size, _OSCILLOSCOPE_MIN_SAMPLES, _OSCILLOSCOPE_MAX_SAMPLES)
 
 	raw_output := ui.analysis.raw_output[:ui.analysis.channels]
 	drawlist := imgui.GetWindowDrawList()
@@ -2316,7 +2327,7 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 	switch osc.display_mode {
 	case .Average:
 		draw_wave(
-			ui, drawlist, ui.analysis.avg_output[:window_size],
+			ui, drawlist, analysis.avg_output[:window_size],
 			imgui.GetCursorScreenPos(),
 			imgui.GetContentRegionAvail(),
 			osc.pinch_ends,
@@ -2679,7 +2690,7 @@ _imgui_settings_open_proc :: proc "c" (
 ) -> rawptr {
 	for info, id in _WINDOW_INFO {
 		if string(info.internal_name) == string(name) {
-			return cast(rawptr) cast(uintptr) id
+			return cast(rawptr) (uintptr(id) + 1)
 		}
 	}
 
@@ -2691,7 +2702,7 @@ _imgui_settings_read_line_proc :: proc "c" (
 ) {
 	context = runtime.default_context()
 	ui := cast(^UI) handler.UserData
-	id := cast(_Window_ID) cast(uintptr) entry
+	id := cast(_Window_ID) (uintptr(entry) - 1)
 	if !reflect.enum_value_has_name(id) do return
 
 	tokens := strings.split_n(string(line), "=", 2, ui.allocators.per_frame)

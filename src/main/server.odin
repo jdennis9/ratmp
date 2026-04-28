@@ -16,8 +16,8 @@ import "src:bindings/taglib"
 import "core:log"
 import "core:reflect"
 import "src:dsp"
+import resampler "src:bindings/samplerate"
 
-OUTPUT_RING_BUFFER_SIZE :: 64<<10
 
 // 0 means none
 // Index into array
@@ -101,11 +101,11 @@ Server :: struct {
 	need_background_scan: bool,
 	library_path:         string,
 	saved_library_serial: uint,
-	output_ring_buffers:  [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
-	output_spec:          Audio_Spec,
+	analysis:             Analysis_Buffer,
 
 	// Used by the audio callback for storing samples
-	// without the need to reallocate every frame
+	// without the need to reallocate every time the callback
+	// is ran
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 	// Tell audio callback to reset output ring buffers when streaming
 	audio_buffer_was_dropped: bool,
@@ -117,13 +117,6 @@ Server_Library_Save_Data :: struct {
 }
 
 hash_track_url :: stable_hash_string_64
-
-@(private="file")
-_reset_ring_buffers :: proc(sv: ^Server) {
-	for ch in 0..<AUDIO_MAX_CHANNELS {
-		rb_reset(&sv.output_ring_buffers[ch])
-	}
-}
 
 server_audio_callback :: proc(
 	data: rawptr, event: Audio_Callback_Event, buf: []f32, spec: Audio_Spec
@@ -138,7 +131,7 @@ server_audio_callback :: proc(
 
 		if sv.audio_buffer_was_dropped {
 			sv.audio_buffer_was_dropped = false
-			_reset_ring_buffers(sv)
+			analysis_reset(&sv.analysis)
 		}
 
 		frame_count := len(buf) / spec.channels
@@ -150,18 +143,7 @@ server_audio_callback :: proc(
 
 		status := playback_thread_request_frames(&sv.playback_thread, output[:spec.channels], spec.samplerate)
 
-		sv.output_spec = spec
-
-		for ch in 0..<spec.channels {
-			rb := &sv.output_ring_buffers[ch]
-
-			if rb.data == nil {
-				rb_init(rb, OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
-			}
-			
-			rb_produce(rb, output[ch])
-		}
-
+		analysis_feed(&sv.analysis, output[:spec.channels], spec.samplerate)
 
 		dsp.interlace(output[:spec.channels], buf)
 
@@ -197,9 +179,7 @@ server_init :: proc(sv: ^Server) -> bool {
 
 	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
 
-	rb_init(&sv.output_ring_buffers[0], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
-	rb_init(&sv.output_ring_buffers[1], OUTPUT_RING_BUFFER_SIZE, sv.allocators.analysis)
-
+	analysis_init(&sv.analysis, sv.allocators.analysis)
 
 	return true
 }
@@ -524,13 +504,16 @@ server_get_background_scan_progress :: proc(sv: ^Server) -> (total_files, files_
 }
 
 server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) -> Audio_Spec {
-	consume_frames := int(math.ceil(timespan * f32(sv.output_spec.samplerate)))
+	/*a := &sv.analysis
+
+	consume_frames := int(math.ceil(timespan * ANALYSIS_SAMPLE_RATE))
 	
-	for ch in 0..<sv.output_spec.channels {
-		rb_consume(&sv.output_ring_buffers[ch], buf[ch], consume_frames)
+	for ch in 0..<a.channels {
+		rb_consume(&a.ring_buffers[ch], buf[ch], consume_frames)
 	}
 
-	return sv.output_spec
+	return {channels = a.channels, samplerate = ANALYSIS_SAMPLE_RATE}*/
+	return analysis_consume(&sv.analysis, timespan, buf)
 }
 
 @(private="file")
