@@ -45,7 +45,7 @@ Track :: struct {
 	title:            string,
 	file_date,        date_added: time.Time,
 	file_size:        i64,
-	handle:           Track_ID,
+	id:               Track_ID,
 	duration_seconds: i32,
 	release_year:     i32,
 	samplerate:       i32,
@@ -185,6 +185,7 @@ library_add_track :: proc(
 	ptr.date_added       = time.now()
 	ptr.file_date        = data.file_date
 	ptr.protocol         = data.protocol
+	ptr.id           = id
 
 	l.url_hash_map[hash] = id
 	l.serial += 1
