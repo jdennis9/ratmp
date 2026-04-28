@@ -64,9 +64,10 @@ Calc_Peaks_State :: struct {
 	}
 }*/
 
+// Naturally distribute frequencies from 0-22k across bands
 distribute_band_frequencies :: proc(output: []f32) {
-	// = the nth root of (20,000 / 50) where n is the number of bands
-	freq_mul := math.pow(f32(400), f32(1.0/f32(len(output)-1)))
+	// = the nth root of (22,000 / 50) where n is the number of bands
+	freq_mul := math.pow(f32(440), f32(1.0/f32(len(output)-1)))
 
 	// Calculate band frequencies
 	i := f32(0)

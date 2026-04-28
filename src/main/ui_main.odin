@@ -275,7 +275,7 @@ _Spectrum_Window :: struct {
 	bands:            [dynamic; SPECTRUM_MAX_BANDS]f32,
 	band_freqs:       [dynamic; SPECTRUM_MAX_BANDS]f32,
 	freq_guides:      [dynamic; 32]_Spectrum_Frequency_Guide,
-	window_w:         [dynamic]f32,
+	window_values:         [dynamic]f32,
 	band_gap:         f32,
 	fft:              dsp.FFT_State,
 	display_mode:     _Spectrum_Display_Mode,
@@ -2386,134 +2386,89 @@ _oscilloscope_window_load_setting :: proc(ui: ^UI, osc: ^_Oscilloscope_Window, k
 
 _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	analysis := &ui.analysis
+	enable_band_hover_info := true
 	if len(analysis.raw_output) == 0 do return false
 	if len(analysis.raw_output[0]) == 0 do return false
 
-	size := imgui.GetContentRegionAvail()
-	pos := imgui.GetCursorScreenPos()
-	window_size := 8<<10
+	// Default band count
+	if len(state.bands) == 0 do resize(&state.bands, 80)
 
-	draw_histogram :: proc(
-		ui: ^UI,
-		state: ^_Spectrum_Window,
-		pos, size: [2]f32,
-		bar_width: f32,
-		bar_spacing: f32,
-		window_size: int,
-	) {
-		analysis    := &ui.analysis
-		peaks       := state.bands[:]
-		drawlist    := imgui.GetWindowDrawList()
-		quiet_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeLow])
-		loud_color  := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeHigh])
-
-		bar_height := size.y
-		pos := pos
-
-		// Draw bars
-		for peak, band_index in peaks {
-			color := linalg.lerp(quiet_color, loud_color, clamp(peak, 0, 1))
-			p_min: [2]f32 = {pos.x, pos.y + bar_height * (1 - peak)}
-			p_max: [2]f32 = {pos.x + bar_width, pos.y + bar_height}
-
-			imgui.DrawList_AddRectFilled(
-				drawlist,
-				p_min, p_max, imgui.GetColorU32ImVec4(color)
-			)
-
-			// Tooltip for gain and frequency info
-			if imgui.IsMouseHoveringRect(pos, pos + {bar_spacing, bar_height}) && imgui.BeginTooltip() {
-				if band_index + 1 < len(state.band_freqs) {
-					imx.textf(64, "Frequency: %.1f-%.1fHz", 
-						state.band_freqs[band_index], state.band_freqs[band_index+1]
-					)
-				}
-				else {
-					imx.textf(64, "Frequency: %.1f+Hz", state.band_freqs[band_index])
-				}
-				imx.textf(64, "Gain: %.1fDb", dsp.amp_to_gain(peak))
-
-				imgui.DrawList_AddRect(drawlist, pos, pos + {bar_spacing, bar_height}, imgui.GetColorU32(.TextDisabled))
-
-				imgui.EndTooltip()
-			}
-
-			pos.x += bar_spacing
-		}
-	}
-
-	draw_frequency_guides :: proc(
-		ui: ^UI,
-		state: ^_Spectrum_Window,
-		pos, size: [2]f32,
-		bar_width: f32,
-		bar_spacing: f32,
-		window_size: int
-	) {
-		drawlist := imgui.GetWindowDrawList()
-		imx.push_font_scale(0.7)
-		defer imgui.PopFont()
-		color := imgui.GetColorU32(.TextDisabled)
-
-		for &guide in state.freq_guides {
-			str := string_from_array(guide.str[:])
-			imgui.DrawList_AddText(drawlist, pos + {guide.offset, 0}, color, imx.string_to_ptrs(str))
-		}
-	}
-
-	band_count := clamp(len(state.bands), 40, SPECTRUM_MAX_BANDS)
-	
+	// Settings
 	if imgui.BeginPopupContextWindow() {
 		defer imgui.EndPopup()
+		enable_band_hover_info = false
+		band_count := len(state.bands)
 
 		size_options := []int {10, 20, 40, 60, 80, 100, 140, 160}
 		imgui.SeparatorText("No. Bands")
-		imx.number_picker_menu_items(size_options, &band_count)
-		imgui.SeparatorText("Band Gap")
-		imgui.SliderFloat("##band_gap", &state.band_gap, -8, 8, "%.0f")
-	}
-
-	// Distribute band frequencies
-	if len(state.bands) != band_count {
-		resize(&state.bands, band_count)
-		resize(&state.band_freqs, band_count)
-		dsp.distribute_band_frequencies(state.band_freqs[:])
-	}
-
-	for &b in state.bands do b = 0
-
-	// Make window
-	if len(state.window_w) != window_size {
-		resize(&state.window_w, window_size)
-		dsp.make_window_hann(state.window_w[:])
-	}
-
-	output := &analysis.raw_output
-	windowed_output: [AUDIO_MAX_CHANNELS][]f32
-	mono_output := make([]f32, window_size, ui.allocators.per_frame)
-	
-	// apply window -> convert to mono
-	for ch in 0..<analysis.channels {
-		windowed_output[ch] = make([]f32, window_size, ui.allocators.per_frame)
-
-		for frame in 0..<window_size {
-			windowed_output[ch][frame] = analysis.raw_output[ch][frame] * state.window_w[frame]
+		if imx.number_picker_menu_items(size_options, &band_count) {
+			resize(&state.bands, band_count)
 		}
 	}
 
-	dsp.to_mono(windowed_output[:analysis.channels], mono_output)
+	// Audio vars
+	input_window_size := 8<<10
+	mono_input        := analysis.avg_output[:input_window_size]
+	windowed_input    := make([]f32, input_window_size, ui.allocators.per_frame)
 
-	dsp.fft_process(&state.fft, mono_output)
-	dsp.fft_extract_bands(state.fft, state.band_freqs[:], analysis.samplerate, state.bands[:])
-
-	// Drawing vars
-	bar_width := (size.x / f32(len(state.bands)) - state.band_gap - 1)
-	bar_spacing := bar_width + state.band_gap + 1
-	graph_size: [2]f32 = {size.x, size.y - imgui.GetTextLineHeight()}
+	// Draw vars
+	guide_font_scale :: 0.7
+	style       := imgui.GetStyle()
+	avail_size  := imgui.GetContentRegionAvail()
+	graph_pos   := imgui.GetCursorScreenPos()
+	graph_size: [2]f32 = {avail_size.x, avail_size.y - imgui.GetTextLineHeight() * guide_font_scale}
+	bar_width   := graph_size.x / f32(len(state.bands)) - 1
+	bar_spacing := bar_width + 1
+	drawlist    := imgui.GetWindowDrawList()
 	
-	// Build frequency guides
+	
+	// Update window function values
+	if len(state.window_values) != len(mono_input) {
+		if state.window_values == nil {
+			state.window_values = make([dynamic]f32, ui.allocators.analysis)
+		}
+		resize(&state.window_values, len(mono_input))
+		dsp.make_window_hann(state.window_values[:])
+	}
+	
+	// Apply window function
+	for input, i in mono_input {
+		windowed_input[i] = input * state.window_values[i]
+	}
+	
+	// Update band frequencies
+	if len(state.band_freqs) != len(state.bands) {
+		resize(&state.band_freqs, len(state.bands))
+		dsp.distribute_band_frequencies(state.band_freqs[:])
+	}
+	
+	// FFT
+	for &b in state.bands do b = 0
+	dsp.fft_process(&state.fft, windowed_input)
+	dsp.fft_extract_bands(state.fft, state.band_freqs[:], analysis.samplerate, state.bands[:])
+	
+	// Create bands
+	Band :: struct {offset, width, peak: f32}
+	bands: [dynamic; SPECTRUM_MAX_BANDS]Band
+
+	// Calc band offsets
+	{
+		x_offset: f32 = 0
+
+		for band in state.bands {
+			append(&bands, Band {
+				offset = x_offset,
+				width = bar_width,
+				peak = band,
+			})
+
+			x_offset += bar_spacing
+		}
+	}
+
+	// Update guides
 	if state.freq_guide_bands != len(state.band_freqs) || state.freq_guide_width != graph_size.x {
-		log.debug("Building frequency guides...")
+		TIME_SCOPE("Build frequency guides")
 		state.freq_guide_bands = len(state.band_freqs)
 		state.freq_guide_width = graph_size.x
 		min_spacing: f32 = 40
@@ -2547,18 +2502,61 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 		}
 	}
 
-	// Draw
-	style := imgui.GetStyle()
+	// Draw bands
+	draw_band_bars :: proc(
+		drawlist: ^imgui.DrawList, pos, size: [2]f32, bands: []Band
+	) {
+		quiet_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeLow])
+		loud_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeHigh])
 
-	draw_histogram(ui, state, pos, {
-		size.x, size.y - imgui.GetTextLineHeight()
-	}, bar_width, bar_spacing, window_size)
+		for band in bands {
+			peak := clamp(band.peak, 0, 1)
+			color := linalg.lerp(quiet_color, loud_color, clamp(peak, 0, 1))
+			p_min: [2]f32 = {pos.x + band.offset, pos.y + size.y * (1 - peak)}
+			p_max: [2]f32 = {pos.x + band.offset + band.width, pos.y + size.y}
 
-	draw_frequency_guides(
-		ui, state,
-		pos + {0, graph_size.y + style.ItemSpacing.y}, size - {0, graph_size.y},
-		bar_width, bar_spacing, window_size
-	)
+			imgui.DrawList_AddRectFilled(drawlist, p_min, p_max, imgui.GetColorU32ImVec4(color))
+		}
+	}
+
+	draw_frequency_guides :: proc(
+		drawlist: ^imgui.DrawList,
+		guides: []_Spectrum_Frequency_Guide,
+		pos: [2]f32,
+	) {
+		imx.push_font_scale(guide_font_scale)
+		defer imgui.PopFont()
+		color := imgui.GetColorU32(.TextDisabled)
+
+		for &guide in guides {
+			str := string_from_array(guide.str[:])
+			imgui.DrawList_AddText(drawlist, pos + {guide.offset, 0}, color, imx.string_to_ptrs(str))
+		}
+	}
+
+	draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+	draw_frequency_guides(drawlist, state.freq_guides[:], graph_pos + {0, graph_size.y + style.FramePadding.y})
+
+	// Band info on hover
+	if enable_band_hover_info do for band, band_index in bands {
+		p_min := graph_pos + {band.offset, 0}
+		p_max := p_min + {band.width, graph_size.y}
+
+		if imgui.IsMouseHoveringRect(p_min, p_max) && imgui.BeginTooltip() {
+			if band_index + 1 < len(state.band_freqs) {
+				imx.textf(64, "Frequency: %.1f-%.1fHz", 
+					state.band_freqs[band_index], state.band_freqs[band_index+1]
+				)
+			}
+			else {
+				imx.textf(64, "Frequency: %.1f+Hz", state.band_freqs[band_index])
+			}
+			imx.textf(64, "Gain: %.1fDb", dsp.amp_to_gain(state.bands[band_index]))
+
+			imgui.DrawList_AddRect(drawlist, p_min, p_max, imgui.GetColorU32(.TextDisabled))
+			imgui.EndTooltip()
+		}
+	}
 
 	return true
 }
