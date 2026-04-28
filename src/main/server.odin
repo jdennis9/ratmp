@@ -84,6 +84,7 @@ Server :: struct {
 		scan_queue:      mem.Allocator,
 		analysis:        mem.Allocator,
 		playback_thread: mem.Allocator,
+		temp:            mem.Allocator,
 	},
 
 	library: Library,
@@ -168,6 +169,7 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
 	sv.allocators.analysis = allocator_map_add_heap(&sv.allocator_map, "analysis")
 	sv.allocators.playback_thread = allocator_map_add_heap(&sv.allocator_map, "playback_thread")
+	sv.allocators.temp = allocator_map_add_dynamic_arena(&sv.allocator_map, "temp", flags={.IsTemp})
 
 	library_init(&sv.library)
 	playback_thread_init(&sv.playback_thread, {}, sv.allocators.playback_thread)
@@ -469,6 +471,11 @@ server_request_play_playlist :: proc(
 	}
 
 	server_send_event(sv, event)
+}
+
+server_request_radio :: proc(sv: ^Server, main_track: Track_ID) {
+	tracks := library_build_radio(sv.library, main_track, sv.allocators.temp)
+	server_request_play_playlist(sv, tracks, generate_uid(), main_track)
 }
 
 server_request_pause :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPause})}

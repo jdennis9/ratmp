@@ -537,3 +537,31 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: T
 		}
 	}
 }
+
+// -----------------------------------------------------------------------------
+// Radio
+// -----------------------------------------------------------------------------
+
+library_build_radio :: proc(l: Library, main_track_id: Track_ID, allocator: mem.Allocator) -> []Track_ID {
+	output := make([dynamic]Track_ID, allocator)
+	reserve(&output, 256)
+
+	main_track, ok := l.tracks[main_track_id]
+	if !ok do return nil
+
+	for track_id, track in l.tracks {
+		if track_id == main_track_id do continue
+
+		if main_track.album != 0 && main_track.album == track.album {
+			append(&output, track_id)
+		}
+		else if main_track.artist != 0 && main_track.artist == track.artist {
+			append(&output, track_id)
+		}
+		else if main_track.genre != 0 && main_track.genre == track.genre {
+			append(&output, track_id)
+		}
+	}
+
+	return output[:]
+}

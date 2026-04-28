@@ -1021,6 +1021,7 @@ _track_table_show :: proc(
 		add_to_playlist: Maybe(Playlist_Handle),
 		play_selection: bool,
 		context_menu_target: Track_ID,
+		play_similar_tracks: bool,
 	}
 
 	list_clipper: imgui.ListClipper
@@ -1147,6 +1148,10 @@ _track_table_show :: proc(
 						actions.play_selection = true
 					}
 
+					if imgui.MenuItem("Play similar tracks") {
+						actions.play_similar_tracks = true
+					}
+
 					if .NoRemove not_in flags {
 						imgui.Separator()
 						imgui.MenuItem("Remove")
@@ -1212,6 +1217,10 @@ _track_table_show :: proc(
 		if playlist, ok := library_get_playlist(&sv.library, h); ok {
 			playlist_add(sv, playlist, _track_table_get_selection(table^, ui.allocators.per_frame))
 		}
+	}
+
+	if actions.play_similar_tracks {
+		server_request_radio(sv, actions.context_menu_target)
 	}
 
 	return true
