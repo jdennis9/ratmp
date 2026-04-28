@@ -162,7 +162,7 @@ library_add_track :: proc(
 		l.tracks[id] = Track{}
 	}
 
-	if data.protocol == .File {
+	if data.protocol == .File && data.url != "" {
 		dir := filepath.dir(data.url)
 		defer delete(dir)
 
@@ -284,7 +284,8 @@ library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist:
 // Track groups
 // -----------------------------------------------------------------------------
 track_group_get_entry :: proc(tg: ^Track_Group_Set, hash: u32) -> (index: int, found: bool) {
-	for h, i in tg.entries.name_hash[:len(tg.entries)] {
+	count := len(tg.entries)
+	for h, i in tg.entries.name_hash[:count] {
 		if h == hash do return i, true
 	}
 	return
@@ -292,6 +293,7 @@ track_group_get_entry :: proc(tg: ^Track_Group_Set, hash: u32) -> (index: int, f
 
 track_group_init :: proc(tg: ^Track_Group_Set) {
 	mem.dynamic_arena_init(&tg.arena)
+	reserve(&tg.entries, 512)
 	append(&tg.entries, Track_Group {
 		name = "",
 		name_hash = stable_hash_string_32(""),
@@ -313,6 +315,8 @@ track_group_add_track :: proc(
 			name_hash = stable_hash_string_32(str),
 			uid = generate_uid(),
 		})
+
+		reserve(&tg.entries[index].tracks, 64)
 	}
 
 	entry := &tg.entries[index]
@@ -418,6 +422,7 @@ find_track_thumbnail :: proc(
 library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) {
 	hash := stable_hash_string_64(dir)
 	if hash in l.folder_cover_art do return
+	log.debug("Scanning directory", dir, "for cover art")
 
 	files, error := os.read_all_directory_by_path(dir, context.allocator)
 	if error != nil {

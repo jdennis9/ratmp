@@ -44,14 +44,14 @@ sfield :: reflect.struct_field_by_name
 
 _Track_DB_Model :: struct {
 	path_hash: i64,
-	url: cstring,
-	protocol: cstring,
+	url: string,
+	protocol: string,
 
 	format,
 	artist,
 	album,
 	genre,
-	title: cstring,
+	title: string,
 
 	duration_seconds,
 	track_no,
@@ -66,23 +66,15 @@ _Track_DB_Model :: struct {
 }
 
 _track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (model: _Track_DB_Model, error: Error) {
-	protocol := strings.clone_to_cstring(
-		reflect.enum_name_from_value(t.protocol) or_else "File", allocator
-	) or_return
-
-	format := strings.clone_to_cstring(
-		reflect.enum_name_from_value(t.format) or_else "", allocator
-	) or_return
-
 	return _Track_DB_Model {
 		path_hash        = auto_cast stable_hash_string_64(t.url),
-		protocol         = protocol,
-		url              = strings.clone_to_cstring(t.url, allocator) or_return,
-		format           = format,
-		artist           = strings.clone_to_cstring(library_get_artist_name(l, t.artist), allocator) or_return,
-		album            = strings.clone_to_cstring(library_get_album_name(l, t.album), allocator) or_return,
-		genre            = strings.clone_to_cstring(library_get_genre_name(l, t.genre), allocator) or_return,
-		title            = strings.clone_to_cstring(t.title, allocator) or_return,
+		protocol         = reflect.enum_name_from_value(t.protocol) or_else "File",
+		url              = t.url,
+		format           = reflect.enum_name_from_value(t.format) or_else "",
+		artist           = library_get_artist_name(l, t.artist),
+		album            = library_get_album_name(l, t.album),
+		genre            = library_get_genre_name(l, t.genre),
+		title            = t.title,
 		duration_seconds = auto_cast t.duration_seconds,
 		track_no         = auto_cast t.track_no,
 		release_year     = auto_cast t.release_year,
@@ -97,13 +89,13 @@ _track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (m
 
 _track_from_db_model :: proc(t: _Track_DB_Model, allocator: mem.Allocator) -> (ret: Track_Data, error: Error) {
 	return Track_Data {
-		protocol         = reflect.enum_from_name(Track_Protocol, string(t.protocol)) or_else .File,
-		url              = strings.clone(string(t.url), allocator) or_return,
-		format           = reflect.enum_from_name(Audio_File_Format, string(t.format)) or_else .Wav,
-		artist           = strings.clone(string(t.artist), allocator) or_return,
-		album            = strings.clone(string(t.album), allocator) or_return,
-		genre            = strings.clone(string(t.genre), allocator) or_return,
-		title            = strings.clone(string(t.title), allocator) or_return,
+		protocol         = reflect.enum_from_name(Track_Protocol, t.protocol) or_else .File,
+		url              = strings.clone(t.url, allocator) or_return,
+		format           = reflect.enum_from_name(Audio_File_Format, t.format) or_else .Wav,
+		artist           = strings.clone(t.artist, allocator) or_return,
+		album            = strings.clone(t.album, allocator) or_return,
+		genre            = strings.clone(t.genre, allocator) or_return,
+		title            = strings.clone(t.title, allocator) or_return,
 		duration_seconds = auto_cast t.duration_seconds,
 		track_no         = auto_cast t.track_no,
 		release_year     = auto_cast t.release_year,
@@ -265,8 +257,8 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 						v := f.(i64)
 						sql.bind_int64(stmt, bind_index, auto_cast v)
 					case .TinyString, .ShortString, .LongString:
-						v := f.(cstring)
-						sql.bind_text(stmt, bind_index, auto_cast v, auto_cast len(v), {})
+						v := f.(string)
+						sql.bind_text(stmt, bind_index, cstring(raw_data(v)), auto_cast len(v), {})
 				}
 			}
 
@@ -328,7 +320,7 @@ track_db_load :: proc(
 	// Set up temporary arena
 	// --------------------------------------------------------------------------
 	temp_arena: mem.Dynamic_Arena
-	mem.dynamic_arena_init(&temp_arena)
+	mem.dynamic_arena_init(&temp_arena, block_size=128<<10)
 	defer mem.dynamic_arena_destroy(&temp_arena)
 	temp_allocator := mem.dynamic_arena_allocator(&temp_arena)
 
@@ -374,8 +366,6 @@ track_db_load :: proc(
 			else {
 				l.folder_cover_art[u64(folder_hash)] = ""
 			}
-
-			log.debug(folder_hash, cover_path)
 		}
 	}
 
@@ -383,14 +373,16 @@ track_db_load :: proc(
 	// Load tracks in model format
 	// --------------------------------------------------------------------------
 	
-	models: [dynamic]_Track_DB_Model
+	models := make_dynamic_array_len_cap([dynamic]_Track_DB_Model, 0, 2048)
 	defer delete(models)
 	{
+		TIME_SCOPE("DB table -> tracks")
+
 		stmt: ^sql.Statement
 		defer sql.finalize(stmt)
 
 		// @TODO: Select columns by name
-		_check(sql.prepare_v2(db, "SELECT * from tracks", -1, &stmt, nil))
+		_check(sql.prepare_v2(db, "SELECT * FROM tracks", -1, &stmt, nil))
 		
 		for {
 			model: _Track_DB_Model
@@ -416,9 +408,9 @@ track_db_load :: proc(
 					v := sql.column_int64(stmt, col_index)
 					(cast(^i64) f.data)^ = auto_cast v
 				case .TinyString, .ShortString, .LongString:
-					assert(col.field.type.id == cstring)
+					assert(col.field.type.id == string)
 					v := sql.column_text(stmt, col_index)
-					(cast(^cstring) f.data)^ = strings.clone_to_cstring(string(v), temp_allocator)
+					(cast(^string) f.data)^ = strings.clone(string(v), temp_allocator)
 				}
 
 				col_index += 1
@@ -431,17 +423,20 @@ track_db_load :: proc(
 	// --------------------------------------------------------------------------
 	// Convert models -> tracks for library
 	// --------------------------------------------------------------------------
-	for model in models {
-		path_hash := cast(u64) model.path_hash
-		_, exists := l.url_hash_map[path_hash]
+	{
+		TIME_SCOPE("Models -> tracks -> library")
+		for model in models {
+			path_hash := cast(u64) model.path_hash
+			_, exists := l.url_hash_map[path_hash]
 
-		// Update the track?
-		if exists do continue
+			// Update the track?
+			if exists do continue
 
-		track := _track_from_db_model(model, allocator) or_continue
+			track := _track_from_db_model(model, allocator) or_continue
 
-		//handle := handle_map.add(track_map, track) or_continue
-		library_add_track(l, track)
+			//handle := handle_map.add(track_map, track) or_continue
+			library_add_track(l, track)
+		}
 	}
 
 	return nil

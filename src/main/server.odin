@@ -116,9 +116,7 @@ Server_Library_Save_Data :: struct {
 	folder_cover_art: map[u64]string,
 }
 
-hash_track_url :: proc(str: string) -> u64 {
-	return xxhash.XXH3_64_default(transmute([]u8) str)
-}
+hash_track_url :: stable_hash_string_64
 
 @(private="file")
 _reset_ring_buffers :: proc(sv: ^Server) {
