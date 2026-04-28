@@ -1,5 +1,6 @@
 package dsp
 
+import "core:math/linalg"
 import "core:sync"
 import "core:math"
 import "core:math/bits"
@@ -287,6 +288,11 @@ to_mono :: proc(input: [][]f32, output: []f32) {
 	for &o in output {
 		o *= M
 	}
+}
+
+amp_to_gain :: proc(amp: f32) -> f32 {
+	if amp == 0 do return -60
+	return 20 * linalg.log10(abs(amp))
 }
 
 /*get_sdk_impl :: proc() -> sdk.Analysis_Procs {

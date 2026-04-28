@@ -32,7 +32,7 @@ ICON_PAUSE          :: ""
 ICON_STOP           :: ""
 ICON_PLAY           :: ""
 
-_ANALYSIS_BUFFER_SIZE :: (32<<10)
+_ANALYSIS_BUFFER_SIZE :: (16<<10)
 
 // -----------------------------------------------------------------------------
 // Track table
@@ -264,13 +264,21 @@ _Spectrum_Display_Mode :: enum {
 
 SPECTRUM_MAX_BANDS :: 160
 
+_Spectrum_Frequency_Guide :: struct {
+	str: [8]u8,
+	offset: f32,
+}
+
 _Spectrum_Window :: struct {
-	bands:        [dynamic; SPECTRUM_MAX_BANDS]f32,
-	band_freqs:   [dynamic; SPECTRUM_MAX_BANDS]f32,
-	window_w:     [dynamic]f32,
-	band_gap:     f32,
-	fft:          dsp.FFT_State,
-	display_mode: _Spectrum_Display_Mode,
+	freq_guide_width: f32, // Width of spectrum window when frequency guides were built
+	freq_guide_bands: int,
+	bands:            [dynamic; SPECTRUM_MAX_BANDS]f32,
+	band_freqs:       [dynamic; SPECTRUM_MAX_BANDS]f32,
+	freq_guides:      [dynamic; 32]_Spectrum_Frequency_Guide,
+	window_w:         [dynamic]f32,
+	band_gap:         f32,
+	fft:              dsp.FFT_State,
+	display_mode:     _Spectrum_Display_Mode,
 }
 
 // -----------------------------------------------------------------------------
@@ -2386,30 +2394,72 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	window_size := 8<<10
 
 	draw_histogram :: proc(
+		ui: ^UI,
+		state: ^_Spectrum_Window,
 		pos, size: [2]f32,
-		peaks: []f32,
-		spacing: f32,
+		bar_width: f32,
+		bar_spacing: f32,
+		window_size: int,
 	) {
+		analysis    := &ui.analysis
+		peaks       := state.bands[:]
 		drawlist    := imgui.GetWindowDrawList()
 		quiet_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeLow])
 		loud_color  := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeHigh])
 
-		bar_width := (size.x / f32(len(peaks)) - spacing)
 		bar_height := size.y
 		pos := pos
 
-		for peak in peaks {
+		// Draw bars
+		for peak, band_index in peaks {
 			color := linalg.lerp(quiet_color, loud_color, clamp(peak, 0, 1))
+			p_min: [2]f32 = {pos.x, pos.y + bar_height * (1 - peak)}
+			p_max: [2]f32 = {pos.x + bar_width, pos.y + bar_height}
 
 			imgui.DrawList_AddRectFilled(
 				drawlist,
-				{pos.x, pos.y + bar_height * (1 - peak)},
-				{pos.x + bar_width, pos.y + bar_height}, imgui.GetColorU32ImVec4(color)
+				p_min, p_max, imgui.GetColorU32ImVec4(color)
 			)
-			pos.x += bar_width + spacing
+
+			// Tooltip for gain and frequency info
+			if imgui.IsMouseHoveringRect(pos, pos + {bar_spacing, bar_height}) && imgui.BeginTooltip() {
+				if band_index + 1 < len(state.band_freqs) {
+					imx.textf(64, "Frequency: %.1f-%.1fHz", 
+						state.band_freqs[band_index], state.band_freqs[band_index+1]
+					)
+				}
+				else {
+					imx.textf(64, "Frequency: %.1f+Hz", state.band_freqs[band_index])
+				}
+				imx.textf(64, "Gain: %.1fDb", dsp.amp_to_gain(peak))
+
+				imgui.DrawList_AddRect(drawlist, pos, pos + {bar_spacing, bar_height}, imgui.GetColorU32(.TextDisabled))
+
+				imgui.EndTooltip()
+			}
+
+			pos.x += bar_spacing
 		}
 	}
 
+	draw_frequency_guides :: proc(
+		ui: ^UI,
+		state: ^_Spectrum_Window,
+		pos, size: [2]f32,
+		bar_width: f32,
+		bar_spacing: f32,
+		window_size: int
+	) {
+		drawlist := imgui.GetWindowDrawList()
+		imx.push_font_scale(0.7)
+		defer imgui.PopFont()
+		color := imgui.GetColorU32(.TextDisabled)
+
+		for &guide in state.freq_guides {
+			str := string_from_array(guide.str[:])
+			imgui.DrawList_AddText(drawlist, pos + {guide.offset, 0}, color, imx.string_to_ptrs(str))
+		}
+	}
 
 	band_count := clamp(len(state.bands), 40, SPECTRUM_MAX_BANDS)
 	
@@ -2442,7 +2492,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	windowed_output: [AUDIO_MAX_CHANNELS][]f32
 	mono_output := make([]f32, window_size, ui.allocators.per_frame)
 	
-	// Apply window to output
+	// apply window -> convert to mono
 	for ch in 0..<analysis.channels {
 		windowed_output[ch] = make([]f32, window_size, ui.allocators.per_frame)
 
@@ -2456,7 +2506,59 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	dsp.fft_process(&state.fft, mono_output)
 	dsp.fft_extract_bands(state.fft, state.band_freqs[:], analysis.samplerate, state.bands[:])
 
-	draw_histogram(pos, size, state.bands[:], state.band_gap)
+	// Drawing vars
+	bar_width := (size.x / f32(len(state.bands)) - state.band_gap - 1)
+	bar_spacing := bar_width + state.band_gap + 1
+	graph_size: [2]f32 = {size.x, size.y - imgui.GetTextLineHeight()}
+	
+	// Build frequency guides
+	if state.freq_guide_bands != len(state.band_freqs) || state.freq_guide_width != graph_size.x {
+		log.debug("Building frequency guides...")
+		state.freq_guide_bands = len(state.band_freqs)
+		state.freq_guide_width = graph_size.x
+		min_spacing: f32 = 40
+		x_accum: f32 = 10000
+		x_offset: f32
+		clear(&state.freq_guides)
+
+		for freq in state.band_freqs {
+			if len(state.freq_guides) == cap(state.freq_guides) do break
+
+			x_accum += bar_spacing
+
+			if x_accum >= min_spacing {
+				guide: _Spectrum_Frequency_Guide
+				guide.offset = x_offset
+				x_accum = 0
+				if freq > 10_000 {
+					fmt.bprintf(guide.str[:], "%dKHz", int(freq/1000))
+				}
+				else if freq > 1000 {
+					fmt.bprintf(guide.str[:], "%.1fKHz", freq/1000)
+				}
+				else {
+					fmt.bprintf(guide.str[:], "%dHz", int(freq))
+				}
+
+				append(&state.freq_guides, guide)
+			}
+
+			x_offset += bar_spacing
+		}
+	}
+
+	// Draw
+	style := imgui.GetStyle()
+
+	draw_histogram(ui, state, pos, {
+		size.x, size.y - imgui.GetTextLineHeight()
+	}, bar_width, bar_spacing, window_size)
+
+	draw_frequency_guides(
+		ui, state,
+		pos + {0, graph_size.y + style.ItemSpacing.y}, size - {0, graph_size.y},
+		bar_width, bar_spacing, window_size
+	)
 
 	return true
 }
