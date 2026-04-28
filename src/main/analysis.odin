@@ -34,7 +34,7 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 		}
 		
 		if buf.rs[ch] == nil {
-			buf.rs[ch] = resampler.new(.SINC_FASTEST, auto_cast channels, nil)
+			buf.rs[ch] = resampler.new(.SINC_FASTEST, 1, nil)
 		}
 	}
 
@@ -44,7 +44,8 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 		}
 	}
 	else {
-		resize(&buf.resample_buf, len(input[0]))
+		ratio := ANALYSIS_SAMPLE_RATE / f32(samplerate)
+		resize(&buf.resample_buf, int(linalg.ceil(f32(len(input[0])) * ratio)))
 
 		for samples, ch in input {
 			data := resampler.Data {
@@ -52,7 +53,7 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 				data_out = raw_data(buf.resample_buf),
 				input_frames = auto_cast len(samples),
 				output_frames = auto_cast len(buf.resample_buf),
-				src_ratio = auto_cast(f32(len(samples)) / f32(len(buf.resample_buf)))
+				src_ratio = f64(ratio),
 			}
 
 			resampler.process(buf.rs[ch], &data)
@@ -74,5 +75,9 @@ analysis_consume :: proc(buf: ^Analysis_Buffer, time: f32, output: [][]f32) -> A
 analysis_reset :: proc(buf: ^Analysis_Buffer) {
 	for &ring in buf.rings {
 		rb_reset(&ring)
+	}
+
+	for rs in buf.rs {
+		if rs != nil do resampler.reset(rs)
 	}
 }

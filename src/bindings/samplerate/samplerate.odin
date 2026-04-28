@@ -26,7 +26,7 @@ Data :: struct {
 	src_ratio: f64,
 }
 
-State :: rawptr
+State :: distinct rawptr
 
 @(link_prefix="src_")
 foreign samplerate {
