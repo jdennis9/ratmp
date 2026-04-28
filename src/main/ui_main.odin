@@ -267,7 +267,6 @@ _Spectrum_Display_Mode :: enum {
 }
 
 SPECTRUM_MAX_BANDS :: 160
-_SPECTRUM_WINDOW_FUNCTION :: dsp.Window_Function.Hann
 _SPECTRUM_WINDOW_SIZE :: 8<<10
 
 _Spectrum_Frequency_Guide :: struct {
@@ -285,6 +284,7 @@ _Spectrum_Window :: struct {
 	band_gap:         f32,
 	fft:              dsp.FFT_State,
 	display_mode:     _Spectrum_Display_Mode,
+	window_func:      dsp.Window_Function,
 }
 
 // -----------------------------------------------------------------------------
@@ -2409,6 +2409,7 @@ _oscilloscope_window_load_setting :: proc(ui: ^UI, osc: ^_Oscilloscope_Window, k
 _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	analysis := &ui.analysis
 	enable_band_hover_info := true
+	window_func_changed := false
 	if len(analysis.raw_output) == 0 do return false
 	if len(analysis.raw_output[0]) == 0 do return false
 
@@ -2426,11 +2427,14 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 		if imx.number_picker_menu_items(size_options, &band_count) {
 			resize(&state.bands, band_count)
 		}
+
+		window_func_changed |= imx.select_enum("Window", &state.window_func)
 	}
 
 	// Audio vars
 	input_window_size := _SPECTRUM_WINDOW_SIZE
-	mono_input        := analysis.avg_output[:input_window_size]
+	//mono_input        := analysis.avg_output[:input_window_size]
+	mono_input        := analysis.raw_output[0][:input_window_size]
 	windowed_input    := make([]f32, input_window_size, ui.allocators.per_frame)
 
 	// Draw vars
@@ -2445,12 +2449,12 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	
 	
 	// Update window function values
-	if len(state.window_values) != len(mono_input) {
+	if len(state.window_values) != len(mono_input) || window_func_changed {
 		if state.window_values == nil {
 			state.window_values = make([dynamic]f32, ui.allocators.analysis)
 		}
 		resize(&state.window_values, len(mono_input))
-		dsp.make_window(state.window_values[:], _SPECTRUM_WINDOW_FUNCTION)
+		dsp.make_window(state.window_values[:], state.window_func)
 	}
 	
 	// Apply window function

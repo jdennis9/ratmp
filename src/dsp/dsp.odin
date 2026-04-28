@@ -135,6 +135,8 @@ fft_process :: proc(state: ^FFT_State, input: []f32) {
 		state.real_buffer[i] = log10(m) / math.PI
 		state.real_buffer[i] = clamp(state.real_buffer[i], 0, 1)
 	}
+
+	state.real_buffer[0] = 0
 }
 
 fft_extract_bands_from_slice :: proc(fft: []f32, window_size: int, frequencies: []f32, samplerate: f32, output: []f32) {
@@ -233,9 +235,21 @@ interlace :: proc(input: [][]f32, output: []f32) {
 }
 
 Window_Function :: enum {
+	Blackman, // Default to blackman because it has least noise in fft
+	Nuttall,
+	Hamming,
 	Hann,
 	Welch,
 	Osc,
+	Normal,
+}
+
+make_window_raised_cosine :: proc(output: []f32, alpha: f32) {
+	N := f32(len(output))
+	for i in 0..<len(output) {
+		n := f32(i)
+		output[i] = alpha - (1 - alpha) * math.cos_f32((2 * math.PI * n) / N)
+	}
 }
 
 make_window_hann :: proc(output: []f32) {
@@ -243,6 +257,41 @@ make_window_hann :: proc(output: []f32) {
 	for i in 0..<len(output) {
 		n := f32(i)
 		output[i] = 0.5 * (1 - math.cos_f32((2 * math.PI * n) / (N - 1)))
+	}
+}
+
+make_window_hamming :: proc(output: []f32) {
+	make_window_raised_cosine(output, 25.0/46.0)
+}
+
+make_window_blackman :: proc(output: []f32) {
+	N := f32(len(output))
+	a: f32 = 0.16
+	a0 := (1 - a) / 2
+	a1: f32 = 0.5
+	a2: f32 = a / 2
+
+	for &o, i in output {
+		n := f32(i)
+
+		o = a0 - (a1 * math.cos((2 * math.PI * n) / N)) + (a2 * math.cos((4 * math.PI * n) / N))
+	}
+}
+
+make_window_nuttall :: proc(output: []f32) {
+	N := f32(len(output))
+	a0: f32 = 0.35578
+	a1: f32 = 0.4891775
+	a2: f32 = 0.1365996
+	a3: f32 = 0.0106411
+
+	for &o, i in output {
+		n := f32(i)
+		t := math.PI * n
+		x1 := math.cos_f32((2 * t) / N)
+		x2 := math.cos_f32((4 * t) / N)
+		x3 := math.cos_f32((6 * t) / N)
+		o = a0 - (x1*a1) - (x2*a2) - (x3*a3)
 	}
 }
 
@@ -280,9 +329,13 @@ make_window_osc :: proc(output: []f32) {
 
 make_window :: proc(output: []f32, func: Window_Function) {
 	switch func {
-	case .Hann: make_window_hann(output)
-	case .Welch: make_window_welch(output)
-	case .Osc: make_window_osc(output)
+	case .Normal:   for &o in output do o = 1
+	case .Hann:     make_window_hann(output)
+	case .Hamming:  make_window_hamming(output)
+	case .Blackman: make_window_blackman(output)
+	case .Nuttall:  make_window_nuttall(output)
+	case .Welch:    make_window_welch(output)
+	case .Osc:      make_window_osc(output)
 	}
 }
 
