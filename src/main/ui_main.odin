@@ -268,6 +268,7 @@ _Spectrum_Display_Mode :: enum {
 
 SPECTRUM_MAX_BANDS :: 160
 _SPECTRUM_WINDOW_FUNCTION :: dsp.Window_Function.Hann
+_SPECTRUM_WINDOW_SIZE :: 8<<10
 
 _Spectrum_Frequency_Guide :: struct {
 	str: [8]u8,
@@ -2301,7 +2302,7 @@ _oscilloscope_window_show :: proc(ui: ^UI, osc: ^_Oscilloscope_Window) -> bool {
 
 		for i in 0..<window_size {
 			m: f32 = 1
-			p := samples[i]
+			p := samples[i] * 0.8
 
 			if pinch {
 				if i < fade_size {
@@ -2419,7 +2420,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	}
 
 	// Audio vars
-	input_window_size := 8<<10
+	input_window_size := _SPECTRUM_WINDOW_SIZE
 	mono_input        := analysis.avg_output[:input_window_size]
 	windowed_input    := make([]f32, input_window_size, ui.allocators.per_frame)
 
