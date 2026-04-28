@@ -213,6 +213,12 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 		show_proc = proc(ui: ^UI) -> bool {
 			return _spectrum_window_show(ui, &ui.windows.spectrum)
 		},
+		settings_save_proc = proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error {
+			return _spectrum_window_get_settings(ui, &ui.windows.spectrum, output, allocator)
+		},
+		settings_load_proc = proc(ui: ^UI, key, value: string) -> Error {
+			return _spectrum_window_load_setting(ui, &ui.windows.spectrum, key, value)
+		},
 	},
 }
 
@@ -1788,6 +1794,8 @@ _theme_editor_show :: proc(ui: ^UI) -> (changed: bool) {
 	imgui.SeparatorText("RAT MP colors")
 	imgui.PushID("##ratmp_colors")
 	imx.color_edit_u32("Playing highlight", &t.colors[.PlayingHighlight])
+	imx.color_edit_u32("Quiet", &t.colors[.VolumeLow])
+	imx.color_edit_u32("Loud", &t.colors[.VolumeHigh])
 	imx.color_edit_u32("Left channel wave", &t.colors[.LeftChannelWave])
 	imx.color_edit_u32("Right channel wave", &t.colors[.RightChannelWave])
 	imgui.PopID()
@@ -2585,6 +2593,32 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 	}
 
 	return true
+}
+
+_spectrum_window_get_settings :: proc(
+	ui: ^UI, state: ^_Spectrum_Window, output: ^map[string]string,
+	allocator: mem.Allocator
+) -> Error {
+	output["Bands"] = fmt.aprint(len(state.bands), allocator=allocator)
+	output["Window"] = fmt.aprint(state.window_func, allocator=allocator)
+	return nil
+}
+
+_spectrum_window_load_setting :: proc(
+	ui: ^UI, state: ^_Spectrum_Window,
+	key, value: string
+) -> Error {
+
+	switch key {
+	case "Bands":
+		v := strconv.parse_int(value) or_break
+		v = clamp(v, 10, SPECTRUM_MAX_BANDS)
+		resize(&state.bands, v)
+	case "Window":
+		state.window_func = reflect.enum_from_name(dsp.Window_Function, value) or_break
+	}
+
+	return nil
 }
 
 // -----------------------------------------------------------------------------

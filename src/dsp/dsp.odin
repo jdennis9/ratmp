@@ -240,7 +240,6 @@ Window_Function :: enum {
 	Hamming,
 	Hann,
 	Welch,
-	Osc,
 	Normal,
 }
 
@@ -335,7 +334,6 @@ make_window :: proc(output: []f32, func: Window_Function) {
 	case .Blackman: make_window_blackman(output)
 	case .Nuttall:  make_window_nuttall(output)
 	case .Welch:    make_window_welch(output)
-	case .Osc:      make_window_osc(output)
 	}
 }
 
