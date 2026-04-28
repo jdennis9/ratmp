@@ -232,6 +232,12 @@ interlace :: proc(input: [][]f32, output: []f32) {
 	}
 }
 
+Window_Function :: enum {
+	Hann,
+	Welch,
+	Osc,
+}
+
 make_window_hann :: proc(output: []f32) {
 	N := f32(len(output))
 	for i in 0..<len(output) {
@@ -269,6 +275,14 @@ make_window_osc :: proc(output: []f32) {
 	for i in end_of_middle..<len(output) {
 		n := f32(i-end_of_middle)
 		output[i] = 1 - (n/N)
+	}
+}
+
+make_window :: proc(output: []f32, func: Window_Function) {
+	switch func {
+	case .Hann: make_window_hann(output)
+	case .Welch: make_window_welch(output)
+	case .Osc: make_window_osc(output)
 	}
 }
 

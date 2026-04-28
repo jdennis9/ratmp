@@ -267,6 +267,7 @@ _Spectrum_Display_Mode :: enum {
 }
 
 SPECTRUM_MAX_BANDS :: 160
+_SPECTRUM_WINDOW_FUNCTION :: dsp.Window_Function.Hann
 
 _Spectrum_Frequency_Guide :: struct {
 	str: [8]u8,
@@ -279,7 +280,7 @@ _Spectrum_Window :: struct {
 	bands:            [dynamic; SPECTRUM_MAX_BANDS]f32,
 	band_freqs:       [dynamic; SPECTRUM_MAX_BANDS]f32,
 	freq_guides:      [dynamic; 32]_Spectrum_Frequency_Guide,
-	window_values:         [dynamic]f32,
+	window_values:    [dynamic]f32,
 	band_gap:         f32,
 	fft:              dsp.FFT_State,
 	display_mode:     _Spectrum_Display_Mode,
@@ -2439,7 +2440,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 			state.window_values = make([dynamic]f32, ui.allocators.analysis)
 		}
 		resize(&state.window_values, len(mono_input))
-		dsp.make_window_hann(state.window_values[:])
+		dsp.make_window(state.window_values[:], _SPECTRUM_WINDOW_FUNCTION)
 	}
 	
 	// Apply window function
@@ -2711,10 +2712,11 @@ _imgui_settings_read_line_proc :: proc "c" (
 	state := &ui.window_state[id]
 	info := _WINDOW_INFO[id]
 
-	if info.settings_load_proc == nil do return
-
+	
 	if tokens[0] != "_Open" {
-		info.settings_load_proc(ui, tokens[0], tokens[1])
+		if info.settings_load_proc != nil {
+			info.settings_load_proc(ui, tokens[0], tokens[1])
+		}
 	}
 	else {
 		state.open = strconv.parse_bool(tokens[1]) or_else state.open
