@@ -49,6 +49,7 @@ Server_Event_Type :: enum {
 	RequestPlay,
 	RequestPause,
 	RequestSeek,
+	RequestStop,
 	BackgroundScanComplete,
 	UpdateState,
 }
@@ -306,7 +307,7 @@ server_handle_events :: proc(sv: ^Server) {
 	_update_media_controls_state :: proc(sv: ^Server) {
 		media_controls_update_state(Media_Controls_State {
 			paused = sv.playback_state == .Paused,
-			have_track = sv.current_track_id != {},
+			have_track = sv.current_track_id != 0,
 			shuffle_enabled = sv.playback.enable_shuffle,
 		})
 
@@ -353,7 +354,14 @@ server_handle_events :: proc(sv: ^Server) {
 			if global_config.server.notify_library_scan {
 				notify_send("Library scan complete")
 			}
-		
+		case .RequestStop:
+			playback_thread_close_track(&sv.playback_thread)
+			sv.current_track_id = 0
+			sv.track_info = {}
+			sv.playback_state = .Stopped
+			platform_set_window_title(PROGRAM_NAME_AND_VERSION)
+			audio_drop_buffer()
+
 		case .RequestSeek:
 			playback_thread_seek(&sv.playback_thread, ev.seek_target)
 			audio_drop_buffer()
@@ -480,6 +488,7 @@ server_request_radio :: proc(sv: ^Server, main_track: Track_ID) {
 
 server_request_pause :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPause})}
 server_request_resume :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPlay})}
+server_request_stop :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestStop})}
 
 server_send_empty_event :: proc(sv: ^Server) {
 	sync.auto_reset_event_signal(&sv.event_signal)

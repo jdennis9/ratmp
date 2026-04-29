@@ -799,6 +799,10 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		imgui.Separator()
 		shuffled := server_is_shuffle_enabled(sv)
 
+		if imgui.MenuItem(ICON_STOP) {
+			server_request_stop(sv)
+		}
+
 		if imgui.MenuItem(
 			ICON_SHUFFLE + "###shuffle", nil, shuffled
 		) {
