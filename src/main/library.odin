@@ -193,6 +193,27 @@ library_add_track :: proc(
 	return
 }
 
+library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
+	for track_id in tracks {
+		track := l.tracks[track_id] or_continue
+		url_hash := hash_track_url(track.url)
+		delete_key(&l.tracks, track_id)
+		delete_key(&l.url_hash_map, url_hash)
+	}
+
+	l.serial += 1
+}
+
+library_get_missing_tracks :: proc(l: Library, allocator: mem.Allocator) -> []Track_ID {
+	tracks := make_dynamic_array_len_cap([dynamic]Track_ID, 0, len(l.tracks), allocator)
+
+	for track_id, track in l.tracks {
+		if !os.exists(track.url) do append(&tracks, track_id)
+	}
+
+	return tracks[:]
+}
+
 library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Track_ID, error: Error) {
 	track := read_audio_file_metadata(path, l.allocators.temp) or_return
 	return library_add_track(l, track)

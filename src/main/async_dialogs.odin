@@ -6,6 +6,7 @@ import "core:sync"
 import "core:fmt"
 import "core:thread"
 
+@private
 Message_Box_Handle :: UID
 
 _Message_Thread :: struct {
@@ -70,6 +71,7 @@ show_message_box_async :: proc(type: Message_Box_Type, urgency: Message_Box_Urge
 	copy(mt.title[:len(mt.title)-1], string(title))
 
 	mt.id = generate_uid()
+	h = mt.id
 	mt.type = type
 	mt.urgency = urgency
 	mt.runner = thread.create(_message_box_thread)
@@ -91,8 +93,10 @@ message_box_get_response :: proc(
 
 	for r, i in _responses {
 		if r.id == h {
+			res = r.res
+			have_response = true
 			unordered_remove(&_responses, i)
-			return r.res, true
+			return
 		}
 	}
 

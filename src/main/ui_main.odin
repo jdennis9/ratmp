@@ -79,6 +79,7 @@ _Window_ID :: enum {
 	ThemeEditor,
 	Oscilloscope,
 	Spectrum,
+	Settings,
 }
 
 _Window_Category :: enum {
@@ -87,7 +88,7 @@ _Window_Category :: enum {
 	Settings,
 }
 
-_Window_Flag :: enum {DefaultShow, AlwaysShow}
+_Window_Flag :: enum {DefaultShow, AlwaysShow, DontSave}
 _Window_Flags :: bit_set[_Window_Flag]
 
 _Window_Args :: union {
@@ -220,6 +221,14 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			return _spectrum_window_load_setting(ui, &ui.windows.spectrum, key, value)
 		},
 	},
+	.Settings = {
+		title = "Edit settings",
+		internal_name = "_settings",
+		flags = {.DontSave},
+		show_proc = proc(ui: ^UI) -> bool {
+			return _show_settings_editor(ui)
+		},
+	}
 }
 
 _Metadata_Window :: struct {
@@ -242,11 +251,11 @@ _Playlists_Window :: struct {
 }
 
 _Track_Group_Window :: struct {
-	playlist_table:       _Playlist_Table,
-	track_table:          _Track_Table,
-	filter_buf:           [128]u8,
-	filter_hash:          u32,
-	displayed_entry_hash: u32,
+	playlist_table:     _Playlist_Table,
+	track_table:        _Track_Table,
+	filter_buf:         [128]u8,
+	filter_hash:        u32,
+	displayed_entry_id: Maybe(i16),
 }
 
 _Oscilloscope_Display_Mode :: enum {
@@ -343,12 +352,12 @@ UI :: struct {
 			tracks:      []Track_ID,
 			serial:      uint,
 		},
-
+		
 		queue: struct {
 			serial:     uint,
 			track_table: _Track_Table,
 		},
-
+		
 		playlists:    _Playlists_Window,
 		artists:      _Track_Group_Window,
 		albums:       _Track_Group_Window,
@@ -356,10 +365,13 @@ UI :: struct {
 		metadata:     _Metadata_Window,
 		oscilloscope: _Oscilloscope_Window,
 		spectrum:     _Spectrum_Window,
+		
+		show_settings: bool,
 	},
 	dialogs: struct {
 		add_folder:     File_Dialog_State,
 		set_background: File_Dialog_State,
+		confirm_remove_missing_tracks: Message_Box_Handle,
 	},
 	background: struct {
 		texture: Maybe(Texture_Handle),
@@ -580,6 +592,19 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	imgui.PopStyleColor(2)
 
 	// --------------------------------------------------------------------------
+	// Remove missing tracks
+	// --------------------------------------------------------------------------
+	if res, have_res := message_box_get_response(
+		ui.dialogs.confirm_remove_missing_tracks
+	); have_res && res == .OkYes {
+		tracks := library_get_missing_tracks(sv.library, ui.allocators.per_frame)
+		library_remove_tracks(&sv.library, tracks)
+		show_message_box_async(
+			.Message, .Info, "Tracks Removed", "Removed", len(tracks), "missing tracks"
+		)
+	}
+
+	// --------------------------------------------------------------------------
 	// Add folders
 	// --------------------------------------------------------------------------
 	{
@@ -653,13 +678,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	}
 
 	// --------------------------------------------------------------------------
-	// Settings
+	// Show windows
 	// --------------------------------------------------------------------------
-	if imx.begin("Settings###settings") {
-		global_config_dirty |= _show_settings_editor(ui)
-		imgui.End()
-	}
-
 	for win, id in _WINDOW_INFO {
 		name_buf: [512]u8
 		state := &ui.window_state[id]
@@ -702,9 +722,14 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		}
 
 		if imgui.BeginMenu("Settings") {
+			if imgui.MenuItem("Edit settings") {
+				ui.window_state[.Settings].bring_to_front = true
+			}
+
 			if imgui.MenuItem("Change background") {
 				async_file_dialog_open(&ui.dialogs.set_background, .Image, {})
 			}
+
 			imgui.EndMenu()
 		}
 
@@ -744,6 +769,15 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 						state.bring_to_front = true
 					}
 				}
+			}
+		}
+
+		if imgui.BeginMenu("Library") {
+			defer imgui.EndMenu()
+
+			if imgui.MenuItem("Remove missing tracks") {
+				ui.dialogs.confirm_remove_missing_tracks, _ = 
+					show_message_box_async(.YesNo, .Warning, "Remove Missing Tracks", "Remove all tracks with missing files? This cannot be undone.")
 			}
 		}
 
@@ -1035,6 +1069,10 @@ _track_table_show :: proc(
 		play_selection: bool,
 		context_menu_target: Track_ID,
 		play_similar_tracks: bool,
+		go_to_artist: Artist_ID,
+		go_to_album: Album_ID,
+		go_to_genre: Genre_ID,
+		add_selection_to_queue: bool,
 	}
 
 	list_clipper: imgui.ListClipper
@@ -1165,6 +1203,23 @@ _track_table_show :: proc(
 						actions.play_similar_tracks = true
 					}
 
+					if imgui.MenuItem("Add to queue") {
+						actions.add_selection_to_queue = true
+					}
+
+					imgui.Separator()
+					if row.artist != 0 && imgui.MenuItem("More by this artist...") {
+						actions.go_to_artist = row.artist
+					}
+
+					if row.album != 0 && imgui.MenuItem("View album") {
+						actions.go_to_album = row.album
+					}
+
+					if row.genre != 0 && imgui.MenuItem("View genre") {
+						actions.go_to_genre = row.genre
+					}
+					
 					if .NoRemove not_in flags {
 						imgui.Separator()
 						imgui.MenuItem("Remove")
@@ -1235,6 +1290,15 @@ _track_table_show :: proc(
 	if actions.play_similar_tracks {
 		server_request_radio(sv, actions.context_menu_target)
 	}
+
+	if actions.add_selection_to_queue {
+		sel := _track_table_get_selection(table^, ui.allocators.per_frame)
+		playback_queue_add(&sv.playback, sel, table.playlist_uid)
+	}
+
+	if actions.go_to_genre != 0 do _go_to_genre(ui, actions.go_to_genre)
+	if actions.go_to_album != 0 do _go_to_album(ui, actions.go_to_album)
+	if actions.go_to_artist != 0 do _go_to_artist(ui, actions.go_to_artist)
 
 	return true
 }
@@ -1383,7 +1447,7 @@ _track_group_window_show_groups :: proc(
 	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set,
 ) -> (shown: bool) {
 	sv := ui.server
-	entry_index, have_entry := track_group_get_entry(tg, w.displayed_entry_hash)
+	entry_index, have_entry := w.displayed_entry_id.?
 	entry: Track_Group_Ptr
 
 	if have_entry do entry = &tg.entries[entry_index]
@@ -1405,16 +1469,18 @@ _track_group_window_show_groups :: proc(
 		w.filter_hash = filter_hash
 		
 		if w.filter_buf[0] == 0 {
-			for e in tg.entries {
+			for e, i in tg.entries {
 				row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
+				row.id = i64(i)
 				append(&w.playlist_table.rows, row)
 			}
 		}
 		else {
 			lower_filter := strings.to_lower(filter_string, ui.allocators.per_frame)
-			for e in tg.entries {
+			for e, i in tg.entries {
 				if strings.contains(e.lower_case_name, lower_filter) {
 					row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.tracks[:])
+					row.id = i64(i)
 					append(&w.playlist_table.rows, row)
 				}
 			}
@@ -1427,11 +1493,15 @@ _track_group_window_show_groups :: proc(
 
 	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 	if result.selected_row != nil {
-		w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
+		//w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.selected_row.?].title)
+		row := w.playlist_table.rows[result.selected_row.?]
+		w.displayed_entry_id = i16(row.id)
 	}
 
 	if result.played_row != nil {
-		w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.played_row.?].title)
+		//w.displayed_entry_hash = stable_hash_string_32(w.playlist_table.rows[result.played_row.?].title)
+		row := w.playlist_table.rows[result.played_row.?]
+		w.displayed_entry_id = i16(row.id)
 	}
 
 	return true
@@ -1440,12 +1510,12 @@ _track_group_window_show_groups :: proc(
 _track_group_window_show_tracks :: proc(
 	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set
 ) -> bool {
-	entry_index, have_entry := track_group_get_entry(tg, w.displayed_entry_hash)
+	entry_index, have_entry := w.displayed_entry_id.?
 	entry: Track_Group_Ptr
 
 	if have_entry do entry = &tg.entries[entry_index]
 	else {
-		if w.displayed_entry_hash != 0 do w.displayed_entry_hash = 0
+		if w.displayed_entry_id != nil do w.displayed_entry_id = nil
 		imgui.TextDisabled("Select a playlist")
 		return false
 	}
@@ -1470,9 +1540,9 @@ _track_group_window_show_tracks :: proc(
 _track_group_window_show_focused :: proc(
 	ui: ^UI, w: ^_Track_Group_Window, tg: ^Track_Group_Set,
 ) {
-	if w.displayed_entry_hash != 0 {
+	if w.displayed_entry_id != nil {
 		if imgui.Button("Back") {
-			w.displayed_entry_hash = 0
+			w.displayed_entry_id = nil
 		}
 		_track_group_window_show_tracks(ui, w, tg)
 	}
@@ -1487,6 +1557,7 @@ _track_group_window_show_focused :: proc(
 
 _Playlist_Table_Row :: struct {
 	uid: UID,
+	id: i64,
 	title: string,
 	file_size: [12]u8,
 	duration: [9]u8,
@@ -2720,47 +2791,6 @@ _spectrum_window_load_setting :: proc(
 // Misc
 // -----------------------------------------------------------------------------
 
-/*_begin :: proc(ui: ^UI, title: cstring, default_open := false, flags: imgui.WindowFlags = {}) -> bool {
-	id := imgui.GetID(title)
-	state := &ui.window_state[id]
-	if state == nil {
-		ui.window_state[id] = _Window_State {
-			name = title,
-			open = default_open
-		}
-		state = &ui.window_state[id]
-
-		// Sort windows by name
-		delete(ui.sorted_window_states)
-		ui.sorted_window_states, _ = slice.map_keys(ui.window_state)
-		sort.sort(
-			sort.Interface {
-				collection = ui,
-				len = proc(it: sort.Interface) -> int {
-					return len((cast(^UI) it.collection).sorted_window_states)
-				},
-				less = proc(it: sort.Interface, a, b: int) -> bool {
-					ui := cast(^UI) it.collection
-					A := ui.window_state[ui.sorted_window_states[a]] or_return
-					B := ui.window_state[ui.sorted_window_states[b]] or_return
-					return strings.compare(string(A.name), string(B.name)) < 0
-				},
-				swap = proc(it: sort.Interface, a, b: int) {
-					ui := cast(^UI) it.collection
-					ui.sorted_window_states[a], ui.sorted_window_states[b] = 
-						ui.sorted_window_states[b], ui.sorted_window_states[a]
-				}
-			},
-		)
-
-	}
-	else if !state.open do return false
-
-	if state.bring_to_front do imgui.SetNextWindowFocus()
-	state.bring_to_front = false
-	return imx.begin(title, &state.open, flags)
-}*/
-
 _table_select_row :: proc(table: ^$T, row_index: int, keep_selection: bool) {
 	row := &table.rows[row_index]
 	rows := table.rows[:]
@@ -2825,6 +2855,22 @@ _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast (mods | key))
 }
 
+_go_to_album :: proc(ui: ^UI, id: Album_ID) {
+	ui.windows.albums.displayed_entry_id = i16(id)
+	ui.window_state[.Albums].bring_to_front = true
+}
+
+_go_to_artist :: proc(ui: ^UI, id: Artist_ID) {
+	ui.windows.artists.displayed_entry_id = i16(id)
+	ui.window_state[.Artists].bring_to_front = true
+}
+
+_go_to_genre :: proc(ui: ^UI, id: Genre_ID) {
+	ui.windows.genres.displayed_entry_id = i16(id)
+	ui.window_state[.Genres].bring_to_front = true
+}
+
+
 // -----------------------------------------------------------------------------
 // Layout
 // -----------------------------------------------------------------------------
@@ -2855,6 +2901,7 @@ _imgui_settings_read_line_proc :: proc "c" (
 	state := &ui.window_state[id]
 	info := _WINDOW_INFO[id]
 
+	if .DontSave in info.flags do return
 	
 	if tokens[0] != "_Open" {
 		if info.settings_load_proc != nil {
@@ -2877,6 +2924,7 @@ _imgui_settings_write_proc :: proc "c" (
 		info := _WINDOW_INFO[id]
 		m: map[string]string
 
+		if .DontSave in info.flags do continue
 		
 		imgui.TextBuffer_append(out_buf,
 			imx.string_to_ptrs(fmt.aprintln(
