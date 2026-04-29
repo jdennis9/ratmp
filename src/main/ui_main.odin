@@ -2642,7 +2642,12 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 
 	switch state.display_mode {
 	case .Histogram:
-		draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+		//draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+		//draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+		imx.draw_bars(
+			drawlist, graph_pos + {0, graph_size.y}, graph_pos + {graph_size.x, 0}, state.bands[:],
+			ui_theme.colors[.VolumeLow], ui_theme.colors[.VolumeHigh]
+		)
 	case .Heat:
 		draw_band_heat(drawlist, graph_pos, graph_size, bands[:])
 	case .Line:
