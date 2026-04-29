@@ -234,7 +234,7 @@ kv_row :: proc(name: string, args: ..any, sep := "") -> (active: bool) {
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
 	if imgui.TableSetColumnIndex(1) {
-		active |= imgui.Selectable(cstring(&buf[0]))
+		active |= imgui.Selectable(cstring(&buf[0]), false, {.SpanAllColumns})
 	}
 	return
 }
@@ -245,7 +245,7 @@ kv_rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
 	if imgui.TableSetColumnIndex(1) {
-		active |= imgui.Selectable(cstring(&buf[0]), )
+		active |= imgui.Selectable(cstring(&buf[0]), false, {.SpanAllColumns})
 	}
 	return
 }

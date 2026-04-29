@@ -1173,7 +1173,7 @@ _track_table_show :: proc(
 
 				if imgui.BeginItemTooltip() {
 					if track, got_track := get_track(sv, row.id); got_track {
-						_show_track_metadata_table("##metadata", sv^, track)
+						_show_track_metadata_table(ui, "##metadata", sv^, track)
 					}
 					imgui.EndTooltip()
 				}
@@ -1319,7 +1319,7 @@ _sort_track_table_rows :: proc(ui: ^UI, table: _Track_Table, spec: Track_Sort_Sp
 // Metadata window
 // -----------------------------------------------------------------------------
 
-_show_track_metadata_table :: proc(str_id: cstring, sv: Server, track: Track) -> bool {
+_show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: Track) -> bool {
 	imx.begin_kv_table(str_id, imgui.TableFlags_RowBg) or_return
 	defer imx.end_kv_table()
 
@@ -1331,9 +1331,19 @@ _show_track_metadata_table :: proc(str_id: cstring, sv: Server, track: Track) ->
 	imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
 	
 	if track.title != "" do imx.kv_row("Title", track.title)
-	if track.artist != 0 do imx.kv_row("Artist", get_artist_name(sv, track.artist))
-	if track.album != 0 do imx.kv_row("Album", get_album_name(sv, track.album))
-	if track.genre != 0 do imx.kv_row("Genre", get_genre_name(sv, track.genre))
+
+	if track.artist != 0 && imx.kv_row("Artist", get_artist_name(sv, track.artist)) {
+		_go_to_artist(ui, track.artist)
+	}
+
+	if track.album != 0 && imx.kv_row("Album", get_album_name(sv, track.album)) {
+		_go_to_album(ui, track.album)
+	}
+
+	if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
+		_go_to_genre(ui, track.genre)
+	}
+
 	imx.kv_rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
 	imx.kv_row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
 	if track.samplerate != 0 do imx.kv_row("Sample rate", track.samplerate, "Hz", sep="")
@@ -1434,7 +1444,7 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 	imx.push_font_scale(1.2)
 	imgui.SeparatorText("Metadata")
 	imgui.PopFont()
-	_show_track_metadata_table("##metadata", sv^, md)
+	_show_track_metadata_table(ui, "##metadata", sv^, md)
 
 	return true
 }
