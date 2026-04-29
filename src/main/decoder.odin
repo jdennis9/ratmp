@@ -16,6 +16,7 @@ Audio_File_Info :: struct {
 	samplerate:  int,
 	channels:    int,
 	duration:    int,
+	replay_gain: Maybe(ffmpeg.Replay_Gain),
 }
 
 Decoder :: struct {
@@ -58,6 +59,9 @@ decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_I
 		info.samplerate = dec.samplerate
 		info.channels = dec.channels
 		info.duration = auto_cast dec.duration_seconds
+		if file_info.has_replay_gain {
+			info.replay_gain = file_info.replay_gain
+		}
 	}
 	
 	dec.is_open = true

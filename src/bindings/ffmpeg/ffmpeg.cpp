@@ -149,10 +149,10 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 			ff->output_scale = amp;
 
 			info_out->has_replay_gain = true;
-			info_out->replay_gain.track_gain = powf(10, rp->track_gain/20);
-			info_out->replay_gain.album_gain = powf(10, rp->album_gain/20);
-			info_out->replay_gain.track_peak = powf(10, rp->track_peak/20);
-			info_out->replay_gain.album_peak = powf(10, rp->album_peak/20);
+			info_out->replay_gain.track_gain = rp->track_gain / 1e5;
+			info_out->replay_gain.album_gain = rp->album_gain / 1e5;
+			info_out->replay_gain.track_peak = rp->track_peak / 1e5;
+			info_out->replay_gain.album_peak = rp->album_peak / 1e5;
 		}
 		else {
 			ff->output_scale = 1.f;

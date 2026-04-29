@@ -902,6 +902,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	if track, have_track := get_track(sv, sv.current_track_id); have_track {
 		imx.text(512, get_artist_name(sv^, track.artist), " - ", track.title)
 		imgui.Separator()
+		track_info := sv.track_info
 
 		imx.text_unformatted_ex(track.album != 0 ? get_album_name(sv^, track.album) : "<no album>")
 
@@ -922,6 +923,14 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 		imgui.Separator()
 		imx.text(32, track.bitrate_kbps, "kb/s")
 		imgui.Separator()
+
+		if track_info.replay_gain != nil {
+			rp := track_info.replay_gain.?
+			imx.textf(64, "Applied gain: %.2fdB", rp.track_gain)
+			imgui.Separator()
+			imx.textf(64, "Peak: %.2fdB", rp.track_peak)
+			imgui.Separator()
+		}
 	}
 
 	// --------------------------------------------------------------------------
