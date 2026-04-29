@@ -235,7 +235,7 @@ interlace :: proc(input: [][]f32, output: []f32) {
 }
 
 Window_Function :: enum {
-	Blackman, // Default to blackman because it has least noise in fft
+	Blackman, // Default to blackman
 	Nuttall,
 	Hamming,
 	Hann,

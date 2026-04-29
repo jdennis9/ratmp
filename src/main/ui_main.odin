@@ -560,6 +560,7 @@ ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {	
 	sv := ui.server
 	ui.actions = {}
+	need_pop_font := false
 
 	defer free_all(ui.allocators.per_frame)
 	
@@ -567,10 +568,11 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 
 	//style := imgui.GetStyle()
 	//style.FontSizeBase = cfg.font_size != 0 ? clamp(f32(cfg.font_size), 8, 36) : 16
-	if global_config.ui.font_size != 0 {
+	if global_config.ui.font_size > 8 {
 		imgui.PushFontFloat(nil, global_config.ui.font_size)
+		need_pop_font = true
 	}
-	defer if global_config.ui.font_size != 0 do imgui.PopFont()
+	defer if need_pop_font do imgui.PopFont()
 
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.PushStyleColor(.WindowBg, 0)
