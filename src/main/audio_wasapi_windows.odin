@@ -217,31 +217,39 @@ _run_session :: proc() -> (ok: bool) {
 		frame_padding: u32
 		avail_frames: u32
 
-		if sync.sema_wait_with_timeout(&w.event_semaphore, time.Millisecond * auto_cast(buffer_duration_ms/2)) {
-			if w.in_events[.Kill] > 0 {
-				break main_loop
-			}
-			
-			if w.in_events[.DropBuffer] > 0 {
-				audio_client->Stop()
-				audio_client->Reset()
-				w.callback(w.callback_data, .BufferDropped, nil, {})
-				audio_client->Start()
-				w.in_events[.DropBuffer] -= 1
-			}
+		// -----------------------------------------------------------------------
+		// Wait for event or timeout
+		// -----------------------------------------------------------------------
+		sync.sema_wait_with_timeout(&w.event_semaphore, time.Millisecond * auto_cast(buffer_duration_ms/2))
 
-			if w.in_events[.Pause] > 0 {
-				w.is_paused = true
-				audio_client->Stop()
-				sync.sema_wait(&w.event_semaphore)
-				w.is_paused = false
-				audio_client->Start()
-				w.in_events[.Pause] = 0
-				w.in_events[.Resume] = 0
-			}
-
+		// -----------------------------------------------------------------------
+		// Handle events
+		// -----------------------------------------------------------------------
+		if w.in_events[.Kill] > 0 {
+			break main_loop
 		}
 		
+		if w.in_events[.DropBuffer] > 0 {
+			audio_client->Stop()
+			audio_client->Reset()
+			w.callback(w.callback_data, .BufferDropped, nil, {})
+			audio_client->Start()
+			w.in_events[.DropBuffer] -= 1
+		}
+
+		if w.in_events[.Pause] > 0 {
+			w.is_paused = true
+			audio_client->Stop()
+			sync.sema_wait(&w.event_semaphore)
+			w.is_paused = false
+			audio_client->Start()
+			w.in_events[.Pause] = 0
+			w.in_events[.Resume] = 0
+		}
+		
+		// -----------------------------------------------------------------------
+		// Callbacks
+		// -----------------------------------------------------------------------
 		if status == .Finish {
 			w.callback(w.callback_data, .TrackFinised, nil, {})
 		}
