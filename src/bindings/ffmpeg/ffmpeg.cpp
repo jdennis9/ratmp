@@ -8,6 +8,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/replaygain.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 }
@@ -28,6 +29,8 @@ struct FFMPEG_Context {
 	Audio_Spec resampler_spec;
 
 	int32_t samplerate;
+
+	float output_scale;
 };
 
 void ffmpeg_free_context(FFMPEG_Context *ff) {
@@ -126,6 +129,36 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	ff->frame = av_frame_alloc();
 	ff->packet = av_packet_alloc();
 
+
+	// Replay gain
+	{
+		const AVPacketSideData *sd = av_packet_side_data_get(
+			stream->side_data,
+			stream->nb_side_data,
+			AV_PKT_DATA_REPLAYGAIN
+		);
+
+		AVReplayGain *rp;
+
+		if (sd) {
+			rp = (AVReplayGain*)sd->data;
+
+			float gain = (float)rp->track_gain / 100000;
+			float amp = powf(10, gain/20);
+
+			ff->output_scale = amp;
+
+			info_out->has_replay_gain = true;
+			info_out->replay_gain.track_gain = powf(10, rp->track_gain/20);
+			info_out->replay_gain.album_gain = powf(10, rp->album_gain/20);
+			info_out->replay_gain.track_peak = powf(10, rp->track_peak/20);
+			info_out->replay_gain.album_peak = powf(10, rp->album_peak/20);
+		}
+		else {
+			ff->output_scale = 1.f;
+		}
+	}
+
 	return true;
 }
 
@@ -206,6 +239,15 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 
 		packet_out->frames_out += write_frames;
 		packet_out->frames_in += read_frames;
+	}
+
+	if (ff->output_scale != 1) {
+		float scale = ff->output_scale;
+		for (int ch = 0; ch < output_spec.channels; ++ch) {
+			for (int frame = 0; frame < packet_out->frames_out; ++frame) {
+				packet_out->data[ch][frame] *= scale;
+			}
+		}
 	}
 
 	return status;

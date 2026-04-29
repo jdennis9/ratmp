@@ -18,11 +18,20 @@ struct Audio_Spec {
 	}
 };
 
+struct Replay_Gain {
+	float track_gain;
+	float album_gain;
+	float track_peak;
+	float album_peak;
+};
+
 struct File_Info {
 	char codec_name[64];
 	char format_name[64];
 	Audio_Spec spec;
 	int64_t total_frames;
+	bool has_replay_gain;
+	Replay_Gain replay_gain;
 };
 
 struct Packet {

@@ -22,11 +22,17 @@ Audio_Spec :: struct {
 	samplerate: i32,
 }
 
+Replay_Gain :: struct {
+	track_gain, album_gain, track_peak, album_peak: f32,
+}
+
 File_Info :: struct {
 	codec_name: [64]u8,
 	format_name: [64]u8,
 	spec: Audio_Spec,
 	total_frames: i64,
+	has_replay_gain: bool,
+	replay_gain: Replay_Gain,
 }
 
 Decode_Status :: enum c.int {
