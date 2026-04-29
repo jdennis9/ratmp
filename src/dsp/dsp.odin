@@ -361,6 +361,11 @@ amp_to_gain :: proc(amp: f32) -> f32 {
 	return 20 * linalg.log10(abs(amp))
 }
 
+gain_to_amp :: proc(gain: f32) -> f32 {
+	if gain == 0 do return 0
+	return linalg.pow(f32(10), gain/20)
+}
+
 /*get_sdk_impl :: proc() -> sdk.Analysis_Procs {
 	return sdk.Analysis_Procs {
 		distribute_spectrum_frequencies = proc(output: []f32) {

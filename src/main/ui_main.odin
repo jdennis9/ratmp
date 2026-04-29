@@ -80,6 +80,7 @@ _Window_ID :: enum {
 	Oscilloscope,
 	Spectrum,
 	Settings,
+	PostProcessing,
 }
 
 _Window_Category :: enum {
@@ -222,13 +223,20 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 		},
 	},
 	.Settings = {
-		title = "Edit settings",
+		title = "Edit Settings",
 		internal_name = "_settings",
 		flags = {.DontSave},
 		show_proc = proc(ui: ^UI) -> bool {
 			return _show_settings_editor(ui)
 		},
-	}
+	},
+	.PostProcessing = {
+		title = "Post Processing",
+		internal_name = "_post_processing",
+		show_proc = proc(ui: ^UI) -> bool {
+			return _post_processing_window_show(ui, &ui.windows.post_processing)
+		},
+	},
 }
 
 _Metadata_Window :: struct {
@@ -303,6 +311,10 @@ _Spectrum_Window :: struct {
 	freq_guide_bands: int,
 }
 
+_Post_Processing_Window :: struct {
+	params: Playback_Post_Process_Params,
+}
+
 // -----------------------------------------------------------------------------
 // Tracked window state
 // -----------------------------------------------------------------------------
@@ -358,13 +370,14 @@ UI :: struct {
 			track_table: _Track_Table,
 		},
 		
-		playlists:    _Playlists_Window,
-		artists:      _Track_Group_Window,
-		albums:       _Track_Group_Window,
-		genres:       _Track_Group_Window,
-		metadata:     _Metadata_Window,
-		oscilloscope: _Oscilloscope_Window,
-		spectrum:     _Spectrum_Window,
+		playlists:       _Playlists_Window,
+		artists:         _Track_Group_Window,
+		albums:          _Track_Group_Window,
+		genres:          _Track_Group_Window,
+		metadata:        _Metadata_Window,
+		oscilloscope:    _Oscilloscope_Window,
+		spectrum:        _Spectrum_Window,
+		post_processing: _Post_Processing_Window,
 		
 		show_settings: bool,
 	},
@@ -446,10 +459,10 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 
 	// Allocators
 	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame", flags={.IsTemp})
-	ui.allocators.fonts =     allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
-	ui.allocators.themes =    allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
-	ui.allocators.lazy =      allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
-	ui.allocators.analysis =  allocator_map_add_heap(&ui.allocator_map, "analysis")
+	ui.allocators.fonts     = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
+	ui.allocators.themes    = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
+	ui.allocators.lazy      = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
+	ui.allocators.analysis  = allocator_map_add_heap(&ui.allocator_map, "analysis")
 
 	// Theme defaults
 	ui_theme.imgui_colors = imgui.GetStyle().Colors
@@ -757,6 +770,7 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				},
 				.Settings = {
 					.ThemeEditor,
+					.PostProcessing
 				},
 			}
 
@@ -2347,6 +2361,22 @@ _update_analysis :: proc(ui: ^UI) {
 		server_consume_audio_output(sv, state.raw_output[:channels], global_delta_time)
 		dsp.to_mono(state.raw_output[:state.channels], state.avg_output)
 	}
+}
+
+// -----------------------------------------------------------------------------
+// Post-processing
+// -----------------------------------------------------------------------------
+
+_post_processing_window_show :: proc(ui: ^UI, w: ^_Post_Processing_Window) -> bool {
+	sv := ui.server
+
+	imgui.SliderFloat("Pre-amp gain", &w.params.preamp_gain, -10, 10, "%.1fdB")
+
+	if imgui.Button("Apply") {
+		playback_thread_set_post_process_params(&sv.playback_thread, w.params)
+	}
+
+	return true
 }
 
 // -----------------------------------------------------------------------------

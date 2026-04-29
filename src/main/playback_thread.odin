@@ -1,21 +1,26 @@
 package main
 
+import "src:dsp"
 import "core:mem"
+import "core:math"
+import "core:log"
+import "core:sync"
+import "core:thread"
+
 // =============================================================================
 // Procedures to create and interact with an asynchronous playback stream.
 // Exists to keep decoding and post-processing away from the main audio thread,
 // and do it before the audio is needed.
 // =============================================================================
 
-import "core:math"
-import "core:log"
-import "core:sync"
-import "core:thread"
-
 Playback_Thread_Status :: enum {
 	MoreInput,
 	NoInput,
 	Eof,
+}
+
+Playback_Post_Process_Params :: struct {
+	preamp_gain: f32,
 }
 
 Playback_Thread :: struct {
@@ -39,6 +44,9 @@ Playback_Thread :: struct {
 	samplerate, channels: int,
 
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
+
+	post_processing: Playback_Post_Process_Params,
+	post_processing_lock: sync.Mutex,
 }
 
 Playback_Thread_Params :: struct {
@@ -60,6 +68,18 @@ _reset_ring_buffers :: proc(at: ^Playback_Thread) {
 @(private="file")
 _post_process :: proc(at: ^Playback_Thread, audio: [][]f32) {
 	TIME_SCOPE("Post process")
+	sync.guard(&at.post_processing_lock)
+	pp := &at.post_processing
+
+	// Apply preamp
+	if pp.preamp_gain != 0 {
+		v := dsp.gain_to_amp(pp.preamp_gain)
+		for ch in audio {
+			for &f in ch {
+				f *= v
+			}
+		}
+	}
 
 	// Clipping
 	for ch in audio {
@@ -234,4 +254,14 @@ playback_thread_get_track_position :: proc(at: ^Playback_Thread) -> int {
 
 playback_thread_has_track :: proc(at: Playback_Thread) -> bool {
 	return decoder_is_open(at.dec)
+}
+
+playback_thread_set_post_process_params :: proc(at: ^Playback_Thread, params: Playback_Post_Process_Params) {
+	sync.guard(&at.post_processing_lock)
+	at.post_processing = params
+}
+
+playback_thread_get_post_process_params :: proc(at: ^Playback_Thread) -> Playback_Post_Process_Params {
+	sync.guard(&at.post_processing_lock)
+	return at.post_processing
 }
