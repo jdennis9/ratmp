@@ -270,6 +270,7 @@ _Spectrum_Display_Mode :: enum {
 	Histogram,
 	Heat,
 	Line,
+	LineFilled,
 }
 
 SPECTRUM_MAX_BANDS :: 160
@@ -281,16 +282,16 @@ _Spectrum_Frequency_Guide :: struct {
 }
 
 _Spectrum_Window :: struct {
-	freq_guide_width: f32, // Width of spectrum window when frequency guides were built
-	freq_guide_bands: int,
 	bands:            [dynamic; SPECTRUM_MAX_BANDS]f32,
 	band_freqs:       [dynamic; SPECTRUM_MAX_BANDS]f32,
 	freq_guides:      [dynamic; 32]_Spectrum_Frequency_Guide,
 	window_values:    [dynamic]f32,
-	band_gap:         f32,
 	fft:              dsp.FFT_State,
 	display_mode:     _Spectrum_Display_Mode,
 	window_func:      dsp.Window_Function,
+	band_gap:         f32,
+	freq_guide_width: f32, // Width of spectrum window when frequency guides were built
+	freq_guide_bands: int,
 }
 
 // -----------------------------------------------------------------------------
@@ -2436,7 +2437,35 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 			resize(&state.bands, band_count)
 		}
 
-		window_func_changed |= imx.select_enum("Window", &state.window_func)
+		imgui.Separator()
+
+		if imgui.BeginMenu("Window") {
+			defer imgui.EndMenu()
+
+			items := []imx.Enum_Menu_Item(dsp.Window_Function) {
+				{value=.Blackman, name="Blackman (recommended)"},
+				{value=.Nuttall,  name="Nuttall"},
+				{value=.Hamming,  name="Hamming"},
+				{value=.Hann,     name="Hann"},
+				{},
+				{value=.Normal,   name="None"},
+			}
+
+			window_func_changed |= imx.show_enum_menu_items_ex(items, &state.window_func)
+		}
+
+		if imgui.BeginMenu("Mode") {
+			defer imgui.EndMenu()
+			
+			items := []imx.Enum_Menu_Item(_Spectrum_Display_Mode) {
+				{value=.Histogram,  name="Histogram"},
+				{value=.Heat,       name="Heat map"},
+				{value=.Line,       name="Line graph"},
+				{value=.LineFilled, name="Line graph (filled)"},
+			}
+
+			imx.show_enum_menu_items_ex(items, &state.display_mode)
+		}
 	}
 
 	// Audio vars
@@ -2553,6 +2582,49 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 		}
 	}
 
+	draw_band_heat :: proc(
+		drawlist: ^imgui.DrawList, pos, size: [2]f32, bands: []Band
+	) {
+		quiet_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeLow])
+		loud_color := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.VolumeHigh])
+
+		quiet_color.a = 0
+		loud_color.a = 1
+
+		for band in bands {
+			peak := clamp(band.peak, 0, 1)
+			color := linalg.lerp(quiet_color, loud_color, clamp(peak, 0, 1))
+			p_min: [2]f32 = {pos.x + band.offset, pos.y}
+			p_max: [2]f32 = {pos.x + band.offset + band.width, pos.y + size.y}
+
+			imgui.DrawList_AddRectFilled(drawlist, p_min, p_max, imgui.GetColorU32ImVec4(color))
+		}
+	}
+	
+	draw_line_graph :: proc(
+		drawlist: ^imgui.DrawList, pos, size: [2]f32, bands: []Band, allocator: mem.Allocator, fill: bool
+	) {
+		positions := make([][2]f32, len(bands), allocator)
+		gap := (size.x/f32(len(bands)))
+		x := pos.x
+		color := imgui.GetColorU32(.PlotLines)
+
+		if fill do imgui.DrawList_PathLineTo(drawlist, pos + {0, size.y})
+
+		for band, i in bands {
+			p := pos + {x, size.y * (1 - band.peak)}
+			positions[i] = p
+			if fill do imgui.DrawList_PathLineTo(drawlist, p)
+			x += gap
+		}
+
+		if fill do imgui.DrawList_PathLineTo(drawlist, pos + size)
+
+		if fill do imgui.DrawList_PathFillConcave(drawlist, ui_theme.colors[.VolumeHigh])
+
+		imgui.DrawList_AddPolyline(drawlist, raw_data(positions), auto_cast len(positions), color, {}, 2)
+	}
+
 	draw_frequency_guides :: proc(
 		drawlist: ^imgui.DrawList,
 		guides: []_Spectrum_Frequency_Guide,
@@ -2568,7 +2640,16 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 		}
 	}
 
-	draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+	switch state.display_mode {
+	case .Histogram:
+		draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
+	case .Heat:
+		draw_band_heat(drawlist, graph_pos, graph_size, bands[:])
+	case .Line:
+		draw_line_graph(drawlist, graph_pos, graph_size, bands[:], ui.allocators.per_frame, false)
+	case .LineFilled:
+		draw_line_graph(drawlist, graph_pos, graph_size, bands[:], ui.allocators.per_frame, true)
+	}
 	draw_frequency_guides(drawlist, state.freq_guides[:], graph_pos + {0, graph_size.y + style.FramePadding.y})
 
 	// Band info on hover
@@ -2601,6 +2682,7 @@ _spectrum_window_get_settings :: proc(
 ) -> Error {
 	output["Bands"] = fmt.aprint(len(state.bands), allocator=allocator)
 	output["Window"] = fmt.aprint(state.window_func, allocator=allocator)
+	output["Mode"] = fmt.aprint(state.display_mode, allocator=allocator)
 	return nil
 }
 
@@ -2616,6 +2698,8 @@ _spectrum_window_load_setting :: proc(
 		resize(&state.bands, v)
 	case "Window":
 		state.window_func = reflect.enum_from_name(dsp.Window_Function, value) or_break
+	case "Mode":
+		state.display_mode = reflect.enum_from_name(_Spectrum_Display_Mode, value) or_break
 	}
 
 	return nil

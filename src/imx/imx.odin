@@ -152,15 +152,7 @@ color_edit_u32 :: proc(label: cstring, color: ^u32, flags: imgui.ColorEditFlags 
 	return false
 }
 
-select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
-	label_buf: [128]u8
-	str := cstring(&label_buf[0])
-
-	copy(label_buf[:127], reflect.enum_name_from_value(v^) or_else "")
-
-	imgui.BeginCombo(label, str) or_return
-	defer imgui.EndCombo()
-
+show_enum_menu_items :: proc(v: ^$E) -> (changed: bool) {
 	for e in E {
 		buf: [128]u8
 		if e != v^ {
@@ -173,6 +165,55 @@ select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
 	}
 
 	return
+}
+
+// nil name is separator
+Enum_Menu_Item :: struct($E: typeid) {
+	value:   E,
+	name:    cstring,
+	tooltip: cstring,
+}
+Enum_Menu_Flag :: enum {ExcludeSelected}
+Enum_Menu_Flags :: bit_set[Enum_Menu_Flag]
+
+show_enum_menu_items_ex :: proc(
+	items: []Enum_Menu_Item($E),
+	current: ^E, flags: Enum_Menu_Flags = {}
+) -> (changed: bool) {
+	for item in items {
+		if item.name == nil {
+			imgui.Separator()
+			continue
+		}
+
+		selected := item.value == current^
+		if selected && .ExcludeSelected in flags do continue
+
+		if imgui.MenuItem(item.name, nil, selected=selected) {
+			current^ = item.value
+			changed = true
+		}
+
+		if item.tooltip != nil && imgui.BeginTooltip() {
+			defer imgui.EndTooltip()
+
+			text_unformatted(string(item.tooltip))
+		}
+	}
+
+	return
+}
+
+select_enum :: proc(label: cstring, v: ^$E) -> (changed: bool) {
+	label_buf: [128]u8
+	str := cstring(&label_buf[0])
+
+	copy(label_buf[:127], reflect.enum_name_from_value(v^) or_else "")
+
+	imgui.BeginCombo(label, str) or_return
+	defer imgui.EndCombo()
+
+	return show_enum_menu_items(v)
 }
 
 push_font_scale :: proc(scale: f32) {
