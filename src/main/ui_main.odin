@@ -2963,6 +2963,18 @@ _wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
 	}
 
 	// --------------------------------------------------------------------------
+	// Input
+	// --------------------------------------------------------------------------
+	if imgui.IsWindowHovered() && imgui.IsMouseClicked(.Left) {
+		p_min := imgui.GetCursorScreenPos()
+		p_max := p_min + imgui.GetContentRegionAvail()
+
+		pos := linalg.unlerp(p_min.x, p_max.x, imgui.GetMousePos().x)
+		pos = clamp(pos, 0, 1)
+		server_seek(sv, int(pos * f32(sv.track_info.duration)))
+	}
+
+	// --------------------------------------------------------------------------
 	// Display
 	// --------------------------------------------------------------------------
 	data_points := state.bg.data_points[:]
