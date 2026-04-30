@@ -1,6 +1,8 @@
 #+private file
 package main
 
+import "core:sync"
+import "core:thread"
 import "core:math/linalg"
 import "base:runtime"
 import "core:strconv"
@@ -79,6 +81,7 @@ _Window_ID :: enum {
 	ThemeEditor,
 	Oscilloscope,
 	Spectrum,
+	Wavebar,
 	Settings,
 	PostProcessing,
 }
@@ -222,6 +225,19 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			return _spectrum_window_load_setting(ui, &ui.windows.spectrum, key, value)
 		},
 	},
+	.Wavebar = {
+		title = "Wavebar",
+		internal_name = "_wavebar",
+		show_proc = proc(ui: ^UI) -> bool {
+			return _wavebar_window_show(ui, &ui.windows.wavebar)
+		},
+		settings_save_proc = proc(ui: ^UI, output: ^map[string]string, allocator: mem.Allocator) -> Error {
+			return _wavebar_window_get_settings(ui, &ui.windows.wavebar, output, allocator)
+		},
+		settings_load_proc = proc(ui: ^UI, key, value: string) -> Error {
+			return _wavebar_window_load_setting(&ui.windows.wavebar, key, value)
+		}
+	},
 	.Settings = {
 		title = "Edit Settings",
 		internal_name = "_settings",
@@ -315,6 +331,22 @@ _Post_Processing_Window :: struct {
 	params: Playback_Post_Process_Params,
 }
 
+_WAVEBAR_NUM_DATA_POINTS :: 1440
+
+_Wavebar_Builder :: struct {
+	data_points: [_WAVEBAR_NUM_DATA_POINTS]f32,
+	data_points_calculated: int,
+	want_cancel: bool,
+	track_url: string,
+}
+
+_Wavebar_Window :: struct {
+	bg: _Wavebar_Builder,
+	decoder_thread: ^thread.Thread,
+	displayed_track: Track_ID,
+	color_mode: imx.Bar_Color_Mode,
+}
+
 // -----------------------------------------------------------------------------
 // Tracked window state
 // -----------------------------------------------------------------------------
@@ -377,6 +409,7 @@ UI :: struct {
 		metadata:        _Metadata_Window,
 		oscilloscope:    _Oscilloscope_Window,
 		spectrum:        _Spectrum_Window,
+		wavebar:         _Wavebar_Window,
 		post_processing: _Post_Processing_Window,
 		
 		show_settings: bool,
@@ -427,6 +460,8 @@ _Theme_Color :: enum {
 	RightChannelWave,
 	VolumeLow,
 	VolumeHigh,
+	WaveBarInner,
+	WaveBarOuter,
 }
 
 _Theme_Accent :: enum {
@@ -451,6 +486,8 @@ _THEME_COLOR_DEFAULTS := [_Theme_Color]u32 {
 	.RightChannelWave = 0xff00ffff,
 	.VolumeLow        = 0xff00ff00,
 	.VolumeHigh       = 0xff0000ff,
+	.WaveBarOuter     = 0xffffce00,
+	.WaveBarInner     = 0xffff0800,
 }
 
 @private
@@ -767,6 +804,7 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				.Visualizers = {
 					.Oscilloscope,
 					.Spectrum,
+					.Wavebar,
 				},
 				.Settings = {
 					.ThemeEditor,
@@ -1909,6 +1947,8 @@ _theme_editor_show :: proc(ui: ^UI) -> (changed: bool) {
 	imx.color_edit_u32("Loud", &t.colors[.VolumeHigh])
 	imx.color_edit_u32("Left channel wave", &t.colors[.LeftChannelWave])
 	imx.color_edit_u32("Right channel wave", &t.colors[.RightChannelWave])
+	imx.color_edit_u32("Wavebar quiet", &t.colors[.WaveBarInner])
+	imx.color_edit_u32("Wavebar loud", &t.colors[.WaveBarOuter])
 	imgui.PopID()
 
 	imgui.SeparatorText("ImGui colors")
@@ -2831,6 +2871,173 @@ _spectrum_window_load_setting :: proc(
 		state.window_func = reflect.enum_from_name(dsp.Window_Function, value) or_break
 	case "Mode":
 		state.display_mode = reflect.enum_from_name(_Spectrum_Display_Mode, value) or_break
+	}
+
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// Wavebar
+// -----------------------------------------------------------------------------
+_wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
+	sv := ui.server
+	track_id := sv.current_track_id
+
+	_build_data_points :: proc(state: ^_Wavebar_Builder) -> bool {
+		dec: Decoder
+
+		decoder_open(&dec, state.track_url, nil) or_return
+		defer decoder_close(&dec)
+
+		buffer_size := dec.frame_count / _WAVEBAR_NUM_DATA_POINTS
+
+		buf := make([]f32, buffer_size)
+		defer delete(buf)
+
+		for i in 0..<_WAVEBAR_NUM_DATA_POINTS {
+			status := decoder_fill_buffer(&dec, {buf}, dec.samplerate)
+
+			if sync.atomic_load(&state.want_cancel) do break
+
+			peak: f32
+
+			for v in buf {
+				peak = max(abs(v), peak)
+			}
+
+			state.data_points[i] = peak
+			sync.atomic_add(&state.data_points_calculated, 1)
+
+			if status != .Complete do break
+		}
+
+		return true
+	}
+
+	_thread_proc :: proc(thr: ^thread.Thread) {
+		state := cast(^_Wavebar_Builder) thr.data
+		_build_data_points(state)
+	}
+
+	// --------------------------------------------------------------------------
+	// Settings
+	// --------------------------------------------------------------------------
+
+	if imgui.BeginPopupContextWindow() {
+		defer imgui.EndPopup()
+
+		items := []imx.Enum_Menu_Item(imx.Bar_Color_Mode) {
+			{value=.Gradient, name="Gradient"},
+			{value=.Flat, name="Flat"},
+		}
+
+		imgui.SeparatorText("Color Mode")
+		imx.show_enum_menu_items_ex(items, &state.color_mode)
+	}
+
+	// --------------------------------------------------------------------------
+	// Update
+	// --------------------------------------------------------------------------
+	if track_id != state.displayed_track {
+		state.displayed_track = track_id
+
+		// Cancel thread if it's running
+		if state.decoder_thread != nil {
+			sync.atomic_store(&state.bg.want_cancel, true)
+			thread.join(state.decoder_thread)
+			state.decoder_thread = nil
+			state.bg.want_cancel = false
+		}
+
+		if track_id == 0 do return false
+
+		for &f in state.bg.data_points[:state.bg.data_points_calculated] do f = 0
+		state.bg.data_points_calculated = 0
+		track := sv.library.tracks[track_id] or_return
+		state.bg.track_url = track.url
+
+		state.decoder_thread = thread.create(_thread_proc, .Low)
+		state.decoder_thread.data = &state.bg
+		state.decoder_thread.init_context = context
+		thread.start(state.decoder_thread)
+	}
+
+	// --------------------------------------------------------------------------
+	// Display
+	// --------------------------------------------------------------------------
+	data_points := state.bg.data_points[:]
+
+	imgui.PushStyleVarImVec2(.WindowPadding, {0, 0})
+	defer imgui.PopStyleVar()
+
+
+	track_pos := server_get_track_position_seconds(sv)
+	track_duration := sv.track_info.duration
+	if track_duration <= 0 do return false
+	track_progress := f32(f64(track_pos) / f64(track_duration))
+
+	// Draw histogram
+	{
+		drawlist := imgui.GetWindowDrawList()
+		pos := imgui.GetCursorScreenPos()
+		size := imgui.GetContentRegionAvail()
+
+		left_data_points := int(track_progress * _WAVEBAR_NUM_DATA_POINTS)
+		right_data_points := _WAVEBAR_NUM_DATA_POINTS - left_data_points
+		bar_size := size.x / f32(_WAVEBAR_NUM_DATA_POINTS)
+		left_size := f32(left_data_points) * bar_size
+		right_size := f32(right_data_points) * bar_size
+
+		draw_wave :: proc(drawlist: ^imgui.DrawList, pos, size: [2]f32, points: []f32, brightness: f32, color_mode: imx.Bar_Color_Mode) {
+			height := size.y * 0.5
+			inner_color_v := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.WaveBarInner])
+			outer_color_v := imgui.ColorConvertU32ToFloat4(ui_theme.colors[.WaveBarOuter])
+
+			inner_color_v.rgb *= brightness
+			outer_color_v.rgb *= brightness
+			inner_color := imgui.GetColorU32ImVec4(inner_color_v)
+			outer_color := imgui.GetColorU32ImVec4(outer_color_v)
+
+			imx.draw_bars(
+				imgui.GetWindowDrawList(), 
+				{pos.x, pos.y + height}, {pos.x + size.x, pos.y}, points, inner_color, outer_color,
+				spacing = 0, min_height = 1, color_mode = color_mode,
+			)
+			imx.draw_bars(
+				imgui.GetWindowDrawList(), 
+				{pos.x, pos.y + height}, {pos.x + size.x, pos.y + size.y}, points, inner_color, outer_color,
+				spacing = 0, min_height = 1, color_mode = color_mode,
+			)
+		}
+
+		draw_wave(
+			drawlist, pos,
+			{left_size, size.y}, data_points[:left_data_points],
+			1, state.color_mode
+		)
+		draw_wave(
+			drawlist,
+			{pos.x + left_size, pos.y}, {right_size, size.y},
+			data_points[left_data_points:],
+			0.4, state.color_mode
+		)
+	}
+
+
+	return true
+}
+
+_wavebar_window_get_settings :: proc(
+	ui: ^UI, w: ^_Wavebar_Window, out: ^map[string]string, allocator: mem.Allocator
+) -> Error {
+	out["ColorMode"] = reflect.enum_name_from_value(w.color_mode) or_else ""
+
+	return nil
+}
+
+_wavebar_window_load_setting :: proc(w: ^_Wavebar_Window, key, value: string) -> Error {
+	switch key {
+	case "ColorMode": w.color_mode = reflect.enum_from_name(imx.Bar_Color_Mode, value) or_break
 	}
 
 	return nil

@@ -202,7 +202,7 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 			swr_free(&ff->resampler);
 		}
 
-		out_ch_layout = AV_CHANNEL_LAYOUT_STEREO;
+		av_channel_layout_default(&out_ch_layout, output_spec.channels);
 
 		swr_alloc_set_opts2(&ff->resampler,
 			&out_ch_layout, AV_SAMPLE_FMT_FLTP, output_spec.samplerate,

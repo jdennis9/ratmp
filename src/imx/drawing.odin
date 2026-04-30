@@ -3,12 +3,19 @@ package imx
 import "core:math/linalg"
 import imgui "src:thirdparty/odin-imgui"
 
+Bar_Color_Mode :: enum {
+	Gradient,
+	Flat,
+}
+
 draw_bars :: proc(
 	drawlist: ^imgui.DrawList,
 	bb_min, bb_max: [2]f32,
 	values: []f32,
 	low_color_u, high_color_u: u32,
 	spacing: f32 = 1,
+	min_height: f32 = 0,
+	color_mode: Bar_Color_Mode = .Gradient,
 ) {
 	x_offset: f32 = 0
 	width := bb_max.x - bb_min.x
@@ -18,17 +25,37 @@ draw_bars :: proc(
 	low_color  := imgui.ColorConvertU32ToFloat4(low_color_u)
 	high_color := imgui.ColorConvertU32ToFloat4(high_color_u)
 
-	for v in values {
-		top_color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
+	switch color_mode {
+	case .Gradient:
+		for v in values {
+			top_color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
+			h: f32 = max(abs(v * height), min_height)
+			if height < 0 do h = -h
 
-		imgui.DrawList_AddRectFilledMultiColor(
-			drawlist,
-			bb_min + {x_offset, 0},
-			bb_min + {x_offset + bar_width, v * height},
-			low_color_u, low_color_u,
-			top_color, top_color,
-		)
+			imgui.DrawList_AddRectFilledMultiColor(
+				drawlist,
+				bb_min + {x_offset, 0},
+				bb_min + {x_offset + bar_width, h},
+				low_color_u, low_color_u,
+				top_color, top_color,
+			)
 
-		x_offset += gap
+			x_offset += gap
+		}
+	case .Flat:
+		for v in values {
+			color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
+			h: f32 = max(abs(v * height), min_height)
+			if height < 0 do h = -h
+
+			imgui.DrawList_AddRectFilled(
+				drawlist,
+				bb_min + {x_offset, 0},
+				bb_min + {x_offset + bar_width, h},
+				color
+			)
+
+			x_offset += gap
+		}
 	}
 }
