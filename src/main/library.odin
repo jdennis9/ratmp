@@ -146,7 +146,9 @@ library_update :: proc(l: ^Library) {
 }
 
 library_add_track :: proc(
-	l: ^Library, data: Track_Data, update_existing := false
+	l: ^Library, data: Track_Data,
+	update_existing := false,
+	overwrite_id: Maybe(Track_ID) = nil,
 ) -> (id: Track_ID, error: Error) {
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
@@ -156,7 +158,6 @@ library_add_track :: proc(
 		id = existing_id
 	}
 	else {
-		//id = hm.add(&l.tracks, Track{}) or_return
 		l.last_track_id += 1
 		id = l.last_track_id
 		l.tracks[id] = Track{}
@@ -169,28 +170,44 @@ library_add_track :: proc(
 		library_scan_directory_for_cover_art(l, dir)
 	}
 
-	ptr := (&l.tracks[id]) or_return
-	ptr.album            = library_get_or_add_album(l, data.album, id)
-	ptr.artist           = library_get_or_add_artist(l, data.artist, id)
-	ptr.genre            = library_get_or_add_genre(l, data.genre, id)
-	ptr.bitrate_kbps     = auto_cast data.bitrate_kbps
-	ptr.channels         = auto_cast data.channels
-	ptr.duration_seconds = auto_cast data.duration_seconds
-	ptr.file_size        = auto_cast data.file_size
-	ptr.flags            = auto_cast data.flags
-	ptr.format           = data.format
-	ptr.samplerate       = auto_cast data.samplerate
-	ptr.title            = strings.clone(data.title, l.allocators.track_data)
-	ptr.url              = strings.clone(data.url, l.allocators.track_data)
-	ptr.date_added       = time.now()
-	ptr.file_date        = data.file_date
-	ptr.protocol         = data.protocol
-	ptr.id           = id
+	library_add_or_update_track(l, id, data) or_return
 
+	return
+}
+
+// Adds or overwrites track with given ID
+library_add_or_update_track :: proc(
+	l: ^Library, id: Track_ID, data: Track_Data,
+) -> Error {
+	hash := hash_track_url(data.url)
+	if hash == 0 do return .InvalidInput
+
+	track: Track
+
+	track.url              = strings.clone(data.url, l.allocators.track_data)
+	track.title            = strings.clone(data.title, l.allocators.track_data)
+	track.file_date        = data.file_date
+	track.file_size        = auto_cast data.file_size
+	track.id               = id
+	track.duration_seconds = auto_cast data.duration_seconds
+	track.release_year     = data.release_year
+	track.samplerate       = auto_cast data.samplerate
+	track.track_no         = data.track_no
+	track.channels         = auto_cast data.channels
+	track.bitrate_kbps     = auto_cast data.bitrate_kbps
+	track.format           = data.format
+	track.flags            = auto_cast data.flags
+	track.protocol         = data.protocol
+	track.artist           = library_get_or_add_artist(l, data.artist, id)
+	track.album            = library_get_or_add_album(l, data.album, id)
+	track.genre            = library_get_or_add_genre(l, data.genre, id)
+	track.date_added       = time.now()
+	
+	l.tracks[id] = track
 	l.url_hash_map[hash] = id
 	l.serial += 1
 
-	return
+	return nil
 }
 
 library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
@@ -224,6 +241,12 @@ library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Tra
 	return library_add_track(l, track)
 }
 
+library_update_track_from_file :: proc(l: ^Library, path: string, track_id: Track_ID) -> Error {
+	data := read_audio_file_metadata(path, l.allocators.temp) or_return
+	library_add_or_update_track(l, track_id, data)
+	return nil
+}
+
 library_get_all_tracks :: proc(l: Library, allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
 	keys = slice.map_keys(l.tracks, allocator) or_return
 	return
@@ -237,28 +260,21 @@ library_get_artist_name_lower :: proc(l: Library, id: Artist_ID) -> string {retu
 library_get_album_name_lower :: proc(l: Library, id: Album_ID) -> string {return l.albums.entries[id].lower_case_name}
 library_get_genre_name_lower :: proc(l: Library, id: Genre_ID) -> string {return l.genres.entries[id].lower_case_name}
 
-library_save :: proc(l: Library, path: string) -> bool {
+library_save :: proc(l: Library, path: string) -> Error {
 	TIME_SCOPE("Save library", path)
-
-	track_db_save(l, path)
-
-	// @TODO: Save folder cover art
-
-	return true
+	return track_db_save(l, path)
 }
 
-library_load :: proc(l: ^Library, path: string) -> bool {
+library_load :: proc(l: ^Library, path: string) -> Error {
 	TIME_SCOPE("Load library", path)
 
-	track_db_load(l, path)
+	track_db_load(l, path) or_return
 
 	track_group_pseudo_sort(&l.albums)
 	track_group_pseudo_sort(&l.artists)
 	track_group_pseudo_sort(&l.genres)
 
-	// @TODO: Load folder cover art
-
-	return true
+	return nil
 }
 
 

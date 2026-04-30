@@ -153,7 +153,7 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 	path_cstring := strings.clone_to_cstring(path)
 	defer delete(path_cstring)
 	
-	os.remove(path)
+	//os.remove(path) or_return
 
 	// --------------------------------------------------------------------------
 	// Open DB
@@ -168,6 +168,9 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 	{
 		exec_error: cstring
 		b: strings.Builder
+
+		sql.exec(db, "DROP TABLE tracks", nil, nil, nil)
+
 		defer strings.builder_destroy(&b)
 
 		strings.write_string(&b, "CREATE TABLE tracks (\n")
@@ -189,6 +192,7 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 	// --------------------------------------------------------------------------
 	{
 		exec_error: cstring
+		sql.exec(db, "DROP TABLE cover_art", nil, nil, nil)
 		statement :: `CREATE TABLE cover_art (folder_hash BIGINT, cover_path VARCHAR(512))`
 		_check(sql.exec(db, statement, nil, nil, &exec_error), exec_error)
 	}
