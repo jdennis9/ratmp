@@ -197,6 +197,11 @@ library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
 	for track_id in tracks {
 		track := l.tracks[track_id] or_continue
 		url_hash := hash_track_url(track.url)
+
+		track_group_remove_track(&l.artists, auto_cast track.artist, track_id)
+		track_group_remove_track(&l.genres, auto_cast track.album, track_id)
+		track_group_remove_track(&l.albums, auto_cast track.genre, track_id)
+
 		delete_key(&l.tracks, track_id)
 		delete_key(&l.url_hash_map, url_hash)
 	}
@@ -354,6 +359,7 @@ track_group_remove_track :: proc(tg: ^Track_Group_Set, entry_index: int, id: Tra
 	entry := &tg.entries[entry_index]
 	index := slice.linear_search(entry.tracks[:], id) or_return
 	ordered_remove(&entry.tracks, index)
+	entry.serial += 1
 
 	return true
 }
