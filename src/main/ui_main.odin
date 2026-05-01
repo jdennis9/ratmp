@@ -1046,7 +1046,7 @@ _track_table_row_from_track :: proc(
 		fmt.bprintf(row.duration[:], "%02d:%02d:%02d", h, m, s)
 	}
 
-	if row.track_no != 0 do fmt.bprint(row.track_no[:], track.track_no)
+	if track.track_no != 0 do fmt.bprint(row.track_no[:], track.track_no)
 	fmt.bprint(row.year[:], track.release_year)
 
 	fmt.bprint(row.samplerate[:], track.samplerate, "Hz", sep="")

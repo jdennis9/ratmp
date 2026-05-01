@@ -219,63 +219,6 @@ taglib_open :: proc(path: string) -> taglib.File {
 	}
 }
 
-read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (track: Track_Data, found: bool) {
-	track.format = audio_file_format_from_extension(filepath.ext(path)) or_return
-
-	TIME_SCOPE("TagLib probe")
-
-	file := taglib_open(path)
-	
-	if file == nil {
-		log.warn("Failed to open file", path)
-		return
-	}
-	defer taglib.file_free(file)
-
-	found = true
-	track.url = strings.clone(path, allocator)
-	track.protocol = .File
-
-	if file_info, error := os.stat(path, context.allocator); error == nil {
-		track.file_date = file_info.creation_time
-		track.file_size = auto_cast file_info.size
-		os.file_info_delete(file_info, context.allocator)
-	}
-	
-	tag := taglib.file_tag(file)
-	if tag != nil {
-		defer taglib.tag_free_strings()
-
-		title := taglib.tag_title(tag)
-		artist := taglib.tag_artist(tag)
-		album := taglib.tag_album(tag)
-		genre := taglib.tag_genre(tag)
-		year := taglib.tag_year(tag)
-		track_no := taglib.tag_track(tag)
-
-		if title != nil do track.title = strings.clone(string(title), allocator)
-		if album != nil do track.album = strings.clone(string(album), allocator)
-		if genre != nil do track.genre = strings.clone(string(genre), allocator)
-		if artist != nil do track.artist = strings.clone(string(artist), allocator)
-		track.release_year = auto_cast year
-		track.track_no = auto_cast track_no
-	}
-
-	if track.title == "" {
-		track.title = strings.clone(filepath.short_stem(filepath.base(path)), allocator)
-	}
-
-	audio_props := taglib.file_audioproperties(file)
-	if audio_props != nil {
-		track.bitrate_kbps = auto_cast taglib.audioproperties_bitrate(audio_props)
-		track.duration_seconds = auto_cast taglib.audioproperties_length(audio_props)
-		track.samplerate = auto_cast taglib.audioproperties_samplerate(audio_props)
-		track.channels = auto_cast taglib.audioproperties_channels(audio_props)
-	}
-
-	return
-}
-
 server_wait_events :: proc(sv: ^Server) {
 	sync.auto_reset_event_wait(&sv.event_signal)
 	server_handle_events(sv)
