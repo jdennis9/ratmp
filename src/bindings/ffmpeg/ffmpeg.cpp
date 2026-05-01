@@ -241,14 +241,14 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 		packet_out->frames_in += read_frames;
 	}
 
-	if (ff->output_scale != 1) {
+	/*if (ff->output_scale != 1) {
 		float scale = ff->output_scale;
 		for (int ch = 0; ch < output_spec.channels; ++ch) {
 			for (int frame = 0; frame < packet_out->frames_out; ++frame) {
 				packet_out->data[ch][frame] *= scale;
 			}
 		}
-	}
+	}*/
 
 	return status;
 }

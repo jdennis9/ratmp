@@ -243,7 +243,12 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 		internal_name = "_settings",
 		flags = {.DontSave},
 		show_proc = proc(ui: ^UI) -> bool {
-			return _show_settings_editor(ui)
+			if _show_settings_editor(ui) {
+				global_config_dirty = true
+				return true
+			}
+
+			return false
 		},
 	},
 	.PostProcessing = {
@@ -535,6 +540,8 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 		imgui.AddSettingsHandler(&handler)
 	}
 
+	ui.windows.post_processing.params = playback_thread_get_post_process_params(&server.playback_thread)
+
 	return nil
 }
 
@@ -545,6 +552,8 @@ ui_shutdown :: proc(ui: ^UI) {
 @private
 ui_apply_config :: proc(ui: ^UI, the_cfg: Config) -> Error {
 	cfg := the_cfg.ui
+
+	log.debug("Applying UI config...")
 	
 	_set_background(ui, string(cfg.background), context.allocator)
 	_set_theme_by_name(ui, string(cfg.default_theme))
@@ -2409,8 +2418,38 @@ _update_analysis :: proc(ui: ^UI) {
 
 _post_processing_window_show :: proc(ui: ^UI, w: ^_Post_Processing_Window) -> bool {
 	sv := ui.server
+	replay_gain_on := w.params.replay_gain_mode == .TrackGain
+	p := &w.params
 
-	imgui.SliderFloat("Pre-amp gain", &w.params.preamp_gain, -10, 10, "%.1fdB")
+	imgui.SeparatorText("ReplayGain")
+	if imgui.Checkbox("Enabled", &replay_gain_on) {
+		if replay_gain_on do p.replay_gain_mode = .TrackGain
+		else do p.replay_gain_mode = .Ignore
+	}
+
+	{
+		if imgui.BeginCombo(
+			"Pre-amp gain", fmt.caprintf("%ddB", int(p.preamp_gain), allocator=ui.allocators.per_frame)
+		) {
+			defer imgui.EndCombo()
+
+			imgui.SetItemTooltip("Gain to apply along side ReplayGain. High values may cause clipping.")
+
+			if imgui.MenuItem("+12dB") do p.preamp_gain = 12
+			if imgui.MenuItem("+9dB") do p.preamp_gain = 9
+			if imgui.MenuItem("+6dB") do p.preamp_gain = 6
+			if imgui.MenuItem("+3dB (default, higher may cause clipping)") do p.preamp_gain = 3
+			if imgui.MenuItem("+0dB (disable)") do p.preamp_gain = 0
+			if imgui.MenuItem("-3dB") do p.preamp_gain = -3
+			if imgui.MenuItem("-6dB") do p.preamp_gain = -6
+			if imgui.MenuItem("-12dB") do p.preamp_gain = -12
+		}
+	}
+
+	imgui.SeparatorText("Misc")
+	imgui.Checkbox("Hard limit", &p.hard_limiter.enable)
+
+	//imgui.SliderFloat("Pre-amp gain", &w.params.preamp_gain, -10, 10, "%.1fdB")
 
 	if imgui.Button("Apply") {
 		playback_thread_set_post_process_params(&sv.playback_thread, w.params)

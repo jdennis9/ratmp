@@ -19,22 +19,46 @@ Playback_Thread_Status :: enum {
 	Eof,
 }
 
+Playback_Replay_Gain_Mode :: enum {
+	TrackGain,
+	Ignore,
+}
+
 Playback_Post_Process_Params :: struct {
 	preamp_gain: f32,
+	replay_gain_mode: Playback_Replay_Gain_Mode,
+	hard_limiter: struct {
+		enable: bool,
+		release_ms: f32,
+		state: struct {
+			current_gain: f32,
+		}
+	},
+	state: dsp.Process_State,
+}
+
+PLAYBACK_POST_PROCESS_DEFAULTS :: Playback_Post_Process_Params {
+	preamp_gain = 3,
+	replay_gain_mode = .TrackGain,
+	hard_limiter = {
+		enable = false,
+		release_ms = 30,
+	},
 }
 
 Playback_Thread :: struct {
-	runner: ^thread.Thread,
-	allocator: mem.Allocator,
-	ring_buffers: [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
-	ring_buffer_channels: int,
+	runner:                 ^thread.Thread,
+	allocator:              mem.Allocator,
+	processing_allocator:   mem.Allocator,
+	allocator_map:          Allocator_Map,
+	ring_buffers:           [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
+	ring_buffer_channels:   int,
 	ring_buffer_samplerate: int,
-	dec: Decoder,
-	decode_status: Decode_Status,
-	//post_process_hook: Post_Process_Hook,
-	request_fill_signal: sync.Auto_Reset_Event,
-	buffer_filled_signal: sync.Auto_Reset_Event,
-	lock: sync.Mutex,
+	dec:                    Decoder,
+	decode_status:          Decode_Status,
+	request_fill_signal:    sync.Auto_Reset_Event,
+	buffer_filled_signal:   sync.Auto_Reset_Event,
+	lock:                   sync.Mutex,
 
 	// Index of last frame consumed in the samplerate of the input
 	consumed_frame_index: int,
@@ -45,8 +69,9 @@ Playback_Thread :: struct {
 
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 
-	post_processing: Playback_Post_Process_Params,
-	post_processing_lock: sync.Mutex,
+	post_processing:             Playback_Post_Process_Params,
+	post_processing_lock:        sync.Mutex,
+	post_processing_config_path: string,
 }
 
 Playback_Thread_Params :: struct {
@@ -66,27 +91,64 @@ _reset_ring_buffers :: proc(at: ^Playback_Thread) {
 }
 
 @(private="file")
-_post_process :: proc(at: ^Playback_Thread, audio: [][]f32) {
+_post_process :: proc(at: ^Playback_Thread, audio: [][]f32, samplerate: f32) {
 	TIME_SCOPE("Post process")
-	sync.guard(&at.post_processing_lock)
-	pp := &at.post_processing
+	sync.lock(&at.post_processing_lock)
+	pp := at.post_processing
+	sync.unlock(&at.post_processing_lock)
 
-	// Apply preamp
-	if pp.preamp_gain != 0 {
-		v := dsp.gain_to_amp(pp.preamp_gain)
-		for ch in audio {
-			for &f in ch {
-				f *= v
+	// ReplayGain
+	if at.dec.replay_gain != nil {
+		rp := at.dec.replay_gain.?
+		{
+			v := dsp.gain_to_amp(rp.track_gain)
+			for ch in audio {
+				for &f in ch {
+					f *= v
+				}
 			}
 		}
-	}
 
-	// Clipping
-	for ch in audio {
-		for &f in ch {
-			f = clamp(f, -1, 1)
+		// Apply preamp
+		if pp.preamp_gain != 0 {
+			v := dsp.gain_to_amp(pp.preamp_gain)
+			for ch in audio {
+				for &f in ch {
+					f *= v
+				}
+			}
+		}
+
+		// Hard limit
+		if pp.hard_limiter.enable {
+			//release_samples := pp.hard_limiter.release_ms * (samplerate * 0.001)
+			x := dsp.Process_Params {
+				limiter = dsp.Limiter_Params {
+					release_ms = 30,
+					limit = 1,
+				},
+			}
+
+			dsp.post_process(&at.post_processing.state, x, audio, samplerate, at.processing_allocator)
+
+			// @Remove
+			for samples in audio {
+				for &sample in samples do sample = clamp(sample, -1, 1)
+			}
+		}
+		else {
+			
 		}
 	}
+
+	// Safety clipping to prevent super loud pops that can sometimes happen
+	// at the start of playback
+	for ch in audio {
+		for &f in ch {
+			if abs(f) > 10 do f = 0
+		}
+	}
+
 }
 
 @(private="file")
@@ -143,7 +205,7 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		/*if at.post_process_hook.process != nil do at.post_process_hook.process(
 			at.post_process_hook.data, deinterlaced[:at.channels], at.samplerate
 		)*/
-		_post_process(at, deinterlaced[:at.channels])
+		_post_process(at, deinterlaced[:at.channels], f32(at.samplerate))
 
 		for d, ch in deinterlaced[:at.channels] {
 			frames_copied = rb_produce(&at.ring_buffers[ch], d)
@@ -153,7 +215,14 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 
 playback_thread_init :: proc(at: ^Playback_Thread, params: Playback_Thread_Params, allocator: mem.Allocator) {
 	//at.post_process_hook = params.post_process_hook
+
+	// Post-processing defaults
+	at.post_processing = PLAYBACK_POST_PROCESS_DEFAULTS
+
 	at.allocator = allocator
+	at.processing_allocator = allocator_map_add_dynamic_arena(
+		&at.allocator_map, "post_processing"
+	)
 	at.runner = thread.create(_thread_proc)
 	at.runner.data = at
 	at.runner.init_context = context

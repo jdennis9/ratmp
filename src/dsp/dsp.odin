@@ -362,7 +362,7 @@ amp_to_gain :: proc(amp: f32) -> f32 {
 }
 
 gain_to_amp :: proc(gain: f32) -> f32 {
-	if gain == 0 do return 0
+	if gain == 0 do return 1
 	return linalg.pow(f32(10), gain/20)
 }
 

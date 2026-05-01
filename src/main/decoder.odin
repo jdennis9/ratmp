@@ -31,6 +31,7 @@ Decoder :: struct {
 	duration_seconds:    i64,
 	is_open:             bool,
 	packet_buffer:       [AUDIO_MAX_CHANNELS][dynamic]f32,
+	replay_gain:         Maybe(ffmpeg.Replay_Gain),
 }
 
 decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_Info) -> (ok: bool) {
@@ -51,6 +52,9 @@ decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_I
 	dec.frame_index = 0
 	dec.duration_seconds = file_info.total_frames / auto_cast file_info.spec.samplerate
 	dec.frame_count = auto_cast file_info.total_frames
+
+	if file_info.has_replay_gain do dec.replay_gain = file_info.replay_gain
+	else do dec.replay_gain = nil
 
 	if info != nil {
 		info^ = {}
