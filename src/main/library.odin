@@ -463,27 +463,31 @@ find_track_thumbnail :: proc(
 	return
 }
 
-library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) {
-	hash := stable_hash_string_64(dir)
-	if hash in l.folder_cover_art do return
-	log.debug("Scanning directory", dir, "for cover art")
-
-	files, error := os.read_all_directory_by_path(dir, context.allocator)
-	if error != nil {
-		log.error(error)
-		return
-	}
-	defer os.file_info_slice_delete(files, context.allocator)
+scan_directory_for_cover_art :: proc(
+	dir: string, allocator: mem.Allocator, temp_allocator: mem.Allocator
+) -> (path: string, error: Error) {
+	files := os.read_all_directory_by_path(dir, temp_allocator) or_return
+	defer os.file_info_slice_delete(files, temp_allocator)
 
 	for file in files {
 		if file_is_type(file.fullpath, .Image) {
-			log.debug("Adding cover art", file.fullpath, "for folder", dir)
-			l.folder_cover_art[hash] = strings.clone(file.fullpath, l.allocators.track_data)
+			path = strings.clone(file.fullpath, allocator) or_return
 			return
 		}
 	}
 
-	l.folder_cover_art[hash] = ""
+	return
+}
+
+library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) -> (error: Error) {
+	hash := stable_hash_string_64(dir)
+	if hash in l.folder_cover_art do return
+	log.debug("Scanning directory", dir, "for cover art")
+
+	path := scan_directory_for_cover_art(dir, l.allocators.track_data, l.allocators.temp) or_else ""
+	l.folder_cover_art[hash] = path
+
+	return
 }
 
 Track_List_Totals :: struct {

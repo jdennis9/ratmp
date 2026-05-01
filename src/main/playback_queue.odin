@@ -65,9 +65,9 @@ playback_queue_contains :: proc(p: ^Playback_Queue, track_id: Track_ID) -> bool 
 }
 
 playback_queue_set_track :: proc(p: ^Playback_Queue, track_id: Track_ID) {
-	for track in p.tracks {
+	for track, i in p.tracks {
 		if track == track_id {
-			playback_queue_set_pos(p, p.pos)
+			playback_queue_set_pos(p, i)
 			return
 		}
 	}

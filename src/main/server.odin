@@ -51,6 +51,7 @@ Server_Event_Type :: enum {
 	RequestSeek,
 	RequestStop,
 	BackgroundScanComplete,
+	CoverArtScanComplete,
 	UpdateState,
 }
 
@@ -75,7 +76,12 @@ Server_Background_Scan_State :: struct {
 	runner: ^thread.Thread,
 	queue: [dynamic]string,
 	queue_lock: sync.Mutex,
-	output: [dynamic]Track_Data,
+	output_tracks: [dynamic]Track_Data,
+}
+
+Server_Cover_Art_Scan_State :: struct {
+	input: map[u64]string,
+	output: map[u64]string,
 }
 
 Server :: struct {				
@@ -86,6 +92,7 @@ Server :: struct {
 		analysis:        mem.Allocator,
 		playback_thread: mem.Allocator,
 		temp:            mem.Allocator,
+		cover_art_scan:  mem.Allocator,
 	},
 
 	library: Library,
@@ -100,6 +107,8 @@ Server :: struct {
 	track_info:           Audio_File_Info,
 	current_track_id:     Track_ID,
 	background_scan:      Server_Background_Scan_State,
+	cover_art_scan:       Background_Task,
+	cover_art_scan_state: Server_Cover_Art_Scan_State,
 	need_background_scan: bool,
 	library_path:         string,
 	saved_library_serial: uint,
@@ -170,7 +179,8 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
 	sv.allocators.analysis = allocator_map_add_heap(&sv.allocator_map, "analysis")
 	sv.allocators.playback_thread = allocator_map_add_heap(&sv.allocator_map, "playback_thread")
-	sv.allocators.temp = allocator_map_add_dynamic_arena(&sv.allocator_map, "temp", flags={.IsTemp})
+	sv.allocators.temp = allocator_map_add_scratch(&sv.allocator_map, "temp", 256<<10, context.allocator, flags={.IsTemp})
+	sv.allocators.cover_art_scan = allocator_map_add_scratch(&sv.allocator_map, "cover_art_scan", 64<<10, context.allocator)
 
 	library_init(&sv.library)
 	playback_thread_init(&sv.playback_thread, {}, sv.allocators.playback_thread)
@@ -306,8 +316,8 @@ server_handle_events :: proc(sv: ^Server) {
 
 	_update_media_controls_state :: proc(sv: ^Server) {
 		media_controls_update_state(Media_Controls_State {
-			paused = sv.playback_state == .Paused,
-			have_track = sv.current_track_id != 0,
+			paused          = sv.playback_state == .Paused,
+			have_track      = sv.current_track_id != 0,
 			shuffle_enabled = sv.playback.enable_shuffle,
 		})
 
@@ -344,19 +354,31 @@ server_handle_events :: proc(sv: ^Server) {
 			_update_media_controls_state(sv)
 
 		case .BackgroundScanComplete:
-			tracks := sv.background_scan.output[:]
+			tracks := sv.background_scan.output_tracks[:]
 			for track in tracks {
 				path_hash := stable_hash_string_64(track.url)
 				if path_hash in sv.library.url_hash_map do continue
 				library_add_track(&sv.library, track)
 			}
-			clear(&sv.background_scan.output)
+			clear(&sv.background_scan.output_tracks)
 			free_all(sv.allocators.scan_output)
 			sync.auto_reset_event_signal(&sv.background_scan.output_used_signal)
 
 			if global_config.server.notify_library_scan {
 				notify_send("Library scan complete")
 			}
+
+		case .CoverArtScanComplete:
+			output := sv.cover_art_scan_state.output
+			for k, v in output {
+				sv.library.folder_cover_art[k] = strings.clone(
+					v, sv.library.allocators.track_data
+				)
+			}
+			sv.library.serial += 1
+			free_all(sv.allocators.cover_art_scan)
+			bgtask_cancel(&sv.cover_art_scan)
+
 		case .RequestStop:
 			playback_thread_close_track(&sv.playback_thread)
 			sv.current_track_id = 0
@@ -428,7 +450,6 @@ server_handle_events :: proc(sv: ^Server) {
 			audio_drop_buffer()
 		}
 	}
-
 }
 
 server_send_event :: proc(sv: ^Server, ev: Server_Event) {
@@ -514,6 +535,33 @@ server_queue_for_background_scan :: proc(sv: ^Server, path: string) {
 	server_send_empty_event(sv)
 }
 
+server_start_cover_art_scan :: proc(sv: ^Server) {
+	bgtask_cancel(&sv.cover_art_scan)
+	free_all(sv.allocators.cover_art_scan)
+
+	state := &sv.cover_art_scan_state
+	free_all(sv.allocators.cover_art_scan)
+	state.input = make(map[u64]string, sv.allocators.cover_art_scan)
+	state.output = make(map[u64]string, sv.allocators.cover_art_scan)
+
+	clear(&sv.library.folder_cover_art)
+
+	for _, track in sv.library.tracks {
+		if track.protocol != .File do continue
+		dir := filepath.dir(track.url, sv.allocators.temp)
+		hash := stable_hash_string_64(dir)
+
+		if hash not_in state.input {
+			state.input[hash] = strings.clone(dir, sv.allocators.cover_art_scan)
+		}
+	}
+
+	bgtask_run(
+		&sv.cover_art_scan, _cover_art_scan_proc,
+		context.allocator, sv
+	)
+}
+
 server_is_doing_background_scan :: proc(sv: ^Server) -> bool {
 	return sv.background_scan.scanning
 }
@@ -523,15 +571,6 @@ server_get_background_scan_progress :: proc(sv: ^Server) -> (total_files, files_
 }
 
 server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) -> Audio_Spec {
-	/*a := &sv.analysis
-
-	consume_frames := int(math.ceil(timespan * ANALYSIS_SAMPLE_RATE))
-	
-	for ch in 0..<a.channels {
-		rb_consume(&a.ring_buffers[ch], buf[ch], consume_frames)
-	}
-
-	return {channels = a.channels, samplerate = ANALYSIS_SAMPLE_RATE}*/
 	return analysis_consume(&sv.analysis, timespan, buf)
 }
 
@@ -594,7 +633,7 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 		for file in files {
 			track := read_audio_file_metadata(file.fullpath, output_allocator) or_continue
 			assert(track.title != "")
-			append(&state.output, track)
+			append(&state.output_tracks, track)
 			state.scanned_count += 1
 		}
 
@@ -606,6 +645,30 @@ _background_scan_proc :: proc(t: ^thread.Thread) {
 		state.total_file_count = 0
 		state.scanned_count = 0
 	}
+}
+
+_cover_art_scan_proc :: proc(
+	task: ^Background_Task
+) -> Error {
+	sv := cast(^Server) task.data
+	state := &sv.cover_art_scan_state
+
+	sync.atomic_store(&task.progress.total_items, len(state.input))
+
+	for hash, dir in state.input {
+		if task.want_cancel do break
+
+		state.output[hash] = scan_directory_for_cover_art(
+			dir, sv.allocators.cover_art_scan, task.allocator
+		) or_else ""
+
+		log.debug(dir, state.output[hash])
+
+		sync.atomic_add(&task.progress.items_processed, 1)
+	}
+
+	server_send_event(sv, Server_Event{type = .CoverArtScanComplete})
+	return nil
 }
 
 // -----------------------------------------------------------------------------

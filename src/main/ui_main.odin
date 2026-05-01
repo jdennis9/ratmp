@@ -836,6 +836,10 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 		if imgui.BeginMenu("Library") {
 			defer imgui.EndMenu()
 
+			if imgui.MenuItem("Update cover art") {
+				server_start_cover_art_scan(sv)
+			}
+
 			if imgui.MenuItem("Remove missing tracks") {
 				ui.dialogs.confirm_remove_missing_tracks, _ = 
 					show_message_box_async(.YesNo, .Warning, "Remove Missing Tracks", "Remove all tracks with missing files? This cannot be undone.")
@@ -1000,8 +1004,19 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	if server_is_doing_background_scan(sv) {
 		total, scanned := server_get_background_scan_progress(sv)
 		progress := f32(scanned) / f32(total)
-		imgui.ProgressBar(progress, {160, 0})
-		imx.text(64, "Scanning metadata (", scanned, "/", total, ")")
+		imgui.ProgressBar(progress, {100, 0})
+		imx.textf(64, "Scanning metadata (%d/%d)", scanned, total)
+
+		imgui.Separator()
+	}
+
+	// --------------------------------------------------------------------------
+	// Cover art scan progress
+	// --------------------------------------------------------------------------
+	if scanned, total, running := bgtask_get_progress(&sv.cover_art_scan); running {
+		progress := f32(scanned) / f32(total)
+		imgui.ProgressBar(progress, {100, 0})
+		imx.textf(64, "Scanning cover art (%d/%d)", scanned, total)
 
 		imgui.Separator()
 	}
