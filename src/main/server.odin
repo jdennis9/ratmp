@@ -32,14 +32,6 @@ Playback_State :: enum {
 	Playing,
 }
 
-Track_Flag :: enum {
-	Missing,
-}
-
-Track_Protocol :: enum u8 {
-	File,
-}
-
 Server_Event_Type :: enum {
 	TrackFinished,
 	NextTrackRequested,
@@ -56,27 +48,13 @@ Server_Event_Type :: enum {
 }
 
 Server_Event :: struct {
-	type: Server_Event_Type,
-	track: Track_ID,
-	tracks: []Track_ID, // Needs to be freed after use
-	initial_track: Maybe(Track_ID),
-	playlist_uid: UID,
-	seek_target: int,
-}
-
-Server_Background_Scan_State :: struct {
-	// Main thread signals this to start the scan
-	start_signal: sync.Auto_Reset_Event,
-	// Main thread signals this to say the scan output has
-	// been added to the library
-	output_used_signal: sync.Auto_Reset_Event,
-	total_file_count: int,
-	scanned_count: int,
-	scanning: bool,
-	runner: ^thread.Thread,
-	queue: [dynamic]string,
-	queue_lock: sync.Mutex,
-	output_tracks: [dynamic]Track_Data,
+	type:           Server_Event_Type,
+	track:          Track_ID,
+	tracks:         []Track_ID, // Needs to be freed after use
+	initial_track:  Maybe(Track_ID),
+	playlist_uid:   UID,
+	seek_target:    int,
+	scanned_tracks: []Track_Data,
 }
 
 Server_Cover_Art_Scan_State :: struct {
@@ -106,7 +84,6 @@ Server :: struct {
 	queue_uid:            UID,
 	track_info:           Audio_File_Info,
 	current_track_id:     Track_ID,
-	background_scan:      Server_Background_Scan_State,
 	cover_art_scan:       Background_Task,
 	cover_art_scan_state: Server_Cover_Art_Scan_State,
 	need_background_scan: bool,
@@ -120,6 +97,9 @@ Server :: struct {
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 	// Tell audio callback to reset output ring buffers when streaming
 	audio_buffer_was_dropped: bool,
+
+	track_scanner:             Track_Scanner,
+	track_scanner_output_used: sync.Auto_Reset_Event,
 }
 
 Server_Library_Save_Data :: struct {
@@ -185,10 +165,10 @@ server_init :: proc(sv: ^Server) -> bool {
 	library_init(&sv.library)
 	playback_thread_init(&sv.playback_thread, {}, sv.allocators.playback_thread)
 
-	sv.background_scan.runner = thread.create(_background_scan_proc)
-	sv.background_scan.runner.data = sv
-	sv.background_scan.runner.init_context = context
-	thread.start(sv.background_scan.runner)
+	track_scanner_init(&sv.track_scanner,
+		_server_consume_scan_output_proc,
+		sv,
+	)
 
 	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
 
@@ -266,15 +246,6 @@ server_handle_events :: proc(sv: ^Server) {
 
 	}
 
-	if sv.need_background_scan {
-		sv.need_background_scan = false
-		sync.auto_reset_event_signal(&sv.background_scan.start_signal)
-
-		if global_config.server.notify_library_scan {
-			notify_send("Beginning library scan")
-		}
-	}
-
 	library_update(&sv.library)
 
 	if sv.library.serial != sv.saved_library_serial {
@@ -297,19 +268,10 @@ server_handle_events :: proc(sv: ^Server) {
 			_update_media_controls_state(sv)
 
 		case .BackgroundScanComplete:
-			tracks := sv.background_scan.output_tracks[:]
-			for track in tracks {
-				path_hash := stable_hash_string_64(track.url)
-				if path_hash in sv.library.url_hash_map do continue
+			for track in ev.scanned_tracks {
 				library_add_track(&sv.library, track)
 			}
-			clear(&sv.background_scan.output_tracks)
-			free_all(sv.allocators.scan_output)
-			sync.auto_reset_event_signal(&sv.background_scan.output_used_signal)
-
-			if global_config.server.notify_library_scan {
-				notify_send("Library scan complete")
-			}
+			sync.auto_reset_event_signal(&sv.track_scanner_output_used)
 
 		case .CoverArtScanComplete:
 			output := sv.cover_art_scan_state.output
@@ -469,14 +431,14 @@ server_get_track_position_seconds :: proc(sv: ^Server) -> int {
 	return playback_thread_get_track_position(&sv.playback_thread)
 }
 
-server_queue_for_background_scan :: proc(sv: ^Server, path: string) {
-	allocator := sv.allocators.scan_queue
-	sync.lock(&sv.background_scan.queue_lock)
-	append(&sv.background_scan.queue, strings.clone(path, allocator))
-	sync.unlock(&sv.background_scan.queue_lock)
+/*server_queue_for_background_scan :: proc(sv: ^Server, path: string) {
+	/*allocator := sv.allocators.scan_queue
+	append(&sv.track_scan_state.inpput, strings.clone(path, allocator))
 	sv.need_background_scan = true
-	server_send_empty_event(sv)
-}
+	server_send_empty_event(sv)*/
+
+	track_scanner_queue(&sv.track_scanner, {path})
+}*/
 
 server_start_cover_art_scan :: proc(sv: ^Server) {
 	bgtask_cancel(&sv.cover_art_scan)
@@ -505,101 +467,39 @@ server_start_cover_art_scan :: proc(sv: ^Server) {
 	)
 }
 
-server_is_doing_background_scan :: proc(sv: ^Server) -> bool {
-	return sv.background_scan.scanning
-}
+server_start_metadata_refresh :: proc(sv: ^Server) {
+	input := make([]Track_Scanner_Input, len(sv.library.tracks))
+	defer delete(input)
 
-server_get_background_scan_progress :: proc(sv: ^Server) -> (total_files, files_scanned: int) {
-	return sv.background_scan.total_file_count, sv.background_scan.scanned_count
+	i := 0
+	for _, v in sv.library.tracks {
+		input[i].path = v.url
+		input[i].overwrite = true
+		i += 1
+	}
+
+	track_scanner_queue(&sv.track_scanner, input)
 }
 
 server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) -> Audio_Spec {
 	return analysis_consume(&sv.analysis, timespan, buf)
 }
 
-@(private="file")
-_background_scan_proc :: proc(t: ^thread.Thread) {
-	sv := cast(^Server) t.data
-	state := &sv.background_scan
-
-	input_arena: mem.Dynamic_Arena
-	mem.dynamic_arena_init(&input_arena)
-	defer mem.dynamic_arena_destroy(&input_arena)
-
-	allocator := mem.dynamic_arena_allocator(&input_arena)
-	output_allocator := sv.allocators.scan_output
-
-	for {
-		input: [dynamic]string
-		defer {
-			delete(input)
-			mem.dynamic_arena_free_all(&input_arena)
-		}
-
-		sync.auto_reset_event_wait(&state.start_signal)
-
-		// Copy queue to local array
-		sync.lock(&state.queue_lock)
-		for i in state.queue {
-			append(&input, strings.clone(i, allocator))
-		}
-		clear(&state.queue)
-		free_all(sv.allocators.scan_queue)
-		sync.unlock(&state.queue_lock)
-
-		state.scanning = true
-
-		// Collect files
-		files: [dynamic]os.File_Info
-		defer delete(files)
-
-		add_files :: proc(dir: string, output: ^[dynamic]os.File_Info, counter: ^int, allocator: mem.Allocator) -> os.Error {
-			df := os.read_all_directory_by_path(dir, allocator) or_return
-			for file in df {
-				if file.type == .Regular {
-					append(output, file)
-					counter^ += 1
-				}
-				else if file.type == .Directory {
-					add_files(file.fullpath, output, counter, allocator)
-				}
-			}
-			return nil
-		}
-
-		for i in input {
-			add_files(i, &files, &state.total_file_count, allocator)
-		}
-		log.debug("Scanning", state.total_file_count, "files...")
-
-		// Get metadata
-		for file in files {
-			track := read_audio_file_metadata(file.fullpath, output_allocator) or_continue
-			assert(track.title != "")
-			append(&state.output_tracks, track)
-			state.scanned_count += 1
-		}
-
-		log.debug("Scanned", state.total_file_count, "files")
-
-		server_send_event(sv, {type = .BackgroundScanComplete})
-		sync.auto_reset_event_wait(&state.output_used_signal)
-		state.scanning = false
-		state.total_file_count = 0
-		state.scanned_count = 0
-	}
-}
-
 _cover_art_scan_proc :: proc(
 	task: ^Background_Task
-) -> Error {
+) -> (error: Error) {
+	defer if error != nil do bgtask_consume_input(task)
+
 	sv := cast(^Server) task.data
 	state := &sv.cover_art_scan_state
+	input := slice.map_values(state.input, task.allocator) or_return
+	bgtask_consume_input(task)
 
 	sync.atomic_store(&task.progress.total_items, len(state.input))
 
-	for hash, dir in state.input {
+	for dir in input {
 		if task.want_cancel do break
+		hash := stable_hash_string_64(dir)
 
 		state.output[hash] = scan_directory_for_cover_art(
 			dir, sv.allocators.cover_art_scan, task.allocator
@@ -611,6 +511,18 @@ _cover_art_scan_proc :: proc(
 	}
 
 	server_send_event(sv, Server_Event{type = .CoverArtScanComplete})
+	return nil
+}
+
+_server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Track_Data) -> Error {
+	sv := cast(^Server) data
+
+	server_send_event(sv, Server_Event {
+		type = .BackgroundScanComplete,
+		scanned_tracks = tracks,
+	})
+
+	sync.auto_reset_event_wait(&sv.track_scanner_output_used)
 	return nil
 }
 

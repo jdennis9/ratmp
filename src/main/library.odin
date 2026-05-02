@@ -11,6 +11,15 @@ import "core:path/filepath"
 import hm "core:container/handle_map"
 import "core:mem"
 
+Track_Flag :: enum {
+	Missing,
+	Overwrite, // Use on Track_Data struct to tell library to overwrite an existing track
+}
+
+Track_Protocol :: enum u8 {
+	File,
+}
+
 Track_ID :: distinct u32
 
 // High-level storage of track data
@@ -153,6 +162,9 @@ library_add_track :: proc(
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
 
+	update_existing := update_existing
+	update_existing |= .Overwrite in data.flags
+
 	if existing_id, exists := l.url_hash_map[hash]; exists  {
 		if !update_existing do return existing_id, nil
 		id = existing_id
@@ -239,8 +251,9 @@ library_add_or_update_track :: proc(
 ) -> Error {
 	hash := hash_track_url(data.url)
 	if hash == 0 do return .InvalidInput
+	if id not_in l.tracks do l.tracks[id] = {}
 
-	track: Track
+	track := &l.tracks[id]
 
 	track.url              = strings.clone(data.url, l.allocators.track_data)
 	track.title            = strings.clone(data.title, l.allocators.track_data)
@@ -254,14 +267,13 @@ library_add_or_update_track :: proc(
 	track.channels         = auto_cast data.channels
 	track.bitrate_kbps     = auto_cast data.bitrate_kbps
 	track.format           = data.format
-	track.flags            = auto_cast data.flags
+	track.flags            = data.flags ~ {.Overwrite}
 	track.protocol         = data.protocol
 	track.artist           = library_get_or_add_artist(l, data.artist, id)
 	track.album            = library_get_or_add_album(l, data.album, id)
 	track.genre            = library_get_or_add_genre(l, data.genre, id)
 	track.date_added       = time.now()
 	
-	l.tracks[id] = track
 	l.url_hash_map[hash] = id
 	l.serial += 1
 

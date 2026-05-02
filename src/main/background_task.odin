@@ -15,13 +15,15 @@ Background_Task_Progress :: struct {
 Background_Task_Proc :: #type proc(task: ^Background_Task) -> Error
 
 Background_Task :: struct {
-	progress: Background_Task_Progress,
-	data: rawptr,
-	runner: ^thread.Thread,
-	run_proc: Background_Task_Proc,
-	scratch: mem.Scratch,
-	allocator: mem.Allocator,
-	want_cancel: bool,
+	progress:              Background_Task_Progress,
+	data:                  rawptr,
+	runner:                ^thread.Thread,
+	// The task proc needs to signal this once input is consumed
+	input_consumed_signal: sync.Auto_Reset_Event,
+	run_proc:              Background_Task_Proc,
+	scratch:               mem.Scratch,
+	allocator:             mem.Allocator,
+	want_cancel:           bool,
 }
 
 @(private="file")
@@ -44,6 +46,7 @@ bgtask_cancel :: proc(
 	}
 }
 
+// Starts a task ands waits for input to be consumed
 bgtask_run :: proc(
 	task: ^Background_Task,
 	run_proc: proc(task: ^Background_Task) -> Error,
@@ -58,6 +61,7 @@ bgtask_run :: proc(
 	task.runner.data = task
 	task.run_proc = run_proc
 	task.want_cancel = false
+	task.input_consumed_signal = {}
 
 	mem.scratch_init(
 		&task.scratch,
@@ -68,6 +72,13 @@ bgtask_run :: proc(
 	task.allocator = mem.scratch_allocator(&task.scratch)
 	
 	thread.start(task.runner)
+
+	sync.auto_reset_event_wait(&task.input_consumed_signal)
+}
+
+// Called by the task proc once input has been copied
+bgtask_consume_input :: proc(task: ^Background_Task) {
+	sync.auto_reset_event_signal(&task.input_consumed_signal)
 }
 
 bgtask_is_complete :: proc(

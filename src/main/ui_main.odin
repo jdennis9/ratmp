@@ -670,11 +670,20 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 		results: [dynamic]Path
 		defer delete(results)
 
+
 		if async_file_dialog_get_results(&ui.dialogs.add_folder, &results) {
+			input: [dynamic]Track_Scanner_Input
+			defer delete(input)
+
 			for &p in results {
-				server_queue_for_background_scan(sv, string(cstring(&p[0])))
+				append(&input, Track_Scanner_Input {
+					path = string(cstring(&p[0]))
+				})
 			}
+
+			track_scanner_queue(&sv.track_scanner, input[:])
 		}
+
 	}
 
 	// --------------------------------------------------------------------------
@@ -835,6 +844,10 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 
 		if imgui.BeginMenu("Library") {
 			defer imgui.EndMenu()
+
+			if imgui.MenuItem("Update all metadata") {
+				server_start_metadata_refresh(sv)
+			}
 
 			if imgui.MenuItem("Update cover art") {
 				server_start_cover_art_scan(sv)
@@ -999,14 +1012,14 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	}
 
 	// --------------------------------------------------------------------------
-	// Scan progress
+	// Metadata scan progress
 	// --------------------------------------------------------------------------
-	if server_is_doing_background_scan(sv) {
-		total, scanned := server_get_background_scan_progress(sv)
-		progress := f32(scanned) / f32(total)
+	if scanned_dirs, total_dirs, scanned_files, scanning := track_scanner_get_progress(
+		&sv.track_scanner
+	); scanning {
+		progress := f32(scanned_dirs) / f32(total_dirs)
 		imgui.ProgressBar(progress, {100, 0})
-		imx.textf(64, "Scanning metadata (%d/%d)", scanned, total)
-
+		imx.textf(64, "Scanning metadata (%d/%d) (%d)", scanned_dirs, total_dirs, scanned_files)
 		imgui.Separator()
 	}
 
