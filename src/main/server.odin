@@ -18,14 +18,6 @@ import "core:reflect"
 import "src:dsp"
 import resampler "src:bindings/samplerate"
 
-
-// 0 means none
-// Index into array
-Artist_ID :: distinct i16
-Genre_ID :: distinct i16
-Album_ID :: distinct i16
-Dir_ID :: distinct i16
-
 Playback_State :: enum {
 	Stopped,
 	Paused,
@@ -213,14 +205,16 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 
 	audio_resume()
 
+	artists := library_format_track_artists(sv.library, track, sv.allocators.temp)
+
 	sv.playback_state = .Playing
 	media_controls_update_track(sv, track)
 	platform_set_window_title(
-		PROGRAM_NAME_AND_VERSION, "|", get_artist_name(sv^, track.artist), "-", track.title
+		PROGRAM_NAME_AND_VERSION, "|", artists, "-", track.title
 	)
 
 	if global_config.server.notify_new_track {
-		notify_send("Now playing:", get_artist_name(sv^, track.artist), "-", get_album_name(sv^, track.album))
+		notify_send("Now playing:", artists, "-", get_album_name(sv^, track.album))
 	}
 
 	server_send_event(sv, {type = .UpdateState})
@@ -560,14 +554,18 @@ Track_Compare_Proc :: #type proc(l: Library, a, b: Track) -> int
 TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
 	.Title =      proc(l: Library, a, b: Track) -> int {return strings.compare(a.title, b.title)},
 	.Artist =     proc(l: Library, a, b: Track) -> int {
-		return strings.compare(library_get_artist_name(l, a.artist), library_get_artist_name(l, b.artist))
+		// @FIXME
+		//return strings.compare(library_get_artist_name(l, a.artist), library_get_artist_name(l, b.artist))
+		return 0
 		//return l.artists.sorted_indices[a.artist] - l.artists.sorted_indices[b.artist]
 	},
 	.Album =      proc(l: Library, a, b: Track) -> int {
 		return strings.compare(library_get_album_name(l, a.album), library_get_album_name(l, b.album))
 	},
 	.Genre =      proc(l: Library, a, b: Track) -> int {
-		return strings.compare(library_get_genre_name(l, a.genre), library_get_genre_name(l, b.genre))
+		//@FIXME
+		//return strings.compare(library_get_genre_name(l, a.genre), library_get_genre_name(l, b.genre))
+		return 0
 	},
 	.Duration =   proc(l: Library, a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
 	.Track =      proc(l: Library, a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},

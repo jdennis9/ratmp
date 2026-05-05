@@ -11,6 +11,13 @@ import "core:path/filepath"
 import hm "core:container/handle_map"
 import "core:mem"
 
+// 0 means none
+// Index into array
+Artist_ID :: distinct i16
+Genre_ID :: distinct i16
+Album_ID :: distinct i16
+Dir_ID :: distinct i16
+
 Track_Flag :: enum {
 	Missing,
 	Overwrite, // Use on Track_Data struct to tell library to overwrite an existing track
@@ -36,11 +43,11 @@ Track_Data :: struct {
 	flags: bit_set[Track_Flag; u8],
 
 	duration_seconds: i32,
-	track_no: i16,
-	channels: i16,
-	samplerate: i32,
-	release_year: i32,
-	bitrate_kbps: i32,
+	track_no:         i16,
+	channels:         i16,
+	samplerate:       i32,
+	release_year:     i32,
+	bitrate_kbps:     i32,
 
 	file_size: int,
 
@@ -58,9 +65,9 @@ Track :: struct {
 	duration_seconds: i32,
 	release_year:     i32,
 	samplerate:       i32,
-	artist:           Artist_ID,
+	artists:          [8]Artist_ID,
 	album:            Album_ID,
-	genre:            Genre_ID,
+	genres:           [8]Genre_ID,
 	track_no:         i16,
 	channels:         i16,
 	bitrate_kbps:     i16,
@@ -269,10 +276,26 @@ library_add_or_update_track :: proc(
 	track.format           = data.format
 	track.flags            = data.flags ~ {.Overwrite}
 	track.protocol         = data.protocol
-	track.artist           = library_get_or_add_artist(l, data.artist, id)
 	track.album            = library_get_or_add_album(l, data.album, id)
-	track.genre            = library_get_or_add_genre(l, data.genre, id)
+	//track.artist           = library_get_or_add_artist(l, data.artist, id)
+	//track.genre            = library_get_or_add_genre(l, data.genre, id)
 	track.date_added       = time.now()
+
+	artists := strings.split(data.artist, ",")
+	defer delete(artists)
+
+	for artist, i in artists {
+		if i >= len(track.artists) do break
+		track.artists[i] = library_get_or_add_artist(l, strings.trim(artist, " "), track.id)
+	}
+
+	genres := strings.split(data.genre, ", ")
+	defer delete(genres)
+
+	for genre, i in genres {
+		if i >= len(track.genres) do break
+		track.genres[i] = library_get_or_add_genre(l, strings.trim(genre, " "), track.id)
+	}
 	
 	l.url_hash_map[hash] = id
 	l.serial += 1
@@ -285,9 +308,17 @@ library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
 		track := l.tracks[track_id] or_continue
 		url_hash := hash_track_url(track.url)
 
-		track_group_remove_track(&l.artists, auto_cast track.artist, track_id)
+		for artist in track.artists {
+			if artist != 0 {
+				track_group_remove_track(&l.artists, auto_cast artist, track_id)
+			}
+		}
+
+		for genre in track.genres {
+			track_group_remove_track(&l.genres, auto_cast genre, track_id)
+		}
+
 		track_group_remove_track(&l.genres, auto_cast track.album, track_id)
-		track_group_remove_track(&l.albums, auto_cast track.genre, track_id)
 
 		delete_key(&l.tracks, track_id)
 		delete_key(&l.url_hash_map, url_hash)
@@ -593,7 +624,8 @@ Track_Filter_Spec :: struct {
 
 filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Track_Filter_Metric], temp_allocator: mem.Allocator) -> bool {
 	if .Artist in metrics {
-		if strings.contains(library_get_artist_name_lower(l, t.artist), filter) do return true
+		//@FIXME
+		//if strings.contains(library_get_artist_name_lower(l, t.artist), filter) do return true
 	}
 
 	if .Album in metrics {
@@ -601,7 +633,8 @@ filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Trac
 	}
 
 	if .Genre in metrics {
-		if strings.contains(library_get_genre_name_lower(l, t.genre), filter) do return true
+		//@FIXME
+		//if strings.contains(library_get_genre_name_lower(l, t.genre), filter) do return true
 	}
 
 	if .Title in metrics {
@@ -657,6 +690,49 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: T
 }
 
 // -----------------------------------------------------------------------------
+// Misc
+// -----------------------------------------------------------------------------
+
+library_format_track_artists :: proc(l: Library, track: Track, allocator: mem.Allocator) -> string {
+	strb: strings.Builder
+
+	strings.builder_init(&strb, allocator)
+
+	if track.artists[0] == 0 do return ""
+
+	strings.write_string(&strb, l.artists.entries[track.artists[0]].name)
+
+	for i in 1..<len(track.artists) {
+		artist := track.artists[i]
+		if artist == 0 do break
+		strings.write_string(&strb, ", ")
+		strings.write_string(&strb, l.artists.entries[artist].name)
+	}
+
+	return strings.to_string(strb)
+}
+
+library_format_track_genres :: proc(l: Library, track: Track, allocator: mem.Allocator) -> string {
+	strb: strings.Builder
+
+	strings.builder_init(&strb, allocator)
+
+	if track.genres[0] == 0 do return ""
+
+	strings.write_string(&strb, l.genres.entries[track.genres[0]].name)
+
+	for i in 1..<len(track.genres) {
+		genre := track.genres[i]
+		if genre == 0 do break
+		strings.write_string(&strb, ", ")
+		strings.write_string(&strb, l.genres.entries[genre].name)
+	}
+
+	return strings.to_string(strb)
+}
+
+
+// -----------------------------------------------------------------------------
 // Radio
 // -----------------------------------------------------------------------------
 
@@ -673,12 +749,13 @@ library_build_radio :: proc(l: Library, main_track_id: Track_ID, allocator: mem.
 		if main_track.album != 0 && main_track.album == track.album {
 			append(&output, track_id)
 		}
-		else if main_track.artist != 0 && main_track.artist == track.artist {
+		//@FIXME
+		/*else if main_track.artist != 0 && main_track.artist == track.artist {
 			append(&output, track_id)
 		}
 		else if main_track.genre != 0 && main_track.genre == track.genre {
 			append(&output, track_id)
-		}
+		}*/
 	}
 
 	return output[:]

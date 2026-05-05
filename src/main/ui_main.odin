@@ -44,8 +44,8 @@ _Track_Table_Row :: struct {
 	title:      string,
 	url:        string,
 	id:         Track_ID,
-	artist:     Artist_ID,
-	genre:      Genre_ID,
+	artist:     string,
+	genre:      string,
 	album:      Album_ID,
 	format:     Audio_File_Format,
 	samplerate: [8]u8,
@@ -64,6 +64,7 @@ _Track_Table :: struct {
 	serial:         uint,
 	playlist_uid:   UID,
 	rows:           [dynamic]_Track_Table_Row,
+	scratch:        mem.Scratch,
 }
 
 // -----------------------------------------------------------------------------
@@ -978,7 +979,9 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// Track info
 	// --------------------------------------------------------------------------
 	if track, have_track := get_track(sv, sv.current_track_id); have_track {
-		imx.text(512, get_artist_name(sv^, track.artist), " - ", track.title)
+		artists := library_format_track_artists(sv.library, track, ui.allocators.per_frame)
+
+		imx.text(512, artists, " - ", track.title)
 		imgui.Separator()
 		track_info := sv.track_info
 
@@ -1042,15 +1045,15 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 // -----------------------------------------------------------------------------
 
 _track_table_row_from_track :: proc(
-	sv: ^Server, handle: Track_ID
+	sv: ^Server, handle: Track_ID, allocator: mem.Allocator,
 ) -> (row: _Track_Table_Row, ok: bool) {
 	track := get_track(sv, handle) or_return
 	ok = true
 
 	row.id = handle
 	row.album = track.album
-	row.artist = track.artist
-	row.genre = track.genre
+	row.artist = library_format_track_artists(sv.library, track, allocator)
+	row.genre = library_format_track_genres(sv.library, track, allocator)
 	row.title = track.title
 	row.url = track.url
 
@@ -1111,6 +1114,14 @@ _track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	if serial != table.serial || table.playlist_uid != playlist_id || filter_hash != table.filter_hash {
 		TIME_SCOPE("Build track table", name)
+
+		if table.scratch.data == nil {
+			mem.scratch_init(&table.scratch, 16<<10)
+		}
+
+		scratch := mem.scratch_allocator(&table.scratch)
+		free_all(scratch)
+		
 		filtered_tracks: []Track_ID
 		table.filter_hash = stable_hash_string_32(filter_spec.filter_string)
 
@@ -1128,12 +1139,12 @@ _track_table_show :: proc(
 		clear(&table.rows)
 
 		for track in filtered_tracks {
-			row := _track_table_row_from_track(sv, track) or_continue
+			row := _track_table_row_from_track(sv, track, scratch) or_continue
 			append(&table.rows, row)
 		}
 
 		if table.sort_spec != nil {
-			_sort_track_table_rows(ui, table^, table.sort_spec.?)
+			_sort_track_table_rows(ui, table, table.sort_spec.?)
 		}
 	}
 
@@ -1238,7 +1249,7 @@ _track_table_show :: proc(
 			}
 
 			if table.sort_spec != nil {
-				_sort_track_table_rows(ui, table^, table.sort_spec.?)
+				_sort_track_table_rows(ui, table, table.sort_spec.?)
 				log.debug("Sorting track table", name, "with by", table.sort_spec.?.metric)
 			}
 		}
@@ -1306,18 +1317,19 @@ _track_table_show :: proc(
 					}
 
 					imgui.Separator()
-					if row.artist != 0 && imgui.MenuItem("More by this artist...") {
+					//@FIXME
+					/*if row.artist != 0 && imgui.MenuItem("More by this artist...") {
 						actions.go_to_artist = row.artist
-					}
+					}*/
 
 					if row.album != 0 && imgui.MenuItem("View album") {
 						actions.go_to_album = row.album
 					}
 
-					if row.genre != 0 && imgui.MenuItem("View genre") {
+					/*if row.genre != 0 && imgui.MenuItem("View genre") {
 						actions.go_to_genre = row.genre
 					}
-					
+					*/
 					if .NoRemove not_in flags {
 						imgui.Separator()
 						imgui.MenuItem("Remove")
@@ -1327,7 +1339,7 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
-				imx.text_unformatted(get_artist_name(sv^, row.artist))
+				imx.text_unformatted(row.artist)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
@@ -1335,7 +1347,7 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
-				imx.text_unformatted(get_genre_name(sv^, row.genre))
+				imx.text_unformatted(row.genre)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Duration) {
@@ -1401,14 +1413,14 @@ _track_table_show :: proc(
 	return true
 }
 
-_sort_track_table_rows :: proc(ui: ^UI, table: _Track_Table, spec: Track_Sort_Spec) {
+_sort_track_table_rows :: proc(ui: ^UI, table: ^_Track_Table, spec: Track_Sort_Spec) {
 	sv := ui.server
-	tracks := _track_table_get_tracks(table, ui.allocators.per_frame)
+	tracks := _track_table_get_tracks(table^, ui.allocators.per_frame)
 
 	sort_tracks(sv, tracks, spec)
 
 	for track_id, i in tracks {
-		row := _track_table_row_from_track(sv, track_id) or_continue
+		row := _track_table_row_from_track(sv, track_id, mem.scratch_allocator(&table.scratch)) or_continue
 		table.rows[i] = row
 	}
 }
@@ -1430,17 +1442,19 @@ _show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: 
 	
 	if track.title != "" do imx.kv_row("Title", track.title)
 
-	if track.artist != 0 && imx.kv_row("Artist", get_artist_name(sv, track.artist)) {
+	//@FIXME
+	/*if track.artist != 0 && imx.kv_row("Artist", get_artist_name(sv, track.artist)) {
 		_go_to_artist(ui, track.artist)
-	}
+	}*/
 
 	if track.album != 0 && imx.kv_row("Album", get_album_name(sv, track.album)) {
 		_go_to_album(ui, track.album)
 	}
 
-	if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
+	//@FIXME
+	/*if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
 		_go_to_genre(ui, track.genre)
-	}
+	}*/
 
 	imx.kv_rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
 	imx.kv_row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
