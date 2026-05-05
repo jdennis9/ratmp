@@ -60,7 +60,7 @@ track_scanner_init :: proc(
 		output_allocator: mem.Allocator,
 	) -> (output: []Track_Data, error: Error) {
 		scratch: mem.Scratch
-		mem.scratch_init(&scratch, 256<<10, context.allocator)
+		mem.scratch_init(&scratch, 512<<10, context.allocator)
 		defer mem.scratch_destroy(&scratch)
 
 		context.allocator = mem.scratch_allocator(&scratch)
@@ -135,7 +135,7 @@ track_scanner_init :: proc(
 	worker_init(
 		&ts.worker, _produce_proc, consume_proc, &ts.progress, consume_data,
 		output_scratch_size = TRACK_SCANNER_SCRATCH_SIZE,
-		input_scratch_size = 32<<10,
+		input_scratch_size = 512<<10,
 	)
 
 	ts.worker.clone_input = _clone_proc

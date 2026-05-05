@@ -205,7 +205,7 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 
 	audio_resume()
 
-	artists := library_format_track_artists(sv.library, track, sv.allocators.temp)
+	artists := library_format_track_group_set_to_allocator(track.artists, sv.library.artists, sv.allocators.temp)
 
 	sv.playback_state = .Playing
 	media_controls_update_track(sv, track)

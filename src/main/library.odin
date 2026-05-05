@@ -11,10 +11,14 @@ import "core:path/filepath"
 import hm "core:container/handle_map"
 import "core:mem"
 
+
+Track_Group_ID :: distinct i16
+Track_Group_ID_Set :: [6]Track_Group_ID
+
 // 0 means none
 // Index into array
-Artist_ID :: distinct i16
-Genre_ID :: distinct i16
+Artist_ID :: Track_Group_ID
+Genre_ID :: Track_Group_ID
 Album_ID :: distinct i16
 Dir_ID :: distinct i16
 
@@ -55,6 +59,7 @@ Track_Data :: struct {
 	date_added: time.Time,
 }
 
+
 // Raw storage of track data in the server
 Track :: struct {
 	url:              string,
@@ -65,9 +70,9 @@ Track :: struct {
 	duration_seconds: i32,
 	release_year:     i32,
 	samplerate:       i32,
-	artists:          [8]Artist_ID,
+	artists:          Track_Group_ID_Set,
+	genres:           Track_Group_ID_Set,
 	album:            Album_ID,
-	genres:           [8]Genre_ID,
 	track_no:         i16,
 	channels:         i16,
 	bitrate_kbps:     i16,
@@ -624,8 +629,10 @@ Track_Filter_Spec :: struct {
 
 filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Track_Filter_Metric], temp_allocator: mem.Allocator) -> bool {
 	if .Artist in metrics {
-		//@FIXME
-		//if strings.contains(library_get_artist_name_lower(l, t.artist), filter) do return true
+		for artist in t.artists {
+			if artist == 0 do break
+			if strings.contains(library_get_artist_name_lower(l, artist), filter) do return true
+		}
 	}
 
 	if .Album in metrics {
@@ -633,8 +640,10 @@ filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Trac
 	}
 
 	if .Genre in metrics {
-		//@FIXME
-		//if strings.contains(library_get_genre_name_lower(l, t.genre), filter) do return true
+		for genre in t.genres {
+			if genre == 0 do break
+			if strings.contains(library_get_genre_name_lower(l, genre), filter) do return true
+		}
 	}
 
 	if .Title in metrics {
@@ -693,70 +702,90 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: T
 // Misc
 // -----------------------------------------------------------------------------
 
-library_format_track_artists :: proc(l: Library, track: Track, allocator: mem.Allocator) -> string {
-	strb: strings.Builder
+library_format_track_group_set :: proc(
+	b: ^strings.Builder,
+	ids: Track_Group_ID_Set, groups: Track_Group_Set
+) -> string {
+	if ids[0] == 0 do return ""
 
-	strings.builder_init(&strb, allocator)
+	strings.write_string(b, groups.entries[ids[0]].name)
 
-	if track.artists[0] == 0 do return ""
-
-	strings.write_string(&strb, l.artists.entries[track.artists[0]].name)
-
-	for i in 1..<len(track.artists) {
-		artist := track.artists[i]
-		if artist == 0 do break
-		strings.write_string(&strb, ", ")
-		strings.write_string(&strb, l.artists.entries[artist].name)
+	for i in 1..<len(ids) {
+		if ids[i] == 0 do break
+		strings.write_string(b, ", ")
+		strings.write_string(b, groups.entries[ids[i]].name)
 	}
 
-	return strings.to_string(strb)
+	return strings.to_string(b^)
 }
 
-library_format_track_genres :: proc(l: Library, track: Track, allocator: mem.Allocator) -> string {
-	strb: strings.Builder
-
-	strings.builder_init(&strb, allocator)
-
-	if track.genres[0] == 0 do return ""
-
-	strings.write_string(&strb, l.genres.entries[track.genres[0]].name)
-
-	for i in 1..<len(track.genres) {
-		genre := track.genres[i]
-		if genre == 0 do break
-		strings.write_string(&strb, ", ")
-		strings.write_string(&strb, l.genres.entries[genre].name)
-	}
-
-	return strings.to_string(strb)
+library_format_track_group_set_to_allocator :: proc(
+	ids: Track_Group_ID_Set, groups: Track_Group_Set,
+	allocator: mem.Allocator
+) -> string {
+	b: strings.Builder
+	strings.builder_init(&b, allocator)
+	return library_format_track_group_set(&b, ids, groups)
 }
-
 
 // -----------------------------------------------------------------------------
 // Radio
 // -----------------------------------------------------------------------------
 
 library_build_radio :: proc(l: Library, main_track_id: Track_ID, allocator: mem.Allocator) -> []Track_ID {
+	TIME_SCOPE("Build radio")
+	
 	output := make([dynamic]Track_ID, allocator)
 	reserve(&output, 256)
 
 	main_track, ok := l.tracks[main_track_id]
 	if !ok do return nil
 
-	for track_id, track in l.tracks {
+	track_loop: for track_id, &track in l.tracks {
 		if track_id == main_track_id do continue
 
 		if main_track.album != 0 && main_track.album == track.album {
 			append(&output, track_id)
 		}
-		//@FIXME
-		/*else if main_track.artist != 0 && main_track.artist == track.artist {
-			append(&output, track_id)
+		else if main_track.artists[0] != 0 {
+			for a in main_track.artists {
+				if track_has_artist(track, a) {
+					append(&output, track_id)
+					continue track_loop
+				}
+			}
 		}
-		else if main_track.genre != 0 && main_track.genre == track.genre {
-			append(&output, track_id)
-		}*/
+		else if main_track.genres[0] != 0 {
+			for a in main_track.genres {
+				if track_has_genre(track, a) {
+					append(&output, track_id)
+					continue track_loop
+				}
+			}
+		}
 	}
 
 	return output[:]
+}
+
+// -----------------------------------------------------------------------------
+// Track helpers
+// -----------------------------------------------------------------------------
+
+track_has_artist :: proc(track: Track, a: Artist_ID) -> bool {
+	for artist in track.artists {
+		if artist == 0 do return false
+		if artist == a do return true
+	}
+
+	return false
+}
+
+track_has_genre :: proc(track: Track, g: Genre_ID) -> bool {
+	for genre in track.genres {
+		if genre == 0 do return false
+		if genre == g do return true
+	}
+
+	return false
 }

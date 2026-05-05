@@ -44,8 +44,8 @@ _Track_Table_Row :: struct {
 	title:      string,
 	url:        string,
 	id:         Track_ID,
-	artist:     string,
-	genre:      string,
+	artists:    Track_Group_ID_Set,
+	genres:     Track_Group_ID_Set,
 	album:      Album_ID,
 	format:     Audio_File_Format,
 	samplerate: [8]u8,
@@ -979,7 +979,9 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// Track info
 	// --------------------------------------------------------------------------
 	if track, have_track := get_track(sv, sv.current_track_id); have_track {
-		artists := library_format_track_artists(sv.library, track, ui.allocators.per_frame)
+		artists := library_format_track_group_set_to_allocator(
+			track.artists, sv.library.artists, ui.allocators.per_frame
+		)
 
 		imx.text(512, artists, " - ", track.title)
 		imgui.Separator()
@@ -1052,8 +1054,8 @@ _track_table_row_from_track :: proc(
 
 	row.id = handle
 	row.album = track.album
-	row.artist = library_format_track_artists(sv.library, track, allocator)
-	row.genre = library_format_track_genres(sv.library, track, allocator)
+	row.artists = track.artists
+	row.genres = track.genres
 	row.title = track.title
 	row.url = track.url
 
@@ -1116,12 +1118,12 @@ _track_table_show :: proc(
 		TIME_SCOPE("Build track table", name)
 
 		if table.scratch.data == nil {
-			mem.scratch_init(&table.scratch, 16<<10)
+			mem.scratch_init(&table.scratch, 64<<10)
 		}
 
 		scratch := mem.scratch_allocator(&table.scratch)
 		free_all(scratch)
-		
+
 		filtered_tracks: []Track_ID
 		table.filter_hash = stable_hash_string_32(filter_spec.filter_string)
 
@@ -1255,6 +1257,9 @@ _track_table_show :: proc(
 		}
 	}
 
+	string_builder: strings.Builder
+	strings.builder_init(&string_builder, ui.allocators.per_frame)
+
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
 	defer imgui.ListClipper_End(&list_clipper)
 
@@ -1339,7 +1344,10 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
-				imx.text_unformatted(row.artist)
+				strings.builder_reset(&string_builder)
+				imx.text_unformatted(
+					library_format_track_group_set(&string_builder, row.artists, sv.library.artists)
+				)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
@@ -1347,7 +1355,10 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
-				imx.text_unformatted(row.genre)
+				strings.builder_reset(&string_builder)
+				imx.text_unformatted(
+					library_format_track_group_set(&string_builder, row.genres, sv.library.genres)
+				)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Duration) {
