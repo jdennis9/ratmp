@@ -135,6 +135,7 @@ server_audio_callback :: proc(
 		}
 	}
 	else if event == .TrackFinised {
+		playback_thread_close_track(&sv.playback_thread)
 		server_send_event(sv, {type = .TrackFinished})
 	}
 	else if event == .BufferDropped {
@@ -343,10 +344,9 @@ server_handle_events :: proc(sv: ^Server) {
 			_play_track(sv, track_id)
 			audio_drop_buffer()
 		case .TrackFinished:
-			playback_thread_close_track(&sv.playback_thread)
 			track_id := playback_queue_next(&sv.playback) or_break
 			_play_track(sv, track_id)
-			audio_drop_buffer()
+			analysis_reset(&sv.analysis)
 		}
 	}
 }
@@ -355,6 +355,8 @@ server_send_event :: proc(sv: ^Server, ev: Server_Event) {
 	sync.lock(&sv.event_queue_lock)
 	append(&sv.event_queue, ev)
 	sync.unlock(&sv.event_queue_lock)
+
+	log.debug("Server event:", ev.type)
 
 	sync.auto_reset_event_signal(&sv.event_signal)
 	platform_flush_events()
@@ -554,18 +556,13 @@ Track_Compare_Proc :: #type proc(l: Library, a, b: Track) -> int
 TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
 	.Title =      proc(l: Library, a, b: Track) -> int {return strings.compare(a.title, b.title)},
 	.Artist =     proc(l: Library, a, b: Track) -> int {
-		// @FIXME
-		//return strings.compare(library_get_artist_name(l, a.artist), library_get_artist_name(l, b.artist))
-		return 0
-		//return l.artists.sorted_indices[a.artist] - l.artists.sorted_indices[b.artist]
+		return strings.compare(library_get_artist_name(l, a.artists[0]), library_get_artist_name(l, b.artists[0]))
 	},
 	.Album =      proc(l: Library, a, b: Track) -> int {
 		return strings.compare(library_get_album_name(l, a.album), library_get_album_name(l, b.album))
 	},
 	.Genre =      proc(l: Library, a, b: Track) -> int {
-		//@FIXME
-		//return strings.compare(library_get_genre_name(l, a.genre), library_get_genre_name(l, b.genre))
-		return 0
+		return strings.compare(library_get_genre_name(l, a.genres[0]), library_get_genre_name(l, b.genres[0]))
 	},
 	.Duration =   proc(l: Library, a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
 	.Track =      proc(l: Library, a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
