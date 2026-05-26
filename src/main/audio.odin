@@ -43,6 +43,7 @@ audio_init :: proc(callback: Audio_Callback, callback_data: rawptr) -> bool {
 }
 
 audio_shutdown :: proc() {
+	_audio_impl_stop()
 	_audio_impl_shutdown()
 }
 
