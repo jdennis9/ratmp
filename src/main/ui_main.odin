@@ -1122,7 +1122,7 @@ _track_table_show :: proc(
 		}
 
 		scratch := mem.scratch_allocator(&table.scratch)
-		free_all(scratch)
+		mem.scratch_free_all(&table.scratch)
 
 		filtered_tracks: []Track_ID
 		table.filter_hash = stable_hash_string_32(filter_spec.filter_string)
@@ -1162,6 +1162,9 @@ _track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	// Show
 	// --------------------------------------------------------------------------
+
+	imgui.TextDisabled("%d tracks", i32(len(table.rows)))
+
 	_Column_Index :: enum {
 		TrackNo,
 		Title,

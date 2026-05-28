@@ -169,7 +169,6 @@ library_update :: proc(l: ^Library) {
 library_add_track :: proc(
 	l: ^Library, data: Track_Data,
 	update_existing := false,
-	overwrite_id: Maybe(Track_ID) = nil,
 ) -> (id: Track_ID, error: Error) {
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
@@ -282,8 +281,6 @@ library_add_or_update_track :: proc(
 	track.flags            = data.flags ~ {.Overwrite}
 	track.protocol         = data.protocol
 	track.album            = library_get_or_add_album(l, data.album, id)
-	//track.artist           = library_get_or_add_artist(l, data.artist, id)
-	//track.genre            = library_get_or_add_genre(l, data.genre, id)
 	track.date_added       = time.now()
 
 	artists := strings.split(data.artist, ",")
@@ -470,7 +467,7 @@ track_group_add_track :: proc(
 
 	entry := &tg.entries[index]
 	entry.serial += 1
-	append(&entry.tracks, track_id)
+	if !slice.contains(entry.tracks[:], track_id) do append(&entry.tracks, track_id)
 
 	tg.serial += 1
 

@@ -95,7 +95,7 @@ track_scanner_init :: proc(
 				for file, _ in os.read_directory_iterator(&iter) {
 					process_file(progress, Track_Scanner_Input {
 						path = file.fullpath,
-						overwrite = true
+						overwrite = input.overwrite,
 					}, output, depth+1, output_allocator)
 				}	
 
