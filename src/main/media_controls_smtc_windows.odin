@@ -35,7 +35,7 @@ media_controls_use_smtc :: proc() {
 		return true
 	}
 
-	_media_controls_impl_update_track = proc(sv: ^Server, track: Track) {
+	_media_controls_impl_update_track = proc(sv: ^Server, track: Media_Controls_Track_Info) {
 		cover_data, mime_type, have_cover_data := find_track_thumbnail(
 			sv.library, track.id, context.allocator
 		)
@@ -45,11 +45,11 @@ media_controls_use_smtc :: proc() {
 		}
 
 		ti := smtc.Track_Info {
-			album = track.album   != 0 ? strings.clone_to_cstring(get_album_name(sv^, track.album)) : nil,
-			//artist = track.artist != 0 ? strings.clone_to_cstring(get_artist_name(sv^, track.artist)) : nil,
-			//genre = track.genre   != 0 ? strings.clone_to_cstring(get_genre_name(sv^, track.genre)) : nil,
-			title = track.title   != "" ? strings.clone_to_cstring(track.title) : nil,
-			cover_data = raw_data(cover_data),
+			album           = track.album   != "" ? strings.clone_to_cstring(track.album) : nil,
+			artist          = track.artists != "" ? strings.clone_to_cstring(track.artists) : nil,
+			genre           = track.genres  != "" ? strings.clone_to_cstring(track.genres) : nil,
+			title           = track.title   != "" ? strings.clone_to_cstring(track.title) : nil,
+			cover_data      = raw_data(cover_data),
 			cover_data_size = auto_cast len(cover_data),
 		}
 
