@@ -288,7 +288,7 @@ _Playlists_Window :: struct {
 // Track group window
 // -----------------------------------------------------------------------------
 
-_TRACK_COMMON_STRING_TYPE_NAMES := [Track_Common_String_Type]cstring {
+_TRACK_COMMON_STRING_TYPE_NAMES := [Track_Group_Type]cstring {
 	.Artist = "Artists",
 	.Genre  = "Genres",
 	.Album  = "Albums",
@@ -1010,7 +1010,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// Track info
 	// --------------------------------------------------------------------------
 	if track, have_track := get_track(sv, sv.current_track_id); have_track {
-		artists := library_format_track_common_strings_to_allocator(
+		artists := library_join_track_group_names_to_allocator(
 			sv.library, track.artists, .Artist, ui.allocators.per_frame
 		)
 
@@ -1380,7 +1380,7 @@ _track_table_show :: proc(
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
 				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_format_track_group_set(sv.library, &string_builder, row.artists, .Artist)
+					library_join_track_group_names_to_builder(sv.library, &string_builder, row.artists, .Artist)
 				)
 			}
 
@@ -1391,7 +1391,7 @@ _track_table_show :: proc(
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
 				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_format_track_group_set(sv.library, &string_builder, row.genres, .Genre)
+					library_join_track_group_names_to_builder(sv.library, &string_builder, row.genres, .Genre)
 				)
 			}
 
@@ -1611,9 +1611,9 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 // -----------------------------------------------------------------------------
 
 _track_group_window_show_groups :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Common_String_Type,
+	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type,
 ) -> (shown: bool) {
-	entry: ^Track_Common_String
+	entry: ^Track_Group
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
@@ -1680,9 +1680,9 @@ _track_group_window_show_groups :: proc(
 }
 
 _track_group_window_show_tracks :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Common_String_Type
+	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type
 ) -> bool {
-	entry: ^Track_Common_String
+	entry: ^Track_Group
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
@@ -1713,7 +1713,7 @@ _track_group_window_show_tracks :: proc(
 }
 
 _track_group_window_show_focused :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Common_String_Type,
+	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type,
 ) {
 	if w.displayed_entry_id != nil {
 		if imgui.Button("Back") {

@@ -81,7 +81,7 @@ Track :: struct {
 	protocol:         Track_Protocol,
 }
 
-Track_Common_String :: struct {
+Track_Group :: struct {
 	name:            string,
 	lower_case_name: string,
 	name_hash:       u32,
@@ -91,14 +91,14 @@ Track_Common_String :: struct {
 	totals:          Track_List_Totals,
 }
 
-Track_Common_String_Type :: enum {Artist, Genre, Album}
+Track_Group_Type :: enum {Artist, Genre, Album}
 
 // Entries never get removed or rearranged for the duration of the program
 // so it is safe to store an index into the entries array
-Track_Common_Strings :: struct {
+Track_Group_List :: struct {
 	allocator:      mem.Allocator,
-	type:           Track_Common_String_Type,
-	entries:        [dynamic]Track_Common_String,
+	type:           Track_Group_Type,
+	entries:        [dynamic]Track_Group,
 	sorted_indices: [dynamic]int,
 	serial:         uint,
 }
@@ -116,7 +116,7 @@ Library :: struct {
 	tracks: map[Track_ID]Track,
 	url_hash_map: map[u64]Track_ID,
 
-	track_common_strings: [Track_Common_String_Type]Track_Common_Strings,
+	track_common_strings: [Track_Group_Type]Track_Group_List,
 
 	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
 	playlists_serial: uint,
@@ -141,7 +141,7 @@ library_init :: proc(l: ^Library) {
 	l.url_hash_map = make_map_cap(map[u64]Track_ID, 4096, l.allocators.track_map)
 
 	for &t, type in l.track_common_strings {
-		track_common_strings_init(&t, type, l.allocators.track_data)
+		track_group_list_init(&t, type, l.allocators.track_data)
 	}
 }
 
@@ -165,7 +165,7 @@ library_update :: proc(l: ^Library) {
 
 		l.common_string_totals_serial = l.serial
 
-		for type in Track_Common_String_Type {
+		for type in Track_Group_Type {
 			list := &l.track_common_strings[type]
 			for &e in list.entries {
 				e.totals = {}
@@ -410,9 +410,9 @@ library_load :: proc(l: ^Library, path: string) -> Error {
 
 	track_db_load(l, path) or_return
 
-	track_common_strings_sort(&l.track_common_strings[.Artist])
-	track_common_strings_sort(&l.track_common_strings[.Genre])
-	track_common_strings_sort(&l.track_common_strings[.Album])
+	track_group_list_sort(&l.track_common_strings[.Artist])
+	track_group_list_sort(&l.track_common_strings[.Genre])
+	track_group_list_sort(&l.track_common_strings[.Album])
 
 	return nil
 }
@@ -423,7 +423,7 @@ library_get_track :: proc(l: Library, id: Track_ID) -> (track: Track, found: boo
 
 library_get_tracks_in_group :: proc(
 	l:          Library,
-	group_type: Track_Common_String_Type,
+	group_type: Track_Group_Type,
 	group_id:   Track_Group_ID,
 	output:    ^[dynamic]Track_ID,
 ) {
@@ -500,7 +500,7 @@ library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist:
 // -----------------------------------------------------------------------------
 // Track groups
 // -----------------------------------------------------------------------------
-track_common_strings_find_entry :: proc(tg: ^Track_Common_Strings, hash: u32) -> (index: int, found: bool) {
+track_group_list_find_entry :: proc(tg: ^Track_Group_List, hash: u32) -> (index: int, found: bool) {
 	count := len(tg.entries)
 	for ent, i in tg.entries {
 		if ent.name_hash == hash do return i, true
@@ -508,25 +508,25 @@ track_common_strings_find_entry :: proc(tg: ^Track_Common_Strings, hash: u32) ->
 	return
 }
 
-track_common_strings_init :: proc(list: ^Track_Common_Strings, type: Track_Common_String_Type, allocator: mem.Allocator) {
+track_group_list_init :: proc(list: ^Track_Group_List, type: Track_Group_Type, allocator: mem.Allocator) {
 	list.type = type
 	list.allocator = allocator
 	reserve(&list.entries, 512)
-	append(&list.entries, Track_Common_String {
+	append(&list.entries, Track_Group {
 		name = "",
 		name_hash = stable_hash_string_32(""),
 	})
 }
 
-track_common_strings_get_or_add_entry :: proc(
-	list: ^Track_Common_Strings, str: string
+track_group_list_get_or_add_entry :: proc(
+	list: ^Track_Group_List, str: string
 ) -> int {
 	hash := stable_hash_string_32(str)
-	index := track_common_strings_find_entry(list, hash) or_else -1
+	index := track_group_list_find_entry(list, hash) or_else -1
 
 	if index == -1 {
 		index = len(list.entries)
-		append(&list.entries, Track_Common_String {
+		append(&list.entries, Track_Group {
 			name = strings.clone(str, list.allocator),
 			lower_case_name = strings.to_lower(str, list.allocator),
 			name_hash = stable_hash_string_32(str),
@@ -542,7 +542,7 @@ track_common_strings_get_or_add_entry :: proc(
 }
 
 // Broken, but keep for future
-track_common_strings_sort :: proc(list: ^Track_Common_Strings) {
+track_group_list_sort :: proc(list: ^Track_Group_List) {
 	resize(&list.sorted_indices, len(list.entries))
 
 	for _, i in list.entries {
@@ -552,15 +552,15 @@ track_common_strings_sort :: proc(list: ^Track_Common_Strings) {
 	iface := sort.Interface {
 		collection = list,
 		len = proc(it: sort.Interface) -> int {
-			tg := cast(^Track_Common_Strings) it.collection
+			tg := cast(^Track_Group_List) it.collection
 			return len(tg.entries)
 		},
 		swap = proc(it: sort.Interface, a, b: int) {
-			tg := cast(^Track_Common_Strings) it.collection
+			tg := cast(^Track_Group_List) it.collection
 			tg.sorted_indices[a], tg.sorted_indices[b] = tg.sorted_indices[b], tg.sorted_indices[a]
 		},
 		less = proc(it: sort.Interface, a, b: int) -> bool {
-			tg := cast(^Track_Common_Strings) it.collection
+			tg := cast(^Track_Group_List) it.collection
 			A := tg.sorted_indices[a]
 			B := tg.sorted_indices[b]
 			return strings.compare(tg.entries[A].name, tg.entries[B].name) < 0
@@ -571,15 +571,15 @@ track_common_strings_sort :: proc(list: ^Track_Common_Strings) {
 }
 
 library_get_or_add_artist :: proc(l: ^Library, name: string, track_id: Track_ID) -> Artist_ID {
-	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Artist], name)
+	return auto_cast track_group_list_get_or_add_entry(&l.track_common_strings[.Artist], name)
 }
 
 library_get_or_add_album :: proc(l: ^Library, name: string, track_id: Track_ID) -> Album_ID {
-	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Album], name)
+	return auto_cast track_group_list_get_or_add_entry(&l.track_common_strings[.Album], name)
 }
 
 library_get_or_add_genre :: proc(l: ^Library, name: string, track_id: Track_ID) -> Genre_ID {
-	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Genre], name)
+	return auto_cast track_group_list_get_or_add_entry(&l.track_common_strings[.Genre], name)
 }
 
 find_track_thumbnail :: proc(
@@ -743,7 +743,7 @@ filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID,
 	}
 }
 
-filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Common_String, tg: Track_Common_Strings, filter: string) {
+filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: Track_Group_List, filter: string) {
 	lower_filter := strings.to_lower(filter, l.allocators.temp)
 	defer delete(lower_filter)
 
@@ -758,11 +758,11 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Common_Strin
 // Misc
 // -----------------------------------------------------------------------------
 
-library_format_track_group_set :: proc(
+library_join_track_group_names_to_builder :: proc(
 	l:    Library,
 	b:    ^strings.Builder,
 	ids:  Track_Group_ID_Set,
-	type: Track_Common_String_Type
+	type: Track_Group_Type
 ) -> string {
 	if ids[0] == 0 do return ""
 	list := l.track_common_strings[type]
@@ -778,15 +778,20 @@ library_format_track_group_set :: proc(
 	return strings.to_string(b^)
 }
 
-library_format_track_common_strings_to_allocator :: proc(
+library_join_track_group_names_to_allocator :: proc(
 	l:         Library,
 	ids:       Track_Group_ID_Set,
-	type:      Track_Common_String_Type,
+	type:      Track_Group_Type,
 	allocator: mem.Allocator
 ) -> string {
 	b: strings.Builder
 	strings.builder_init(&b, allocator)
-	return library_format_track_group_set(l, &b, ids, type)
+	return library_join_track_group_names_to_builder(l, &b, ids, type)
+}
+
+library_join_track_group_names :: proc {
+	library_join_track_group_names_to_allocator,
+	library_join_track_group_names_to_builder,
 }
 
 // -----------------------------------------------------------------------------
