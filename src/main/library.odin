@@ -19,7 +19,7 @@ Track_Group_ID_Set :: [6]Track_Group_ID
 // Index into array
 Artist_ID :: Track_Group_ID
 Genre_ID :: Track_Group_ID
-Album_ID :: distinct i16
+Album_ID :: Track_Group_ID
 Dir_ID :: distinct i16
 
 Track_Flag :: enum {
@@ -72,7 +72,7 @@ Track :: struct {
 	samplerate:       i32,
 	artists:          Track_Group_ID_Set,
 	genres:           Track_Group_ID_Set,
-	album:            Album_ID,
+	album:            Track_Group_ID,
 	track_no:         i16,
 	channels:         i16,
 	bitrate_kbps:     i16,
@@ -81,28 +81,26 @@ Track :: struct {
 	protocol:         Track_Protocol,
 }
 
-Track_Group :: struct {
-	name: string,
+Track_Common_String :: struct {
+	name:            string,
 	lower_case_name: string,
-	name_hash: u32,
-	// Index of the entry in the sorted entry array.
-	// Use to compare tracks
-	sort_index: int,
-	serial: uint,
-	uid: UID,
-	tracks: [dynamic]Track_ID,
+	name_hash:       u32,
+	sort_index:      int,
+	serial:          uint,
+	uid:             UID,
+	totals:          Track_List_Totals,
 }
 
-Track_Group_Ptr :: #soa^#soa[dynamic]Track_Group
+Track_Common_String_Type :: enum {Artist, Genre, Album}
 
 // Entries never get removed or rearranged for the duration of the program
 // so it is safe to store an index into the entries array
-Track_Group_Set :: struct {
-	name: string,
-	arena: mem.Dynamic_Arena,
-	entries: #soa[dynamic]Track_Group,
+Track_Common_Strings :: struct {
+	allocator:      mem.Allocator,
+	type:           Track_Common_String_Type,
+	entries:        [dynamic]Track_Common_String,
 	sorted_indices: [dynamic]int,
-	serial: uint,
+	serial:         uint,
 }
 
 Library :: struct {
@@ -118,9 +116,7 @@ Library :: struct {
 	tracks: map[Track_ID]Track,
 	url_hash_map: map[u64]Track_ID,
 
-	artists: Track_Group_Set,
-	albums: Track_Group_Set,
-	genres: Track_Group_Set,
+	track_common_strings: [Track_Common_String_Type]Track_Common_Strings,
 
 	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
 	playlists_serial: uint,
@@ -128,8 +124,9 @@ Library :: struct {
 	folder_cover_art: map[u64]string,
 	
 	// Serial of library when groups were sorted
-	group_sort_serial: uint,
-	serial: uint,
+	group_sort_serial:           uint,
+	common_string_totals_serial: uint,
+	serial:                      uint,
 }
 
 library_init :: proc(l: ^Library) {
@@ -138,16 +135,14 @@ library_init :: proc(l: ^Library) {
 	l.allocators.track_data = allocator_map_add_dynamic_arena(&l.allocator_map, "track_data")
 	l.allocators.track_map = allocator_map_add_heap(&l.allocator_map, "track_map")
 	l.allocators.temp = allocator_map_add_dynamic_arena(&l.allocator_map, "temp")
-	track_group_init(&l.artists)
-	track_group_init(&l.albums)
-	track_group_init(&l.genres)
-	l.artists.name = "Artist"
-	l.albums.name = "Album"
-	l.genres.name = "Genre"
 	l.serial = 1
 
 	l.tracks = make_map_cap(map[Track_ID]Track, 4096, l.allocators.track_map)
 	l.url_hash_map = make_map_cap(map[u64]Track_ID, 4096, l.allocators.track_map)
+
+	for &t, type in l.track_common_strings {
+		track_common_strings_init(&t, type, l.allocators.track_data)
+	}
 }
 
 library_destroy :: proc(l: ^Library) {
@@ -159,10 +154,48 @@ library_destroy :: proc(l: ^Library) {
 library_update :: proc(l: ^Library) {
 	if l.group_sort_serial != l.serial {
 		log.debug("Sorting track groups...")
-		track_group_pseudo_sort(&l.albums)
-		track_group_pseudo_sort(&l.artists)
-		track_group_pseudo_sort(&l.genres)
 		l.group_sort_serial = l.serial
+	}
+
+	// --------------------------------------------------------------------------
+	// Recalculate common string totals
+	// --------------------------------------------------------------------------
+	if l.common_string_totals_serial != l.serial {
+		TIME_SCOPE("Calculate common string totals")
+
+		l.common_string_totals_serial = l.serial
+
+		for type in Track_Common_String_Type {
+			list := &l.track_common_strings[type]
+			for &e in list.entries {
+				e.totals = {}
+			}
+		}
+
+		for _, track in l.tracks {
+			for i in 0..<len(track.artists) {
+				if i != 0 && track.artists[i] == 0 do continue
+				tots := &l.track_common_strings[.Artist].entries[track.artists[i]].totals
+
+				tots.track_count += 1
+				tots.file_size   += auto_cast track.file_size
+				tots.duration    += auto_cast track.duration_seconds
+			}
+
+			for i in 0..<len(track.genres) {
+				if i != 0 && track.genres[i] == 0 do continue
+				tots := &l.track_common_strings[.Genre].entries[track.genres[i]].totals
+
+				tots.track_count += 1
+				tots.file_size   += auto_cast track.file_size
+				tots.duration    += auto_cast track.duration_seconds
+			}
+
+			tots := &l.track_common_strings[.Album].entries[track.album].totals
+			tots.duration    += auto_cast track.duration_seconds
+			tots.file_size   += track.file_size
+			tots.track_count += 1
+		}
 	}
 }
 
@@ -310,18 +343,6 @@ library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
 		track := l.tracks[track_id] or_continue
 		url_hash := hash_track_url(track.url)
 
-		for artist in track.artists {
-			if artist != 0 {
-				track_group_remove_track(&l.artists, auto_cast artist, track_id)
-			}
-		}
-
-		for genre in track.genres {
-			track_group_remove_track(&l.genres, auto_cast genre, track_id)
-		}
-
-		track_group_remove_track(&l.genres, auto_cast track.album, track_id)
-
 		delete_key(&l.tracks, track_id)
 		delete_key(&l.url_hash_map, url_hash)
 	}
@@ -355,13 +376,29 @@ library_get_all_tracks :: proc(l: Library, allocator: mem.Allocator) -> (keys: [
 	return
 }
 
-library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {return l.artists.entries[id].name}
-library_get_album_name :: proc(l: Library, id: Album_ID) -> string {return l.albums.entries[id].name}
-library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {return l.genres.entries[id].name}
+library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {
+	return l.track_common_strings[.Artist].entries[id].name
+}
 
-library_get_artist_name_lower :: proc(l: Library, id: Artist_ID) -> string {return l.artists.entries[id].lower_case_name}
-library_get_album_name_lower :: proc(l: Library, id: Album_ID) -> string {return l.albums.entries[id].lower_case_name}
-library_get_genre_name_lower :: proc(l: Library, id: Genre_ID) -> string {return l.genres.entries[id].lower_case_name}
+library_get_album_name :: proc(l: Library, id: Album_ID) -> string {
+	return l.track_common_strings[.Album].entries[id].name
+}
+
+library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {
+	return l.track_common_strings[.Genre].entries[id].name
+}	
+
+library_get_artist_name_lower :: proc(l: Library, id: Artist_ID) -> string {
+	return l.track_common_strings[.Artist].entries[id].lower_case_name
+}
+
+library_get_album_name_lower :: proc(l: Library, id: Album_ID) -> string {
+	return l.track_common_strings[.Album].entries[id].lower_case_name
+}
+
+library_get_genre_name_lower :: proc(l: Library, id: Genre_ID) -> string {
+	return l.track_common_strings[.Genre].entries[id].lower_case_name
+}
 
 library_save :: proc(l: Library, path: string) -> Error {
 	TIME_SCOPE("Save library", path)
@@ -373,18 +410,52 @@ library_load :: proc(l: ^Library, path: string) -> Error {
 
 	track_db_load(l, path) or_return
 
-	track_group_pseudo_sort(&l.albums)
-	track_group_pseudo_sort(&l.artists)
-	track_group_pseudo_sort(&l.genres)
+	track_common_strings_sort(&l.track_common_strings[.Artist])
+	track_common_strings_sort(&l.track_common_strings[.Genre])
+	track_common_strings_sort(&l.track_common_strings[.Album])
 
 	return nil
 }
-
 
 library_get_track :: proc(l: Library, id: Track_ID) -> (track: Track, found: bool) {
 	return l.tracks[id]
 }
 
+library_get_tracks_in_group :: proc(
+	l:          Library,
+	group_type: Track_Common_String_Type,
+	group_id:   Track_Group_ID,
+	output:    ^[dynamic]Track_ID,
+) {
+	switch group_type {
+	case .Artist:
+		for id, track in l.tracks {
+			for a, i in track.artists {
+				if i != 0 && a == 0 do break
+				if a == group_id {
+					append(output, id)
+					break
+				}
+			}
+		}
+	case .Genre:
+		for id, track in l.tracks {
+			for a, i in track.genres {
+				if i != 0 && a == 0 do break
+				if a == group_id {
+					append(output, id)
+					break
+				}
+			}
+		}
+	case .Album:
+		for id, track in l.tracks {
+			if track.album == group_id {
+				append(output, id)
+			}
+		}
+	}
+}
 
 // -----------------------------------------------------------------------------
 // Playlist management
@@ -429,80 +500,67 @@ library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist:
 // -----------------------------------------------------------------------------
 // Track groups
 // -----------------------------------------------------------------------------
-track_group_get_entry :: proc(tg: ^Track_Group_Set, hash: u32) -> (index: int, found: bool) {
+track_common_strings_find_entry :: proc(tg: ^Track_Common_Strings, hash: u32) -> (index: int, found: bool) {
 	count := len(tg.entries)
-	for h, i in tg.entries.name_hash[:count] {
-		if h == hash do return i, true
+	for ent, i in tg.entries {
+		if ent.name_hash == hash do return i, true
 	}
 	return
 }
 
-track_group_init :: proc(tg: ^Track_Group_Set) {
-	mem.dynamic_arena_init(&tg.arena)
-	reserve(&tg.entries, 512)
-	append(&tg.entries, Track_Group {
+track_common_strings_init :: proc(list: ^Track_Common_Strings, type: Track_Common_String_Type, allocator: mem.Allocator) {
+	list.type = type
+	list.allocator = allocator
+	reserve(&list.entries, 512)
+	append(&list.entries, Track_Common_String {
 		name = "",
 		name_hash = stable_hash_string_32(""),
 	})
 }
 
-track_group_add_track :: proc(
-	tg: ^Track_Group_Set, str: string, track_id: Track_ID
+track_common_strings_get_or_add_entry :: proc(
+	list: ^Track_Common_Strings, str: string
 ) -> int {
 	hash := stable_hash_string_32(str)
-	index := track_group_get_entry(tg, hash) or_else -1
-	allocator := mem.dynamic_arena_allocator(&tg.arena)
+	index := track_common_strings_find_entry(list, hash) or_else -1
 
 	if index == -1 {
-		index = len(tg.entries)
-		append(&tg.entries, Track_Group{
-			name = strings.clone(str, allocator),
-			lower_case_name = strings.to_lower(str, allocator),
+		index = len(list.entries)
+		append(&list.entries, Track_Common_String {
+			name = strings.clone(str, list.allocator),
+			lower_case_name = strings.to_lower(str, list.allocator),
 			name_hash = stable_hash_string_32(str),
 			uid = generate_uid(),
 		})
-
-		reserve(&tg.entries[index].tracks, 64)
 	}
 
-	entry := &tg.entries[index]
+	entry := &list.entries[index]
 	entry.serial += 1
-	if !slice.contains(entry.tracks[:], track_id) do append(&entry.tracks, track_id)
-
-	tg.serial += 1
+	list.serial += 1
 
 	return index
 }
 
-track_group_remove_track :: proc(tg: ^Track_Group_Set, entry_index: int, id: Track_ID) -> bool {
-	entry := &tg.entries[entry_index]
-	index := slice.linear_search(entry.tracks[:], id) or_return
-	ordered_remove(&entry.tracks, index)
-	entry.serial += 1
-
-	return true
-}
-
 // Broken, but keep for future
-track_group_pseudo_sort :: proc(tg: ^Track_Group_Set) {
-	resize(&tg.sorted_indices, len(tg.entries))
+track_common_strings_sort :: proc(list: ^Track_Common_Strings) {
+	resize(&list.sorted_indices, len(list.entries))
 
-	for _, i in tg.entries {
-		tg.sorted_indices[i] = i
+	for _, i in list.entries {
+		list.sorted_indices[i] = i
 	}
 
 	iface := sort.Interface {
-		collection = tg,
+		collection = list,
 		len = proc(it: sort.Interface) -> int {
-			tg := cast(^Track_Group_Set) it.collection
+			tg := cast(^Track_Common_Strings) it.collection
 			return len(tg.entries)
 		},
 		swap = proc(it: sort.Interface, a, b: int) {
-			tg := cast(^Track_Group_Set) it.collection
+			tg := cast(^Track_Common_Strings) it.collection
 			tg.sorted_indices[a], tg.sorted_indices[b] = tg.sorted_indices[b], tg.sorted_indices[a]
 		},
 		less = proc(it: sort.Interface, a, b: int) -> bool {
-			tg := cast(^Track_Group_Set) it.collection
+			tg := cast(^Track_Common_Strings) it.collection
 			A := tg.sorted_indices[a]
 			B := tg.sorted_indices[b]
 			return strings.compare(tg.entries[A].name, tg.entries[B].name) < 0
@@ -513,15 +571,15 @@ track_group_pseudo_sort :: proc(tg: ^Track_Group_Set) {
 }
 
 library_get_or_add_artist :: proc(l: ^Library, name: string, track_id: Track_ID) -> Artist_ID {
-	return auto_cast track_group_add_track(&l.artists, name, track_id)
+	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Artist], name)
 }
 
 library_get_or_add_album :: proc(l: ^Library, name: string, track_id: Track_ID) -> Album_ID {
-	return auto_cast track_group_add_track(&l.albums, name, track_id)
+	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Album], name)
 }
 
 library_get_or_add_genre :: proc(l: ^Library, name: string, track_id: Track_ID) -> Genre_ID {
-	return auto_cast track_group_add_track(&l.genres, name, track_id)
+	return auto_cast track_common_strings_get_or_add_entry(&l.track_common_strings[.Genre], name)
 }
 
 find_track_thumbnail :: proc(
@@ -594,8 +652,9 @@ library_scan_directory_for_cover_art :: proc(l: ^Library, dir: string) -> (error
 }
 
 Track_List_Totals :: struct {
-	duration: i64,
-	file_size: i64,
+	duration:    i64,
+	file_size:   i64,
+	track_count: int,
 }
 
 calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Totals {
@@ -684,7 +743,7 @@ filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID,
 	}
 }
 
-filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: Track_Group_Set, filter: string) {
+filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Common_String, tg: Track_Common_Strings, filter: string) {
 	lower_filter := strings.to_lower(filter, l.allocators.temp)
 	defer delete(lower_filter)
 
@@ -700,29 +759,34 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: T
 // -----------------------------------------------------------------------------
 
 library_format_track_group_set :: proc(
-	b: ^strings.Builder,
-	ids: Track_Group_ID_Set, groups: Track_Group_Set
+	l:    Library,
+	b:    ^strings.Builder,
+	ids:  Track_Group_ID_Set,
+	type: Track_Common_String_Type
 ) -> string {
 	if ids[0] == 0 do return ""
+	list := l.track_common_strings[type]
 
-	strings.write_string(b, groups.entries[ids[0]].name)
+	strings.write_string(b, list.entries[ids[0]].name)
 
 	for i in 1..<len(ids) {
 		if ids[i] == 0 do break
 		strings.write_string(b, ", ")
-		strings.write_string(b, groups.entries[ids[i]].name)
+		strings.write_string(b, list.entries[ids[i]].name)
 	}
 
 	return strings.to_string(b^)
 }
 
-library_format_track_group_set_to_allocator :: proc(
-	ids: Track_Group_ID_Set, groups: Track_Group_Set,
+library_format_track_common_strings_to_allocator :: proc(
+	l:         Library,
+	ids:       Track_Group_ID_Set,
+	type:      Track_Common_String_Type,
 	allocator: mem.Allocator
 ) -> string {
 	b: strings.Builder
 	strings.builder_init(&b, allocator)
-	return library_format_track_group_set(&b, ids, groups)
+	return library_format_track_group_set(l, &b, ids, type)
 }
 
 // -----------------------------------------------------------------------------

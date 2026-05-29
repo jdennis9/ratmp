@@ -41,12 +41,14 @@ media_controls_init :: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool {
 
 media_controls_update_track :: proc(sv: ^Server, track: Track) {
 	if _media_controls_impl_update_track != nil {
+		l := &sv.library
+
 		info := Media_Controls_Track_Info {
 			id      = track.id,
 			title   = track.title,
 			album   = get_album_name(sv^, track.album),
-			artists = library_format_track_group_set_to_allocator(track.artists, sv.library.artists, sv.allocators.temp),
-			genres  = library_format_track_group_set_to_allocator(track.genres, sv.library.genres, sv.allocators.temp),
+			artists = library_format_track_common_strings_to_allocator(l^, track.artists, .Artist, sv.allocators.temp),
+			genres  = library_format_track_common_strings_to_allocator(l^, track.genres, .Genre, sv.allocators.temp),
 		}
 
 		_media_controls_impl_update_track(sv, info)
