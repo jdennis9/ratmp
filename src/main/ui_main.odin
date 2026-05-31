@@ -1492,9 +1492,13 @@ _show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: 
 		_go_to_artist(ui, track.artist)
 	}*/
 
+	imx.kv_row("Artist(s)", library_join_track_group_names_to_allocator(sv.library, track.artists, .Artist, ui.allocators.per_frame))
+	
 	if track.album != 0 && imx.kv_row("Album", get_album_name(sv, track.album)) {
 		_go_to_album(ui, track.album)
 	}
+	
+	imx.kv_row("Genre(s)", library_join_track_group_names_to_allocator(sv.library, track.genres, .Genre, ui.allocators.per_frame))
 
 	//@FIXME
 	/*if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
