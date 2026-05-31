@@ -1330,7 +1330,9 @@ _track_table_show :: proc(
 					actions.play_track = row.id
 				}
 
+				// -----------------------------------------------------------------
 				// Context menu
+				// -----------------------------------------------------------------
 				if imgui.BeginPopupContextItem() {
 					defer imgui.EndPopup()
 
@@ -1351,6 +1353,18 @@ _track_table_show :: proc(
 						actions.play_similar_tracks = true
 					}
 
+					if imgui.BeginMenu("More by...") {
+						defer imgui.EndMenu()
+
+						for artist in row.artists {
+							if artist == 0 do break
+							name := library_get_artist_name(sv.library, artist)
+							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
+								actions.go_to_artist = artist
+							}
+						}
+					}
+
 					if imgui.MenuItem("Add to queue") {
 						actions.add_selection_to_queue = true
 					}
@@ -1365,10 +1379,19 @@ _track_table_show :: proc(
 						actions.go_to_album = row.album
 					}
 
-					/*if row.genre != 0 && imgui.MenuItem("View genre") {
-						actions.go_to_genre = row.genre
+					if imgui.BeginMenu("More in genre...") {
+						defer imgui.EndMenu()
+
+						for genre in row.genres {
+							if genre == 0 do break
+							name := library_get_genre_name(sv.library, genre)
+							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
+								actions.go_to_genre = genre
+							}
+						}
 					}
-					*/
+
+
 					if .NoRemove not_in flags {
 						imgui.Separator()
 						imgui.MenuItem("Remove")
@@ -1667,16 +1690,12 @@ _track_group_window_show_groups :: proc(
 	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 	if result.selected_row != nil {
 		row := w.playlist_table.rows[result.selected_row.?]
-		w.displayed_entry_id = i16(row.id)
-		clear(&w.tracks)
-		library_get_tracks_in_group(sv.library, group_type, auto_cast row.id, &w.tracks)
+		_track_group_window_select_group(ui, w, group_type, auto_cast row.id)
 	}
 
 	if result.played_row != nil {
 		row := w.playlist_table.rows[result.played_row.?]
-		w.displayed_entry_id = i16(row.id)
-		clear(&w.tracks)
-		library_get_tracks_in_group(sv.library, group_type, auto_cast row.id, &w.tracks)
+		_track_group_window_select_group(ui, w, group_type, auto_cast row.id)
 		server_request_play_playlist(sv, w.tracks[:], row.uid)
 	}
 
@@ -1728,6 +1747,14 @@ _track_group_window_show_focused :: proc(
 	else {
 		_track_group_window_show_groups(ui, w, group_type)
 	}
+}
+
+_track_group_window_select_group :: proc(
+	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type, id: Track_Group_ID
+) {
+	w.displayed_entry_id = i16(id)
+	clear(&w.tracks)
+	library_get_tracks_in_group(ui.server.library, group_type, id, &w.tracks)
 }
 
 // -----------------------------------------------------------------------------
@@ -3260,20 +3287,19 @@ _is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 }
 
 _go_to_album :: proc(ui: ^UI, id: Album_ID) {
-	ui.windows.albums.displayed_entry_id = i16(id)
+	_track_group_window_select_group(ui, &ui.windows.albums, .Album, id)
 	ui.window_state[.Albums].bring_to_front = true
 }
 
 _go_to_artist :: proc(ui: ^UI, id: Artist_ID) {
-	ui.windows.artists.displayed_entry_id = i16(id)
+	_track_group_window_select_group(ui, &ui.windows.artists, .Artist, id)
 	ui.window_state[.Artists].bring_to_front = true
 }
 
 _go_to_genre :: proc(ui: ^UI, id: Genre_ID) {
-	ui.windows.genres.displayed_entry_id = i16(id)
+	_track_group_window_select_group(ui, &ui.windows.genres, .Genre, id)
 	ui.window_state[.Genres].bring_to_front = true
 }
-
 
 // -----------------------------------------------------------------------------
 // Layout
