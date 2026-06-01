@@ -106,13 +106,14 @@ Track_Group_List :: struct {
 Library_Folder_ID :: distinct u16
 
 Library_Folder :: struct {
-	id:          Library_Folder_ID,
-	hash:        u64,
-	name:        string,
-	totals:      Track_List_Totals,
-	first_child: ^Library_Folder,
-	next:        ^Library_Folder,
-	child_count: int,
+	uid:          UID,
+	name:         string,
+	name_cstring: cstring,
+	totals:       Track_List_Totals,
+	parent:       ^Library_Folder,
+	first_child:  ^Library_Folder,
+	next:         ^Library_Folder,
+	child_count:  int,
 }
 
 Library :: struct {
@@ -168,6 +169,8 @@ library_destroy :: proc(l: ^Library) {
 }
 
 library_update :: proc(l: ^Library) {
+	free_all(l.allocators.temp)
+
 	if l.group_sort_serial != l.serial {
 		log.debug("Sorting track groups...")
 		l.group_sort_serial = l.serial
@@ -878,9 +881,10 @@ library_build_folder_tree :: proc(l: ^Library) {
 	mem.dynamic_arena_init(&l.folder_tree_arena)
 
 	allocator := mem.dynamic_arena_allocator(&l.folder_tree_arena)
-	clear(&l.folder_hash_map)
 
+	clear(&l.folder_hash_map)
 	l.folder_tree = {}
+	l.folder_tree.name_cstring = "<root>"
 	l.folder_tree.name = "<root>"
 
 	add_to_folder :: proc(
@@ -898,8 +902,15 @@ library_build_folder_tree :: proc(l: ^Library) {
 		}
 		
 		new_folder := new(Library_Folder, allocator)
-		new_folder.name = strings.clone(name, allocator)
-		new_folder.next = f.first_child
+
+		new_folder.uid          = generate_uid()
+		new_folder.name_cstring = strings.clone_to_cstring(name, allocator)
+		new_folder.name         = string(new_folder.name_cstring)
+		new_folder.next         = f.first_child
+		new_folder.parent       = f
+		
+		track_totals_add_track(&new_folder.totals, track)
+
 		f.first_child = new_folder
 		f.child_count += 1
 
@@ -920,7 +931,32 @@ library_build_folder_tree :: proc(l: ^Library) {
 			parent = add_to_folder(l, parent, part, track, allocator)
 			if parent == nil do break
 		}
+
+		if parent != nil {
+			l.folder_hash_map[dir_hash] = parent
+		}
 	}
+}
+
+library_get_tracks_in_folder :: proc(l: Library, folder: ^Library_Folder, out: ^[dynamic]Track_ID) -> Error {
+	parts := make_dynamic_array_len_cap([dynamic]string, 0, 64)
+	defer delete(parts)
+
+	for p := folder; p != nil && p.parent != nil; p = p.parent {
+		append(&parts, p.name)
+	}
+
+	slice.reverse(parts[:])
+
+	path := filepath.join(parts[:], l.allocators.temp) or_return
+
+	for id, track in l.tracks {
+		if strings.starts_with(track.url, path) {
+			append(out, id)
+		}
+	}
+
+	return nil
 }
 
 // -----------------------------------------------------------------------------

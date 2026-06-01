@@ -33,6 +33,7 @@ ICON_NEXT_TRACK     :: ""
 ICON_PAUSE          :: ""
 ICON_STOP           :: ""
 ICON_PLAY           :: ""
+ICON_MAGNIFY        :: ""
 
 _ANALYSIS_BUFFER_SIZE :: (16<<10)
 
@@ -85,6 +86,7 @@ _Window_ID :: enum {
 	Wavebar,
 	Settings,
 	PostProcessing,
+	FolderTree,
 }
 
 _Window_Category :: enum {
@@ -259,6 +261,15 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			return _post_processing_window_show(ui, &ui.windows.post_processing)
 		},
 	},
+	.FolderTree = {
+		title = "Folders",
+		internal_name = "_folder_tree",
+
+		show_proc = proc(ui: ^UI) -> bool {
+			_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
+			return true
+		}
+	},
 }
 
 // -----------------------------------------------------------------------------
@@ -385,6 +396,27 @@ _Wavebar_Window :: struct {
 }
 
 // -----------------------------------------------------------------------------
+// Folder tree
+// -----------------------------------------------------------------------------
+
+_Folder_Tree_Node :: struct {
+	totals:   Track_List_Totals,
+	children: []_Folder_Tree_Node,
+	name:     cstring,
+	origin:   ^Library_Folder,
+}
+
+_Folder_Tree_Window :: struct {
+	selected_folder_hash:   u64,
+	selected_folder_serial: uint,
+	selected_folder:        ^_Folder_Tree_Node,
+	tree_serial:            uint,
+	root_node:              _Folder_Tree_Node,
+	track_table:            _Track_Table,
+	tracks:                 [dynamic]Track_ID,
+}
+
+// -----------------------------------------------------------------------------
 // Tracked window state
 // -----------------------------------------------------------------------------
 
@@ -420,11 +452,12 @@ UI :: struct {
 	system_fonts:         []System_Font,
 
 	allocators: struct {
-		per_frame:  mem.Allocator,
-		themes:     mem.Allocator,
-		fonts:      mem.Allocator,
-		lazy:       mem.Allocator,
-		analysis:   mem.Allocator,
+		per_frame:   mem.Allocator,
+		themes:      mem.Allocator,
+		fonts:       mem.Allocator,
+		lazy:        mem.Allocator,
+		analysis:    mem.Allocator,
+		folder_tree: mem.Allocator,
 	},
 
 	windows: struct {
@@ -448,6 +481,7 @@ UI :: struct {
 		spectrum:        _Spectrum_Window,
 		wavebar:         _Wavebar_Window,
 		post_processing: _Post_Processing_Window,
+		folder_tree:     _Folder_Tree_Window,
 		
 		show_settings: bool,
 	},
@@ -532,11 +566,12 @@ ui_init :: proc(ui: ^UI, server: ^Server) -> Error {
 	ui.server = server
 
 	// Allocators
-	ui.allocators.per_frame = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame", flags={.IsTemp})
-	ui.allocators.fonts     = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
-	ui.allocators.themes    = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
-	ui.allocators.lazy      = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
-	ui.allocators.analysis  = allocator_map_add_heap(&ui.allocator_map, "analysis")
+	ui.allocators.per_frame   = allocator_map_add_dynamic_arena(&ui.allocator_map, "per_frame", flags={.IsTemp})
+	ui.allocators.fonts       = allocator_map_add_dynamic_arena(&ui.allocator_map, "fonts")
+	ui.allocators.themes      = allocator_map_add_dynamic_arena(&ui.allocator_map, "themes", block_size=4096)
+	ui.allocators.lazy        = allocator_map_add_dynamic_arena(&ui.allocator_map, "lazy")
+	ui.allocators.folder_tree = allocator_map_add_dynamic_arena(&ui.allocator_map, "folder_tree", flags={.IsTemp})
+	ui.allocators.analysis    = allocator_map_add_heap(&ui.allocator_map, "analysis")
 
 	// Theme defaults
 	ui_theme.imgui_colors = imgui.GetStyle().Colors
@@ -846,6 +881,7 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 				.Music = {
 					.Albums,
 					.Artists,
+					.FolderTree,
 					.Genres,
 					.Library,
 					.Playlists,
@@ -3215,6 +3251,209 @@ _wavebar_window_load_setting :: proc(w: ^_Wavebar_Window, key, value: string) ->
 	}
 
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// Folder tree
+// -----------------------------------------------------------------------------
+
+_folder_tree_window_select_folder :: proc(
+	library: Library, w: ^_Folder_Tree_Window, folder: ^_Folder_Tree_Node
+) {
+	clear(&w.tracks)
+	library_get_tracks_in_folder(library, folder.origin, &w.tracks)
+	w.selected_folder = folder
+	w.track_table.serial = 0
+}
+
+_folder_tree_window_show_folders :: proc(
+	ui: ^UI, w: ^_Folder_Tree_Window
+) -> bool {
+	sv := ui.server
+	library := &sv.library
+
+
+	COLUMN_NAME      :: 0
+	COLUMN_LENGTH    :: 1
+	COLUMN_FILE_SIZE :: 2
+	COLUMN__COUNT    :: 3
+
+	// --------------------------------------------------------------------------
+	// Build if needed
+	// --------------------------------------------------------------------------
+	if w.tree_serial != library.folder_tree_serial {
+		w.tree_serial = library.folder_tree_serial
+		free_all(ui.allocators.folder_tree)
+		w.root_node = {}
+
+		make_node :: proc(node: ^_Folder_Tree_Node, l: ^Library_Folder, allocator: mem.Allocator) {
+			node.totals   = l.totals
+			node.name     = l.name_cstring
+			node.origin   = l
+			node.children = make([]_Folder_Tree_Node, l.child_count, allocator)
+			
+			i := 0
+			for head := l.first_child; head != nil; head = head.next {
+				make_node(&node.children[i], head, allocator)
+				i += 1
+			}
+		}
+
+		make_node(&w.root_node, &library.folder_tree, ui.allocators.folder_tree)
+	}
+
+	// --------------------------------------------------------------------------
+	// Show table
+	// --------------------------------------------------------------------------
+
+	_Actions :: struct {
+		select:        ^_Folder_Tree_Node,
+		play:          ^_Folder_Tree_Node,
+		add_to_queue:  ^_Folder_Tree_Node,
+	}
+	actions: _Actions
+
+	table_flags := imgui.TableFlags_BordersInner|
+		imgui.TableFlags_RowBg|
+		imgui.TableFlags_ScrollY
+	
+	imgui.BeginTable("##folders", COLUMN__COUNT, table_flags) or_return
+	defer imgui.EndTable()
+
+	on_show_node :: proc(sv: ^Server, actions: ^_Actions, node: ^_Folder_Tree_Node) {
+		if imgui.IsItemClicked(.Middle) {
+			actions.play = node
+		}
+
+		if imgui.BeginPopupContextItem() {
+			defer imgui.EndPopup()
+
+			if imgui.MenuItem("Play") {
+				actions.play = node
+			}
+
+			if imgui.MenuItem("Add to queue") {
+				actions.add_to_queue = node
+			}
+		}
+	}
+
+	show_node :: proc(
+		sv:      ^Server,
+		actions: ^_Actions,
+		w:       ^_Folder_Tree_Window,
+		node:    ^_Folder_Tree_Node
+	) {
+		library := &sv.library
+
+		imgui.TableNextRow()
+
+		imgui.PushIDPtr(node)
+		defer imgui.PopID()
+
+
+		if imgui.TableSetColumnIndex(COLUMN_LENGTH) {
+			imx.text(64, node.totals.track_count)
+		}
+
+		if imgui.TableSetColumnIndex(COLUMN_FILE_SIZE) {
+			imx.textf(64, "%M", node.totals.file_size)
+		}
+		
+		if imgui.TableSetColumnIndex(COLUMN_NAME) {
+			// Small button to show all tracks contained in folder and subfolders
+			if node.children != nil {
+				if imgui.SmallButton(ICON_MAGNIFY) {
+					actions.select = node
+				}
+				imgui.SetItemTooltip("View tracks")
+				imgui.SameLine()
+			}
+			
+			// Playing highlight
+			if node.origin.uid != 0 && node.origin.uid == sv.playback.playlist_uid {
+				imgui.TableSetBgColor(.RowBg0, ui_theme.colors[.PlayingHighlight])
+			}
+
+			// Selectable part
+			if node.children != nil {
+				if imgui.TreeNodeEx(node.name, {.SpanAllColumns}) {
+					defer imgui.TreePop()
+
+					on_show_node(sv, actions, node)
+					
+					for &child in node.children {
+						show_node(sv, actions, w, &child)
+					}
+				}
+				else {
+					on_show_node(sv, actions, node)
+				}
+			}
+			else {
+				if imgui.Selectable(node.name) {
+					actions.select = node
+				}
+
+				on_show_node(sv, actions, node)
+			}
+		}
+	}
+
+	get_first_node_with_multiple_children :: proc(n: ^_Folder_Tree_Node) -> ^_Folder_Tree_Node {
+		if len(n.children) > 1 do return n
+		else if len(n.children) == 0 do return nil
+		return get_first_node_with_multiple_children(&n.children[0])
+	}
+
+	root := get_first_node_with_multiple_children(&w.root_node)
+	if root == nil do root = &w.root_node
+	show_node(sv, &actions, w, root)
+	
+	if actions.select != nil {
+		_folder_tree_window_select_folder(library^, w, actions.select)
+	}
+
+	if actions.play != nil {
+		_folder_tree_window_select_folder(library^, w, actions.play)
+		server_request_play_playlist(sv, w.tracks[:], w.selected_folder.origin.uid)
+	}
+
+	if actions.add_to_queue != nil {
+		tracks: [dynamic]Track_ID
+		defer delete(tracks)
+		library_get_tracks_in_folder(library^, actions.add_to_queue.origin, &tracks)
+		playback_queue_add(&sv.playback, tracks[:], actions.add_to_queue.origin.uid)
+	}
+
+	return true
+}
+
+_folder_tree_window_show_tracks :: proc(
+	ui: ^UI, w: ^_Folder_Tree_Window
+) {
+	if imgui.Button("Back") {
+		w.selected_folder = nil
+		return
+	}
+
+	_track_table_show(
+		ui, "##tracks", &w.track_table, ui.server.library.serial,
+		w.tracks[:], {.NoRemove}, w.selected_folder.origin.uid
+	)
+}
+
+_folder_tree_window_show_focused :: proc(ui: ^UI, w: ^_Folder_Tree_Window) {
+	if w.tree_serial != ui.server.library.folder_tree_serial {
+		w.selected_folder = nil
+	}
+
+	if w.selected_folder != nil {
+		_folder_tree_window_show_tracks(ui, w)
+	}
+	else {
+		_folder_tree_window_show_folders(ui, w)
+	}
 }
 
 // -----------------------------------------------------------------------------

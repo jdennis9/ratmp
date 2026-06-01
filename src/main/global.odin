@@ -1,5 +1,6 @@
 package main
 
+import "core:sync"
 PROGRAM_VERSION_STRING :: "0.5.0"
 PROGRAM_NAME :: "RAT MP"
 PROGRAM_ID :: "ratmp"
@@ -17,8 +18,7 @@ UID :: distinct u64
 
 generate_uid :: proc() -> UID {
 	@static counter: UID
-	counter += 1
-	return counter
+	return sync.atomic_add(&counter, 1)
 }
 
 global_command_opts: struct {
