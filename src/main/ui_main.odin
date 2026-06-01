@@ -3145,7 +3145,6 @@ _wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
 	imgui.PushStyleVarImVec2(.WindowPadding, {0, 0})
 	defer imgui.PopStyleVar()
 
-
 	track_pos := server_get_track_position_seconds(sv)
 	track_duration := sv.track_info.duration
 	if track_duration <= 0 do return false

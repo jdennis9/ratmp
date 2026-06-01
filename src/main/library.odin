@@ -103,6 +103,18 @@ Track_Group_List :: struct {
 	serial:         uint,
 }
 
+Library_Folder_ID :: distinct u16
+
+Library_Folder :: struct {
+	id:          Library_Folder_ID,
+	hash:        u64,
+	name:        string,
+	totals:      Track_List_Totals,
+	first_child: ^Library_Folder,
+	next:        ^Library_Folder,
+	child_count: int,
+}
+
 Library :: struct {
 	allocator_map: Allocator_Map,
 	allocators: struct {
@@ -123,10 +135,14 @@ Library :: struct {
 	
 	folder_cover_art: map[u64]string,
 	
-	// Serial of library when groups were sorted
 	group_sort_serial:           uint,
 	common_string_totals_serial: uint,
 	serial:                      uint,
+
+	folder_tree_arena:  mem.Dynamic_Arena,
+	folder_tree:        Library_Folder,
+	folder_hash_map:    map[u64]^Library_Folder, // Map dir hash -> library folder
+	folder_tree_serial: uint,
 }
 
 library_init :: proc(l: ^Library) {
@@ -155,6 +171,11 @@ library_update :: proc(l: ^Library) {
 	if l.group_sort_serial != l.serial {
 		log.debug("Sorting track groups...")
 		l.group_sort_serial = l.serial
+	}
+
+	if l.folder_tree_serial != l.serial {
+		library_build_folder_tree(l)
+		l.folder_tree_serial = l.serial
 	}
 
 	// --------------------------------------------------------------------------
@@ -669,6 +690,12 @@ calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Tot
 	return t
 }
 
+track_totals_add_track :: proc(tots: ^Track_List_Totals, track: Track) {
+	tots.duration    += auto_cast track.duration_seconds
+	tots.file_size   += auto_cast track.file_size
+	tots.track_count += 1
+}
+
 Track_Filter_Metric :: enum {
 	Artist,
 	Album,
@@ -832,6 +859,68 @@ library_build_radio :: proc(l: Library, main_track_id: Track_ID, allocator: mem.
 	}
 
 	return output[:]
+}
+
+// -----------------------------------------------------------------------------
+// Folder tree
+// -----------------------------------------------------------------------------
+
+library_build_folder_tree :: proc(l: ^Library) {
+	TIME_SCOPE("Build folder tree")
+
+	scratch: mem.Scratch
+
+	mem.scratch_init(&scratch, 16<<10, context.allocator)
+	defer mem.scratch_destroy(&scratch)
+	temp_allocator := mem.scratch_allocator(&scratch)
+
+	mem.dynamic_arena_destroy(&l.folder_tree_arena)
+	mem.dynamic_arena_init(&l.folder_tree_arena)
+
+	allocator := mem.dynamic_arena_allocator(&l.folder_tree_arena)
+	clear(&l.folder_hash_map)
+
+	l.folder_tree = {}
+	l.folder_tree.name = "<root>"
+
+	add_to_folder :: proc(
+		l:         ^Library,
+		f:         ^Library_Folder,
+		name:      string,
+		track:     Track,
+		allocator: mem.Allocator
+	) -> ^Library_Folder {
+		for head := f.first_child; head != nil; head = head.next {
+			if head.name == name {
+				track_totals_add_track(&head.totals, track)
+				return head
+			}
+		}
+		
+		new_folder := new(Library_Folder, allocator)
+		new_folder.name = strings.clone(name, allocator)
+		new_folder.next = f.first_child
+		f.first_child = new_folder
+		f.child_count += 1
+
+		return new_folder
+	}
+
+	for _, track in l.tracks {
+		defer mem.scratch_free_all(&scratch)
+
+		parent := &l.folder_tree
+
+		dir := filepath.dir(track.url, temp_allocator)
+		parts := strings.split(dir, filepath.SEPARATOR_STRING, temp_allocator) or_continue
+
+		dir_hash := stable_hash_string_64(dir)
+
+		for part in parts {
+			parent = add_to_folder(l, parent, part, track, allocator)
+			if parent == nil do break
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------
