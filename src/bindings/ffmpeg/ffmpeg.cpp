@@ -133,10 +133,16 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	// Replay gain
 	{
 		const AVPacketSideData *sd = av_packet_side_data_get(
+#ifdef _WIN32
 			stream->side_data,
 			stream->nb_side_data,
+#else
+			ff->decoder->coded_side_data,
+			ff->decoder->nb_coded_side_data,
+#endif
 			AV_PKT_DATA_REPLAYGAIN
 		);
+
 
 		AVReplayGain *rp;
 

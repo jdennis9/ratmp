@@ -24,7 +24,7 @@ media_controls_use_dbus :: proc() {
 			return
 		}
 
-		data, mime_type := find_track_thumbnail(sv, track_id, context.allocator) or_return
+		data, mime_type := find_track_thumbnail(sv.library, track_id, context.allocator) or_return
 		defer delete(data)
 		defer delete(mime_type)
 
@@ -91,15 +91,15 @@ media_controls_use_dbus :: proc() {
 		return true
 	}
 
-	_media_controls_impl_update_track = proc(sv: ^Server, track: Track) {
+	_media_controls_impl_update_track = proc(sv: ^Server, track: Media_Controls_Track_Info) {
 
 		ti := impl.Track_Info {
-			album = track.album != "" ? strings.clone_to_cstring(track.album) : nil,
-			artist = track.artist != "" ? strings.clone_to_cstring(track.artist) : nil,
-			genre = track.genre != "" ? strings.clone_to_cstring(track.genre) : nil,
-			title = track.title != "" ? strings.clone_to_cstring(track.title) : nil,
-			path = strings.clone_to_cstring(track.url),
-			cover_uri = _write_thumbnail_to_file(sv, track.handle) or_else nil,
+			album     = track.album   != "" ? strings.clone_to_cstring(track.album) : nil,
+			artist    = track.artists != "" ? strings.clone_to_cstring(track.artists) : nil,
+			genre     = track.genres  != "" ? strings.clone_to_cstring(track.genres) : nil,
+			title     = track.title   != "" ? strings.clone_to_cstring(track.title) : nil,
+			path      = strings.clone_to_cstring(track.url),
+			cover_uri = _write_thumbnail_to_file(sv, track.id) or_else nil,
 		}
 
 		defer {

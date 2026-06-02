@@ -244,8 +244,7 @@ library_add_track :: proc(
 	}
 
 	if data.protocol == .File && data.url != "" {
-		dir := filepath.dir(data.url)
-		defer delete(dir)
+		dir, _ := filepath.clean(filepath.dir(data.url), l.allocators.temp)
 
 		library_scan_directory_for_cover_art(l, dir)
 	}
@@ -616,7 +615,7 @@ find_track_thumbnail :: proc(
 
 	// Try find in folder cover arts
 	if track.protocol == .File {
-		dir := filepath.dir(track.url, context.allocator)
+		dir, _ := filepath.clean(filepath.dir(track.url), context.allocator)
 		defer delete(dir)
 
 		hash := stable_hash_string_64(dir)
@@ -922,7 +921,7 @@ library_build_folder_tree :: proc(l: ^Library) {
 
 		parent := &l.folder_tree
 
-		dir := filepath.dir(track.url, temp_allocator)
+		dir := filepath.clean(filepath.dir(track.url), temp_allocator) or_continue
 		parts := strings.split(dir, filepath.SEPARATOR_STRING, temp_allocator) or_continue
 
 		dir_hash := stable_hash_string_64(dir)

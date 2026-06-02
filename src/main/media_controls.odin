@@ -23,6 +23,7 @@ Media_Controls_Track_Info :: struct {
 	artists: string,
 	genres:  string,
 	album:   string,
+	url:     string,
 }
 
 Media_Controls_Proc :: #type proc(data: rawptr, event: Media_Controls_Event)
@@ -46,6 +47,7 @@ media_controls_update_track :: proc(sv: ^Server, track: Track) {
 		info := Media_Controls_Track_Info {
 			id      = track.id,
 			title   = track.title,
+			url     = track.url,
 			album   = get_album_name(sv^, track.album),
 			artists = library_join_track_group_names_to_allocator(l^, track.artists, .Artist, sv.allocators.temp),
 			genres  = library_join_track_group_names_to_allocator(l^, track.genres, .Genre, sv.allocators.temp),

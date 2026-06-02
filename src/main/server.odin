@@ -448,7 +448,7 @@ server_start_cover_art_scan :: proc(sv: ^Server) {
 
 	for _, track in sv.library.tracks {
 		if track.protocol != .File do continue
-		dir := filepath.dir(track.url, sv.allocators.temp)
+		dir := filepath.clean(filepath.dir(track.url), sv.allocators.temp) or_continue
 		hash := stable_hash_string_64(dir)
 
 		if hash not_in state.input {
