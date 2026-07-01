@@ -87,6 +87,7 @@ _Window_ID :: enum {
 	Settings,
 	PostProcessing,
 	FolderTree,
+	Licenses,
 }
 
 _Window_Category :: enum {
@@ -269,6 +270,25 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
 			return true
 		}
+	},
+	.Licenses = {
+		title = "Licenses",
+		internal_name = "_licenses",
+
+		show_proc = proc(ui: ^UI) -> bool {
+			mpl := get_license()
+			imx.title_text(mpl.name)
+			imx.text_unformatted(PROGRAM_LICENSE)
+			imgui.TextLinkOpenURL(mpl.url)
+
+			for l in get_third_party_licenses() {
+				imx.title_text(l.name)
+				imgui.Text(l.ownage)
+				imgui.TextLinkOpenURL(l.url)
+			}
+
+			return true
+		},
 	},
 }
 
@@ -924,6 +944,14 @@ _main_menu_bar :: proc(sv: ^Server, ui: ^UI) {
 			if imgui.MenuItem("Remove missing tracks") {
 				ui.dialogs.confirm_remove_missing_tracks, _ = 
 					show_message_box_async(.YesNo, .Warning, "Remove Missing Tracks", "Remove all tracks with missing files? This cannot be undone.")
+			}
+		}
+
+		if imgui.BeginMenu("About") {
+			defer imgui.EndMenu()
+
+			if imgui.MenuItem("License") {
+				ui.window_state[.Licenses].bring_to_front = true
 			}
 		}
 

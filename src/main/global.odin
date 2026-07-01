@@ -1,6 +1,7 @@
 package main
 
 import "core:sync"
+
 PROGRAM_VERSION_STRING :: "0.5.0"
 PROGRAM_NAME :: "RAT MP"
 PROGRAM_ID :: "ratmp"
