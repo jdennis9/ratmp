@@ -134,41 +134,40 @@ Library_Folder :: struct {
 }
 
 Library :: struct {
-	allocator_map: Allocator_Map,
+	allocator_map:               Allocator_Map,
+	last_track_id:               Track_ID,
+	tracks:                      map[Track_ID]Track,
+	url_hash_map:                map[u64]Track_ID,
+	track_common_strings:        [Track_Group_Type]Track_Group_List,
+	playlists:                   hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
+	playlists_serial:            uint,
+	need_load_playlists:         bool,
+	folder_cover_art:            map[u64]string,
+	group_sort_serial:           uint,
+	common_string_totals_serial: uint,
+	serial:                      uint,
+	folder_tree_arena:           mem.Dynamic_Arena,
+	folder_tree:                 Library_Folder,
+	folder_hash_map:             map[u64]^Library_Folder, // Map dir hash -> library folder
+	folder_tree_serial:          uint,
+
+	paths: struct {
+		playlists: string,
+	},
+
 	allocators: struct {
 		track_data: mem.Allocator,
 		track_map: mem.Allocator,
 		// Freed after event handling
 		temp: mem.Allocator,
 	},
-
-	last_track_id: Track_ID,
-	tracks: map[Track_ID]Track,
-	url_hash_map: map[u64]Track_ID,
-
-	track_common_strings: [Track_Group_Type]Track_Group_List,
-
-	playlists:           hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
-	playlists_serial:    uint,
-	need_load_playlists: bool,
-	
-	folder_cover_art: map[u64]string,
-	
-	group_sort_serial:           uint,
-	common_string_totals_serial: uint,
-	serial:                      uint,
-
-	folder_tree_arena:  mem.Dynamic_Arena,
-	folder_tree:        Library_Folder,
-	folder_hash_map:    map[u64]^Library_Folder, // Map dir hash -> library folder
-	folder_tree_serial: uint,
-
-	paths: struct {
-		playlists: string,
-	},
 }
 
-library_init :: proc(l: ^Library) {
+@(private="file")
+_library: Library
+
+library_init :: proc() {
+	l := &_library
 	log.debug("size_of(Track) =", size_of(Track))
 
 	l.allocators.track_data = allocator_map_add_dynamic_arena(&l.allocator_map, "track_data")
@@ -188,13 +187,15 @@ library_init :: proc(l: ^Library) {
 	}
 }
 
-library_destroy :: proc(l: ^Library) {
-	delete(l.tracks)
-	delete(l.folder_cover_art)
-	delete(l.url_hash_map)
+library_destroy :: proc() {
+	delete(_library.tracks)
+	delete(_library.folder_cover_art)
+	delete(_library.url_hash_map)
 }
 
-library_update :: proc(l: ^Library) {
+library_update :: proc() {
+	l := &_library
+
 	free_all(l.allocators.temp)
 
 	if l.group_sort_serial != l.serial {
@@ -203,7 +204,7 @@ library_update :: proc(l: ^Library) {
 	}
 
 	if l.folder_tree_serial != l.serial {
-		library_build_folder_tree(l)
+		library_build_folder_tree()
 		l.folder_tree_serial = l.serial
 	}
 
@@ -219,7 +220,7 @@ library_update :: proc(l: ^Library) {
 		defer os.file_info_slice_delete(files, context.allocator)
 
 		for file in files {
-			pl := playlist_load(l^, file.fullpath) or_continue
+			pl := playlist_load(file.fullpath) or_continue
 			pl.file = strings.clone(file.fullpath, l.allocators.track_data)
 			pl.uid = generate_uid()
 			log.debug("Loaded playlist:", pl.name)
@@ -239,7 +240,7 @@ library_update :: proc(l: ^Library) {
 			if pl.save_serial != pl.serial {
 				pl.save_serial = pl.serial
 				log.debug("Saving playlist:", pl.name)
-				playlist_save_to_dir(l^, pl, l.paths.playlists)
+				playlist_save_to_dir(pl, l.paths.playlists)
 			}
 		}
 	}
@@ -287,9 +288,10 @@ library_update :: proc(l: ^Library) {
 }
 
 library_add_track :: proc(
-	l: ^Library, data: Track_Data,
-	update_existing := false,
+	data: Track_Data, update_existing := false,
 ) -> (id: Track_ID, error: Error) {
+	l := &_library
+
 	hash := hash_track_url(data.url)
 	if hash == 0 do return {}, false
 
@@ -312,7 +314,7 @@ library_add_track :: proc(
 		library_scan_directory_for_cover_art(l, dir)
 	}
 
-	library_add_or_update_track(l, id, data) or_return
+	library_add_or_update_track(id, data) or_return
 
 	return
 }
@@ -377,8 +379,10 @@ read_audio_file_metadata :: proc(path: string, allocator: mem.Allocator) -> (tra
 
 // Adds or overwrites track with given ID
 library_add_or_update_track :: proc(
-	l: ^Library, id: Track_ID, data: Track_Data,
+	id: Track_ID, data: Track_Data,
 ) -> Error {
+	l := &_library
+
 	hash := hash_track_url(data.url)
 	if hash == 0 do return .InvalidInput
 	if id not_in l.tracks do l.tracks[id] = {}
@@ -424,7 +428,9 @@ library_add_or_update_track :: proc(
 	return nil
 }
 
-library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
+library_remove_tracks :: proc(tracks: []Track_ID) {
+	l := &_library
+
 	for track_id in tracks {
 		track := l.tracks[track_id] or_continue
 		url_hash := hash_track_url(track.url)
@@ -436,7 +442,8 @@ library_remove_tracks :: proc(l: ^Library, tracks: []Track_ID) {
 	l.serial += 1
 }
 
-library_get_missing_tracks :: proc(l: Library, allocator: mem.Allocator) -> []Track_ID {
+library_get_missing_tracks :: proc(allocator: mem.Allocator) -> []Track_ID {
+	l := &_library
 	tracks := make_dynamic_array_len_cap([dynamic]Track_ID, 0, len(l.tracks), allocator)
 
 	for track_id, track in l.tracks {
@@ -446,52 +453,63 @@ library_get_missing_tracks :: proc(l: Library, allocator: mem.Allocator) -> []Tr
 	return tracks[:]
 }
 
-library_add_track_from_file :: proc(l: ^Library, path: string) -> (track_id: Track_ID, error: Error) {
+library_add_track_from_file :: proc(path: string) -> (track_id: Track_ID, error: Error) {
+	l := &_library
 	track := read_audio_file_metadata(path, l.allocators.temp) or_return
-	return library_add_track(l, track)
+	return library_add_track(track)
 }
 
-library_update_track_from_file :: proc(l: ^Library, path: string, track_id: Track_ID) -> Error {
+library_update_track_from_file :: proc(path: string, track_id: Track_ID) -> Error {
+	l := &_library
 	data := read_audio_file_metadata(path, l.allocators.temp) or_return
-	library_add_or_update_track(l, track_id, data)
+	library_add_or_update_track(track_id, data)
 	return nil
 }
 
-library_get_all_tracks :: proc(l: Library, allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
+library_get_all_tracks :: proc(allocator: mem.Allocator) -> (keys: []Track_ID, error: Error) {
+	l := &_library
 	keys = slice.map_keys(l.tracks, allocator) or_return
 	return
 }
 
-library_get_artist_name :: proc(l: Library, id: Artist_ID) -> string {
+library_get_artist_name :: proc(id: Artist_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Artist].entries[id].name
 }
 
-library_get_album_name :: proc(l: Library, id: Album_ID) -> string {
+library_get_album_name :: proc(id: Album_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Album].entries[id].name
 }
 
-library_get_genre_name :: proc(l: Library, id: Genre_ID) -> string {
+library_get_genre_name :: proc(id: Genre_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Genre].entries[id].name
 }	
 
-library_get_artist_name_lower :: proc(l: Library, id: Artist_ID) -> string {
+library_get_artist_name_lower :: proc(id: Artist_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Artist].entries[id].lower_case_name
 }
 
-library_get_album_name_lower :: proc(l: Library, id: Album_ID) -> string {
+library_get_album_name_lower :: proc(id: Album_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Album].entries[id].lower_case_name
 }
 
-library_get_genre_name_lower :: proc(l: Library, id: Genre_ID) -> string {
+library_get_genre_name_lower :: proc(id: Genre_ID) -> string {
+	l := &_library
 	return l.track_common_strings[.Genre].entries[id].lower_case_name
 }
 
-library_save :: proc(l: Library, path: string) -> Error {
+library_save :: proc(path: string) -> Error {
+	l := &_library
 	TIME_SCOPE("Save library", path)
-	return track_db_save(l, path)
+	return track_db_save(_library, path)
 }
 
-library_load :: proc(l: ^Library, path: string) -> Error {
+library_load :: proc(path: string) -> Error {
+	l := &_library
 	TIME_SCOPE("Load library", path)
 
 	track_db_load(l, path) or_return
@@ -503,15 +521,16 @@ library_load :: proc(l: ^Library, path: string) -> Error {
 	return nil
 }
 
-library_get_track :: proc(l: Library, id: Track_ID) -> (track: Track, found: bool) {
-	return l.tracks[id]
+library_get_track :: proc(id: Track_ID) -> (track: Track, found: bool) {
+	return _library.tracks[id]
 }
 
-library_get_track_id_from_path_hash :: proc(l: Library, hash: u64) -> (id: Track_ID, found: bool) {
-	return l.url_hash_map[hash]
+library_get_track_id_from_path_hash :: proc(hash: u64) -> (id: Track_ID, found: bool) {
+	return _library.url_hash_map[hash]
 }
 
-library_get_track_from_path_hash :: proc(l: Library, hash: u64) -> (track: Track, found: bool) {
+library_get_track_from_path_hash :: proc(hash: u64) -> (track: Track, found: bool) {
+	l := &_library
 	id := l.url_hash_map[hash] or_return
 	return l.tracks[id]
 }
@@ -687,9 +706,10 @@ library_get_or_add_genre :: proc(l: ^Library, name: string, track_id: Track_ID) 
 }
 
 find_track_thumbnail :: proc(
-	l: Library, track_id: Track_ID, allocator: mem.Allocator
+	track_id: Track_ID, allocator: mem.Allocator
 ) -> (data: []byte, mime_type: string, found: bool) {
-	track := library_get_track(l, track_id) or_return
+	track := library_get_track(track_id) or_return
+	l := &_library
 	file := taglib_open(track.url)
 	if file == nil do return
 	defer taglib.file_free(file)
@@ -767,7 +787,7 @@ calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Tot
 	t.track_count = len(tracks)
 
 	for track_id in tracks {
-		track := library_get_track(l, track_id) or_continue
+		track := library_get_track(track_id) or_continue
 		t.duration += auto_cast track.duration_seconds
 		t.file_size += track.file_size
 	}
@@ -799,18 +819,18 @@ filter_track :: proc(l: Library, t: Track, filter: string, metrics: bit_set[Trac
 	if .Artist in metrics {
 		for artist in t.artists {
 			if artist == 0 do break
-			if strings.contains(library_get_artist_name_lower(l, artist), filter) do return true
+			if strings.contains(library_get_artist_name_lower(artist), filter) do return true
 		}
 	}
 
 	if .Album in metrics {
-		if strings.contains(library_get_album_name_lower(l, t.album), filter) do return true
+		if strings.contains(library_get_album_name_lower(t.album), filter) do return true
 	}
 
 	if .Genre in metrics {
 		for genre in t.genres {
 			if genre == 0 do break
-			if strings.contains(library_get_genre_name_lower(l, genre), filter) do return true
+			if strings.contains(library_get_genre_name_lower(genre), filter) do return true
 		}
 	}
 
@@ -847,7 +867,7 @@ filter_tracks :: proc(l: Library, output: ^[dynamic]Track_ID, input: []Track_ID,
 	lower_filter := strings.to_lower(spec.filter_string, temp_allocator)
 
 	for track_id in input {
-		track := library_get_track(l, track_id) or_continue
+		track := library_get_track(track_id) or_continue
 
 		if filter_track(l, track, lower_filter, spec.metrics, temp_allocator) {
 			append(output, track_id)
@@ -871,11 +891,11 @@ filter_track_groups :: proc(l: Library, output: ^#soa[dynamic]Track_Group, tg: T
 // -----------------------------------------------------------------------------
 
 library_join_track_group_names_to_builder :: proc(
-	l:    Library,
 	b:    ^strings.Builder,
 	ids:  Track_Group_ID_Set,
 	type: Track_Group_Type
 ) -> string {
+	l := &_library
 	if ids[0] == 0 do return ""
 	list := l.track_common_strings[type]
 
@@ -891,14 +911,13 @@ library_join_track_group_names_to_builder :: proc(
 }
 
 library_join_track_group_names_to_allocator :: proc(
-	l:         Library,
 	ids:       Track_Group_ID_Set,
 	type:      Track_Group_Type,
 	allocator: mem.Allocator
 ) -> string {
 	b: strings.Builder
 	strings.builder_init(&b, allocator)
-	return library_join_track_group_names_to_builder(l, &b, ids, type)
+	return library_join_track_group_names_to_builder(&b, ids, type)
 }
 
 library_join_track_group_names :: proc {
@@ -950,7 +969,9 @@ library_build_radio :: proc(l: Library, main_track_id: Track_ID, allocator: mem.
 // Folder tree
 // -----------------------------------------------------------------------------
 
-library_build_folder_tree :: proc(l: ^Library) {
+library_build_folder_tree :: proc() {
+	l := &_library
+
 	TIME_SCOPE("Build folder tree")
 
 	scratch: mem.Scratch

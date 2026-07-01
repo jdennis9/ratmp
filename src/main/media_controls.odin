@@ -65,9 +65,9 @@ media_controls_update_track :: proc(sv: ^Server, track: Track) {
 			id      = track.id,
 			title   = track.title,
 			url     = track.url,
-			album   = get_album_name(sv^, track.album),
-			artists = library_join_track_group_names_to_allocator(l^, track.artists, .Artist, sv.allocators.temp),
-			genres  = library_join_track_group_names_to_allocator(l^, track.genres, .Genre, sv.allocators.temp),
+			album   = get_album_name(track.album),
+			artists = library_join_track_group_names_to_allocator(track.artists, .Artist, sv.allocators.temp),
+			genres  = library_join_track_group_names_to_allocator(track.genres, .Genre, sv.allocators.temp),
 		}
 
 		_media_controls_impl_update_track(sv, info)

@@ -40,8 +40,8 @@ Playlist :: struct {
 
 Playlist_Format_Interface :: struct {
 	extension: string,
-	save: proc(l: Library, playlist: Playlist, stream: io.Stream) -> Error,
-	load: proc(l: Library, data: []byte) -> (Playlist, Error),
+	save: proc(playlist: Playlist, stream: io.Stream) -> Error,
+	load: proc(data: []byte) -> (Playlist, Error),
 }
 
 Playlist_Format :: enum {M3u}
@@ -72,31 +72,31 @@ playlist_remove :: proc(sv: ^Server, pl: ^Playlist, tracks: []Track_ID) {
 	pl.serial += 1
 }
 
-playlist_save :: proc(l: Library, pl: Playlist, path: string, format := Playlist_Format.M3u) -> Error {
+playlist_save :: proc(pl: Playlist, path: string, format := Playlist_Format.M3u) -> Error {
 	iface := PLAYLIST_FORMATS[format]
 	f := os.create(path) or_return
 	defer os.close(f)
 
-	return iface.save(l, pl, os.to_stream(f))
+	return iface.save(pl, os.to_stream(f))
 }
 
-playlist_save_to_dir :: proc(l: Library, pl: ^Playlist, dir: string) -> Error {
+playlist_save_to_dir :: proc(pl: ^Playlist, dir: string) -> Error {
 	if pl.file == "" {
 		temp_file := os.create_temp_file(dir, "*.m3u") or_return
-		pl.file = strings.clone(os.name(temp_file), l.allocators.track_data)
+		pl.file = strings.clone(os.name(temp_file), context.allocator) //@FIXME
 		os.close(temp_file)
 	}
 
-	playlist_save(l, pl^, pl.file) or_return
+	playlist_save(pl^, pl.file) or_return
 	return nil
 }
 
-playlist_load :: proc(l: Library, path: string) -> (pl: Playlist, error: Error) {
+playlist_load :: proc(path: string) -> (pl: Playlist, error: Error) {
 	format := playlist_format_from_extension(filepath.ext(path)) or_return
 	data := os.read_entire_file_from_path(path, context.allocator) or_return
 	defer delete(data)
 
-	return PLAYLIST_FORMATS[format].load(l, data)
+	return PLAYLIST_FORMATS[format].load(data)
 }
 
 playlist_format_from_extension :: proc(ext: string) -> (Playlist_Format, bool) {
@@ -107,18 +107,18 @@ playlist_format_from_extension :: proc(ext: string) -> (Playlist_Format, bool) {
 	return nil, false
 }
 
-playlist_set_name :: proc(l: Library, pl: ^Playlist, name: string) {
-	pl.name_cstring = strings.clone_to_cstring(name, l.allocators.track_data)
+playlist_set_name :: proc(pl: ^Playlist, name: string) {
+	pl.name_cstring = strings.clone_to_cstring(name, context.allocator) // @FIXME
 	pl.name = string(pl.name_cstring)
 }
 
 @(private="file")
-_m3u_save :: proc(l: Library, pl: Playlist, s: io.Stream) -> Error {
+_m3u_save :: proc(pl: Playlist, s: io.Stream) -> Error {
 	fmt.wprintln(s, "#EXTM3U")
 	fmt.wprintln(s, "#PLAYLIST:", pl.name, sep="")
 	
 	for track_id in pl.tracks {
-		track := library_get_track(l, track_id) or_continue
+		track := library_get_track(track_id) or_continue
 		fmt.wprintln(s, track.url)
 	}
 
@@ -126,7 +126,7 @@ _m3u_save :: proc(l: Library, pl: Playlist, s: io.Stream) -> Error {
 }
 
 @(private="file")
-_m3u_load :: proc(l: Library, data: []byte) -> (pl: Playlist, error: Error) {
+_m3u_load :: proc(data: []byte) -> (pl: Playlist, error: Error) {
 	lines := strings.split_lines(string(data))
 	defer delete(lines)
 
@@ -144,7 +144,7 @@ _m3u_load :: proc(l: Library, data: []byte) -> (pl: Playlist, error: Error) {
 
 			if len(parts) != 2 do return
 
-			playlist_set_name(l, &pl, parts[1])
+			playlist_set_name(&pl, parts[1])
 		}
 		else if strings.starts_with(line, "#") do continue
 		else {
@@ -154,7 +154,7 @@ _m3u_load :: proc(l: Library, data: []byte) -> (pl: Playlist, error: Error) {
 			defer delete(track_path)
 
 			path_hash := stable_hash_string_64(track_path)
-			track := library_get_track_id_from_path_hash(l, path_hash) or_continue
+			track := library_get_track_id_from_path_hash(path_hash) or_continue
 
 			append(&pl.tracks, track)
 		}

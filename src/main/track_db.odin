@@ -82,15 +82,15 @@ _Track_DB_Model :: struct {
 	date_added: i64,
 }
 
-_track_to_db_model :: proc(l: Library, t: Track, allocator: mem.Allocator) -> (model: _Track_DB_Model, error: Error) {
+_track_to_db_model :: proc(t: Track, allocator: mem.Allocator) -> (model: _Track_DB_Model, error: Error) {
 	return _Track_DB_Model {
 		path_hash        = auto_cast stable_hash_string_64(t.url),
 		protocol         = reflect.enum_name_from_value(t.protocol) or_else "File",
 		url              = t.url,
 		format           = reflect.enum_name_from_value(t.format) or_else "",
-		artist           = library_join_track_group_names_to_allocator(l, t.artists, .Artist, allocator),
-		album            = library_get_album_name(l, t.album),
-		genre            = library_join_track_group_names_to_allocator(l, t.genres, .Genre, allocator),
+		artist           = library_join_track_group_names_to_allocator(t.artists, .Artist, allocator),
+		album            = library_get_album_name(t.album),
+		genre            = library_join_track_group_names_to_allocator(t.genres, .Genre, allocator),
 		title            = t.title,
 		duration_seconds = auto_cast t.duration_seconds,
 		track_no         = auto_cast t.track_no,
@@ -232,7 +232,7 @@ track_db_save :: proc(l: Library, path: string) -> Error {
 		for _, track in l.tracks {
 			append(
 				&tracks,
-				_track_to_db_model(l, track, temp_allocator) or_continue
+				_track_to_db_model(track, temp_allocator) or_continue
 			)
 		}
 	}
@@ -456,7 +456,7 @@ track_db_load :: proc(
 			track := _track_from_db_model(model, allocator) or_continue
 
 			//handle := handle_map.add(track_map, track) or_continue
-			library_add_track(l, track)
+			library_add_track(track)
 		}
 	}
 

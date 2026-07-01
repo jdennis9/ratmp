@@ -142,7 +142,7 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			if w.serial != sv.library.serial {
 				delete(w.tracks)
 				w.serial = sv.library.serial
-				w.tracks = library_get_all_tracks(sv.library, context.allocator) or_else nil
+				w.tracks = library_get_all_tracks(context.allocator) or_else nil
 			}
 
 			_track_table_show(
@@ -759,8 +759,8 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	if res, have_res := message_box_get_response(
 		ui.dialogs.confirm_remove_missing_tracks
 	); have_res && res == .OkYes {
-		tracks := library_get_missing_tracks(sv.library, ui.allocators.per_frame)
-		library_remove_tracks(&sv.library, tracks)
+		tracks := library_get_missing_tracks(ui.allocators.per_frame)
+		library_remove_tracks(tracks)
 		show_message_box_async(
 			.Message, .Info, "Tracks Removed", "Removed", len(tracks), "missing tracks"
 		)
@@ -1089,16 +1089,14 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// --------------------------------------------------------------------------
 	// Track info
 	// --------------------------------------------------------------------------
-	if track, have_track := get_track(sv, sv.current_track_id); have_track {
-		artists := library_join_track_group_names_to_allocator(
-			sv.library, track.artists, .Artist, ui.allocators.per_frame
-		)
+	if track, have_track := get_track(sv.current_track_id); have_track {
+		artists := library_join_track_group_names_to_allocator(track.artists, .Artist, ui.allocators.per_frame)
 
 		imx.text(512, artists, " - ", track.title)
 		imgui.Separator()
 		track_info := sv.track_info
 
-		imx.text_unformatted_ex(track.album != 0 ? get_album_name(sv^, track.album) : "<no album>")
+		imx.text_unformatted_ex(track.album != 0 ? get_album_name(track.album) : "<no album>")
 
 		imgui.Separator()
 		if channel_string, have_channel_string := audio_channels_to_string(
@@ -1160,7 +1158,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 _track_table_row_from_track :: proc(
 	sv: ^Server, handle: Track_ID, allocator: mem.Allocator,
 ) -> (row: _Track_Table_Row, ok: bool) {
-	track := get_track(sv, handle) or_return
+	track := get_track(handle) or_return
 	ok = true
 
 	row.id = handle
@@ -1400,7 +1398,7 @@ _track_table_show :: proc(
 				}
 
 				if imgui.BeginItemTooltip() {
-					if track, got_track := get_track(sv, row.id); got_track {
+					if track, got_track := get_track(row.id); got_track {
 						_show_track_metadata_table(ui, "##metadata", sv^, track)
 					}
 					imgui.EndTooltip()
@@ -1420,7 +1418,6 @@ _track_table_show :: proc(
 
 					_table_select_row(table, row_index, true)
 
-
 					if add_to_playlist, yes := _show_playlist_selector_menu(sv, "Add to playlist"); yes {
 						actions.add_to_playlist = add_to_playlist
 					}
@@ -1438,7 +1435,7 @@ _track_table_show :: proc(
 
 						for artist in row.artists {
 							if artist == 0 do break
-							name := library_get_artist_name(sv.library, artist)
+							name := library_get_artist_name(artist)
 							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
 								actions.go_to_artist = artist
 							}
@@ -1464,7 +1461,7 @@ _track_table_show :: proc(
 
 						for genre in row.genres {
 							if genre == 0 do break
-							name := library_get_genre_name(sv.library, genre)
+							name := library_get_genre_name(genre)
 							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
 								actions.go_to_genre = genre
 							}
@@ -1483,18 +1480,18 @@ _track_table_show :: proc(
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
 				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_join_track_group_names_to_builder(sv.library, &string_builder, row.artists, .Artist)
+					library_join_track_group_names_to_builder(&string_builder, row.artists, .Artist)
 				)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
-				imx.text_unformatted(get_album_name(sv^, row.album))
+				imx.text_unformatted(get_album_name(row.album))
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
 				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_join_track_group_names_to_builder(sv.library, &string_builder, row.genres, .Genre)
+					library_join_track_group_names_to_builder(&string_builder, row.genres, .Genre)
 				)
 			}
 
@@ -1595,13 +1592,13 @@ _show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: 
 		_go_to_artist(ui, track.artist)
 	}*/
 
-	imx.kv_row("Artist(s)", library_join_track_group_names_to_allocator(sv.library, track.artists, .Artist, ui.allocators.per_frame))
+	imx.kv_row("Artist(s)", library_join_track_group_names_to_allocator(track.artists, .Artist, ui.allocators.per_frame))
 	
-	if track.album != 0 && imx.kv_row("Album", get_album_name(sv, track.album)) {
+	if track.album != 0 && imx.kv_row("Album", get_album_name(track.album)) {
 		_go_to_album(ui, track.album)
 	}
 	
-	imx.kv_row("Genre(s)", library_join_track_group_names_to_allocator(sv.library, track.genres, .Genre, ui.allocators.per_frame))
+	imx.kv_row("Genre(s)", library_join_track_group_names_to_allocator(track.genres, .Genre, ui.allocators.per_frame))
 
 	//@FIXME
 	/*if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
@@ -1630,9 +1627,7 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 			w.cover_art = nil
 		}
 
-		cover_data, mime_type := find_track_thumbnail(
-			sv.library, w.displayed_track, context.allocator
-		) or_return
+		cover_data, mime_type := find_track_thumbnail(w.displayed_track, context.allocator) or_return
 
 		delete(mime_type)
 		defer delete(cover_data)
@@ -1662,7 +1657,7 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 		return true
 	}
 
-	md := get_track(sv, w.displayed_track) or_return
+	md := get_track(w.displayed_track) or_return
 
 	// Update cover art if needed
 	if w.cover_art != nil && texture_is_outdated(w.cover_art.?) {

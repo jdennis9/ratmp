@@ -175,7 +175,6 @@ server_init :: proc(sv: ^Server) -> bool {
 	sv.allocators.temp = allocator_map_add_scratch(&sv.allocator_map, "temp", 256<<10, context.allocator, flags={.IsTemp})
 	sv.allocators.cover_art_scan = allocator_map_add_scratch(&sv.allocator_map, "cover_art_scan", 64<<10, context.allocator)
 
-	library_init(&sv.library)
 	playback_thread_init(&sv.playback_thread, {}, sv.allocators.playback_thread)
 
 	track_scanner_init(&sv.track_scanner,
@@ -192,7 +191,6 @@ server_init :: proc(sv: ^Server) -> bool {
 
 server_shutdown :: proc(sv: ^Server) {
 	playback_thread_destroy(&sv.playback_thread)
-	library_destroy(&sv.library)
 	delete(sv.event_queue)
 	sv.event_queue = nil
 }
@@ -220,13 +218,13 @@ server_wait_events :: proc(sv: ^Server) {
 @(private="file")
 _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	sv.current_track_id = track_id
-	track := library_get_track(sv.library, track_id) or_return
+	track := library_get_track(track_id) or_return
 
 	playback_thread_load_track(&sv.playback_thread, track.url, &sv.track_info)
 
 	audio_resume()
 
-	artists := library_join_track_group_names_to_allocator(sv.library, track.artists, .Artist, sv.allocators.temp)
+	artists := library_join_track_group_names_to_allocator(track.artists, .Artist, sv.allocators.temp)
 
 	sv.playback_state = .Playing
 	media_controls_update_track(sv, track)
@@ -235,7 +233,7 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	)
 
 	if global_config.server.notify_new_track {
-		notify_send("Now playing:", artists, "-", get_album_name(sv^, track.album))
+		notify_send("Now playing:", artists, "-", get_album_name(track.album))
 	}
 
 	server_send_event(sv, {type = .UpdateState})
@@ -261,11 +259,11 @@ server_handle_events :: proc(sv: ^Server) {
 
 	}
 
-	library_update(&sv.library)
+	library_update()
 
 	if sv.library.serial != sv.saved_library_serial {
 		// @TODO: Do this asynchronously somehow
-		error := library_save(sv.library, sv.paths.library_database)
+		error := library_save(sv.paths.library_database)
 		sv.saved_library_serial = sv.library.serial
 		if error != nil {
 			log.error("Error saving library:", error)
@@ -283,7 +281,7 @@ server_handle_events :: proc(sv: ^Server) {
 
 		case .BackgroundScanComplete:
 			for track in ev.scanned_tracks {
-				library_add_track(&sv.library, track)
+				library_add_track(track)
 			}
 			sync.auto_reset_event_signal(&sv.track_scanner_output_used)
 
@@ -575,13 +573,13 @@ Track_Compare_Proc :: #type proc(l: Library, a, b: Track) -> int
 TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
 	.Title =      proc(l: Library, a, b: Track) -> int {return strings.compare(a.title, b.title)},
 	.Artist =     proc(l: Library, a, b: Track) -> int {
-		return strings.compare(library_get_artist_name(l, a.artists[0]), library_get_artist_name(l, b.artists[0]))
+		return strings.compare(library_get_artist_name(a.artists[0]), library_get_artist_name(b.artists[0]))
 	},
 	.Album =      proc(l: Library, a, b: Track) -> int {
-		return strings.compare(library_get_album_name(l, a.album), library_get_album_name(l, b.album))
+		return strings.compare(library_get_album_name(a.album), library_get_album_name(b.album))
 	},
 	.Genre =      proc(l: Library, a, b: Track) -> int {
-		return strings.compare(library_get_genre_name(l, a.genres[0]), library_get_genre_name(l, b.genres[0]))
+		return strings.compare(library_get_genre_name(a.genres[0]), library_get_genre_name(b.genres[0]))
 	},
 	.Duration =   proc(l: Library, a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
 	.Track =      proc(l: Library, a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
@@ -629,8 +627,8 @@ sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
 		less = proc(it: sort.Interface, a, b: int) -> bool {
 			col := cast(^Collection) it.collection
 			cmp_proc := TRACK_METRIC_COMPARE_PROCS[col.metric]
-			A := library_get_track(col.sv.library, col.tracks[a]) or_return
-			B := library_get_track(col.sv.library, col.tracks[b]) or_return
+			A := library_get_track(col.tracks[a]) or_return
+			B := library_get_track(col.tracks[b]) or_return
 
 			r: int
 
