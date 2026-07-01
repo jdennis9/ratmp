@@ -1,17 +1,32 @@
+/*
+	RAT MP - A cross-platform, extensible music player
+	Copyright (C) 2025-2026 Jamie Dennis
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 package main
 
 import "core:image"
 import "core:encoding/json"
 import "core:mem"
 import "core:os"
-//import "core:log"
 
 Custom_Error :: enum {
 	InvalidName,
 	InvalidInput,
 	NotFound,
 	NotImplemented,
-	// Error happening in third-party library
 	ThirdParty,
 }
 
@@ -24,38 +39,3 @@ Error :: union {
 	image.Error,
 	Custom_Error,
 }
-
-/*check_error_0 :: proc(r: $R) -> bool {
-	if r != nil {
-		log.error(r)
-		return false
-	}
-	return true
-}
-
-check_error_1 :: proc(p1: $T, r: $R) -> (r1: T, ok: bool) {
-	if r != nil {
-		log.error(r)
-		return
-	}
-	r1 = p1
-	ok = true
-	return
-}
-
-check_error_2 :: proc(p1: $T, p2: $T2, r: $R) -> (r1: T, r2: T2, ok: bool) {
-	if r != nil {
-		log.error(r)
-		return
-	}
-	r1 = p1
-	r2 = p2
-	ok = true
-	return
-}
-
-check_error :: proc {
-	check_error_0,
-	check_error_1,
-	check_error_2,
-}*/
