@@ -96,9 +96,12 @@ Server :: struct {
 	cover_art_scan:       Background_Task,
 	cover_art_scan_state: Server_Cover_Art_Scan_State,
 	need_background_scan: bool,
-	library_path:         string,
 	saved_library_serial: uint,
 	analysis:             Analysis_Buffer,
+
+	paths: struct {
+		library_database: string,
+	},
 
 	// Used by the audio callback for storing samples
 	// without the need to reallocate every time the callback
@@ -180,7 +183,7 @@ server_init :: proc(sv: ^Server) -> bool {
 		sv,
 	)
 
-	sv.library_path, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
+	sv.paths.library_database, _ = filepath.join({global_paths.data_dir, "library.sqlite"}, context.allocator)
 
 	analysis_init(&sv.analysis, sv.allocators.analysis)
 
@@ -262,7 +265,7 @@ server_handle_events :: proc(sv: ^Server) {
 
 	if sv.library.serial != sv.saved_library_serial {
 		// @TODO: Do this asynchronously somehow
-		error := library_save(sv.library, sv.library_path)
+		error := library_save(sv.library, sv.paths.library_database)
 		sv.saved_library_serial = sv.library.serial
 		if error != nil {
 			log.error("Error saving library:", error)

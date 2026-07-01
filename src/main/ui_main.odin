@@ -328,7 +328,6 @@ _Playlists_Window :: struct {
 	playlist_table:           _Playlist_Table,
 	track_table:              _Track_Table,
 	viewing_playlist:         Maybe(Playlist_Handle),
-	playlist_handles:         [dynamic]Playlist_Handle,
 	cant_add_playlist_reason: Cant_Add_Playlist_Reason,
 }
 
@@ -2029,17 +2028,19 @@ _playlist_table_show :: proc(
 }
 
 _make_playlist_row :: proc(
-	l: Library,
-	uid: UID,
-	title: string,
+	l:      Library,
+	uid:    UID,
+	title:  string,
 	serial: uint,
 	totals: Track_List_Totals,
+	id:     i64 = 0,
 ) -> _Playlist_Table_Row {
 	row := _Playlist_Table_Row {
 		uid    = uid,
 		serial = serial,
 		title  = title,
 		totals = totals,
+		id     = id,
 	}
 
 	format_duration(row.duration[:], auto_cast row.totals.duration)
@@ -2454,6 +2455,14 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 // Playlists window
 // -----------------------------------------------------------------------------
 
+_playlist_row_id_to_playlist_handle :: proc(id: i64) -> Playlist_Handle {
+	return transmute(Playlist_Handle) u32(id)
+}
+
+_playlist_handle_to_row_id :: proc(h: Playlist_Handle) -> i64 {
+	return i64(transmute(u32) h)
+}
+
 _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 	sv := ui.server
 	// --------------------------------------------------------------------------
@@ -2465,25 +2474,29 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	
 	if need_update {
 		clear(&w.playlist_table.rows)
-		clear(&w.playlist_handles)
 		w.playlist_table.serial = sv.library.playlists_serial
 
 		it := handle_map.iterator_make(&sv.library.playlists)
-		for _, handle in handle_map.iterate(&it) {
-			append(&w.playlist_handles, handle)
-			append(&w.playlist_table.rows, _Playlist_Table_Row{})
+		for pl, handle in handle_map.iterate(&it) {
+			totals := calculate_track_totals(sv.library, pl.tracks[:])
+
+			append(&w.playlist_table.rows, _make_playlist_row(
+				sv.library, pl.uid, pl.name, pl.serial, totals,
+				_playlist_handle_to_row_id(pl.handle)
+			))
 		}
 
 		_playlist_table_sort(&w.playlist_table)
 	}
 
 	for &row, row_index in w.playlist_table.rows {
-		playlist := library_get_playlist(&sv.library, w.playlist_handles[row_index]) or_continue
-		if row.serial != playlist.serial {
-			// @FIXME
-			/*row = _make_playlist_row(
-				sv.library, playlist.uid, playlist.name, playlist.serial, playlist.totals
-			)*/
+		handle := transmute(Playlist_Handle) u32(row.id)
+		pl := library_get_playlist(&sv.library, handle) or_continue
+		if row.serial != pl.serial {
+			totals := calculate_track_totals(sv.library, pl.tracks[:])
+			row = _make_playlist_row(
+				sv.library, pl.uid, pl.name, pl.serial, totals, _playlist_handle_to_row_id(pl.handle)
+			)
 		}
 	}
 
@@ -2533,7 +2546,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	actions, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 
 	if actions.selected_row != nil {
-		w.viewing_playlist = w.playlist_handles[actions.selected_row.?]
+		w.viewing_playlist = _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.selected_row.?].id)
 	}
 
 	return true
@@ -2853,7 +2866,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 			defer imgui.EndMenu()
 
 			items := []imx.Enum_Menu_Item(dsp.Window_Function) {
-				{value=.Blackman, name="Blackman (recommended)"},
+				{value=.Blackman, name="Blackman (default)"},
 				{value=.Nuttall,  name="Nuttall"},
 				{value=.Hamming,  name="Hamming"},
 				{value=.Hann,     name="Hann"},

@@ -148,8 +148,9 @@ Library :: struct {
 
 	track_common_strings: [Track_Group_Type]Track_Group_List,
 
-	playlists: hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
-	playlists_serial: uint,
+	playlists:           hm.Static_Handle_Map(256, Playlist, Playlist_Handle),
+	playlists_serial:    uint,
+	need_load_playlists: bool,
 	
 	folder_cover_art: map[u64]string,
 	
@@ -161,15 +162,23 @@ Library :: struct {
 	folder_tree:        Library_Folder,
 	folder_hash_map:    map[u64]^Library_Folder, // Map dir hash -> library folder
 	folder_tree_serial: uint,
+
+	paths: struct {
+		playlists: string,
+	},
 }
 
 library_init :: proc(l: ^Library) {
 	log.debug("size_of(Track) =", size_of(Track))
 
 	l.allocators.track_data = allocator_map_add_dynamic_arena(&l.allocator_map, "track_data")
-	l.allocators.track_map = allocator_map_add_heap(&l.allocator_map, "track_map")
-	l.allocators.temp = allocator_map_add_dynamic_arena(&l.allocator_map, "temp")
-	l.serial = 1
+	l.allocators.track_map  = allocator_map_add_heap(&l.allocator_map, "track_map")
+	l.allocators.temp       = allocator_map_add_dynamic_arena(&l.allocator_map, "temp")
+	l.serial                = 1
+	l.paths.playlists, _    = filepath.join({global_paths.data_dir, "playlists"})
+	l.need_load_playlists   = true
+
+	ensure_dir(l.paths.playlists)
 
 	l.tracks = make_map_cap(map[Track_ID]Track, 4096, l.allocators.track_map)
 	l.url_hash_map = make_map_cap(map[u64]Track_ID, 4096, l.allocators.track_map)
@@ -196,6 +205,43 @@ library_update :: proc(l: ^Library) {
 	if l.folder_tree_serial != l.serial {
 		library_build_folder_tree(l)
 		l.folder_tree_serial = l.serial
+	}
+
+	// --------------------------------------------------------------------------
+	// Load playlists
+	// --------------------------------------------------------------------------
+	_load_playlists: if l.need_load_playlists {
+		l.need_load_playlists = false
+
+		log.debug("Loading playlists")
+
+		files := os.read_all_directory_by_path(l.paths.playlists, context.allocator) or_break _load_playlists
+		defer os.file_info_slice_delete(files, context.allocator)
+
+		for file in files {
+			pl := playlist_load(l^, file.fullpath) or_continue
+			pl.file = strings.clone(file.fullpath, l.allocators.track_data)
+			pl.uid = generate_uid()
+			log.debug("Loaded playlist:", pl.name)
+			_ = hm.static_add(&l.playlists, pl) or_continue
+		}
+
+		l.playlists_serial += 1
+	}
+
+	// --------------------------------------------------------------------------
+	// Save playlists
+	// --------------------------------------------------------------------------
+	{
+		iter := hm.static_iterator_make(&l.playlists)
+
+		for pl, _ in hm.static_iterate(&iter) {
+			if pl.save_serial != pl.serial {
+				pl.save_serial = pl.serial
+				log.debug("Saving playlist:", pl.name)
+				playlist_save_to_dir(l^, pl, l.paths.playlists)
+			}
+		}
 	}
 
 	// --------------------------------------------------------------------------
@@ -461,6 +507,15 @@ library_get_track :: proc(l: Library, id: Track_ID) -> (track: Track, found: boo
 	return l.tracks[id]
 }
 
+library_get_track_id_from_path_hash :: proc(l: Library, hash: u64) -> (id: Track_ID, found: bool) {
+	return l.url_hash_map[hash]
+}
+
+library_get_track_from_path_hash :: proc(l: Library, hash: u64) -> (track: Track, found: bool) {
+	id := l.url_hash_map[hash] or_return
+	return l.tracks[id]
+}
+
 library_get_tracks_in_group :: proc(
 	l:          Library,
 	group_type: Track_Group_Type,
@@ -699,6 +754,8 @@ Track_List_Totals :: struct {
 
 calculate_track_totals :: proc(l: Library, tracks: []Track_ID) -> Track_List_Totals {
 	t: Track_List_Totals
+
+	t.track_count = len(tracks)
 
 	for track_id in tracks {
 		track := library_get_track(l, track_id) or_continue
