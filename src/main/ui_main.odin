@@ -1878,10 +1878,14 @@ _Playlist_Table :: struct {
 _Playlist_Table_Actions :: struct {
 	selected_row: Maybe(int),
 	played_row: Maybe(int),
+	remove_row: Maybe(int),
 }
 
 _Playlist_Table_Flag :: enum {MultiSelect}
 _Playlist_Table_Flags :: bit_set[_Playlist_Table_Flag]
+
+_Playlist_Table_Context_Item :: enum {Remove}
+_Playlist_Table_Context_Items :: bit_set[_Playlist_Table_Context_Item]
 
 _playlist_table_sort :: proc(
 	table: ^_Playlist_Table
@@ -1913,7 +1917,7 @@ _playlist_table_sort :: proc(
 
 _playlist_table_show :: proc(
 	str_id: cstring, sv: ^Server, table: ^_Playlist_Table,
-	flags: _Playlist_Table_Flags,
+	flags: _Playlist_Table_Flags, context_items: _Playlist_Table_Context_Items = {},
 ) -> (result: _Playlist_Table_Actions, shown: bool) {
 	actions: struct {
 		play: Maybe(int),
@@ -2001,6 +2005,14 @@ _playlist_table_show :: proc(
 				
 				if imgui.IsItemClicked(.Middle) {
 					actions.play = row_index
+				}
+
+				if context_items != {} && imgui.BeginPopupContextItem() {
+					defer imgui.EndPopup()
+
+					if .Remove in context_items && imgui.MenuItem("Remove") {
+						result.remove_row = row_index
+					}
 				}
 			}
 
@@ -2543,10 +2555,22 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	// --------------------------------------------------------------------------
 
 	imx.title_text("Playlists")
-	actions, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
+	actions, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {}, {.Remove})
 
 	if actions.selected_row != nil {
 		w.viewing_playlist = _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.selected_row.?].id)
+	}
+
+	if actions.played_row != nil {
+		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.played_row.?].id)
+		if pl, found := library_get_playlist(&sv.library, handle); found {
+			server_request_play_playlist(sv, pl.tracks[:], pl.uid)
+		}
+	}
+
+	if actions.remove_row != nil {
+		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.remove_row.?].id)
+		library_remove_playlist(&sv.library, handle)
 	}
 
 	return true

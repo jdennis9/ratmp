@@ -587,10 +587,19 @@ library_add_playlist :: proc(l: ^Library, name: string) -> (handle: Playlist_Han
 	return
 }
 
+library_remove_playlist :: proc(l: ^Library, handle: Playlist_Handle) {
+	if pl, exists := hm.static_get(&l.playlists, handle); exists {
+		if pl.file != "" do os.remove(pl.file)
+	}
+
+	hm.static_remove(&l.playlists, handle)
+
+	l.playlists_serial += 1
+}
+
 library_get_playlist :: proc(l: ^Library, handle: Playlist_Handle) -> (playlist: ^Playlist, found: bool) {
 	return hm.get(&l.playlists, handle)
 }
-
 
 // -----------------------------------------------------------------------------
 // Track groups
