@@ -59,8 +59,6 @@ media_controls_init :: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool {
 
 media_controls_update_track :: proc(sv: ^Server, track: Track) {
 	if _media_controls_impl_update_track != nil {
-		l := &sv.library
-
 		info := Media_Controls_Track_Info {
 			id      = track.id,
 			title   = track.title,

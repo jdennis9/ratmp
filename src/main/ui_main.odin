@@ -139,14 +139,14 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			sv := ui.server
 			w := &ui.windows.library
 
-			if w.serial != sv.library.serial {
+			if w.serial != library_get_update_serial() {
 				delete(w.tracks)
-				w.serial = sv.library.serial
-				w.tracks = library_get_all_tracks(context.allocator) or_else nil
+				w.serial = library_get_update_serial()
+				w.tracks = library_get_all_track_ids(context.allocator) or_else nil
 			}
 
 			_track_table_show(
-				ui, "##library", &w.track_table, sv.library.serial, w.tracks, {}, 0
+				ui, "##library", &w.track_table, library_get_update_serial(), w.tracks, {}, 0
 			)
 
 			return true
@@ -1241,7 +1241,7 @@ _track_table_show :: proc(
 		}
 		else {
 			buf := make_dynamic_array_len_cap([dynamic]Track_ID, 0, len(track_ids), ui.allocators.per_frame)
-			filter_tracks(sv.library, &buf, track_ids, filter_spec)
+			filter_tracks(&buf, track_ids, filter_spec)
 			filtered_tracks = buf[:]
 		}
 
@@ -1537,7 +1537,7 @@ _track_table_show :: proc(
 
 	if actions.add_to_playlist != nil {
 		h := actions.add_to_playlist.?
-		if playlist, ok := library_get_playlist(&sv.library, h); ok {
+		if playlist, ok := library_get_playlist(h); ok {
 			playlist_add(sv, playlist, _track_table_get_selection(table^, ui.allocators.per_frame))
 		}
 	}
@@ -1719,7 +1719,7 @@ _track_group_window_show_groups :: proc(
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
-	list := &sv.library.track_common_strings[group_type]
+	list := library_get_track_common_string_list(group_type)
 
 	if have_entry do entry = &list.entries[entry_index]
 
@@ -1741,7 +1741,7 @@ _track_group_window_show_groups :: proc(
 		
 		if w.filter_buf[0] == 0 {
 			for e, i in list.entries {
-				row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.totals)
+				row := _make_playlist_row(e.uid, e.name, e.serial, e.totals)
 				row.id = i64(i)
 				append(&w.playlist_table.rows, row)
 			}
@@ -1750,7 +1750,7 @@ _track_group_window_show_groups :: proc(
 			lower_filter := strings.to_lower(filter_string, ui.allocators.per_frame)
 			for e, i in list.entries {
 				if strings.contains(e.lower_case_name, lower_filter) {
-					row := _make_playlist_row(sv.library, e.uid, e.name, e.serial, e.totals)
+					row := _make_playlist_row(e.uid, e.name, e.serial, e.totals)
 					row.id = i64(i)
 					append(&w.playlist_table.rows, row)
 				}
@@ -1784,7 +1784,7 @@ _track_group_window_show_tracks :: proc(
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
-	list := sv.library.track_common_strings[group_type]
+	list := library_get_track_common_string_list(group_type)
 
 	if have_entry do entry = &list.entries[entry_index]
 	else {
@@ -1829,7 +1829,7 @@ _track_group_window_select_group :: proc(
 ) {
 	w.displayed_entry_id = i16(id)
 	clear(&w.tracks)
-	library_get_tracks_in_group(ui.server.library, group_type, id, &w.tracks)
+	library_get_tracks_in_group(group_type, id, &w.tracks)
 }
 
 // -----------------------------------------------------------------------------
@@ -2035,7 +2035,6 @@ _playlist_table_show :: proc(
 }
 
 _make_playlist_row :: proc(
-	l:      Library,
 	uid:    UID,
 	title:  string,
 	serial: uint,
@@ -2477,18 +2476,18 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	// --------------------------------------------------------------------------
 	need_update := false
 	
-	need_update |= sv.library.playlists_serial != w.playlist_table.serial
+	need_update |= library_get_playlists_serial() != w.playlist_table.serial
 	
 	if need_update {
 		clear(&w.playlist_table.rows)
-		w.playlist_table.serial = sv.library.playlists_serial
+		w.playlist_table.serial = library_get_update_serial()
 
-		it := handle_map.iterator_make(&sv.library.playlists)
+		it := library_make_playlist_iterator()
 		for pl, handle in handle_map.iterate(&it) {
-			totals := calculate_track_totals(sv.library, pl.tracks[:])
+			totals := calculate_track_totals(pl.tracks[:])
 
 			append(&w.playlist_table.rows, _make_playlist_row(
-				sv.library, pl.uid, pl.name, pl.serial, totals,
+				pl.uid, pl.name, pl.serial, totals,
 				_playlist_handle_to_row_id(pl.handle)
 			))
 		}
@@ -2498,12 +2497,10 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	for &row, row_index in w.playlist_table.rows {
 		handle := transmute(Playlist_Handle) u32(row.id)
-		pl := library_get_playlist(&sv.library, handle) or_continue
+		pl := library_get_playlist(handle) or_continue
 		if row.serial != pl.serial {
-			totals := calculate_track_totals(sv.library, pl.tracks[:])
-			row = _make_playlist_row(
-				sv.library, pl.uid, pl.name, pl.serial, totals, _playlist_handle_to_row_id(pl.handle)
-			)
+			totals := calculate_track_totals(pl.tracks[:])
+			row = _make_playlist_row(pl.uid, pl.name, pl.serial, totals, _playlist_handle_to_row_id(pl.handle))
 		}
 	}
 
@@ -2522,7 +2519,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	// Validate playlist name
 	if need_update || imgui.IsItemActive() {
 		w.cant_add_playlist_reason = library_can_add_playlist(
-			&sv.library, string(cstring(&w.new_playlist_name[0]))
+			string(cstring(&w.new_playlist_name[0]))
 		)
 	}
 	imgui.SameLine()
@@ -2541,7 +2538,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	// Add playlist
 	if commit_new_playlist && w.cant_add_playlist_reason == .None {
-		library_add_playlist(&sv.library, string(cstring(&w.new_playlist_name[0])))
+		library_add_playlist(string(cstring(&w.new_playlist_name[0])))
 		for &r in w.new_playlist_name do r = 0
 	}
 
@@ -2558,14 +2555,14 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	if actions.played_row != nil {
 		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.played_row.?].id)
-		if pl, found := library_get_playlist(&sv.library, handle); found {
+		if pl, found := library_get_playlist(handle); found {
 			server_request_play_playlist(sv, pl.tracks[:], pl.uid)
 		}
 	}
 
 	if actions.remove_row != nil {
 		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.remove_row.?].id)
-		library_remove_playlist(&sv.library, handle)
+		library_remove_playlist(handle)
 	}
 
 	return true
@@ -2574,7 +2571,7 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 _playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 	sv := ui.server
 
-	playlist := library_get_playlist(&sv.library, w.viewing_playlist.?) or_return
+	playlist := library_get_playlist(w.viewing_playlist.?) or_return
 
 	imx.title_text("Playlist:", playlist.name)
 	_track_table_show(
@@ -2607,7 +2604,7 @@ _show_playlist_selector_menu :: proc(
 	imgui.BeginMenu(label) or_return
 	defer imgui.EndMenu()
 
-	it := handle_map.iterator_make(&sv.library.playlists)
+	it := library_make_playlist_iterator()
 	for it_playlist, h in handle_map.iterate(&it) {
 		playlist: ^Playlist = it_playlist
 		if exclude != nil && h == exclude.? do continue
@@ -3229,7 +3226,7 @@ _wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
 
 		for &f in state.bg.data_points[:state.bg.data_points_calculated] do f = 0
 		state.bg.data_points_calculated = 0
-		track := sv.library.tracks[track_id] or_return
+		track := get_track(track_id) or_return
 		state.bg.track_url = track.url
 
 		state.decoder_thread = thread.create(_thread_proc, .Low)
@@ -3335,10 +3332,10 @@ _wavebar_window_load_setting :: proc(w: ^_Wavebar_Window, key, value: string) ->
 // -----------------------------------------------------------------------------
 
 _folder_tree_window_select_folder :: proc(
-	library: Library, w: ^_Folder_Tree_Window, folder: ^_Folder_Tree_Node
+	w: ^_Folder_Tree_Window, folder: ^_Folder_Tree_Node
 ) {
 	clear(&w.tracks)
-	library_get_tracks_in_folder(library, folder.origin, &w.tracks)
+	library_get_tracks_in_folder(folder.origin, &w.tracks)
 	w.selected_folder = folder
 	w.track_table.serial = 0
 }
@@ -3347,19 +3344,19 @@ _folder_tree_window_show_folders :: proc(
 	ui: ^UI, w: ^_Folder_Tree_Window
 ) -> bool {
 	sv := ui.server
-	library := &sv.library
-
 
 	COLUMN_NAME      :: 0
 	COLUMN_LENGTH    :: 1
 	COLUMN_FILE_SIZE :: 2
 	COLUMN__COUNT    :: 3
 
+	tree_serial := library_get_folder_tree_serial()
+
 	// --------------------------------------------------------------------------
 	// Build if needed
 	// --------------------------------------------------------------------------
-	if w.tree_serial != library.folder_tree_serial {
-		w.tree_serial = library.folder_tree_serial
+	if w.tree_serial != tree_serial {
+		w.tree_serial = tree_serial
 		free_all(ui.allocators.folder_tree)
 		w.root_node = {}
 
@@ -3376,7 +3373,7 @@ _folder_tree_window_show_folders :: proc(
 			}
 		}
 
-		make_node(&w.root_node, &library.folder_tree, ui.allocators.folder_tree)
+		make_node(&w.root_node, library_get_folder_tree(), ui.allocators.folder_tree)
 	}
 
 	// --------------------------------------------------------------------------
@@ -3421,8 +3418,6 @@ _folder_tree_window_show_folders :: proc(
 		w:       ^_Folder_Tree_Window,
 		node:    ^_Folder_Tree_Node
 	) {
-		library := &sv.library
-
 		imgui.TableNextRow()
 
 		imgui.PushIDPtr(node)
@@ -3488,18 +3483,18 @@ _folder_tree_window_show_folders :: proc(
 	show_node(sv, &actions, w, root)
 	
 	if actions.select != nil {
-		_folder_tree_window_select_folder(library^, w, actions.select)
+		_folder_tree_window_select_folder(w, actions.select)
 	}
 
 	if actions.play != nil {
-		_folder_tree_window_select_folder(library^, w, actions.play)
+		_folder_tree_window_select_folder(w, actions.play)
 		server_request_play_playlist(sv, w.tracks[:], w.selected_folder.origin.uid)
 	}
 
 	if actions.add_to_queue != nil {
 		tracks: [dynamic]Track_ID
 		defer delete(tracks)
-		library_get_tracks_in_folder(library^, actions.add_to_queue.origin, &tracks)
+		library_get_tracks_in_folder(actions.add_to_queue.origin, &tracks)
 		playback_queue_add(&sv.playback, tracks[:], actions.add_to_queue.origin.uid)
 	}
 
@@ -3515,13 +3510,13 @@ _folder_tree_window_show_tracks :: proc(
 	}
 
 	_track_table_show(
-		ui, "##tracks", &w.track_table, ui.server.library.serial,
+		ui, "##tracks", &w.track_table, library_get_update_serial(),
 		w.tracks[:], {.NoRemove}, w.selected_folder.origin.uid
 	)
 }
 
 _folder_tree_window_show_focused :: proc(ui: ^UI, w: ^_Folder_Tree_Window) {
-	if w.tree_serial != ui.server.library.folder_tree_serial {
+	if w.tree_serial != library_get_folder_tree_serial() {
 		w.selected_folder = nil
 	}
 
@@ -3753,7 +3748,7 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 	}
 
 	if imgui.BeginTabItem("Library") {
-		show_map(sv.library.allocator_map)
+		show_map(library_get_allocators())
 		imgui.EndTabItem()
 	}
 

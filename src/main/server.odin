@@ -82,8 +82,6 @@ Server :: struct {
 		cover_art_scan:  mem.Allocator,
 	},
 
-	library: Library,
-
 	playback_thread:      Playback_Thread,
 	playback_state:       Playback_State,
 	event_signal:         sync.Auto_Reset_Event,
@@ -259,12 +257,13 @@ server_handle_events :: proc(sv: ^Server) {
 
 	}
 
+	lib_serial := library_get_update_serial()
 	library_update()
 
-	if sv.library.serial != sv.saved_library_serial {
+	if lib_serial != sv.saved_library_serial {
 		// @TODO: Do this asynchronously somehow
 		error := library_save(sv.paths.library_database)
-		sv.saved_library_serial = sv.library.serial
+		sv.saved_library_serial = lib_serial
 		if error != nil {
 			log.error("Error saving library:", error)
 		}
@@ -288,11 +287,8 @@ server_handle_events :: proc(sv: ^Server) {
 		case .CoverArtScanComplete:
 			output := sv.cover_art_scan_state.output
 			for k, v in output {
-				sv.library.folder_cover_art[k] = strings.clone(
-					v, sv.library.allocators.track_data
-				)
+				library_add_cover_art(k, v)
 			}
-			sv.library.serial += 1
 			free_all(sv.allocators.cover_art_scan)
 			bgtask_cancel(&sv.cover_art_scan)
 
@@ -424,7 +420,7 @@ server_request_play_playlist :: proc(
 }
 
 server_request_radio :: proc(sv: ^Server, main_track: Track_ID) {
-	tracks := library_build_radio(sv.library, main_track, sv.allocators.temp)
+	tracks := library_build_radio(main_track, sv.allocators.temp)
 	server_request_play_playlist(sv, tracks, generate_uid(), main_track)
 }
 
@@ -453,7 +449,7 @@ server_get_track_position_seconds :: proc(sv: ^Server) -> int {
 	track_scanner_queue(&sv.track_scanner, {path})
 }*/
 
-server_start_cover_art_scan :: proc(sv: ^Server) {
+server_start_cover_art_scan :: proc(sv: ^Server) -> Error {
 	bgtask_cancel(&sv.cover_art_scan)
 	free_all(sv.allocators.cover_art_scan)
 
@@ -462,9 +458,10 @@ server_start_cover_art_scan :: proc(sv: ^Server) {
 	state.input = make(map[u64]string, sv.allocators.cover_art_scan)
 	state.output = make(map[u64]string, sv.allocators.cover_art_scan)
 
-	clear(&sv.library.folder_cover_art)
+	tracks := library_get_all_tracks(context.allocator) or_return
+	defer delete(tracks)
 
-	for _, track in sv.library.tracks {
+	for track in tracks {
 		if track.protocol != .File do continue
 		dir := filepath.clean(filepath.dir(track.url), sv.allocators.temp) or_continue
 		hash := stable_hash_string_64(dir)
@@ -478,10 +475,12 @@ server_start_cover_art_scan :: proc(sv: ^Server) {
 		&sv.cover_art_scan, _cover_art_scan_proc,
 		context.allocator, sv
 	)
+
+	return nil
 }
 
-server_start_metadata_refresh :: proc(sv: ^Server) {
-	input := make([]Track_Scanner_Input, len(sv.library.tracks))
+server_start_metadata_refresh :: proc(sv: ^Server) -> Error {
+	/*input := make([]Track_Scanner_Input, len(sv.library.tracks))
 	defer delete(input)
 
 	i := 0
@@ -489,9 +488,24 @@ server_start_metadata_refresh :: proc(sv: ^Server) {
 		input[i].path = v.url
 		input[i].overwrite = true
 		i += 1
+	}*/
+
+	tracks := library_get_all_tracks(context.allocator) or_return
+	defer delete(tracks)
+
+	input := make([]Track_Scanner_Input, len(tracks))
+	defer delete(input)
+
+	i := 0
+	for v in tracks {
+		input[i].path = v.url
+		input[i].overwrite = true
+		i += 1
 	}
 
 	track_scanner_queue(&sv.track_scanner, input)
+
+	return nil
 }
 
 server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) -> Audio_Spec {
@@ -568,26 +582,26 @@ Track_Sort_Spec :: struct {
 	metric: Track_Sort_Metric,
 }
 
-Track_Compare_Proc :: #type proc(l: Library, a, b: Track) -> int
+Track_Compare_Proc :: #type proc(a, b: Track) -> int
 
 TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
-	.Title =      proc(l: Library, a, b: Track) -> int {return strings.compare(a.title, b.title)},
-	.Artist =     proc(l: Library, a, b: Track) -> int {
+	.Title =      proc(a, b: Track) -> int {return strings.compare(a.title, b.title)},
+	.Artist =     proc(a, b: Track) -> int {
 		return strings.compare(library_get_artist_name(a.artists[0]), library_get_artist_name(b.artists[0]))
 	},
-	.Album =      proc(l: Library, a, b: Track) -> int {
+	.Album =      proc(a, b: Track) -> int {
 		return strings.compare(library_get_album_name(a.album), library_get_album_name(b.album))
 	},
-	.Genre =      proc(l: Library, a, b: Track) -> int {
+	.Genre =      proc(a, b: Track) -> int {
 		return strings.compare(library_get_genre_name(a.genres[0]), library_get_genre_name(b.genres[0]))
 	},
-	.Duration =   proc(l: Library, a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
-	.Track =      proc(l: Library, a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
-	.FileDate =   proc(l: Library, a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
-	.DateAdded =  proc(l: Library, a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
-	.Bitrate =    proc(l: Library, a, b: Track) -> int {return auto_cast (a.bitrate_kbps - b.bitrate_kbps)},
-	.Samplerate = proc(l: Library, a, b: Track) -> int {return auto_cast (a.samplerate - b.samplerate)},
-	.Format =     proc(l: Library, a, b: Track) -> int {
+	.Duration =   proc(a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
+	.Track =      proc(a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
+	.FileDate =   proc(a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
+	.DateAdded =  proc(a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
+	.Bitrate =    proc(a, b: Track) -> int {return auto_cast (a.bitrate_kbps - b.bitrate_kbps)},
+	.Samplerate = proc(a, b: Track) -> int {return auto_cast (a.samplerate - b.samplerate)},
+	.Format =     proc(a, b: Track) -> int {
 		return strings.compare(
 			reflect.enum_name_from_value(a.format) or_else "",
 			reflect.enum_name_from_value(b.format) or_else ""
@@ -633,12 +647,12 @@ sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
 			r: int
 
 			metric := col.metric
-			r = cmp_proc(col.sv.library, A, B)
+			r = cmp_proc(A, B)
 
 			for abs(r) == 0 && TRACK_METRIC_NEXT_METRIC[metric] != nil {
 				metric = TRACK_METRIC_NEXT_METRIC[metric].?
 				cmp_proc = TRACK_METRIC_COMPARE_PROCS[metric]
-				r = cmp_proc(col.sv.library, A, B)
+				r = cmp_proc(A, B)
 			}
 
 			return r < 0
