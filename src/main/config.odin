@@ -41,20 +41,16 @@ Config :: struct {
 		notify_background_playback_state: bool,
 	},
 	ui: struct {
-		background_buf: [512]u8 `json:"-"`,
-		default_theme_buf: [128]u8 `json:"-"`,
-		fonts_buf: [CONFIG_MAX_FONTS]Config_Font `json:"-"`,
-		
-		crop_cover_art: bool,
+		background_buf:        [512]u8 `json:"-"`,
+		default_theme_buf:     [128]u8 `json:"-"`,
+		fonts_buf:             [CONFIG_MAX_FONTS]Config_Font `json:"-"`,
+		crop_cover_art:        bool,
 		background_fit_policy: Image_Fit_Policy,
-		background: cstring,
-		default_theme: cstring,
-		font_size: f32,
-		// @TODO: Used fixed length dynamic array when those
-		// are added.
-		// Slice of fonts_buf
-		fonts: []Config_Font,
-		close_policy: Config_Close_Policy,
+		background:            cstring,
+		default_theme:         cstring,
+		font_size:             f32,
+		fonts:                 []Config_Font, // @TODO: Used fixed-length dynamic array
+		close_policy:          Config_Close_Policy,
 	},
 }
 

@@ -34,10 +34,10 @@ _wrap :: proc(i, N: int) -> int {
 }
 
 Ring_Buffer :: struct($T: typeid) {
-	data: []T,
+	data:           []T,
 	producer_index: int,
 	consumer_index: int,
-	allocator: mem.Allocator,
+	allocator:      mem.Allocator,
 }
 
 rb_init :: proc(buf: ^Ring_Buffer($T), size: int, allocator: mem.Allocator) {

@@ -23,12 +23,12 @@ import "core:slice"
 Playlist_Handle :: hm.Handle32
 
 Playlist :: struct {
-	handle: Playlist_Handle,
-	uid: UID,
-	name: string,
+	handle:       Playlist_Handle,
+	uid:          UID,
+	name:         string,
 	name_cstring: cstring,
-	tracks: [dynamic]Track_ID,
-	serial: uint,
+	tracks:       [dynamic]Track_ID,
+	serial:       uint,
 }
 
 playlist_add :: proc(sv: ^Server, pl: ^Playlist, tracks: []Track_ID) {

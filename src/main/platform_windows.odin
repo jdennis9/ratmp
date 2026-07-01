@@ -29,10 +29,10 @@ WINDOW_CLASS_NAME :: PROGRAM_ID + "_window_class"
 
 _win: struct {
 	hinstance: win.HINSTANCE,
-	hwnd: win.HWND,
-	events: Platform_Events,
-	icon: win.HICON,
-	resize: Maybe([2]int),
+	hwnd:      win.HWND,
+	events:    Platform_Events,
+	icon:      win.HICON,
+	resize:    Maybe([2]int),
 }
 
 @private

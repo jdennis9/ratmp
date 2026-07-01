@@ -26,10 +26,10 @@ import "core:log"
 import imgui "src:thirdparty/odin-imgui"
 
 _g: struct {
-	want_show_window: bool,
-	running: bool,
+	want_show_window:   bool,
+	running:            bool,
 	tracking_allocator: mem.Tracking_Allocator,
-	logging_allocator: log.Log_Allocator,
+	logging_allocator:  log.Log_Allocator,
 }
 
 get_global_tracking_allocator :: proc() -> mem.Tracking_Allocator {

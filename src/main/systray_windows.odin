@@ -27,17 +27,17 @@ import win "core:sys/windows"
 WINDOW_CLASS_NAME :: PROGRAM_ID + "_systray"
 
 _win_systray: struct {
-	hinstance: win.HINSTANCE,
-	hwnd: win.HWND,
-	icon: win.HICON,
-	callback: Sys_Tray_Proc,
-	callback_data: rawptr,
-	tray_menu: win.HMENU,
+	hinstance:         win.HINSTANCE,
+	hwnd:              win.HWND,
+	icon:              win.HICON,
+	callback:          Sys_Tray_Proc,
+	callback_data:     rawptr,
+	tray_menu:         win.HMENU,
 	background_thread: ^thread.Thread,
-	want_destroy: bool,
-	error: bool,
-	ready_event: sync.Auto_Reset_Event,
-	ctx: runtime.Context,
+	want_destroy:      bool,
+	error:             bool,
+	ready_event:       sync.Auto_Reset_Event,
+	ctx:               runtime.Context,
 }
 
 _Tray_Button :: enum i32 {

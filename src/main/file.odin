@@ -37,10 +37,10 @@ File_Dialog_Flag :: enum {
 File_Dialog_Flags :: bit_set[File_Dialog_Flag]
 
 File_Dialog_State :: struct {
-	thread: ^thread.Thread,
-	flags: File_Dialog_Flags,
+	thread:    ^thread.Thread,
+	flags:     File_Dialog_Flags,
 	file_type: File_Type,
-	results: [dynamic]Path,
+	results:   [dynamic]Path,
 }
 
 FILE_TYPE_EXTENSIONS := [File_Type][]string {

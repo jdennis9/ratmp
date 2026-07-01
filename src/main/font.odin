@@ -23,12 +23,12 @@ import "core:mem"
 
 System_Font :: struct {
 	handle: rawptr,
-	name: cstring,
+	name:  cstring,
 }
 
 _font_impl_list_system_fonts: proc(allocator: mem.Allocator) -> ([]System_Font, Error)
-_font_impl_get_font_path: proc(f: System_Font, allocator: mem.Allocator) -> (string, Error)
-_font_impl_free: proc(f: System_Font)
+_font_impl_get_font_path:     proc(f: System_Font, allocator: mem.Allocator) -> (string, Error)
+_font_impl_free:              proc(f: System_Font)
 
 font_list_system_fonts :: proc(allocator: mem.Allocator) -> (fonts: []System_Font, error: Error) {
 	if _font_impl_list_system_fonts != nil {

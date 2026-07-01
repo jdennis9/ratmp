@@ -30,7 +30,7 @@ import "core:os"
 TRACK_SCANNER_SCRATCH_SIZE :: (32<<10)
 
 Track_Scanner_Input :: struct {
-	path: string,
+	path:      string,
 	overwrite: bool,
 }
 
@@ -72,8 +72,8 @@ track_scanner_init :: proc(
 	}
 
 	_produce_proc :: proc(
-		data: rawptr,
-		input: []Track_Scanner_Input,
+		data:             rawptr,
+		input:            []Track_Scanner_Input,
 		output_allocator: mem.Allocator,
 	) -> (output: []Track_Data, error: Error) {
 		scratch: mem.Scratch
@@ -94,10 +94,10 @@ track_scanner_init :: proc(
 		sync.atomic_store(&progress.scanned_files, 0)
 				
 		process_file :: proc(
-			progress: ^Track_Scanner_Progress,
-			input: Track_Scanner_Input,
-			output: ^[dynamic]Track_Data,
-			depth: int,
+			progress:         ^Track_Scanner_Progress,
+			input:            Track_Scanner_Input,
+			output:           ^[dynamic]Track_Data,
+			depth:            int,
 			output_allocator: mem.Allocator,
 		) -> Error {
 			file := os.open(input.path) or_return

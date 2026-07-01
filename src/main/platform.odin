@@ -31,18 +31,18 @@ Platform_Events :: struct {
 }
 
 // make_window should also choose graphics backend
-_platform_impl_make_window: proc() -> bool
-_platform_impl_destroy_window: proc()
-_platform_impl_shutdown: proc()
-_platform_impl_imgui_new_frame: proc()
-_platform_impl_poll_events: proc() -> Platform_Events
-_platform_impl_wait_events: proc() -> Platform_Events
-_platform_impl_swap_buffers: proc()
-_platform_impl_is_window_visible: proc() -> bool
+_platform_impl_make_window:        proc() -> bool
+_platform_impl_destroy_window:     proc()
+_platform_impl_shutdown:           proc()
+_platform_impl_imgui_new_frame:    proc()
+_platform_impl_poll_events:        proc() -> Platform_Events
+_platform_impl_wait_events:        proc() -> Platform_Events
+_platform_impl_swap_buffers:       proc()
+_platform_impl_is_window_visible:  proc() -> bool
 _platform_impl_set_window_visible: proc(visible: bool)
-_platform_impl_flush_events: proc()
-_platform_impl_set_window_title: proc(title: cstring)
-_platform_impl_set_window_size: proc(w, h: int)
+_platform_impl_flush_events:       proc()
+_platform_impl_set_window_title:   proc(title: cstring)
+_platform_impl_set_window_size:    proc(w, h: int)
 
 platform_make_window :: proc() -> bool {
 	return _platform_impl_make_window()

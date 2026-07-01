@@ -42,19 +42,19 @@ _Column_Type :: enum {
 }
 
 _Column :: struct {
-	name: string,
-	type: _Column_Type,
-	field: reflect.Struct_Field,
+	name:        string,
+	type:        _Column_Type,
+	field:       reflect.Struct_Field,
 	min_version: int,
 }
 
 
 _COLUMN_TYPE_NAME := [_Column_Type]string {
-	.Int = "INTEGER",
-	.BigInt = "BIGINT",
-	.TinyString = "VARCHAR(31)",
+	.Int         = "INTEGER",
+	.BigInt      = "BIGINT",
+	.TinyString  = "VARCHAR(31)",
 	.ShortString = "VARCHAR(127)",
-	.LongString = "VARCHAR(511)",
+	.LongString  = "VARCHAR(511)",
 }
 
 sfield :: reflect.struct_field_by_name

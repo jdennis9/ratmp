@@ -22,9 +22,9 @@ import "base:runtime"
 import lm "src:bindings/linux_misc"
 
 _systray_appindicator: struct {
-	callback: Sys_Tray_Proc,
+	callback:      Sys_Tray_Proc,
 	callback_data: rawptr,
-	ctx: runtime.Context,
+	ctx:           runtime.Context,
 }
 
 _callback_wrapper :: proc "c" (in_button: i32) {

@@ -20,11 +20,13 @@ package main
 
 import "core:sys/posix"
 import "core:c/libc"
-import "core:strings"
 
 for_each_file_in_dialog :: proc(
-	title: cstring, file_proc: File_Proc, 
-	iterator_data: rawptr, file_type: File_Type, flags: File_Dialog_Flags,
+	title:         cstring,
+	file_proc:     File_Proc, 
+	iterator_data: rawptr,
+	file_type:     File_Type,
+	flags:         File_Dialog_Flags,
 ) -> int {
 	buf: [512]u8
 	count: int

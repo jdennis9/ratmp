@@ -24,9 +24,9 @@ import imgui_glfw "src:thirdparty/odin-imgui/imgui_impl_glfw"
 
 @(private="file")
 _glfw: struct {
-	window: glfw.WindowHandle,
+	window:     glfw.WindowHandle,
 	video_impl: Video_Impl,
-	events: Platform_Events,
+	events:     Platform_Events,
 }
 
 platform_init_glfw :: proc() -> bool {

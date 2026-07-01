@@ -28,15 +28,15 @@ Message_Box_Handle :: UID
 
 _Message_Thread :: struct {
 	message: [1024]u8,
-	title: [128]u8,
-	type: Message_Box_Type,
+	title:   [128]u8,
+	type:    Message_Box_Type,
 	urgency: Message_Box_Urgency,
-	runner: ^thread.Thread,
-	id: UID,
+	runner:  ^thread.Thread,
+	id:      UID,
 }
 
 _Message_Response :: struct {
-	id: UID,
+	id:  UID,
 	res: Message_Box_Response,
 }
 
@@ -64,8 +64,12 @@ _message_box_thread :: proc(t: ^thread.Thread) {
 }
 
 @private
-show_message_box_async :: proc(type: Message_Box_Type, urgency: Message_Box_Urgency,
-	title: cstring, body_args: ..any, sep := " "
+show_message_box_async :: proc(
+	type:      Message_Box_Type,
+	urgency:   Message_Box_Urgency,
+	title:     cstring,
+	body_args: ..any,
+	sep := " "
 ) -> (h: Message_Box_Handle, error: Error) {
 	if _dialog_impl_show_message_box == nil do return 0, Custom_Error.NotImplemented
 

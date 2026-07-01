@@ -41,18 +41,18 @@ Allocator_Map_Entry_Flags :: bit_set[Allocator_Map_Entry_Flag]
 
 Allocator_Map_Entry :: struct {
 	allocator: _Any_Allocator,
-	tracker: ^mem.Tracking_Allocator,
-	flags: Allocator_Map_Entry_Flags,
+	tracker:   ^mem.Tracking_Allocator,
+	flags:     Allocator_Map_Entry_Flags,
 }
 
 Allocator_Map :: map[string]Allocator_Map_Entry
 
 allocator_map_add :: proc(
-	m: ^Allocator_Map,
-	name: string,
+	m:         ^Allocator_Map,
+	name:      string,
 	allocator: _Any_Allocator,
-	iface: mem.Allocator,
-	flags: Allocator_Map_Entry_Flags,
+	iface:     mem.Allocator,
+	flags:     Allocator_Map_Entry_Flags,
 	ignore_bad_free := false
 ) -> mem.Allocator {
 	iface := iface
@@ -77,7 +77,7 @@ allocator_map_add :: proc(
 }
 
 allocator_map_add_dynamic_arena :: proc(
-	m: ^Allocator_Map,
+	m:    ^Allocator_Map,
 	name: string,
 	block_size := mem.DYNAMIC_ARENA_BLOCK_SIZE_DEFAULT,
 	flags: Allocator_Map_Entry_Flags = {},
@@ -94,8 +94,11 @@ allocator_map_add_heap :: proc(m: ^Allocator_Map, name: string, flags: Allocator
 }
 
 allocator_map_add_scratch :: proc(
-	m: ^Allocator_Map, name: string, size: int,
-	backup_allocator: mem.Allocator, flags: Allocator_Map_Entry_Flags = {}
+	m:                ^Allocator_Map,
+	name:             string,
+	size:             int,
+	backup_allocator: mem.Allocator,
+	flags:            Allocator_Map_Entry_Flags = {}
 ) -> mem.Allocator {
 	s := new(mem.Scratch)
 	mem.scratch_init(s, size, backup_allocator)

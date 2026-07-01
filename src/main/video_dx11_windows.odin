@@ -25,10 +25,10 @@ import imgui "src:thirdparty/odin-imgui"
 import imgui_dx11 "src:thirdparty/odin-imgui/imgui_impl_dx11"
 
 _dx: struct {
-	hwnd: win.HWND,
-	device: ^dx.IDevice,
-	ctx: ^dx.IDeviceContext,
-	rtv: ^dx.IRenderTargetView,
+	hwnd:      win.HWND,
+	device:    ^dx.IDevice,
+	ctx:       ^dx.IDeviceContext,
+	rtv:       ^dx.IRenderTargetView,
 	swapchain: ^dxgi.ISwapChain,
 }
 

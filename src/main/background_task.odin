@@ -25,8 +25,8 @@ import "core:thread"
 
 Background_Task_Progress :: struct {
 	items_processed: int,
-	total_items: int,
-	current_stage: string,
+	total_items:     int,
+	current_stage:   string,
 }
 
 Background_Task_Proc :: #type proc(task: ^Background_Task) -> Error
@@ -72,12 +72,12 @@ bgtask_run :: proc(
 	scratch_size := 64<<10,
 ) {
 	bgtask_cancel(task)
-	task.data = data
-	task.runner = thread.create(_bgtask_thread_proc)
-	task.runner.init_context = context
-	task.runner.data = task
-	task.run_proc = run_proc
-	task.want_cancel = false
+	task.data                  = data
+	task.runner                = thread.create(_bgtask_thread_proc)
+	task.runner.init_context   = context
+	task.runner.data           = task
+	task.run_proc              = run_proc
+	task.want_cancel           = false
 	task.input_consumed_signal = {}
 
 	mem.scratch_init(

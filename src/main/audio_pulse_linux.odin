@@ -44,20 +44,20 @@ _Stream_Message :: enum {
 }
 
 _stream: struct {
-	ctx: runtime.Context,
-	pa_context: ^pa.context_,
-	stream: ^pa.stream,
-	mainloop: ^pa.mainloop,
-	mainloop_api: ^pa.mainloop_api,
-	ready_sem: sync.Sema,
-	error: _Stream_Error,
+	ctx:            runtime.Context,
+	pa_context:     ^pa.context_,
+	stream:         ^pa.stream,
+	mainloop:       ^pa.mainloop,
+	mainloop_api:   ^pa.mainloop_api,
+	ready_sem:      sync.Sema,
+	error:          _Stream_Error,
 	session_thread: ^thread.Thread,
-	messages: bit_set[_Stream_Message],
-	volume: f32,
-	index: u32,
-	callback: Audio_Callback,
-	callback_data: rawptr,
-	paused: bool,
+	messages:       bit_set[_Stream_Message],
+	volume:         f32,
+	index:          u32,
+	callback:       Audio_Callback,
+	callback_data:  rawptr,
+	paused:         bool,
 }
 
 @private
@@ -69,15 +69,15 @@ use_audio_pulse :: proc() {
 			_audio_impl_shutdown()
 		}
 
-		s.ctx = context
-		s.callback = cb
-		s.callback_data = cb_data
-
-		s.mainloop = pa.mainloop_new()
-		s.mainloop_api = pa.mainloop_get_api(s.mainloop)
-		s.pa_context = pa.context_new(s.mainloop_api, "RAT MP")
-		s.session_thread = thread.create(_stream_session_thread)
+		s.ctx                 = context
+		s.callback            = cb
+		s.callback_data       = cb_data
+		s.mainloop            = pa.mainloop_new()
+		s.mainloop_api        = pa.mainloop_get_api(s.mainloop)
+		s.pa_context          = pa.context_new(s.mainloop_api, "RAT MP")
+		s.session_thread      = thread.create(_stream_session_thread)
 		s.session_thread.data = s
+		
 		_check(pa.context_connect(s.pa_context, nil, 0, nil)) or_return
 		pa.context_set_state_callback(s.pa_context, _context_state_proc, s)
 

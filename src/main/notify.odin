@@ -19,7 +19,7 @@ package main
 
 import "core:fmt"
 
-_notify_impl_send: proc(message: cstring) -> Error
+_notify_impl_send:     proc(message: cstring) -> Error
 _notify_impl_shutdown: proc()
 
 notify_send :: proc(args: ..any, sep := " ") -> Error {

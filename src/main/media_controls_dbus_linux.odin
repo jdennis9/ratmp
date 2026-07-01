@@ -26,9 +26,9 @@ import impl "src:bindings/media_controls_dbus"
 
 @(private="file")
 _dbus: struct {
-	callback: Media_Controls_Proc,
+	callback:      Media_Controls_Proc,
 	callback_data: rawptr,
-	ctx: runtime.Context,
+	ctx:           runtime.Context,
 }
 
 media_controls_use_dbus :: proc() {

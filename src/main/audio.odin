@@ -44,16 +44,16 @@ Audio_Callback :: #type proc(
 	data: rawptr, event: Audio_Callback_Event, buffer: []f32, spec: Audio_Spec
 ) -> Audio_Callback_Status
 
-_audio_impl_init: proc(callback: Audio_Callback, callback_data: rawptr) -> bool
-_audio_impl_shutdown: proc()
-_audio_impl_start: proc() -> bool
+_audio_impl_init:        proc(callback: Audio_Callback, callback_data: rawptr) -> bool
+_audio_impl_shutdown:    proc()
+_audio_impl_start:       proc() -> bool
 _audio_impl_drop_buffer: proc()
-_audio_impl_pause: proc() -> bool
-_audio_impl_resume: proc() -> bool
-_audio_impl_is_paused: proc() -> bool
-_audio_impl_stop: proc()
-_audio_impl_get_volume: proc() -> f32
-_audio_impl_set_volume: proc(v: f32)
+_audio_impl_pause:       proc() -> bool
+_audio_impl_resume:      proc() -> bool
+_audio_impl_is_paused:   proc() -> bool
+_audio_impl_stop:        proc()
+_audio_impl_get_volume:  proc() -> f32
+_audio_impl_set_volume:  proc(v: f32)
 
 audio_init :: proc(callback: Audio_Callback, callback_data: rawptr) -> bool {
 	return _audio_impl_init(callback, callback_data)

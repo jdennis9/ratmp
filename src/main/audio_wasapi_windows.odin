@@ -49,19 +49,19 @@ _In_Event :: enum {
 }
 
 _wasapi: struct {
-	callback: Audio_Callback,
-	callback_data: rawptr,
+	callback:          Audio_Callback,
+	callback_data:     rawptr,
 	volume_controller: ^wasapi.ISimpleAudioVolume,
-	session_thread: ^thread.Thread,
-	status: _Session_Status,
+	session_thread:    ^thread.Thread,
+	status:            _Session_Status,
 	device_enumerator: ^wasapi.IMMDeviceEnumerator,
-	spec: Audio_Spec,
-	volume: f32,
-	is_paused: b32,
-	in_events: [_In_Event]int,
-	interrupt_event: win.HANDLE,
-	out_events: [OUT_EVENT__COUNT]win.HANDLE,
-	event_semaphore: sync.Sema,
+	spec:              Audio_Spec,
+	volume:            f32,
+	is_paused:         b32,
+	in_events:         [_In_Event]int,
+	interrupt_event:   win.HANDLE,
+	out_events:        [OUT_EVENT__COUNT]win.HANDLE,
+	event_semaphore:   sync.Sema,
 }
 
 _send_event :: proc(ev: _In_Event) {
@@ -170,12 +170,12 @@ _reset_events :: proc(e: []win.HANDLE) {
 
 _run_session :: proc() -> (ok: bool) {
 	w := &_wasapi
-	format: ^wasapi.WAVEFORMATEX
+	format:             ^wasapi.WAVEFORMATEX
 	buffer_frame_count: u32
-	device: ^wasapi.IMMDevice
-	audio_client: ^wasapi.IAudioClient
-	render_client: ^wasapi.IAudioRenderClient
-	buffer: ^u8
+	device:             ^wasapi.IMMDevice
+	audio_client:       ^wasapi.IAudioClient
+	render_client:      ^wasapi.IAudioRenderClient
+	buffer:             ^u8
 	buffer_duration_ms: win.DWORD
 	status := Audio_Callback_Status.Continue
 

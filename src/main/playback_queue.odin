@@ -21,13 +21,13 @@ import "core:math/rand"
 import "core:slice"
 
 Playback_Queue :: struct {
-	tracks: [dynamic]Track_ID,
-	pos: int,
-	current_track: Maybe(Track_ID),
-	playlist_uid: UID,
-	serial: uint,
+	tracks:         [dynamic]Track_ID,
+	pos:            int,
+	current_track:  Maybe(Track_ID),
+	playlist_uid:   UID,
+	serial:         uint,
 	enable_shuffle: bool,
-	shuffled: bool,
+	shuffled:       bool,
 }
 
 playback_queue_set_pos :: proc(p: ^Playback_Queue, pos: int) -> (Track_ID, bool) {

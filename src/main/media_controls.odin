@@ -29,9 +29,9 @@ Media_Controls_Event :: enum {
 }
 
 Media_Controls_State :: struct {
-	paused: bool,
+	paused:          bool,
 	shuffle_enabled: bool,
-	have_track: bool,
+	have_track:      bool,
 }
 
 Media_Controls_Track_Info :: struct {
@@ -45,10 +45,10 @@ Media_Controls_Track_Info :: struct {
 
 Media_Controls_Proc :: #type proc(data: rawptr, event: Media_Controls_Event)
 
-_media_controls_impl_init: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool
+_media_controls_impl_init:         proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool
 _media_controls_impl_update_track: proc(sv: ^Server, track: Media_Controls_Track_Info)
 _media_controls_impl_update_state: proc(state: Media_Controls_State)
-_media_controls_impl_destroy: proc()
+_media_controls_impl_destroy:      proc()
 
 media_controls_init :: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool {
 	if _media_controls_impl_init != nil {

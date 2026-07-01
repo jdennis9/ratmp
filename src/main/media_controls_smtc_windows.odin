@@ -22,8 +22,8 @@ import "base:runtime"
 import smtc "src:bindings/media_controls_smtc"
 
 _smtc: struct {
-	ctx: runtime.Context,
-	callback: Media_Controls_Proc,
+	ctx:           runtime.Context,
+	callback:      Media_Controls_Proc,
 	callback_data: rawptr,
 }
 
