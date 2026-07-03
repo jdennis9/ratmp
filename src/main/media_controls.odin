@@ -17,6 +17,8 @@
 */
 package main
 
+import lib "src:main/library"
+
 Media_Controls_Event :: enum {
 	Play,
 	Pause,
@@ -60,12 +62,12 @@ media_controls_init :: proc(cb: Media_Controls_Proc, cbd: rawptr) -> bool {
 media_controls_update_track :: proc(sv: ^Server, track: Track) {
 	if _media_controls_impl_update_track != nil {
 		info := Media_Controls_Track_Info {
-			id      = track.id,
+			id      = track.handle,
 			title   = track.title,
 			url     = track.url,
-			album   = get_album_name(track.album),
-			artists = library_join_track_group_names_to_allocator(track.artists, .Artist, sv.allocators.temp),
-			genres  = library_join_track_group_names_to_allocator(track.genres, .Genre, sv.allocators.temp),
+			album   = lib.get_shared_string(.Album, track.album),
+			artists = lib.join_shared_strings(.Artist, track.artists, sv.allocators.temp),
+			genres  = lib.join_shared_strings(.Genre, track.genres, sv.allocators.temp),
 		}
 
 		_media_controls_impl_update_track(sv, info)

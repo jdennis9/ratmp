@@ -1,7 +1,5 @@
 package library
 
-import "core:slice"
-import "core:log"
 import "core:testing"
 import "core:mem"
 import "core:strings"
@@ -16,7 +14,7 @@ Track_Filter_Spec :: struct {
 
 // Filters the tracks in-place and returns the newly sized slice of tracks
 // WARNING: This breaks sort order, use it before sorting!!
-filter_tracks :: proc(input: []Track, spec: Track_Filter_Spec) -> []Track {
+filter_tracks :: proc(input: []Track_ID, spec: Track_Filter_Spec) -> []Track_ID {
 	text_buf:       mem.Scratch
 	text_allocator: mem.Allocator
 	count := 0
@@ -33,7 +31,7 @@ filter_tracks :: proc(input: []Track, spec: Track_Filter_Spec) -> []Track {
 	text_allocator = mem.scratch_allocator(&text_buf)
 
 	for track_index := 0; track_index < len(input); track_index += 1 {
-		track := &input[track_index]
+		track := get_track(input[track_index]) or_continue
 		mem.scratch_free_all(&text_buf)
 		pass := false
 
@@ -129,7 +127,7 @@ test_filter_tracks :: proc(t: ^testing.T) {
 		add_track(track, "file://C:/Music/Computer_Music.mp3")
 	}
 
-	tracks := get_all_tracks(context.allocator)
+	tracks := get_all_track_ids(context.allocator)
 	defer delete(tracks)
 
 	testing.expect(t, len(tracks) == 3)

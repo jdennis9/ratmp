@@ -18,6 +18,7 @@
 #+private file
 package main
 
+import lib "src:main/library"
 import "core:sync"
 import "core:thread"
 import "core:math/linalg"
@@ -62,10 +63,10 @@ _Track_Table_Row :: struct {
 	title:      string,
 	url:        string,
 	id:         Track_ID,
-	artists:    Track_Group_ID_Set,
-	genres:     Track_Group_ID_Set,
+	artists:    []Artist_ID,
+	genres:     []Genre_ID,
 	album:      Album_ID,
-	format:     Audio_File_Format,
+	format:     lib.Audio_File_Format,
 	samplerate: [8]u8,
 	duration:   [8]u8,
 	year:       [4]u8,
@@ -76,9 +77,9 @@ _Track_Table_Row :: struct {
 
 _Track_Table :: struct {
 	filter_buf:     [512]u8,
-	filter_metrics: bit_set[Track_Filter_Metric],
+	filter_metrics: bit_set[lib.Track_Filter_Metric],
 	filter_hash:    u32,
-	sort_spec:      Maybe(Track_Sort_Spec),
+	sort_spec:      Maybe(lib.Track_Sort_Spec),
 	serial:         uint,
 	playlist_uid:   UID,
 	rows:           [dynamic]_Track_Table_Row,
@@ -139,14 +140,14 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 			sv := ui.server
 			w := &ui.windows.library
 
-			if w.serial != library_get_update_serial() {
+			if w.serial != lib.get_tracks_serial() {
 				delete(w.tracks)
-				w.serial = library_get_update_serial()
-				w.tracks = library_get_all_track_ids(context.allocator) or_else nil
+				w.serial = lib.get_tracks_serial()
+				w.tracks = lib.get_all_track_ids(context.allocator)
 			}
 
 			_track_table_show(
-				ui, "##library", &w.track_table, library_get_update_serial(), w.tracks, {}, 0
+				ui, "##library", &w.track_table, lib.get_tracks_serial(), w.tracks, {}, 0
 			)
 
 			return true
@@ -284,7 +285,8 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 		internal_name = "_folder_tree",
 
 		show_proc = proc(ui: ^UI) -> bool {
-			_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
+			//@FIXME
+			//_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
 			return true
 		}
 	},
@@ -327,15 +329,15 @@ _Playlists_Window :: struct {
 	new_playlist_name:        [128]u8,
 	playlist_table:           _Playlist_Table,
 	track_table:              _Track_Table,
-	viewing_playlist:         Maybe(Playlist_Handle),
-	cant_add_playlist_reason: Cant_Add_Playlist_Reason,
+	viewing_playlist:         Maybe(lib.Playlist_ID),
+	//cant_add_playlist_reason: Cant_Add_Playlist_Reason,
 }
 
 // -----------------------------------------------------------------------------
 // Track group window
 // -----------------------------------------------------------------------------
 
-_TRACK_COMMON_STRING_TYPE_NAMES := [Track_Group_Type]cstring {
+_TRACK_SHARED_STRING_TYPE_NAMES := [lib.Shared_String_Type]cstring {
 	.Artist = "Artists",
 	.Genre  = "Genres",
 	.Album  = "Albums",
@@ -435,8 +437,8 @@ _Wavebar_Window :: struct {
 // Folder tree
 // -----------------------------------------------------------------------------
 
-_Folder_Tree_Node :: struct {
-	totals:   Track_List_Totals,
+/*_Folder_Tree_Node :: struct {
+	totals:   lib.Track_Totals,
 	children: []_Folder_Tree_Node,
 	name:     cstring,
 	origin:   ^Library_Folder,
@@ -450,7 +452,7 @@ _Folder_Tree_Window :: struct {
 	root_node:              _Folder_Tree_Node,
 	track_table:            _Track_Table,
 	tracks:                 [dynamic]Track_ID,
-}
+}*/
 
 // -----------------------------------------------------------------------------
 // Tracked window state
@@ -517,7 +519,8 @@ UI :: struct {
 		spectrum:        _Spectrum_Window,
 		wavebar:         _Wavebar_Window,
 		post_processing: _Post_Processing_Window,
-		folder_tree:     _Folder_Tree_Window,
+		//@FIXME
+		//folder_tree:     _Folder_Tree_Window,
 		
 		show_settings: bool,
 	},
@@ -756,14 +759,15 @@ ui_show :: proc(ui: ^UI) -> (ui_actions: UI_Actions) {
 	// --------------------------------------------------------------------------
 	// Remove missing tracks
 	// --------------------------------------------------------------------------
+	//@FIXME
 	if res, have_res := message_box_get_response(
 		ui.dialogs.confirm_remove_missing_tracks
 	); have_res && res == .OkYes {
-		tracks := library_get_missing_tracks(ui.allocators.per_frame)
+		/*tracks := library_get_missing_tracks(ui.allocators.per_frame)
 		library_remove_tracks(tracks)
 		show_message_box_async(
 			.Message, .Info, "Tracks Removed", "Removed", len(tracks), "missing tracks"
-		)
+		)*/
 	}
 
 	// --------------------------------------------------------------------------
@@ -1089,14 +1093,17 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 	// --------------------------------------------------------------------------
 	// Track info
 	// --------------------------------------------------------------------------
-	if track, have_track := get_track(sv.current_track_id); have_track {
-		artists := library_join_track_group_names_to_allocator(track.artists, .Artist, ui.allocators.per_frame)
+	if track, have_track := lib.get_track(sv.current_track_id); have_track {
+		//artists := library_join_track_group_names_to_allocator(track.artists, .Artist, ui.allocators.per_frame)
+		artist_names := make([]string, len(track.artists), ui.allocators.per_frame)
+		lib.get_shared_strings(.Artist, track.artists, artist_names)
+		artists := strings.join(artist_names, ", ", ui.allocators.per_frame)
 
 		imx.text(512, artists, " - ", track.title)
 		imgui.Separator()
 		track_info := sv.track_info
 
-		imx.text_unformatted_ex(track.album != 0 ? get_album_name(track.album) : "<no album>")
+		imx.text_unformatted_ex(track.album != 0 ? lib.get_shared_string(.Album, track.album) : "<no album>")
 
 		imgui.Separator()
 		if channel_string, have_channel_string := audio_channels_to_string(
@@ -1108,12 +1115,12 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 			imx.text(32, track.channels, " channels")
 		}
 
-		imgui.Separator()
-		imx.text(32, AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
+		//imgui.Separator()
+		//imx.text(32, AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
 		imgui.Separator()
 		imx.text(32, track.samplerate, "Hz")
 		imgui.Separator()
-		imx.text(32, track.bitrate_kbps, "kb/s")
+		imx.text(32, track.bitrate, "kb/s")
 		imgui.Separator()
 
 		if track_info.replay_gain != nil {
@@ -1158,7 +1165,7 @@ _status_bar :: proc(sv: ^Server, ui: ^UI) -> bool {
 _track_table_row_from_track :: proc(
 	sv: ^Server, handle: Track_ID, allocator: mem.Allocator,
 ) -> (row: _Track_Table_Row, ok: bool) {
-	track := get_track(handle) or_return
+	track := lib.get_track(handle) or_return
 	ok = true
 
 	row.id = handle
@@ -1169,16 +1176,16 @@ _track_table_row_from_track :: proc(
 	row.url = track.url
 
 	{
-		h, m, s := time.clock_from_seconds(auto_cast track.duration_seconds)
+		h, m, s := time.clock_from_seconds(auto_cast track.duration)
 		fmt.bprintf(row.duration[:], "%02d:%02d:%02d", h, m, s)
 	}
 
-	if track.track_no != 0 do fmt.bprint(row.track_no[:], track.track_no)
-	fmt.bprint(row.year[:], track.release_year)
+	if track.track != 0 do fmt.bprint(row.track_no[:], track.track)
+	fmt.bprint(row.year[:], track.year)
 
 	fmt.bprint(row.samplerate[:], track.samplerate, "Hz", sep="")
-	fmt.bprint(row.bitrate[:], track.bitrate_kbps, "kb/s", sep="")
-	row.format = track.format
+	fmt.bprint(row.bitrate[:], track.bitrate, "kb/s", sep="")
+	//row.format = track.format
 
 	return
 }
@@ -1212,13 +1219,14 @@ _track_table_show :: proc(
 	playlist_id: UID,
 ) -> bool {
 	sv := ui.server
+	track_ids := track_ids
 
-	filter_spec := Track_Filter_Spec {
-		metrics = ~{.Url, .Format},
-		filter_string = string(cstring(&table.filter_buf[0])),
+	filter_spec := lib.Track_Filter_Spec {
+		metrics = ~{},
+		text    = string(cstring(&table.filter_buf[0])),
 	}
 
-	filter_hash := stable_hash_string_32(filter_spec.filter_string)
+	filter_hash := stable_hash_string_32(filter_spec.text)
 
 	// --------------------------------------------------------------------------
 	// Update if needed
@@ -1233,23 +1241,18 @@ _track_table_show :: proc(
 		scratch := mem.scratch_allocator(&table.scratch)
 		mem.scratch_free_all(&table.scratch)
 
-		filtered_tracks: []Track_ID
-		table.filter_hash = stable_hash_string_32(filter_spec.filter_string)
+		table.filter_hash = stable_hash_string_32(filter_spec.text)
 
-		if table.filter_buf[0] == 0 {
-			filtered_tracks = track_ids
-		}
-		else {
+		if table.filter_buf[0] != 0 {
 			buf := make_dynamic_array_len_cap([dynamic]Track_ID, 0, len(track_ids), ui.allocators.per_frame)
-			filter_tracks(&buf, track_ids, filter_spec)
-			filtered_tracks = buf[:]
+			track_ids = lib.filter_tracks(track_ids, filter_spec)
 		}
 
 		table.serial = serial
 		table.playlist_uid = playlist_id
 		clear(&table.rows)
 
-		for track in filtered_tracks {
+		for track in track_ids {
 			row := _track_table_row_from_track(sv, track, scratch) or_continue
 			append(&table.rows, row)
 		}
@@ -1287,14 +1290,14 @@ _track_table_show :: proc(
 	}
 
 	actions: struct {
-		play_track: Maybe(Track_ID),
-		add_to_playlist: Maybe(Playlist_Handle),
-		play_selection: bool,
-		context_menu_target: Track_ID,
-		play_similar_tracks: bool,
-		go_to_artist: Artist_ID,
-		go_to_album: Album_ID,
-		go_to_genre: Genre_ID,
+		play_track:             Maybe(Track_ID),
+		add_to_playlist:        Maybe(lib.Playlist_ID),
+		play_selection:         bool,
+		context_menu_target:    Track_ID,
+		play_similar_tracks:    bool,
+		go_to_artist:           Maybe(Artist_ID),
+		go_to_album:            Maybe(Album_ID),
+		go_to_genre:            Maybe(Genre_ID),
 		add_selection_to_queue: bool,
 	}
 
@@ -1315,7 +1318,7 @@ _track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	column_infos: [_Column_Index]struct {
 		name: cstring,
-		sort_metric: Track_Sort_Metric,
+		sort_metric: lib.Track_Sort_Metric,
 		flags: imgui.TableColumnFlags,
 	} = {
 		.Title =      {"Title",       .Title,      {.NoHide},    },
@@ -1351,12 +1354,12 @@ _track_table_show :: proc(
 			case .None:
 				table.sort_spec = nil
 			case .Ascending:
-				table.sort_spec = Track_Sort_Spec {
+				table.sort_spec = lib.Track_Sort_Spec {
 					metric = column_infos[column].sort_metric,
 					order = .Ascending,
 				}
 			case .Descending:
-				table.sort_spec = Track_Sort_Spec {
+				table.sort_spec = lib.Track_Sort_Spec {
 					metric = column_infos[column].sort_metric,
 					order = .Descending
 				}
@@ -1398,7 +1401,7 @@ _track_table_show :: proc(
 				}
 
 				if imgui.BeginItemTooltip() {
-					if track, got_track := get_track(row.id); got_track {
+					if track, got_track := lib.get_track(row.id); got_track {
 						_show_track_metadata_table(ui, "##metadata", sv^, track)
 					}
 					imgui.EndTooltip()
@@ -1430,27 +1433,22 @@ _track_table_show :: proc(
 						actions.play_similar_tracks = true
 					}
 
-					if imgui.BeginMenu("More by...") {
-						defer imgui.EndMenu()
-
-						for artist in row.artists {
-							if artist == 0 do break
-							name := library_get_artist_name(artist)
-							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
-								actions.go_to_artist = artist
-							}
-						}
-					}
-
 					if imgui.MenuItem("Add to queue") {
 						actions.add_selection_to_queue = true
 					}
 
 					imgui.Separator()
-					//@FIXME
-					/*if row.artist != 0 && imgui.MenuItem("More by this artist...") {
-						actions.go_to_artist = row.artist
-					}*/
+	
+					if len(row.artists) != 0 && imgui.BeginMenu("More by...") {
+						defer imgui.EndMenu()
+
+						for a in row.artists {
+							cs := strings.clone_to_cstring(lib.get_shared_string(.Artist, a), ui.allocators.per_frame)
+							if imgui.MenuItem(cs) {
+								actions.go_to_artist = a
+							}
+						}
+					}
 
 					if row.album != 0 && imgui.MenuItem("View album") {
 						actions.go_to_album = row.album
@@ -1460,8 +1458,7 @@ _track_table_show :: proc(
 						defer imgui.EndMenu()
 
 						for genre in row.genres {
-							if genre == 0 do break
-							name := library_get_genre_name(genre)
+							name := lib.get_shared_string(.Genre, genre)
 							if imgui.MenuItem(strings.clone_to_cstring(name, ui.allocators.per_frame)) {
 								actions.go_to_genre = genre
 							}
@@ -1477,21 +1474,21 @@ _track_table_show :: proc(
 
 			}
 
+			// @FIXME
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
-				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_join_track_group_names_to_builder(&string_builder, row.artists, .Artist)
+					lib.join_shared_strings(.Artist, row.artists, ui.allocators.per_frame)
 				)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
-				imx.text_unformatted(get_album_name(row.album))
+				imx.text_unformatted(lib.get_shared_string(.Album, row.album))
 			}
 
+			// @FIXME
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
-				strings.builder_reset(&string_builder)
 				imx.text_unformatted(
-					library_join_track_group_names_to_builder(&string_builder, row.genres, .Genre)
+					lib.join_shared_strings(.Genre, row.genres, ui.allocators.per_frame)
 				)
 			}
 
@@ -1504,7 +1501,7 @@ _track_table_show :: proc(
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Format) {
-				imx.text_unformatted(AUDIO_FILE_FORMAT_DISPLAY_NAMES[row.format].long)
+				imx.text_unformatted(lib.AUDIO_FILE_FORMAT_DISPLAY_NAMES[row.format].long)
 			}
 
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Bitrate) {
@@ -1537,9 +1534,7 @@ _track_table_show :: proc(
 
 	if actions.add_to_playlist != nil {
 		h := actions.add_to_playlist.?
-		if playlist, ok := library_get_playlist(h); ok {
-			playlist_add(sv, playlist, _track_table_get_selection(table^, ui.allocators.per_frame))
-		}
+		lib.add_to_playlist(h, _track_table_get_selection(table^, ui.allocators.per_frame))
 	}
 
 	if actions.play_similar_tracks {
@@ -1551,18 +1546,18 @@ _track_table_show :: proc(
 		playback_queue_add(&sv.playback, sel, table.playlist_uid)
 	}
 
-	if actions.go_to_genre != 0 do _go_to_genre(ui, actions.go_to_genre)
-	if actions.go_to_album != 0 do _go_to_album(ui, actions.go_to_album)
-	if actions.go_to_artist != 0 do _go_to_artist(ui, actions.go_to_artist)
+	if actions.go_to_genre != nil do _go_to_genre(ui, actions.go_to_genre.?)
+	if actions.go_to_album != nil do _go_to_album(ui, actions.go_to_album.?)
+	if actions.go_to_artist != nil do _go_to_artist(ui, actions.go_to_artist.?)
 
 	return true
 }
 
-_sort_track_table_rows :: proc(ui: ^UI, table: ^_Track_Table, spec: Track_Sort_Spec) {
+_sort_track_table_rows :: proc(ui: ^UI, table: ^_Track_Table, spec: lib.Track_Sort_Spec) {
 	sv := ui.server
 	tracks := _track_table_get_tracks(table^, ui.allocators.per_frame)
 
-	sort_tracks(sv, tracks, spec)
+	lib.sort_track_ids(tracks, spec)
 
 	for track_id, i in tracks {
 		row := _track_table_row_from_track(sv, track_id, mem.scratch_allocator(&table.scratch)) or_continue
@@ -1578,10 +1573,6 @@ _show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: 
 	imx.begin_kv_table(str_id, imgui.TableFlags_RowBg) or_return
 	defer imx.end_kv_table()
 
-	protocol_string := [Track_Protocol]string {
-		.File = "Disk"
-	}
-
 	imgui.TableSetupColumn("name", {.WidthStretch}, 0.2)
 	imgui.TableSetupColumn("value", {.WidthStretch}, 0.8)
 	
@@ -1592,28 +1583,28 @@ _show_track_metadata_table :: proc(ui: ^UI, str_id: cstring, sv: Server, track: 
 		_go_to_artist(ui, track.artist)
 	}*/
 
-	imx.kv_row("Artist(s)", library_join_track_group_names_to_allocator(track.artists, .Artist, ui.allocators.per_frame))
+	imx.kv_row("Artist(s)", lib.join_shared_strings(.Artist, track.artists, ui.allocators.per_frame))
 	
-	if track.album != 0 && imx.kv_row("Album", get_album_name(track.album)) {
+	if track.album != 0 && imx.kv_row("Album", lib.get_shared_string(.Album, track.album)) {
 		_go_to_album(ui, track.album)
 	}
 	
-	imx.kv_row("Genre(s)", library_join_track_group_names_to_allocator(track.genres, .Genre, ui.allocators.per_frame))
+	imx.kv_row("Genre(s)", lib.join_shared_strings(.Genre, track.genres, ui.allocators.per_frame))
 
 	//@FIXME
 	/*if track.genre != 0 && imx.kv_row("Genre", get_genre_name(sv, track.genre)) {
 		_go_to_genre(ui, track.genre)
 	}*/
 
-	imx.kv_rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration_seconds))
-	imx.kv_row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
+	imx.kv_rowf("Duration", "%02d:%02d:%02d", time.clock_from_seconds(auto_cast track.duration))
+	//imx.kv_row("Format", AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].long)
 	if track.samplerate != 0 do imx.kv_row("Sample rate", track.samplerate, "Hz", sep="")
 	if track.url != "" do imx.kv_row("Path", track.url)
-	imx.kv_row("From", protocol_string[track.protocol])
+	//imx.kv_row("From", protocol_string[track.protocol])
 
-	if track.protocol == .File {
+	//if track.protocol == .File {
 		imx.kv_rowf("File size", "%M", track.file_size)
-	}
+	//}
 
 	return true
 }
@@ -1622,11 +1613,12 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 	sv := ui.server
 
 	load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
-		if w.cover_art != nil {
+		/*if w.cover_art != nil {
 			texture_release(w.cover_art.?)
 			w.cover_art = nil
 		}
 
+		//@FIXME: Find track thumbnail
 		cover_data, mime_type := find_track_thumbnail(w.displayed_track, context.allocator) or_return
 
 		delete(mime_type)
@@ -1636,7 +1628,7 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 		w.cover_art = h
 		w.cover_width = width
 		w.cover_height = height
-		w.cover_file_size = len(cover_data)
+		w.cover_file_size = len(cover_data)*/
 
 		return true
 	}
@@ -1657,7 +1649,7 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 		return true
 	}
 
-	md := get_track(w.displayed_track) or_return
+	md := lib.get_track(w.displayed_track) or_return
 
 	// Update cover art if needed
 	if w.cover_art != nil && texture_is_outdated(w.cover_art.?) {
@@ -1713,9 +1705,9 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 // -----------------------------------------------------------------------------
 
 _track_group_window_show_groups :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type,
+	ui: ^UI, w: ^_Track_Group_Window, group_type: lib.Shared_String_Type,
 ) -> (shown: bool) {
-	entry: ^Track_Group
+	/*entry: ^Track_Group
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
@@ -1760,7 +1752,7 @@ _track_group_window_show_groups :: proc(
 		_playlist_table_sort(&w.playlist_table)
 	}
 
-	imx.title_text(string(_TRACK_COMMON_STRING_TYPE_NAMES[group_type]))
+	imx.title_text(string(_TRACK_SHARED_STRING_TYPE_NAMES[group_type]))
 
 	result, _ := _playlist_table_show("##playlists", sv, &w.playlist_table, {})
 	if result.selected_row != nil {
@@ -1772,15 +1764,16 @@ _track_group_window_show_groups :: proc(
 		row := w.playlist_table.rows[result.played_row.?]
 		_track_group_window_select_group(ui, w, group_type, auto_cast row.id)
 		server_request_play_playlist(sv, w.tracks[:], row.uid)
-	}
+	}*/
 
 	return true
 }
 
 _track_group_window_show_tracks :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type
+	ui: ^UI, w: ^_Track_Group_Window, group_type: lib.Shared_String_Type
 ) -> bool {
-	entry: ^Track_Group
+	// @FIXME
+	/*entry: ^Track_Group
 
 	sv := ui.server
 	entry_index, have_entry := w.displayed_entry_id.?
@@ -1795,23 +1788,23 @@ _track_group_window_show_tracks :: proc(
 
 	if entry.name == "" {
 		imgui.PushStyleColor(.Text, imgui.GetColorU32(.TextDisabled))
-		imx.title_text(_TRACK_COMMON_STRING_TYPE_NAMES[group_type], ": None", sep="")
+		imx.title_text(_TRACK_SHARED_STRING_TYPE_NAMES[group_type], ": None", sep="")
 		imgui.PopStyleColor()
 	}
 	else {
-		imx.title_text(_TRACK_COMMON_STRING_TYPE_NAMES[group_type], ": ", entry.name, sep="")
+		imx.title_text(_TRACK_SHARED_STRING_TYPE_NAMES[group_type], ": ", entry.name, sep="")
 	}
 
 	_track_table_show(
 		ui, "##tracks", &w.track_table, list.serial,
 		w.tracks[:], {.NoRemove}, entry.uid
-	)
+	)*/
 
 	return true
 }
 
 _track_group_window_show_focused :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type,
+	ui: ^UI, w: ^_Track_Group_Window, group_type: lib.Shared_String_Type,
 ) {
 	if w.displayed_entry_id != nil {
 		if imgui.Button("Back") {
@@ -1825,11 +1818,12 @@ _track_group_window_show_focused :: proc(
 }
 
 _track_group_window_select_group :: proc(
-	ui: ^UI, w: ^_Track_Group_Window, group_type: Track_Group_Type, id: Track_Group_ID
+	ui: ^UI, w: ^_Track_Group_Window, group_type: lib.Shared_String_Type, id: lib.Shared_String_ID
 ) {
 	w.displayed_entry_id = i16(id)
 	clear(&w.tracks)
-	library_get_tracks_in_group(group_type, id, &w.tracks)
+	//@FIXME
+	//library_get_tracks_in_group(group_type, id, &w.tracks)
 }
 
 // -----------------------------------------------------------------------------
@@ -1837,15 +1831,15 @@ _track_group_window_select_group :: proc(
 // -----------------------------------------------------------------------------
 
 _Playlist_Table_Row :: struct {
-	uid: UID,
-	id: i64,
-	title: string,
+	uid:       UID,
+	id:        i64,
+	title:     string,
 	file_size: [12]u8,
-	duration: [9]u8,
-	length: [8]u8,
-	selected: bool,
-	serial: uint,
-	totals: Track_List_Totals,
+	duration:  [9]u8,
+	length:    [8]u8,
+	selected:  bool,
+	serial:    uint,
+	totals:    lib.Track_Totals,
 }
 
 _Playlist_Compare_Proc :: #type proc(a, b: _Playlist_Table_Row) -> int
@@ -1854,14 +1848,14 @@ _Playlist_Sort_Metric :: enum {Name, Length, Duration, FileSize}
 
 _PLAYLIST_SORT_METRIC_PROCS := [_Playlist_Sort_Metric]_Playlist_Compare_Proc {
 	.Name = proc(a, b: _Playlist_Table_Row) -> int {return strings.compare(a.title, b.title)},
-	.Length = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.track_count - b.totals.track_count)},
+	.Length = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.length - b.totals.length)},
 	.Duration = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.duration - b.totals.duration)},
 	.FileSize = proc(a, b: _Playlist_Table_Row) -> int {return auto_cast (a.totals.file_size - b.totals.file_size)}
 }
 
 _Playlist_Sort_Spec :: struct {
 	metric: _Playlist_Sort_Metric,
-	order: Sort_Order,
+	order: lib.Sort_Order,
 }
 
 _Playlist_Table :: struct {
@@ -2038,7 +2032,7 @@ _make_playlist_row :: proc(
 	uid:    UID,
 	title:  string,
 	serial: uint,
-	totals: Track_List_Totals,
+	totals: lib.Track_Totals,
 	id:     i64 = 0,
 ) -> _Playlist_Table_Row {
 	row := _Playlist_Table_Row {
@@ -2050,7 +2044,7 @@ _make_playlist_row :: proc(
 	}
 
 	format_duration(row.duration[:], auto_cast row.totals.duration)
-	fmt.bprint(row.length[:], row.totals.track_count)
+	fmt.bprint(row.length[:], row.totals.length)
 	fmt.bprintf(row.file_size[:], "%M", row.totals.file_size)
 
 	return row
@@ -2461,11 +2455,11 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 // Playlists window
 // -----------------------------------------------------------------------------
 
-_playlist_row_id_to_playlist_handle :: proc(id: i64) -> Playlist_Handle {
-	return transmute(Playlist_Handle) u32(id)
+_playlist_row_id_to_playlist_handle :: proc(id: i64) -> lib.Playlist_ID {
+	return transmute(lib.Playlist_ID) u32(id)
 }
 
-_playlist_handle_to_row_id :: proc(h: Playlist_Handle) -> i64 {
+_playlist_handle_to_row_id :: proc(h: lib.Playlist_ID) -> i64 {
 	return i64(transmute(u32) h)
 }
 
@@ -2476,18 +2470,19 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	// --------------------------------------------------------------------------
 	need_update := false
 	
-	need_update |= library_get_playlists_serial() != w.playlist_table.serial
+	need_update |= lib.get_playlists_serial() != w.playlist_table.serial
 	
 	if need_update {
 		clear(&w.playlist_table.rows)
-		w.playlist_table.serial = library_get_update_serial()
+		w.playlist_table.serial = lib.get_playlists_serial()
 
-		it := library_make_playlist_iterator()
-		for pl, handle in handle_map.iterate(&it) {
-			totals := calculate_track_totals(pl.tracks[:])
+		it := lib.make_playlist_iterator()
+		for pl in lib.iterate_playlists(&it) {
+			totals := lib.sum_track_totals(pl.tracks[:])
 
+			//@FIXME Playlist UID
 			append(&w.playlist_table.rows, _make_playlist_row(
-				pl.uid, pl.name, pl.serial, totals,
+				0, pl.name, pl.serial, totals,
 				_playlist_handle_to_row_id(pl.handle)
 			))
 		}
@@ -2496,11 +2491,12 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 	}
 
 	for &row, row_index in w.playlist_table.rows {
-		handle := transmute(Playlist_Handle) u32(row.id)
-		pl := library_get_playlist(handle) or_continue
+		handle := transmute(lib.Playlist_ID) u32(row.id)
+		pl := lib.get_playlist(handle) or_continue
 		if row.serial != pl.serial {
-			totals := calculate_track_totals(pl.tracks[:])
-			row = _make_playlist_row(pl.uid, pl.name, pl.serial, totals, _playlist_handle_to_row_id(pl.handle))
+			totals := lib.sum_track_totals(pl.tracks[:])
+			//@FIXME Playlist UID
+			row = _make_playlist_row(0, pl.name, pl.serial, totals, _playlist_handle_to_row_id(pl.handle))
 		}
 	}
 
@@ -2516,29 +2512,16 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 		{.EnterReturnsTrue}
 	)
 
-	// Validate playlist name
-	if need_update || imgui.IsItemActive() {
-		w.cant_add_playlist_reason = library_can_add_playlist(
-			string(cstring(&w.new_playlist_name[0]))
-		)
-	}
 	imgui.SameLine()
 
 	// Add button
-	imgui.BeginDisabled(w.cant_add_playlist_reason != .None)
+	imgui.BeginDisabled(w.new_playlist_name[0] == 0)
 	commit_new_playlist |= imgui.Button("+ New playlist")
 	imgui.EndDisabled()
 
-	// Show reason if we can't add the playlist
-	switch (w.cant_add_playlist_reason) {
-	case .None:
-	case .NameExists: imx.set_item_tooltip("Name already used")
-	case .NameEmpty: imx.set_item_tooltip("Must enter a name")
-	}
-
 	// Add playlist
-	if commit_new_playlist && w.cant_add_playlist_reason == .None {
-		library_add_playlist(string(cstring(&w.new_playlist_name[0])))
+	if commit_new_playlist {
+		lib.create_playlist(string(cstring(&w.new_playlist_name[0])))
 		for &r in w.new_playlist_name do r = 0
 	}
 
@@ -2555,14 +2538,15 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 
 	if actions.played_row != nil {
 		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.played_row.?].id)
-		if pl, found := library_get_playlist(handle); found {
-			server_request_play_playlist(sv, pl.tracks[:], pl.uid)
+		if pl, found := lib.get_playlist(handle); found {
+			//@FIXME: Playlist UID
+			server_request_play_playlist(sv, pl.tracks[:], 0)
 		}
 	}
 
 	if actions.remove_row != nil {
 		handle := _playlist_row_id_to_playlist_handle(w.playlist_table.rows[actions.remove_row.?].id)
-		library_remove_playlist(handle)
+		lib.remove_playlist(handle)
 	}
 
 	return true
@@ -2571,11 +2555,12 @@ _playlists_window_show_playlists :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool
 _playlists_window_show_tracks :: proc(ui: ^UI, w: ^_Playlists_Window) -> bool {
 	sv := ui.server
 
-	playlist := library_get_playlist(w.viewing_playlist.?) or_return
+	playlist := lib.get_playlist(w.viewing_playlist.?) or_return
 
 	imx.title_text("Playlist:", playlist.name)
+	//@FIXME: Playlist UID
 	_track_table_show(
-		ui, "##tracks", &w.track_table, playlist.serial, playlist.tracks[:], {}, playlist.uid
+		ui, "##tracks", &w.track_table, playlist.serial, playlist.tracks[:], {}, 0
 	)
 
 	return true
@@ -2599,17 +2584,21 @@ _playlists_window_show :: proc(ui: ^UI, w: ^_Playlists_Window) -> (ok: bool) {
 }
 
 _show_playlist_selector_menu :: proc(
-	sv: ^Server, label: cstring, exclude: Maybe(Playlist_Handle) = nil
-) -> (handle: Playlist_Handle, selected: bool) {
+	sv: ^Server, label: cstring, exclude: Maybe(lib.Playlist_ID) = nil
+) -> (handle: lib.Playlist_ID, selected: bool) {
 	imgui.BeginMenu(label) or_return
 	defer imgui.EndMenu()
 
-	it := library_make_playlist_iterator()
-	for it_playlist, h in handle_map.iterate(&it) {
-		playlist: ^Playlist = it_playlist
-		if exclude != nil && h == exclude.? do continue
-		if imgui.MenuItem(playlist.name_cstring) {
-			handle = h
+	buf: [128]u8
+	
+	it := lib.make_playlist_iterator()
+	for playlist in lib.iterate_playlists(&it) {
+		if exclude != nil && playlist.handle == exclude.? do continue
+
+		copy(buf[:len(buf)-1], playlist.name)
+
+		if imgui.MenuItem(cstring(&buf[0])) {
+			handle = playlist.handle
 			selected = true
 		}
 	}
@@ -3222,11 +3211,11 @@ _wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
 			state.bg.want_cancel = false
 		}
 
-		if track_id == 0 do return false
+		if track_id == {} do return false
 
 		for &f in state.bg.data_points[:state.bg.data_points_calculated] do f = 0
 		state.bg.data_points_calculated = 0
-		track := get_track(track_id) or_return
+		track := lib.get_track(track_id) or_return
 		state.bg.track_url = track.url
 
 		state.decoder_thread = thread.create(_thread_proc, .Low)
@@ -3331,7 +3320,7 @@ _wavebar_window_load_setting :: proc(w: ^_Wavebar_Window, key, value: string) ->
 // Folder tree
 // -----------------------------------------------------------------------------
 
-_folder_tree_window_select_folder :: proc(
+/*_folder_tree_window_select_folder :: proc(
 	w: ^_Folder_Tree_Window, folder: ^_Folder_Tree_Node
 ) {
 	clear(&w.tracks)
@@ -3526,7 +3515,7 @@ _folder_tree_window_show_focused :: proc(ui: ^UI, w: ^_Folder_Tree_Window) {
 	else {
 		_folder_tree_window_show_folders(ui, w)
 	}
-}
+}*/
 
 // -----------------------------------------------------------------------------
 // Misc
@@ -3747,10 +3736,11 @@ _show_memory_tracking :: proc(ui: ^UI) -> bool {
 		imgui.EndTabItem()
 	}
 
-	if imgui.BeginTabItem("Library") {
+	//@FIXME
+	/*if imgui.BeginTabItem("Library") {
 		show_map(library_get_allocators())
 		imgui.EndTabItem()
-	}
+	}*/
 
 	return true
 }

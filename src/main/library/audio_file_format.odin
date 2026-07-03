@@ -15,7 +15,7 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main
+package library
 
 import "core:strings"
 
@@ -34,17 +34,17 @@ Audio_File_Format :: enum u8 {
 }
 
 AUDIO_FILE_FORMAT_EXTENSIONS := [Audio_File_Format][]string {
-	.Wav = {".wav", ".rf64"},
+	.Wav  = {".wav", ".rf64"},
 	.Flac = {".flac"},
-	.Ogg = {".ogg", ".oga"},
+	.Ogg  = {".ogg", ".oga"},
 	.Opus = {".opus"},
-	.M4a = {".m4a"},
-	.Mp3 = {".mp3"},
-	.Ape = {".ape"},
+	.M4a  = {".m4a"},
+	.Mp3  = {".mp3"},
+	.Ape  = {".ape"},
 	.Aiff = {".aiff"},
-	.Aac = {".aac"},
+	.Aac  = {".aac"},
 	.Alac = {".alac"},
-	.Wma = {".wma"},
+	.Wma  = {".wma"},
 }
 
 Audio_File_Format_Display_Name :: struct {

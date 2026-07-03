@@ -53,19 +53,20 @@ media_controls_use_smtc :: proc() {
 	}
 
 	_media_controls_impl_update_track = proc(sv: ^Server, track: Media_Controls_Track_Info) {
-		cover_data, mime_type, have_cover_data := find_track_thumbnail(track.id, context.allocator)
+		//@FIXME
+		/*cover_data, mime_type, have_cover_data := find_track_thumbnail(track.id, context.allocator)
 		defer if have_cover_data {
 			delete(cover_data)
 			delete(mime_type)
-		}
+		}*/
 
 		ti := smtc.Track_Info {
 			album           = track.album   != "" ? strings.clone_to_cstring(track.album) : nil,
 			artist          = track.artists != "" ? strings.clone_to_cstring(track.artists) : nil,
 			genre           = track.genres  != "" ? strings.clone_to_cstring(track.genres) : nil,
 			title           = track.title   != "" ? strings.clone_to_cstring(track.title) : nil,
-			cover_data      = raw_data(cover_data),
-			cover_data_size = auto_cast len(cover_data),
+			//cover_data      = raw_data(cover_data),
+			//cover_data_size = auto_cast len(cover_data),
 		}
 
 		defer {

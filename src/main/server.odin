@@ -17,6 +17,8 @@
 */
 package main
 
+import "src:main/util"
+import lib "src:main/library"
 import "core:math"
 import "core:sort"
 import "core:time"
@@ -34,6 +36,12 @@ import "core:log"
 import "core:reflect"
 import "src:dsp"
 import resampler "src:bindings/samplerate"
+
+Track_ID :: lib.Track_ID
+Track :: lib.Track
+Album_ID :: lib.Album_ID
+Genre_ID :: lib.Genre_ID
+Artist_ID :: lib.Artist_ID
 
 Playback_State :: enum {
 	Stopped,
@@ -56,6 +64,12 @@ Server_Event_Type :: enum {
 	UpdateState,
 }
 
+Server_Scanned_Track :: struct {
+	tags:      lib.Track_Tags,
+	url:       string,
+	overwrite: bool,
+}
+
 Server_Event :: struct {
 	type:           Server_Event_Type,
 	track:          Track_ID,
@@ -63,7 +77,7 @@ Server_Event :: struct {
 	initial_track:  Maybe(Track_ID),
 	playlist_uid:   UID,
 	seek_target:    int,
-	scanned_tracks: []Track_Data,
+	scanned_tracks: []Server_Scanned_Track,
 }
 
 Server_Cover_Art_Scan_State :: struct {
@@ -113,7 +127,7 @@ Server :: struct {
 }
 
 Server_Library_Save_Data :: struct {
-	tracks: [dynamic]Track_Data,
+	tracks: [dynamic]lib.Track_Tags,
 	folder_cover_art: map[u64]string,
 }
 
@@ -164,7 +178,7 @@ server_audio_callback :: proc(
 }
 
 server_init :: proc(sv: ^Server) -> bool {
-	sv.queue_uid = generate_uid()
+	sv.queue_uid = util.generate_uid()
 
 	sv.allocators.scan_output = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_output")
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
@@ -216,13 +230,13 @@ server_wait_events :: proc(sv: ^Server) {
 @(private="file")
 _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	sv.current_track_id = track_id
-	track := library_get_track(track_id) or_return
+	track := lib.get_track(track_id) or_return
 
 	playback_thread_load_track(&sv.playback_thread, track.url, &sv.track_info)
 
 	audio_resume()
 
-	artists := library_join_track_group_names_to_allocator(track.artists, .Artist, sv.allocators.temp)
+	artists := lib.join_shared_strings(.Artist, track.artists, sv.allocators.temp)
 
 	sv.playback_state = .Playing
 	media_controls_update_track(sv, track)
@@ -231,7 +245,7 @@ _play_track :: proc(sv: ^Server, track_id: Track_ID) -> bool {
 	)
 
 	if global_config.server.notify_new_track {
-		notify_send("Now playing:", artists, "-", get_album_name(track.album))
+		notify_send("Now playing:", artists, "-", lib.get_shared_string(.Album, track.album))
 	}
 
 	server_send_event(sv, {type = .UpdateState})
@@ -251,24 +265,16 @@ server_handle_events :: proc(sv: ^Server) {
 	_update_media_controls_state :: proc(sv: ^Server) {
 		media_controls_update_state(Media_Controls_State {
 			paused          = sv.playback_state == .Paused,
-			have_track      = sv.current_track_id != 0,
+			have_track      = sv.current_track_id != {},
 			shuffle_enabled = sv.playback.enable_shuffle,
 		})
 
 	}
 
-	lib_serial := library_get_update_serial()
-	library_update()
+	lib_serial := lib.get_tracks_serial()
 
-	if lib_serial != sv.saved_library_serial {
-		// @TODO: Do this asynchronously somehow
-		error := library_save(sv.paths.library_database)
-		sv.saved_library_serial = lib_serial
-		if error != nil {
-			log.error("Error saving library:", error)
-		}
-	}
-
+	//@FIXME: Update library
+	//@FIXME: Save library
 
 	for ev in events {
 		defer delete(ev.tracks)
@@ -280,21 +286,21 @@ server_handle_events :: proc(sv: ^Server) {
 
 		case .BackgroundScanComplete:
 			for track in ev.scanned_tracks {
-				library_add_track(track)
+				lib.add_track(track.tags, track.url)
 			}
 			sync.auto_reset_event_signal(&sv.track_scanner_output_used)
 
 		case .CoverArtScanComplete:
 			output := sv.cover_art_scan_state.output
 			for k, v in output {
-				library_add_cover_art(k, v)
+				//@FIXME: Add cover art
 			}
 			free_all(sv.allocators.cover_art_scan)
 			bgtask_cancel(&sv.cover_art_scan)
 
 		case .RequestStop:
 			playback_thread_close_track(&sv.playback_thread)
-			sv.current_track_id = 0
+			sv.current_track_id = {}
 			sv.track_info = {}
 			sv.playback_state = .Stopped
 			platform_set_window_title(PROGRAM_NAME_AND_VERSION)
@@ -420,8 +426,9 @@ server_request_play_playlist :: proc(
 }
 
 server_request_radio :: proc(sv: ^Server, main_track: Track_ID) {
-	tracks := library_build_radio(main_track, sv.allocators.temp)
-	server_request_play_playlist(sv, tracks, generate_uid(), main_track)
+	//@FIXME: Radio
+	//tracks := library_build_radio(main_track, sv.allocators.temp)
+	//server_request_play_playlist(sv, tracks, generate_uid(), main_track)
 }
 
 server_request_pause :: proc(sv: ^Server) {server_send_event(sv, {type = .RequestPause})}
@@ -458,11 +465,11 @@ server_start_cover_art_scan :: proc(sv: ^Server) -> Error {
 	state.input = make(map[u64]string, sv.allocators.cover_art_scan)
 	state.output = make(map[u64]string, sv.allocators.cover_art_scan)
 
-	tracks := library_get_all_tracks(context.allocator) or_return
+	tracks := lib.get_all_tracks(context.allocator)
 	defer delete(tracks)
 
 	for track in tracks {
-		if track.protocol != .File do continue
+		if !strings.starts_with(track.url, "file://") do continue
 		dir := filepath.clean(filepath.dir(track.url), sv.allocators.temp) or_continue
 		hash := stable_hash_string_64(dir)
 
@@ -490,7 +497,7 @@ server_start_metadata_refresh :: proc(sv: ^Server) -> Error {
 		i += 1
 	}*/
 
-	tracks := library_get_all_tracks(context.allocator) or_return
+	tracks := lib.get_all_tracks(context.allocator)
 	defer delete(tracks)
 
 	input := make([]Track_Scanner_Input, len(tracks))
@@ -515,7 +522,8 @@ server_consume_audio_output :: proc(sv: ^Server, buf: [][]f32, timespan: f32) ->
 _cover_art_scan_proc :: proc(
 	task: ^Background_Task
 ) -> (error: Error) {
-	defer if error != nil do bgtask_consume_input(task)
+	// @FIXME: Move this to library
+	/*defer if error != nil do bgtask_consume_input(task)
 
 	sv := cast(^Server) task.data
 	state := &sv.cover_art_scan_state
@@ -537,11 +545,11 @@ _cover_art_scan_proc :: proc(
 		sync.atomic_add(&task.progress.items_processed, 1)
 	}
 
-	server_send_event(sv, Server_Event{type = .CoverArtScanComplete})
+	server_send_event(sv, Server_Event{type = .CoverArtScanComplete})*/
 	return nil
 }
 
-_server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Track_Data) -> Error {
+_server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Server_Scanned_Track) -> Error {
 	sv := cast(^Server) data
 
 	server_send_event(sv, Server_Event {
@@ -553,116 +561,3 @@ _server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Track_Data) -> 
 	return nil
 }
 
-// -----------------------------------------------------------------------------
-// Track sorting
-// -----------------------------------------------------------------------------
-
-Sort_Order :: enum {
-	Ascending,
-	Descending,
-}
-
-Track_Sort_Metric :: enum {
-	Title,
-	Artist,
-	Album,
-	Genre,
-	Duration,
-	FileDate,
-	DateAdded,
-	Track,
-	Bitrate,
-	Samplerate,
-	Format,
-}
-
-Track_Sort_Spec :: struct {
-	order: Sort_Order,
-	// Name of field to sort by
-	metric: Track_Sort_Metric,
-}
-
-Track_Compare_Proc :: #type proc(a, b: Track) -> int
-
-TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Compare_Proc {
-	.Title =      proc(a, b: Track) -> int {return strings.compare(a.title, b.title)},
-	.Artist =     proc(a, b: Track) -> int {
-		return strings.compare(library_get_artist_name(a.artists[0]), library_get_artist_name(b.artists[0]))
-	},
-	.Album =      proc(a, b: Track) -> int {
-		return strings.compare(library_get_album_name(a.album), library_get_album_name(b.album))
-	},
-	.Genre =      proc(a, b: Track) -> int {
-		return strings.compare(library_get_genre_name(a.genres[0]), library_get_genre_name(b.genres[0]))
-	},
-	.Duration =   proc(a, b: Track) -> int {return auto_cast (a.duration_seconds - b.duration_seconds)},
-	.Track =      proc(a, b: Track) -> int {return auto_cast (a.track_no - b.track_no)},
-	.FileDate =   proc(a, b: Track) -> int {return auto_cast time.diff(a.file_date, b.file_date)},
-	.DateAdded =  proc(a, b: Track) -> int {return auto_cast time.diff(a.date_added, b.date_added)},
-	.Bitrate =    proc(a, b: Track) -> int {return auto_cast (a.bitrate_kbps - b.bitrate_kbps)},
-	.Samplerate = proc(a, b: Track) -> int {return auto_cast (a.samplerate - b.samplerate)},
-	.Format =     proc(a, b: Track) -> int {
-		return strings.compare(
-			reflect.enum_name_from_value(a.format) or_else "",
-			reflect.enum_name_from_value(b.format) or_else ""
-		)
-	},
-}
-
-// Metrics to fall back to when a two tracks have the same value
-TRACK_METRIC_NEXT_METRIC := #partial [Track_Sort_Metric]Maybe(Track_Sort_Metric) {
-	.Artist = .Album,
-	.Album = .Title,
-	.Genre = .Album,
-	.FileDate = .Album,
-	.DateAdded = .Album,
-	.Track = .Album,
-}
-
-sort_tracks :: proc(sv: ^Server, tracks: []Track_ID, spec: Track_Sort_Spec) {
-	Collection :: struct {
-		sv: ^Server,
-		tracks: []Track_ID,
-		metric: Track_Sort_Metric,
-	}
-
-	col := Collection {
-		sv = sv,
-		tracks = tracks,
-		metric = spec.metric,
-	}
-
-	iface := sort.Interface {
-		collection = &col,
-		len = proc(it: sort.Interface) -> int {
-			col := cast(^Collection) it.collection
-			return len(col.tracks)
-		},
-		less = proc(it: sort.Interface, a, b: int) -> bool {
-			col := cast(^Collection) it.collection
-			cmp_proc := TRACK_METRIC_COMPARE_PROCS[col.metric]
-			A := library_get_track(col.tracks[a]) or_return
-			B := library_get_track(col.tracks[b]) or_return
-
-			r: int
-
-			metric := col.metric
-			r = cmp_proc(A, B)
-
-			for abs(r) == 0 && TRACK_METRIC_NEXT_METRIC[metric] != nil {
-				metric = TRACK_METRIC_NEXT_METRIC[metric].?
-				cmp_proc = TRACK_METRIC_COMPARE_PROCS[metric]
-				r = cmp_proc(A, B)
-			}
-
-			return r < 0
-		},
-		swap = proc(it: sort.Interface, a, b: int) {
-			col := cast(^Collection) it.collection
-			col.tracks[a], col.tracks[b] = col.tracks[b], col.tracks[a]
-		},
-	}
-
-	if spec.order == .Descending do sort.reverse_sort(iface)
-	else do sort.sort(iface)
-}

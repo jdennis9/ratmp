@@ -17,11 +17,11 @@
 */
 package main
 
+import "core:path/slashpath"
+import lib "src:main/library"
 import "core:log"
 import "core:testing"
-import "core:fmt"
 import "core:strings"
-import "core:time"
 import "core:sync"
 import "core:mem"
 import "core:thread"
@@ -39,7 +39,7 @@ Track_Scanner_Progress :: struct {
 }
 
 Track_Scanner :: struct {
-	worker:   Worker(Track_Scanner_Input, Track_Data),
+	worker:   Worker(Track_Scanner_Input, Server_Scanned_Track),
 	runner:   ^thread.Thread,
 	progress: Track_Scanner_Progress,
 }
@@ -63,7 +63,7 @@ _accum_files :: proc(dir: string, output: ^[dynamic]os.File_Info, counter: ^int,
 
 track_scanner_init :: proc(
 	ts: ^Track_Scanner,
-	consume_proc: proc(data: rawptr, tracks: []Track_Data) -> Error,
+	consume_proc: proc(data: rawptr, tracks: []Server_Scanned_Track) -> Error,
 	consume_data: rawptr,
 ) {
 	_thread_proc :: proc(t: ^thread.Thread) {
@@ -75,7 +75,7 @@ track_scanner_init :: proc(
 		data:             rawptr,
 		input:            []Track_Scanner_Input,
 		output_allocator: mem.Allocator,
-	) -> (output: []Track_Data, error: Error) {
+	) -> (output: []Server_Scanned_Track, error: Error) {
 		scratch: mem.Scratch
 		mem.scratch_init(&scratch, 512<<10, context.allocator)
 		defer mem.scratch_destroy(&scratch)
@@ -85,7 +85,7 @@ track_scanner_init :: proc(
 		progress := cast(^Track_Scanner_Progress) data
 		
 		buf := make_dynamic_array_len_cap(
-			[dynamic]Track_Data, 0, 4096,
+			[dynamic]Server_Scanned_Track, 0, 4096,
 			output_allocator
 		)
 		
@@ -96,7 +96,7 @@ track_scanner_init :: proc(
 		process_file :: proc(
 			progress:         ^Track_Scanner_Progress,
 			input:            Track_Scanner_Input,
-			output:           ^[dynamic]Track_Data,
+			output:           ^[dynamic]Server_Scanned_Track,
 			depth:            int,
 			output_allocator: mem.Allocator,
 		) -> Error {
@@ -119,13 +119,19 @@ track_scanner_init :: proc(
 				sync.atomic_add(&progress.scanned_items, 1)
 			}
 			else {
-				track_data := read_audio_file_metadata(
+				track_data := lib.read_tags(
 					input.path, output_allocator
 				) or_return
+
+				s := Server_Scanned_Track {
+					tags      = track_data,
+					url       = strings.concatenate({"file://", input.path}, output_allocator),
+					overwrite = input.overwrite,
+				}
 				
-				if input.overwrite do track_data.flags |= {.Overwrite}
+				//if input.overwrite do track_data.flags |= {.Overwrite}
 				
-				append(output, track_data)
+				append(output, s)
 				sync.atomic_add(&progress.scanned_files, 1)
 			}
 
@@ -198,7 +204,7 @@ test_track_scanner :: proc(t: ^testing.T) {
 	context.logger = log.create_console_logger()
 	defer log.destroy_console_logger(context.logger)
 
-	consume_proc :: proc(_: rawptr, tracks: []Track_Data) -> Error {return nil}
+	consume_proc :: proc(_: rawptr, tracks: []Server_Scanned_Track) -> Error {return nil}
 
 	track_scanner_init(&ts, consume_proc, nil)
 	defer track_scanner_destroy(&ts)

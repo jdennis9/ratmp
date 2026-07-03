@@ -17,6 +17,8 @@
 */
 package library
 
+import "src:main/util"
+import "core:net"
 import "core:slice"
 import "core:path/filepath"
 import "core:os"
@@ -66,10 +68,17 @@ Track :: struct {
 	channels:   i32,
 	bitrate:    i32,
 	album:      Album_ID,
+	format:     Audio_File_Format,
 }
 
 Track_Map        :: hm.Dynamic_Handle_Map(Track, Track_ID)
 Track_Iterator   :: hm.Dynamic_Handle_Map_Iterator(Track_Map)
+
+Track_Totals :: struct {
+	length:    int,
+	duration:  i64,
+	file_size: i64,
+}
 
 Playlist :: struct {
 	serial:      uint,
@@ -78,6 +87,7 @@ Playlist :: struct {
 	handle:      Playlist_ID,
 	name:        string,
 	tracks:      [dynamic]Track_ID,
+	uid:         util.UID,
 }
 
 Playlist_Map      :: hm.Dynamic_Handle_Map(Playlist, Playlist_ID)
@@ -131,6 +141,16 @@ shutdown :: proc() {
 	}
 }
 
+get_playlists_serial :: proc() -> uint {return _library.playlists_serial}
+get_tracks_serial :: proc() -> uint {return _library.tracks_serial}
+
+join_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, allocator: mem.Allocator) -> string {
+	if len(ids) == 0 do return ""
+	s := make([]string, len(ids), context.temp_allocator)
+	get_shared_strings(type, ids, s)
+	return strings.join(s, ", ", allocator)
+}
+
 dump_tracks :: proc() {
 	l := &_library
 
@@ -181,6 +201,7 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	track.file_size  = tags.file_size
 	track.track      = tags.track
 	track.year       = tags.year
+	track.format     = tags.format
 	track.artists    = split_shared_strings(tags.artist, .Artist)
 	track.genres     = split_shared_strings(tags.genre, .Genre)
 
@@ -242,6 +263,21 @@ get_all_tracks :: proc(allocator: mem.Allocator) -> []Track {
 	return tracks[:count]
 }
 
+get_all_track_ids :: proc(allocator: mem.Allocator) -> []Track_ID {
+	l := &_library
+
+	ids   := make([]Track_ID, hm.dynamic_len(l.tracks), allocator)
+	iter  := make_track_iterator()
+	count := 0
+
+	for track in iterate_tracks(&iter) {
+		ids[count] = track.handle
+		count += 1
+	}
+
+	return ids[:count]
+}
+
 find_track_by_url :: proc(url: string) -> (id: Track_ID, found: bool) {
 	iter := make_track_iterator()
 
@@ -270,7 +306,10 @@ iterate_playlists :: proc(iter: ^Playlist_Iterator) -> (pl: ^Playlist, ok: bool)
 create_playlist :: proc(name: string) -> (Playlist_ID, bool) {
 	l := &_library
 
-	playlist := Playlist {name = name != "" ? strings.clone(name, l.tag_allocator) : ""}
+	playlist := Playlist {
+		name = name != "" ? strings.clone(name, l.tag_allocator) : "",
+		uid  = util.generate_uid(),
+	}
 
 	id, error := hm.dynamic_add(&l.playlists, playlist)
 
@@ -319,6 +358,17 @@ add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	}
 
 	return true
+}
+
+sum_track_totals :: proc(tracks: []Track_ID) -> (t: Track_Totals) {
+	for id in tracks {
+		track := get_track(id) or_continue
+		t.duration += i64(track.duration)
+		t.file_size += i64(track.file_size)
+		t.length += 1
+	}
+
+	return
 }
 
 @private

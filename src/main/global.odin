@@ -17,6 +17,7 @@
 */
 package main
 
+import "src:main/util"
 import "core:sync"
 
 PROGRAM_VERSION_STRING   :: "0.5.0"
@@ -25,19 +26,14 @@ PROGRAM_ID               :: "ratmp"
 PROGRAM_FOLDER_NAME      :: "ratmp"
 PROGRAM_NAME_AND_VERSION :: PROGRAM_NAME + " | " + PROGRAM_VERSION_STRING
 
+UID :: util.UID
+
 Global_Flag :: enum {
 	VideoDeviceLost,
 	Headless,
 }
 
 global_flags: bit_set[Global_Flag]
-
-UID :: distinct u64
-
-generate_uid :: proc() -> UID {
-	@static counter: UID
-	return sync.atomic_add(&counter, 1)
-}
 
 global_command_opts: struct {
 	headless:          bool `usage:"Run without UI."`,

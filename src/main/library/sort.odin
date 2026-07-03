@@ -17,6 +17,10 @@ Track_Sort_Metric :: enum u8 {
 	Duration,
 	FileSize,
 	FileDate,
+	Track,
+	Bitrate,
+	Samplerate,
+	Format,
 }
 
 Track_Sort_Spec :: struct {
@@ -40,10 +44,14 @@ TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Metric_Compare_Proc {
 		if len(b.genres) == 0 do return false
 		return strings.compare(get_shared_string(.Genre, a.genres[0]), get_shared_string(.Genre, b.genres[0])) < 0
 	},
-	.Title    = proc(a, b: Track) -> bool {return strings.compare(a.title, b.title) < 0},
-	.Duration = proc(a, b: Track) -> bool {return a.duration < b.duration},
-	.FileSize = proc(a, b: Track) -> bool {return a.file_size < b.file_size},
-	.FileDate = proc(a, b: Track) -> bool {return a.file_date < b.file_date},
+	.Title      = proc(a, b: Track) -> bool {return strings.compare(a.title, b.title) < 0},
+	.Duration   = proc(a, b: Track) -> bool {return a.duration < b.duration},
+	.FileSize   = proc(a, b: Track) -> bool {return a.file_size < b.file_size},
+	.FileDate   = proc(a, b: Track) -> bool {return a.file_date < b.file_date},
+	.Track      = proc(a, b: Track) -> bool {return a.track < b.track},
+	.Bitrate    = proc(a, b: Track) -> bool {return a.bitrate < b.bitrate},
+	.Samplerate = proc(a, b: Track) -> bool {return a.samplerate < b.samplerate},
+	.Format     = proc(a, b: Track) -> bool {return strings.compare(AUDIO_FILE_FORMAT_DISPLAY_NAMES[a.format].short, AUDIO_FILE_FORMAT_DISPLAY_NAMES[b.format].short) < 0},
 }
 
 sort_tracks :: proc(tracks: []Track, spec: Track_Sort_Spec) {

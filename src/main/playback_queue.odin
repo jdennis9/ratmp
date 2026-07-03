@@ -17,6 +17,7 @@
 */
 package main
 
+import "src:main/util"
 import "core:math/rand"
 import "core:slice"
 
@@ -24,7 +25,7 @@ Playback_Queue :: struct {
 	tracks:         [dynamic]Track_ID,
 	pos:            int,
 	current_track:  Maybe(Track_ID),
-	playlist_uid:   UID,
+	playlist_uid:   util.UID,
 	serial:         uint,
 	enable_shuffle: bool,
 	shuffled:       bool,
@@ -54,7 +55,7 @@ playback_queue_next :: proc(p: ^Playback_Queue) -> (Track_ID, bool) {
 	return playback_queue_set_pos(p, p.pos + 1)
 }
 
-playback_queue_add :: proc(p: ^Playback_Queue, tracks: []Track_ID, from_playlist: UID, assume_unique := false) -> bool {
+playback_queue_add :: proc(p: ^Playback_Queue, tracks: []Track_ID, from_playlist: util.UID, assume_unique := false) -> bool {
 	if len(p.tracks) == 0 do p.playlist_uid = from_playlist
 	else do p.playlist_uid = 0
 

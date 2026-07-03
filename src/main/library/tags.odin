@@ -19,9 +19,12 @@ Track_Tags :: struct {
 	year:       i32,
 	file_date:  i64,
 	file_size:  i64,
+	format:     Audio_File_Format,
 }
 
 read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Tags, ok: bool) {
+	tags.format = audio_file_format_from_extension(filepath.ext(filename)) or_return
+
 	when ODIN_OS == .Windows {
 		filename_u16 := make([]u16, len(filename) + 1, context.temp_allocator)
 		utf16.encode_string(filename_u16, filename)

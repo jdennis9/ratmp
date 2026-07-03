@@ -17,6 +17,9 @@
 */
 package main
 
+import "core:strings"
+import "core:path/filepath"
+import "core:net"
 import "src:dsp"
 import "core:mem"
 import "core:math"
@@ -303,8 +306,8 @@ playback_thread_request_frames :: proc(
 	else do return .Eof
 }
 
-playback_thread_load_track :: proc(at: ^Playback_Thread, path: string, file_info: ^Audio_File_Info) -> bool {
-	log.debug("Playing file", path)
+playback_thread_load_track :: proc(at: ^Playback_Thread, url: string, file_info: ^Audio_File_Info) -> bool {
+	log.debug("Playing track", url)
 
 	sync.lock(&at.lock)
 	defer sync.unlock(&at.lock)
@@ -312,7 +315,7 @@ playback_thread_load_track :: proc(at: ^Playback_Thread, path: string, file_info
 	_reset_ring_buffers(at)
 	at.consumed_frame_index = 0
 	decoder_close(&at.dec)
-	decoder_open(&at.dec, path, file_info) or_return
+	decoder_open(&at.dec, url, file_info) or_return
 
 	return true
 }

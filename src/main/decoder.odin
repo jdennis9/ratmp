@@ -51,8 +51,8 @@ Decoder :: struct {
 	replay_gain:         Maybe(ffmpeg.Replay_Gain),
 }
 
-decoder_open :: proc(dec: ^Decoder, filename_native: string, info: ^Audio_File_Info) -> (ok: bool) {
-	filename := strings.clone_to_cstring(filename_native)
+decoder_open :: proc(dec: ^Decoder, url_native: string, info: ^Audio_File_Info) -> (ok: bool) {
+	filename := strings.clone_to_cstring(strings.trim_prefix(url_native, "file://"))
 	defer delete(filename)
 	file_info: ffmpeg.File_Info
 
