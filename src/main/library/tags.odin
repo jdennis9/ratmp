@@ -41,17 +41,21 @@ Track_Tags :: struct {
 	format:     Audio_File_Format,
 }
 
-read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Tags, ok: bool) {
-	tags.format = audio_file_format_from_extension(filepath.ext(filename)) or_return
-
+open_file_for_taglib :: proc(filename: string) -> taglib.File {
 	when ODIN_OS == .Windows {
 		filename_u16 := make([]u16, len(filename) + 1, context.temp_allocator)
 		utf16.encode_string(filename_u16, filename)
-		file := taglib.file_new_wchar(cstring16(raw_data(filename_u16)))
+		return taglib.file_new_wchar(cstring16(raw_data(filename_u16)))
 	}
 	else {
-		file := taglib.file_new(strings.clone_to_cstring(filename, context.temp_allocator))
+		return taglib.file_new(strings.clone_to_cstring(filename, context.temp_allocator))
 	}
+}
+
+read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Tags, ok: bool) {
+	tags.format = audio_file_format_from_extension(filepath.ext(filename)) or_return
+
+	file := open_file_for_taglib(filename)
 
 	if file == nil do return
 	defer taglib.file_free(file)

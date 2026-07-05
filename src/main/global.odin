@@ -17,7 +17,7 @@
 */
 package main
 
-import "src:main/util"
+import "src:main/shared"
 import "core:sync"
 
 PROGRAM_VERSION_STRING   :: "0.5.0"
@@ -26,7 +26,7 @@ PROGRAM_ID               :: "ratmp"
 PROGRAM_FOLDER_NAME      :: "ratmp"
 PROGRAM_NAME_AND_VERSION :: PROGRAM_NAME + " | " + PROGRAM_VERSION_STRING
 
-UID :: util.UID
+UID :: shared.UID
 
 Global_Flag :: enum {
 	VideoDeviceLost,

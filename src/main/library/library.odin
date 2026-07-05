@@ -17,8 +17,10 @@
 */
 package library
 
+import "src:bindings/taglib"
+import "core:hash"
 import "base:runtime"
-import "src:main/util"
+import "src:main/shared"
 import "core:net"
 import "core:slice"
 import "core:path/filepath"
@@ -88,11 +90,16 @@ Playlist :: struct {
 	handle:      Playlist_ID,
 	name:        string,
 	tracks:      [dynamic]Track_ID,
-	uid:         util.UID,
+	uid:         shared.UID,
 }
 
 Playlist_Map      :: hm.Dynamic_Handle_Map(Playlist, Playlist_ID)
 Playlist_Iterator :: hm.Dynamic_Handle_Map_Iterator(Playlist_Map)
+
+Folder_Cover_Art :: struct {
+	folder: string,
+	image:  string,
+}
 
 Library :: struct {
 	tracks_serial:    uint,
@@ -107,6 +114,7 @@ Library :: struct {
 	folder_arena:     mem.Dynamic_Arena,
 	folder_allocator: mem.Allocator,
 	folder_serial:    uint,
+	folder_cover_art: map[u64]Folder_Cover_Art, // folder hash -> cover art path
 
 	tracking_allocators: struct {
 		tag:         mem.Tracking_Allocator,
@@ -115,7 +123,8 @@ Library :: struct {
 }
 
 Library_Config :: struct {
-	enable_memory_tracking: bool,
+	enable_memory_tracking:  bool,
+	prefer_folder_cover_art: bool,
 }
 
 @(private="file")
@@ -134,8 +143,8 @@ init :: proc(config: Library_Config) -> bool {
 	l.folder_allocator = mem.dynamic_arena_allocator(&l.folder_arena)
 
 	if config.enable_memory_tracking {
-		l.tag_allocator    = util.track_allocator(l.tag_allocator, &l.tracking_allocators.tag)
-		l.folder_allocator = util.track_allocator(l.folder_allocator, &l.tracking_allocators.folder_tree)
+		l.tag_allocator    = shared.track_allocator(l.tag_allocator, &l.tracking_allocators.tag)
+		l.folder_allocator = shared.track_allocator(l.folder_allocator, &l.tracking_allocators.folder_tree)
 	}
 
 	// @TEMP: http audio stream test
@@ -174,7 +183,7 @@ update :: proc() {
 
 	if l.folder_serial != l.tracks_serial {
 		l.folder_serial = l.tracks_serial
-		util.TIME_SCOPE("Build folder tree")
+		shared.TIME_SCOPE("Build folder tree")
 		free_all(l.folder_allocator)
 		build_folder_tree(&l.folder_root, l.folder_allocator)
 	}
@@ -349,7 +358,7 @@ create_playlist :: proc(name: string) -> (Playlist_ID, bool) {
 
 	playlist := Playlist {
 		name = name != "" ? strings.clone(name, l.tag_allocator) : "",
-		uid  = util.generate_uid(),
+		uid  = shared.generate_uid(),
 	}
 
 	id, error := hm.dynamic_add(&l.playlists, playlist)
@@ -416,6 +425,81 @@ sum_track_totals :: proc(tracks: []Track_ID) -> (t: Track_Totals) {
 	return
 }
 
+add_cover_art :: proc(folder: string, art_path: string) {
+	l := &_library
+
+	cleaned, _ := filepath.clean(folder)
+	defer delete(cleaned)
+
+	folder_hash := hash.fnv64a(transmute([]byte) folder)
+
+	l.folder_cover_art[folder_hash] = {
+		folder = strings.clone(folder, l.tag_allocator),
+		image  = strings.clone(art_path, l.tag_allocator),
+	}
+}
+
+find_track_cover_art :: proc(
+	track_id: Track_ID,
+	allocator: mem.Allocator
+) -> (data: []byte, found: bool) {
+	l := &_library
+	track := get_track(track_id) or_return
+
+	get_folder_art :: proc(track: Track, allocator: mem.Allocator) -> (data: []byte, found: bool) {
+		l := &_library
+
+		path := url_to_filepath(track.url) or_return
+		path, _ = filepath.clean(filepath.dir(path))
+		defer delete(path)
+
+		folder_hash := hash.fnv64a(transmute([]byte) path)
+		folder_art := l.folder_cover_art[folder_hash] or_return
+
+		read_error: os.Error
+		data, read_error = os.read_entire_file_from_path(folder_art.image, allocator)
+
+		if read_error != nil {
+			log.error(read_error)
+			return
+		}
+
+		found = true
+		return
+	}
+
+	get_embedded_art :: proc(track: Track, allocator: mem.Allocator) -> (data: []byte, found: bool) {
+		path := url_to_filepath(track.url) or_return
+		file := open_file_for_taglib(path)
+		if file == nil do return
+		defer taglib.file_free(file)
+
+		pic_data: taglib.Complex_Property_Picture_Data
+
+		picture := taglib.complex_property_get(file, "PICTURE")
+		if picture == nil do return
+		taglib.picture_from_complex_property(picture, &pic_data)
+		if pic_data.data == nil do return
+
+		data = slice.clone(slice.from_ptr(pic_data.data, auto_cast pic_data.size), allocator)
+		found = true
+		return
+	}
+
+	if l.config.prefer_folder_cover_art {
+		data, found = get_folder_art(track, allocator)
+		if found do return
+		data, found = get_embedded_art(track, allocator)
+		return
+	}
+	else {
+		data, found = get_embedded_art(track, allocator)
+		if found do return
+		data, found = get_folder_art(track, allocator)
+		return
+	}
+}
+
 @private
 _add_shared_string :: proc(type: Shared_String_Type, name: string) -> i16 {
 	l := &_library
@@ -449,6 +533,11 @@ get_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, ou
 	for id, i in ids {
 		out[i] = _library.shared_strings[type][id].name
 	}
+}
+
+url_to_filepath :: proc(url: string) -> (string, bool) {
+	if !strings.starts_with(url, "file://") do return "", false
+	return strings.trim_prefix(url, "file://"), true
 }
 
 @test

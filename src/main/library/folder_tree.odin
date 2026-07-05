@@ -17,7 +17,7 @@
 */
 package library
 
-import "src:main/util"
+import "src:main/shared"
 import "core:os"
 import "core:fmt"
 import "core:slice"
@@ -34,7 +34,7 @@ Folder :: struct {
 	first_child: ^Folder,
 	child_count: int,
 	totals:      Track_Totals,
-	uid:         util.UID,
+	uid:         shared.UID,
 }
 
 @private
@@ -49,7 +49,7 @@ build_folder_tree :: proc(root: ^Folder, allocator: mem.Allocator) {
 
 	root^ = {}
 	root.name = "<root>"
-	root.uid = util.generate_uid()
+	root.uid = shared.generate_uid()
 
 	add :: proc(parent: ^Folder, name: string, track: Track, allocator: mem.Allocator) -> ^Folder {
 		for h := parent.first_child; h != nil; h = h.next {
@@ -63,7 +63,7 @@ build_folder_tree :: proc(root: ^Folder, allocator: mem.Allocator) {
 		folder.name   = strings.clone(name, allocator)
 		folder.next   = parent.first_child
 		folder.parent = parent
-		folder.uid    = util.generate_uid()
+		folder.uid    = shared.generate_uid()
 
 		add_to_track_totals(&folder.totals, track)
 

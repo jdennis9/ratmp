@@ -17,7 +17,7 @@
 */
 package main
 
-import "src:main/util"
+import "src:main/shared"
 import lib "src:main/library"
 import "core:math"
 import "core:sort"
@@ -65,8 +65,20 @@ Server_Event_Type :: enum {
 }
 
 Server_Scanned_Track :: struct {
-	tags:      lib.Track_Tags,
-	url:       string,
+	tags: lib.Track_Tags,
+	url:  string,
+}
+
+Server_Scanned_Cover_Art :: struct {
+	folder: string,
+	image:  string,
+}
+
+Server_Scanned_Item :: struct {
+	variant: union {
+		Server_Scanned_Track,
+		Server_Scanned_Cover_Art,
+	},
 	overwrite: bool,
 }
 
@@ -77,7 +89,7 @@ Server_Event :: struct {
 	initial_track:  Maybe(Track_ID),
 	playlist_uid:   UID,
 	seek_target:    int,
-	scanned_tracks: []Server_Scanned_Track,
+	scanned_items: []Server_Scanned_Item,
 }
 
 Server_Cover_Art_Scan_State :: struct {
@@ -178,7 +190,7 @@ server_audio_callback :: proc(
 }
 
 server_init :: proc(sv: ^Server) -> bool {
-	sv.queue_uid = util.generate_uid()
+	sv.queue_uid = shared.generate_uid()
 
 	sv.allocators.scan_output = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_output")
 	sv.allocators.scan_queue = allocator_map_add_dynamic_arena(&sv.allocator_map, "scan_queue")
@@ -285,8 +297,13 @@ server_handle_events :: proc(sv: ^Server) {
 			_update_media_controls_state(sv)
 
 		case .BackgroundScanComplete:
-			for track in ev.scanned_tracks {
-				lib.add_track(track.tags, track.url)
+			for item in ev.scanned_items {
+				switch v in item.variant {
+				case Server_Scanned_Track:
+					lib.add_track(v.tags, v.url)
+				case Server_Scanned_Cover_Art:
+					lib.add_cover_art(v.folder, v.image)
+				}
 			}
 			sync.auto_reset_event_signal(&sv.track_scanner_output_used)
 
@@ -549,12 +566,12 @@ _cover_art_scan_proc :: proc(
 	return nil
 }
 
-_server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Server_Scanned_Track) -> Error {
+_server_consume_scan_output_proc :: proc(data: rawptr, tracks: []Server_Scanned_Item) -> Error {
 	sv := cast(^Server) data
 
 	server_send_event(sv, Server_Event {
 		type = .BackgroundScanComplete,
-		scanned_tracks = tracks,
+		scanned_items = tracks,
 	})
 
 	sync.auto_reset_event_wait(&sv.track_scanner_output_used)

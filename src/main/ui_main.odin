@@ -18,7 +18,7 @@
 #+private file
 package main
 
-import "src:main/util"
+import "src:main/shared"
 import lib "src:main/library"
 import "core:sync"
 import "core:thread"
@@ -1224,7 +1224,7 @@ _track_table_show :: proc(
 	// Update if needed
 	// --------------------------------------------------------------------------
 	if serial != table.serial || table.playlist_uid != playlist_id || filter_hash != table.filter_hash {
-		util.TIME_SCOPE("Build track table", name)
+		shared.TIME_SCOPE("Build track table", name)
 
 		if table.scratch.data == nil {
 			mem.scratch_init(&table.scratch, 64<<10)
@@ -1605,22 +1605,20 @@ _metadata_window_show :: proc(ui: ^UI, w: ^_Metadata_Window, track_id: Track_ID)
 	sv := ui.server
 
 	load_cover :: proc(sv: ^Server, w: ^_Metadata_Window) -> bool {
-		/*if w.cover_art != nil {
+		if w.cover_art != nil {
 			texture_release(w.cover_art.?)
 			w.cover_art = nil
 		}
 
 		//@FIXME: Find track thumbnail
-		cover_data, mime_type := find_track_thumbnail(w.displayed_track, context.allocator) or_return
-
-		delete(mime_type)
+		cover_data := lib.find_track_cover_art(w.displayed_track, context.allocator) or_return
 		defer delete(cover_data)
 
-		h, width, height := texture_create_from_memory(cover_data) or_return
-		w.cover_art = h
-		w.cover_width = width
-		w.cover_height = height
-		w.cover_file_size = len(cover_data)*/
+		h, width, height  := texture_create_from_memory(cover_data) or_return
+		w.cover_art       = h
+		w.cover_width     = width
+		w.cover_height    = height
+		w.cover_file_size = len(cover_data)
 
 		return true
 	}
@@ -2418,7 +2416,7 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 	}
 
 	log.debug("Loading background", path, "...")
-	util.TIME_SCOPE("Load background", path)
+	shared.TIME_SCOPE("Load background", path)
 
 	if ui.background.path != "" && ui.background.path != path {
 		delete(ui.background.path)
@@ -2951,7 +2949,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 
 	// Update guides
 	if state.freq_guide_bands != len(state.band_freqs) || state.freq_guide_width != graph_size.x {
-		util.TIME_SCOPE("Build frequency guides")
+		shared.TIME_SCOPE("Build frequency guides")
 		state.freq_guide_bands = len(state.band_freqs)
 		state.freq_guide_width = graph_size.x
 		min_spacing: f32 = 40

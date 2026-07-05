@@ -18,7 +18,7 @@
 #+private file
 package main
 
-import "src:main/util"
+import "src:main/shared"
 import "core:mem"
 import "core:sync"
 import "core:fmt"
@@ -92,7 +92,7 @@ show_message_box_async :: proc(
 	fmt.bprint(mt.message[:len(mt.message)-1], ..body_args, sep=sep)
 	copy(mt.title[:len(mt.title)-1], string(title))
 
-	mt.id = util.generate_uid()
+	mt.id = shared.generate_uid()
 	h = mt.id
 	mt.type = type
 	mt.urgency = urgency

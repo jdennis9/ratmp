@@ -1,4 +1,4 @@
-package util
+package shared
 
 import "base:runtime"
 import "core:fmt"

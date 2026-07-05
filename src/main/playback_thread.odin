@@ -17,7 +17,7 @@
 */
 package main
 
-import "src:main/util"
+import "src:main/shared"
 import "core:strings"
 import "core:path/filepath"
 import "core:net"
@@ -113,7 +113,7 @@ _reset_ring_buffers :: proc(at: ^Playback_Thread) {
 
 @(private="file")
 _post_process :: proc(at: ^Playback_Thread, audio: [][]f32, samplerate: f32) {
-	util.TIME_SCOPE("Post process")
+	shared.TIME_SCOPE("Post process")
 	sync.lock(&at.post_processing_lock)
 	pp := at.post_processing
 	sync.unlock(&at.post_processing_lock)

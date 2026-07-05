@@ -17,6 +17,8 @@
 */
 package main
 
+import "core:slice"
+import "core:path/filepath"
 import "core:path/slashpath"
 import lib "src:main/library"
 import "core:log"
@@ -39,7 +41,7 @@ Track_Scanner_Progress :: struct {
 }
 
 Track_Scanner :: struct {
-	worker:   Worker(Track_Scanner_Input, Server_Scanned_Track),
+	worker:   Worker(Track_Scanner_Input, Server_Scanned_Item),
 	runner:   ^thread.Thread,
 	progress: Track_Scanner_Progress,
 }
@@ -63,7 +65,7 @@ _accum_files :: proc(dir: string, output: ^[dynamic]os.File_Info, counter: ^int,
 
 track_scanner_init :: proc(
 	ts: ^Track_Scanner,
-	consume_proc: proc(data: rawptr, tracks: []Server_Scanned_Track) -> Error,
+	consume_proc: proc(data: rawptr, tracks: []Server_Scanned_Item) -> Error,
 	consume_data: rawptr,
 ) {
 	_thread_proc :: proc(t: ^thread.Thread) {
@@ -75,7 +77,7 @@ track_scanner_init :: proc(
 		data:             rawptr,
 		input:            []Track_Scanner_Input,
 		output_allocator: mem.Allocator,
-	) -> (output: []Server_Scanned_Track, error: Error) {
+	) -> (output: []Server_Scanned_Item, error: Error) {
 		scratch: mem.Scratch
 		mem.scratch_init(&scratch, 512<<10, context.allocator)
 		defer mem.scratch_destroy(&scratch)
@@ -85,7 +87,7 @@ track_scanner_init :: proc(
 		progress := cast(^Track_Scanner_Progress) data
 		
 		buf := make_dynamic_array_len_cap(
-			[dynamic]Server_Scanned_Track, 0, 4096,
+			[dynamic]Server_Scanned_Item, 0, 4096,
 			output_allocator
 		)
 		
@@ -96,10 +98,15 @@ track_scanner_init :: proc(
 		process_file :: proc(
 			progress:         ^Track_Scanner_Progress,
 			input:            Track_Scanner_Input,
-			output:           ^[dynamic]Server_Scanned_Track,
+			output:           ^[dynamic]Server_Scanned_Item,
 			depth:            int,
 			output_allocator: mem.Allocator,
 		) -> Error {
+			image_formats := []string {
+				".jpeg", ".jpg", ".png", ".bmp",
+				".tga", ".webm"
+			}
+
 			file := os.open(input.path) or_return
 			defer os.close(file)
 			
@@ -119,22 +126,46 @@ track_scanner_init :: proc(
 				sync.atomic_add(&progress.scanned_items, 1)
 			}
 			else {
-				track_data := lib.read_tags(
-					input.path, output_allocator
-				) or_return
+				ext := filepath.ext(input.path)
+				audio_format, is_audio := lib.audio_file_format_from_extension(ext)
 
-				s := Server_Scanned_Track {
-					tags      = track_data,
-					url       = strings.concatenate({"file://", input.path}, output_allocator),
-					overwrite = input.overwrite,
+				if is_audio {
+					track_data := lib.read_tags(
+						input.path, output_allocator
+					) or_return
+
+					s := Server_Scanned_Item {
+						variant = Server_Scanned_Track {
+							tags = track_data,
+							url  = strings.concatenate({"file://", input.path}, output_allocator),
+						},
+						overwrite = input.overwrite,
+					}
+
+					s.overwrite = input.overwrite
+										
+					append(output, s)
 				}
-				
-				//if input.overwrite do track_data.flags |= {.Overwrite}
-				
-				append(output, s)
+				else if slice.contains(image_formats, ext) {
+					folder_name, _ := filepath.clean(filepath.dir(input.path), output_allocator)
+
+					s := Server_Scanned_Item {
+						variant = Server_Scanned_Cover_Art {
+							folder = folder_name,
+							image  = strings.clone(input.path, output_allocator),
+						},
+					}
+
+					log.debug("Cover art", folder_name, s.variant.(Server_Scanned_Cover_Art).image)
+
+					s.overwrite = input.overwrite
+
+					append(output, s)
+				}
+				else do return false
+
 				sync.atomic_add(&progress.scanned_files, 1)
 			}
-
 
 			return nil
 		}
@@ -204,7 +235,7 @@ test_track_scanner :: proc(t: ^testing.T) {
 	context.logger = log.create_console_logger()
 	defer log.destroy_console_logger(context.logger)
 
-	consume_proc :: proc(_: rawptr, tracks: []Server_Scanned_Track) -> Error {return nil}
+	consume_proc :: proc(_: rawptr, tracks: []Server_Scanned_Item) -> Error {return nil}
 
 	track_scanner_init(&ts, consume_proc, nil)
 	defer track_scanner_destroy(&ts)
