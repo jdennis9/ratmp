@@ -42,6 +42,8 @@ run :: proc() -> Error {
 	server: Server
 	ui: UI
 
+	init_global_temporary_allocator(64<<10)
+
 	// --------------------------------------------------------------------------
 	// Parse command-line
 	// This needs to happen first because it affects many things!
@@ -226,6 +228,8 @@ run :: proc() -> Error {
 	for _g.running {
 		events: Platform_Events
 		ui_actions: UI_Actions
+
+		free_all(context.temp_allocator)
 
 		frame_start := time.tick_now()
 		sys_main_frame()
