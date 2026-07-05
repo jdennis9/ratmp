@@ -1,5 +1,7 @@
 package library
 
+import "core:time"
+import "core:os"
 import "core:path/filepath"
 import "core:unicode/utf16"
 import "core:strings"
@@ -71,6 +73,14 @@ read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Ta
 
 	if tags.title == "" {
 		tags.title = strings.clone(filepath.stem(filepath.base(filename)), allocator)
+	}
+
+	file_info, stat_error := os.stat(filename, context.allocator)
+	if stat_error == nil {
+		defer os.file_info_delete(file_info, context.allocator)
+
+		tags.file_size = file_info.size
+		tags.file_date = time.to_unix_seconds(file_info.creation_time)
 	}
 
 	ok = true
