@@ -17,6 +17,7 @@
 */
 package library
 
+import "base:runtime"
 import "src:main/util"
 import "core:net"
 import "core:slice"
@@ -102,9 +103,14 @@ Library :: struct {
 	playlists:        Playlist_Map,
 	playlists_serial: uint,
 	config:           Library_Config,
+	folder_root:      Folder,
+	folder_arena:     mem.Dynamic_Arena,
+	folder_allocator: mem.Allocator,
+	folder_serial:    uint,
 
 	tracking_allocators: struct {
-		tag: mem.Tracking_Allocator,
+		tag:         mem.Tracking_Allocator,
+		folder_tree: mem.Tracking_Allocator,
 	},
 }
 
@@ -124,9 +130,24 @@ init :: proc(config: Library_Config) -> bool {
 	mem.dynamic_arena_init(&l.tag_arena, alignment = 4)
 	l.tag_allocator = mem.dynamic_arena_allocator(&l.tag_arena)
 
+	mem.dynamic_arena_init(&l.folder_arena)
+	l.folder_allocator = mem.dynamic_arena_allocator(&l.folder_arena)
+
 	if config.enable_memory_tracking {
-		mem.tracking_allocator_init(&l.tracking_allocators.tag, l.tag_allocator)
-		l.tag_allocator = mem.tracking_allocator(&l.tracking_allocators.tag)
+		l.tag_allocator    = util.track_allocator(l.tag_allocator, &l.tracking_allocators.tag)
+		l.folder_allocator = util.track_allocator(l.folder_allocator, &l.tracking_allocators.folder_tree)
+	}
+
+	// @TEMP: http audio stream test
+	{
+		tags := Track_Tags {
+			artist = "TEST",
+			album  = "INTERNET TEST",
+			format = .Mp3,
+			title  = "INTERNET TEST",
+		}
+
+		add_track(tags, "https://audio-edge-d34v9.syd.o.radiomast.io/ref-128k-mp3-stereo")
 	}
 
 	return true
@@ -134,15 +155,35 @@ init :: proc(config: Library_Config) -> bool {
 
 shutdown :: proc() {
 	l := &_library
+
+	if l.config.enable_memory_tracking {
+		mem.tracking_allocator_destroy(&l.tracking_allocators.tag)
+		mem.tracking_allocator_destroy(&l.tracking_allocators.folder_tree)
+	}
+
 	mem.dynamic_arena_destroy(&l.tag_arena)
+	mem.dynamic_arena_destroy(&l.folder_arena)
 	hm.dynamic_destroy(&l.tracks)
 	for ss in l.shared_strings {
 		delete(ss)
 	}
 }
 
+update :: proc() {
+	l := &_library
+
+	if l.folder_serial != l.tracks_serial {
+		l.folder_serial = l.tracks_serial
+		util.TIME_SCOPE("Build folder tree")
+		free_all(l.folder_allocator)
+		build_folder_tree(&l.folder_root, l.folder_allocator)
+	}
+}
+
 get_playlists_serial :: proc() -> uint {return _library.playlists_serial}
 get_tracks_serial :: proc() -> uint {return _library.tracks_serial}
+get_root_folder :: proc() -> ^Folder {return &_library.folder_root}
+get_folder_tree_serial :: proc() -> uint {return _library.folder_serial}
 
 join_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, allocator: mem.Allocator) -> string {
 	if len(ids) == 0 do return ""
@@ -360,12 +401,16 @@ add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	return true
 }
 
+add_to_track_totals :: proc(t: ^Track_Totals, track: Track) {
+	t.duration += i64(track.duration)
+	t.file_size += i64(track.file_size)
+	t.length += 1
+}
+
 sum_track_totals :: proc(tracks: []Track_ID) -> (t: Track_Totals) {
 	for id in tracks {
 		track := get_track(id) or_continue
-		t.duration += i64(track.duration)
-		t.file_size += i64(track.file_size)
-		t.length += 1
+		add_to_track_totals(&t, track)
 	}
 
 	return

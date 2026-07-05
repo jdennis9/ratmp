@@ -273,7 +273,7 @@ server_handle_events :: proc(sv: ^Server) {
 
 	lib_serial := lib.get_tracks_serial()
 
-	//@FIXME: Update library
+	lib.update()
 	//@FIXME: Save library
 
 	for ev in events {

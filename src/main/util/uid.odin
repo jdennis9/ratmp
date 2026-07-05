@@ -1,4 +1,4 @@
-package uid
+package util
 
 import "core:sync"
 

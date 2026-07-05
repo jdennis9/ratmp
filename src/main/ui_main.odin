@@ -18,6 +18,7 @@
 #+private file
 package main
 
+import "src:main/util"
 import lib "src:main/library"
 import "core:sync"
 import "core:thread"
@@ -285,8 +286,7 @@ _WINDOW_INFO := [_Window_ID]_Window_Info {
 		internal_name = "_folder_tree",
 
 		show_proc = proc(ui: ^UI) -> bool {
-			//@FIXME
-			//_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
+			_folder_tree_window_show_focused(ui, &ui.windows.folder_tree)
 			return true
 		}
 	},
@@ -437,22 +437,15 @@ _Wavebar_Window :: struct {
 // Folder tree
 // -----------------------------------------------------------------------------
 
-/*_Folder_Tree_Node :: struct {
-	totals:   lib.Track_Totals,
-	children: []_Folder_Tree_Node,
-	name:     cstring,
-	origin:   ^Library_Folder,
-}
-
 _Folder_Tree_Window :: struct {
 	selected_folder_hash:   u64,
 	selected_folder_serial: uint,
-	selected_folder:        ^_Folder_Tree_Node,
+	selected_folder:        ^lib.Folder,
 	tree_serial:            uint,
-	root_node:              _Folder_Tree_Node,
+	root_node:              ^lib.Folder,
 	track_table:            _Track_Table,
 	tracks:                 [dynamic]Track_ID,
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Tracked window state
@@ -519,8 +512,7 @@ UI :: struct {
 		spectrum:        _Spectrum_Window,
 		wavebar:         _Wavebar_Window,
 		post_processing: _Post_Processing_Window,
-		//@FIXME
-		//folder_tree:     _Folder_Tree_Window,
+		folder_tree:     _Folder_Tree_Window,
 		
 		show_settings: bool,
 	},
@@ -1232,7 +1224,7 @@ _track_table_show :: proc(
 	// Update if needed
 	// --------------------------------------------------------------------------
 	if serial != table.serial || table.playlist_uid != playlist_id || filter_hash != table.filter_hash {
-		TIME_SCOPE("Build track table", name)
+		util.TIME_SCOPE("Build track table", name)
 
 		if table.scratch.data == nil {
 			mem.scratch_init(&table.scratch, 64<<10)
@@ -2426,7 +2418,7 @@ _set_background :: proc(ui: ^UI, path: string, allocator: mem.Allocator) -> Erro
 	}
 
 	log.debug("Loading background", path, "...")
-	TIME_SCOPE("Load background", path)
+	util.TIME_SCOPE("Load background", path)
 
 	if ui.background.path != "" && ui.background.path != path {
 		delete(ui.background.path)
@@ -2959,7 +2951,7 @@ _spectrum_window_show :: proc(ui: ^UI, state: ^_Spectrum_Window) -> bool {
 
 	// Update guides
 	if state.freq_guide_bands != len(state.band_freqs) || state.freq_guide_width != graph_size.x {
-		TIME_SCOPE("Build frequency guides")
+		util.TIME_SCOPE("Build frequency guides")
 		state.freq_guide_bands = len(state.band_freqs)
 		state.freq_guide_width = graph_size.x
 		min_spacing: f32 = 40
@@ -3151,6 +3143,8 @@ _wavebar_window_show :: proc(ui: ^UI, state: ^_Wavebar_Window) -> bool {
 		decoder_open(&dec, state.track_url, nil) or_return
 		defer decoder_close(&dec)
 
+		if dec.frame_count == 0 do return false
+
 		buffer_size := dec.frame_count / _WAVEBAR_NUM_DATA_POINTS
 
 		buf := make([]f32, buffer_size)
@@ -3320,11 +3314,11 @@ _wavebar_window_load_setting :: proc(w: ^_Wavebar_Window, key, value: string) ->
 // Folder tree
 // -----------------------------------------------------------------------------
 
-/*_folder_tree_window_select_folder :: proc(
-	w: ^_Folder_Tree_Window, folder: ^_Folder_Tree_Node
+_folder_tree_window_select_folder :: proc(
+	w: ^_Folder_Tree_Window, folder: ^lib.Folder
 ) {
 	clear(&w.tracks)
-	library_get_tracks_in_folder(folder.origin, &w.tracks)
+	lib.find_folder_tracks(folder, &w.tracks)
 	w.selected_folder = folder
 	w.track_table.serial = 0
 }
@@ -3339,40 +3333,22 @@ _folder_tree_window_show_folders :: proc(
 	COLUMN_FILE_SIZE :: 2
 	COLUMN__COUNT    :: 3
 
-	tree_serial := library_get_folder_tree_serial()
+	tree_serial := lib.get_folder_tree_serial()
 
-	// --------------------------------------------------------------------------
-	// Build if needed
-	// --------------------------------------------------------------------------
 	if w.tree_serial != tree_serial {
-		w.tree_serial = tree_serial
-		free_all(ui.allocators.folder_tree)
-		w.root_node = {}
-
-		make_node :: proc(node: ^_Folder_Tree_Node, l: ^Library_Folder, allocator: mem.Allocator) {
-			node.totals   = l.totals
-			node.name     = l.name_cstring
-			node.origin   = l
-			node.children = make([]_Folder_Tree_Node, l.child_count, allocator)
-			
-			i := 0
-			for head := l.first_child; head != nil; head = head.next {
-				make_node(&node.children[i], head, allocator)
-				i += 1
-			}
-		}
-
-		make_node(&w.root_node, library_get_folder_tree(), ui.allocators.folder_tree)
+		w.root_node = lib.get_root_folder()
 	}
+
+	if w.root_node == nil do return false
 
 	// --------------------------------------------------------------------------
 	// Show table
 	// --------------------------------------------------------------------------
 
 	_Actions :: struct {
-		select:        ^_Folder_Tree_Node,
-		play:          ^_Folder_Tree_Node,
-		add_to_queue:  ^_Folder_Tree_Node,
+		select:        ^lib.Folder,
+		play:          ^lib.Folder,
+		add_to_queue:  ^lib.Folder,
 	}
 	actions: _Actions
 
@@ -3383,7 +3359,7 @@ _folder_tree_window_show_folders :: proc(
 	imgui.BeginTable("##folders", COLUMN__COUNT, table_flags) or_return
 	defer imgui.EndTable()
 
-	on_show_node :: proc(sv: ^Server, actions: ^_Actions, node: ^_Folder_Tree_Node) {
+	on_show_node :: proc(sv: ^Server, actions: ^_Actions, node: ^lib.Folder) {
 		if imgui.IsItemClicked(.Middle) {
 			actions.play = node
 		}
@@ -3405,7 +3381,7 @@ _folder_tree_window_show_folders :: proc(
 		sv:      ^Server,
 		actions: ^_Actions,
 		w:       ^_Folder_Tree_Window,
-		node:    ^_Folder_Tree_Node
+		node:    ^lib.Folder,
 	) {
 		imgui.TableNextRow()
 
@@ -3414,7 +3390,7 @@ _folder_tree_window_show_folders :: proc(
 
 
 		if imgui.TableSetColumnIndex(COLUMN_LENGTH) {
-			imx.text(64, node.totals.track_count)
+			imx.text(64, node.totals.length)
 		}
 
 		if imgui.TableSetColumnIndex(COLUMN_FILE_SIZE) {
@@ -3423,7 +3399,7 @@ _folder_tree_window_show_folders :: proc(
 		
 		if imgui.TableSetColumnIndex(COLUMN_NAME) {
 			// Small button to show all tracks contained in folder and subfolders
-			if node.children != nil {
+			if node.first_child != nil {
 				if imgui.SmallButton(ICON_MAGNIFY) {
 					actions.select = node
 				}
@@ -3432,19 +3408,26 @@ _folder_tree_window_show_folders :: proc(
 			}
 			
 			// Playing highlight
-			if node.origin.uid != 0 && node.origin.uid == sv.playback.playlist_uid {
+			if node.uid != 0 && node.uid == sv.playback.playlist_uid {
 				imgui.TableSetBgColor(.RowBg0, ui_theme.colors[.PlayingHighlight])
 			}
 
+			//@FIXME
+			node_name := strings.clone_to_cstring(node.name, context.allocator)
+			defer delete(node_name)
+
 			// Selectable part
-			if node.children != nil {
-				if imgui.TreeNodeEx(node.name, {.SpanAllColumns}) {
+			if node.first_child != nil {
+				if imgui.TreeNodeEx(node_name, {.SpanAllColumns}) {
 					defer imgui.TreePop()
 
 					on_show_node(sv, actions, node)
 					
-					for &child in node.children {
+					/*for &child in node.children {
 						show_node(sv, actions, w, &child)
+					}*/
+					for child := node.first_child; child != nil; child = child.next {
+						show_node(sv, actions, w, child)
 					}
 				}
 				else {
@@ -3452,7 +3435,7 @@ _folder_tree_window_show_folders :: proc(
 				}
 			}
 			else {
-				if imgui.Selectable(node.name) {
+				if imgui.Selectable(node_name) {
 					actions.select = node
 				}
 
@@ -3461,14 +3444,15 @@ _folder_tree_window_show_folders :: proc(
 		}
 	}
 
-	get_first_node_with_multiple_children :: proc(n: ^_Folder_Tree_Node) -> ^_Folder_Tree_Node {
-		if len(n.children) > 1 do return n
-		else if len(n.children) == 0 do return nil
-		return get_first_node_with_multiple_children(&n.children[0])
+	//@FIXME
+	get_first_node_with_multiple_children :: proc(n: ^lib.Folder) -> ^lib.Folder {
+		if n.child_count > 1 do return n
+		else if n.child_count == 0 do return nil
+		return get_first_node_with_multiple_children(n.first_child)
 	}
 
-	root := get_first_node_with_multiple_children(&w.root_node)
-	if root == nil do root = &w.root_node
+	root := get_first_node_with_multiple_children(w.root_node)
+	if root == nil do root = w.root_node
 	show_node(sv, &actions, w, root)
 	
 	if actions.select != nil {
@@ -3477,14 +3461,14 @@ _folder_tree_window_show_folders :: proc(
 
 	if actions.play != nil {
 		_folder_tree_window_select_folder(w, actions.play)
-		server_request_play_playlist(sv, w.tracks[:], w.selected_folder.origin.uid)
+		server_request_play_playlist(sv, w.tracks[:], w.selected_folder.uid)
 	}
 
 	if actions.add_to_queue != nil {
 		tracks: [dynamic]Track_ID
 		defer delete(tracks)
-		library_get_tracks_in_folder(actions.add_to_queue.origin, &tracks)
-		playback_queue_add(&sv.playback, tracks[:], actions.add_to_queue.origin.uid)
+		lib.find_folder_tracks(actions.add_to_queue, &tracks)
+		playback_queue_add(&sv.playback, tracks[:], actions.add_to_queue.uid)
 	}
 
 	return true
@@ -3499,13 +3483,13 @@ _folder_tree_window_show_tracks :: proc(
 	}
 
 	_track_table_show(
-		ui, "##tracks", &w.track_table, library_get_update_serial(),
-		w.tracks[:], {.NoRemove}, w.selected_folder.origin.uid
+		ui, "##tracks", &w.track_table, lib.get_tracks_serial(),
+		w.tracks[:], {.NoRemove}, w.selected_folder.uid
 	)
 }
 
 _folder_tree_window_show_focused :: proc(ui: ^UI, w: ^_Folder_Tree_Window) {
-	if w.tree_serial != library_get_folder_tree_serial() {
+	if w.tree_serial != lib.get_folder_tree_serial() {
 		w.selected_folder = nil
 	}
 
@@ -3515,7 +3499,7 @@ _folder_tree_window_show_focused :: proc(ui: ^UI, w: ^_Folder_Tree_Window) {
 	else {
 		_folder_tree_window_show_folders(ui, w)
 	}
-}*/
+}
 
 // -----------------------------------------------------------------------------
 // Misc

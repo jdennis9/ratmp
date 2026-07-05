@@ -115,9 +115,15 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	ff->input_spec.samplerate = codecpar->sample_rate;
 	ff->input_spec.channels = codecpar->ch_layout.nb_channels;
 
-	duration = (ff->demuxer->duration / AV_TIME_BASE);
+	if (ff->demuxer->duration > 0) {
+		duration = (ff->demuxer->duration / AV_TIME_BASE);
+		info_out->total_frames = duration * ff->input_spec.samplerate;
+	}
+	else {
+		info_out->total_frames = 0;
+	}
+
 	info_out->spec = ff->input_spec;
-	info_out->total_frames = duration * ff->input_spec.samplerate;
 	strncpy(info_out->codec_name, codec->long_name, sizeof(info_out->codec_name));
 	if (input_format && input_format->long_name) {
 		strncpy(info_out->format_name, input_format->long_name, sizeof(info_out->format_name));

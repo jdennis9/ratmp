@@ -1,5 +1,6 @@
 package library
 
+import "vendor:stb/sprintf"
 import "core:strings"
 import "core:sort"
 
@@ -82,6 +83,13 @@ sort_tracks :: proc(tracks: []Track, spec: Track_Sort_Spec) {
 		col := cast(^_Ctx) iface.collection
 		A, B := col.tracks[a], col.tracks[b]
 		return TRACK_METRIC_COMPARE_PROCS[col.metric](A, B)
+	}
+
+	if spec.order == .Descending {
+		sort.sort(iface)
+	}
+	else if spec.order == .Ascending {
+		sort.reverse_sort(iface)
 	}
 }
 
