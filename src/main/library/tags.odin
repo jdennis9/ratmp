@@ -107,4 +107,3 @@ read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Ta
 	ok = true
 	return
 }
-

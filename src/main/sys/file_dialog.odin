@@ -15,17 +15,18 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main
+package sys
 
-audio_use_null :: proc() {
-	_audio_impl_init = proc(callback: Audio_Callback, callback_data: rawptr) -> bool {return true}
-	_audio_impl_shutdown = proc() {}
-	_audio_impl_start = proc() -> bool {return true}
-	_audio_impl_drop_buffer = proc() {}
-	_audio_impl_pause = proc() -> bool {return true}
-	_audio_impl_resume = proc() -> bool {return true}
-	_audio_impl_is_paused = proc() -> bool {return true}
-	_audio_impl_stop = proc() {}
-	_audio_impl_get_volume = proc() -> f32 {return 1}
-	_audio_impl_set_volume = proc(v: f32) {}
+FILE_DIALOG_MAX_FILE_TYPES :: 16
+
+File_Dialog_File_Type :: struct {
+	name:       string,
+	extensions: []string, // include preceeding dot
+}
+
+File_Dialog_Params :: struct {
+	title:           string,
+	file_types:      []File_Dialog_File_Type,
+	select_folders:  bool,
+	select_multiple: bool,
 }

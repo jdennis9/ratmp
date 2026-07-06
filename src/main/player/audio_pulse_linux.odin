@@ -61,7 +61,7 @@ _stream: struct {
 }
 
 @private
-use_audio_pulse :: proc() {
+audio_init_pulse :: proc() {
 
 	_audio_impl_init = proc(cb: Audio_Callback, cb_data: rawptr) -> bool {
 		s := &_stream

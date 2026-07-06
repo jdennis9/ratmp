@@ -130,7 +130,7 @@ test_folder_tree :: proc(t: ^testing.T) {
 		"file://C:\\Music\\Bloom\\Purple.mp3",
 	}
 
-	testing.expect(t, init({}))
+	testing.expect(t, init({}) == nil)
 	defer shutdown()
 
 	for f in files {

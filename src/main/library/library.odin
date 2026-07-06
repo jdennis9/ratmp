@@ -130,7 +130,7 @@ Library_Config :: struct {
 @(private="file")
 _library: Library
 
-init :: proc(config: Library_Config) -> bool {
+init :: proc(config: Library_Config) -> shared.Error {
 	l := &_library
 	l.config = config
 
@@ -159,7 +159,7 @@ init :: proc(config: Library_Config) -> bool {
 		add_track(tags, "https://audio-edge-d34v9.syd.o.radiomast.io/ref-128k-mp3-stereo")
 	}
 
-	return true
+	return nil
 }
 
 shutdown :: proc() {
@@ -542,7 +542,7 @@ url_to_filepath :: proc(url: string) -> (string, bool) {
 
 @test
 test_add_tracks :: proc(t: ^testing.T) {
-	testing.expect(t, init({}))
+	testing.expect(t, init({}) == nil)
 	defer shutdown()
 
 	track := Track_Tags {

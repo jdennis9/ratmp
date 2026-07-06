@@ -17,6 +17,7 @@
 */
 package library
 
+import "core:mem"
 import "core:strings"
 
 Audio_File_Format :: enum u8 {
@@ -79,4 +80,24 @@ audio_file_format_from_extension :: proc(ext: string) -> (Audio_File_Format, boo
 	}
 
 	return .Wav, false
+}
+
+get_supported_extensions :: proc(allocator: mem.Allocator) -> []string {
+	count := 0
+
+	for f in Audio_File_Format {
+		count += len(AUDIO_FILE_FORMAT_EXTENSIONS[f])
+	}
+
+	output := make([]string, count, allocator)
+	count = 0
+	
+	for f in AUDIO_FILE_FORMAT_EXTENSIONS {
+		for ext in f {
+			output[count] = ext
+			count += 1
+		}
+	}
+
+	return output
 }

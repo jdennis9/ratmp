@@ -16,8 +16,9 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #+private file
-package main
+package client
 
+import "src:main/shared"
 import "vendor:directx/dxgi"
 import dx "vendor:directx/d3d11"
 import win "core:sys/windows"
@@ -31,6 +32,8 @@ _dx: struct {
 	rtv:       ^dx.IRenderTargetView,
 	swapchain: ^dxgi.ISwapChain,
 }
+
+win32_check :: shared.win32_check
 
 @private
 video_shutdown_dx11:: proc() {

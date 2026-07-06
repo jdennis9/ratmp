@@ -89,23 +89,21 @@ _send_event :: proc(ev: _In_Event) {
 _wait_event :: proc(ev: int) {win.WaitForSingleObject(_wasapi.out_events[ev], win.INFINITE)}
 
 @private
-audio_use_wasapi :: proc() {
-	_audio_impl_init = proc(cb: Audio_Callback, cb_data: rawptr) -> bool {
-		win.CoInitializeEx()
+audio_init_wasapi :: proc() -> bool {
+	win32_check(win.CoInitializeEx()) or_return
 
-		win32_check(
-			win.CoCreateInstance(
-				wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL,
-				wasapi.IID_IMMDeviceEnumerator, auto_cast &_wasapi.device_enumerator
-			)
-		) or_return
-		
-		for &ev in _wasapi.out_events do ev = win.CreateEventW(nil, false, false, nil)
+	win32_check(
+		win.CoCreateInstance(
+			wasapi.CLSID_MMDeviceEnumerator, nil, win.CLSCTX_ALL,
+			wasapi.IID_IMMDeviceEnumerator, auto_cast &_wasapi.device_enumerator
+		)
+	) or_return
+	
+	for &ev in _wasapi.out_events do ev = win.CreateEventW(nil, false, false, nil)		
 
-		_wasapi.callback = cb
-		_wasapi.callback_data = cb_data
-
-		return true
+	_audio_impl_set_callback = proc(cb: Audio_Callback, data: rawptr) {
+		_wasapi.callback      = cb
+		_wasapi.callback_data = data
 	}
 
 	_audio_impl_shutdown = proc() {
@@ -181,6 +179,8 @@ audio_use_wasapi :: proc() {
 			w.volume = v
 		}
 	}
+
+	return true
 }
 
 _reset_events :: proc(e: []win.HANDLE) {

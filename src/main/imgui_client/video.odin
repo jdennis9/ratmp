@@ -15,8 +15,9 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main
+package client
 
+import "src:main/shared"
 import "core:log"
 import stbi "vendor:stb/image"
 import imgui "src:thirdparty/odin-imgui"
@@ -121,14 +122,14 @@ texture_is_outdated :: proc(h: Texture_Handle) -> bool {
 
 texture_create_from_file :: proc(
 	path: string
-) -> (handle: Texture_Handle, width, height: int, error: Error) {
+) -> (handle: Texture_Handle, width, height: int, error: shared.Error) {
 	path_buf: [512]u8
 	path_cstr := cstring(&path_buf[0])
 	copy(path_buf[:511], path)
 
 	w, h: i32
 	image_data := stbi.load(path_cstr, &w, &h, nil, 4)
-	if image_data == nil do return {}, 0, 0, Custom_Error.NotFound
+	if image_data == nil do return {}, 0, 0, shared.Error_Code.NotFound
 	defer stbi.image_free(image_data)
 
 	width = auto_cast w

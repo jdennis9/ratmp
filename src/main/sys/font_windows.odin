@@ -15,9 +15,9 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-#+private file
-package main
+package sys
 
+import "src:main/shared"
 import "core:slice"
 import "core:strings"
 import "core:log"
@@ -27,35 +27,33 @@ import "base:runtime"
 import misc "src:bindings/windows_misc"
 import "core:mem"
 
-@private
-font_init_windows :: proc() -> Error {
-
+font_init_windows :: proc() -> shared.Error {
 	_font_impl_free = proc(f: System_Font) {
 		if f.handle != nil do free(f.handle)
 	}
 
 	_font_impl_get_font_path = proc(
 		f: System_Font, allocator: mem.Allocator
-	) -> (path: string, error: Error) {
+	) -> (path: string, error: shared.Error) {
 		buf: [512]u8
 
 		if f.handle == nil {
-			error = Custom_Error.NotFound
+			error = shared.Error_Code.NotFound
 			return
 		}
 
 		if !misc.get_font_file_from_logfont(auto_cast f.handle, cstring(&buf[0]), auto_cast len(buf)) {
-			error = Custom_Error.NotFound
+			error = shared.Error_Code.NotFound
 			return
 		}
 
-		path = strings.clone(string_from_array(buf[:]), allocator) or_return
+		path = strings.clone(shared.string_from_array(buf[:]), allocator) or_return
 		return
 	}
 
 	_font_impl_list_system_fonts = proc(
 		allocator: mem.Allocator
-	) -> (out: []System_Font, error: Error) {
+	) -> (out: []System_Font, error: shared.Error) {
 
 		Args :: struct {
 			output: [dynamic]System_Font,
@@ -88,7 +86,7 @@ font_init_windows :: proc() -> Error {
 
 			utf16.decode_to_utf8(buf[:255], transmute([]u16) font_name)
 
-			sf.name = strings.clone_to_cstring(string_from_array(buf[:]), args.allocator)
+			sf.name = strings.clone_to_cstring(shared.string_from_array(buf[:]), args.allocator)
 
 			append(&args.output, sf)
 
@@ -101,5 +99,5 @@ font_init_windows :: proc() -> Error {
 		return
 	}
 
-	return nil
+	return true
 }

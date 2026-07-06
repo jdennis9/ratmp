@@ -16,7 +16,7 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #+private file
-package main
+package client
 
 import gl "vendor:OpenGL"
 import "core:log"
@@ -51,7 +51,6 @@ video_init_opengl :: proc(set_gl_proc_address: gl.Set_Proc_Address_Type) -> bool
 		if gl.GetError() != gl.NO_ERROR {
 			gl.Finish()
 			handle_graphics_device_lost()
-			global_flags |= {.VideoDeviceLost}
 			return
 		}
 

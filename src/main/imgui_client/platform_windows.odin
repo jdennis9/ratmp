@@ -16,16 +16,14 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #+private file
-package main
+package client
 
+import "src:main/shared"
 import "core:unicode/utf16"
 import win "core:sys/windows"
 import imgui_win32 "src:thirdparty/odin-imgui/imgui_impl_win32"
 
-
-
-WINDOW_CLASS_NAME :: PROGRAM_ID + "_window_class"
-
+WINDOW_CLASS_NAME :: shared.PROGRAM_ID + "_window_class"
 
 _win: struct {
 	hinstance: win.HINSTANCE,
@@ -43,7 +41,7 @@ platform_init_win32 :: proc() -> bool {
 
 	_platform_impl_make_window = proc() -> bool {
 		_win.hwnd = win.CreateWindowExW(
-			0, WINDOW_CLASS_NAME, PROGRAM_NAME_AND_VERSION, win.WS_OVERLAPPEDWINDOW, win.CW_USEDEFAULT,
+			0, WINDOW_CLASS_NAME, shared.PROGRAM_NAME_AND_VERSION, win.WS_OVERLAPPEDWINDOW, win.CW_USEDEFAULT,
 			win.CW_USEDEFAULT, win.CW_USEDEFAULT, win.CW_USEDEFAULT, nil, nil, _win.hinstance, nil
 		)
 

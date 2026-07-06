@@ -31,6 +31,7 @@ Track_Filter_Spec :: struct {
 
 // Filters the tracks in-place and returns the newly sized slice of tracks
 // WARNING: This breaks sort order, use it before sorting!!
+@require_results
 filter_tracks :: proc(input: []Track_ID, spec: Track_Filter_Spec) -> []Track_ID {
 	text_buf:       mem.Scratch
 	text_allocator: mem.Allocator
@@ -93,7 +94,7 @@ filter_tracks :: proc(input: []Track_ID, spec: Track_Filter_Spec) -> []Track_ID 
 
 @test
 test_filter_tracks :: proc(t: ^testing.T) {
-	testing.expect(t, init({}))
+	testing.expect(t, init({}) == nil)
 	defer shutdown()
 
 	{
