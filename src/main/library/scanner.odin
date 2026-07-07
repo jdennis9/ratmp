@@ -15,12 +15,16 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main
+package library
 
+// =============================================================================
+// Utility for scanning files to add to the library on a background thread
+// =============================================================================
+
+import "src:main/shared"
 import "core:slice"
 import "core:path/filepath"
 import "core:path/slashpath"
-import lib "src:main/library"
 import "core:log"
 import "core:testing"
 import "core:strings"
@@ -29,21 +33,39 @@ import "core:mem"
 import "core:thread"
 import "core:os"
 
-TRACK_SCANNER_SCRATCH_SIZE :: (32<<10)
+FILE_SCANNER_SCRATCH_SIZE :: (32<<10)
 
-Track_Scanner_Input :: struct {
+Scanned_Track :: struct {
+	tags: Track_Tags,
+	url:  string,
+}
+
+Scanned_Art :: struct {
+	folder: string,
+	image:  string,
+}
+
+Scanned_Item :: struct {
+	variant: union {
+		Scanned_Track,
+		Scanned_Art,
+	},
+	overwrite: bool,
+}
+
+Scanner_Input :: struct {
 	path:      string,
 	overwrite: bool,
 }
 
-Track_Scanner_Progress :: struct {
+Scanner_Progress :: struct {
 	scanned_items, total_items, scanned_files: int,
 }
 
-Track_Scanner :: struct {
-	worker:   Worker(Track_Scanner_Input, Server_Scanned_Item),
+Scanner :: struct {
+	worker:   shared.Worker(Scanner_Input, Scanned_Item),
 	runner:   ^thread.Thread,
-	progress: Track_Scanner_Progress,
+	progress: Scanner_Progress,
 }
 
 @(private="file")
@@ -63,31 +85,31 @@ _accum_files :: proc(dir: string, output: ^[dynamic]os.File_Info, counter: ^int,
 	return nil
 }
 
-track_scanner_init :: proc(
-	ts: ^Track_Scanner,
-	consume_proc: proc(data: rawptr, tracks: []Server_Scanned_Item) -> Error,
+scanner_init :: proc(
+	ts: ^Scanner,
+	consume_proc: proc(data: rawptr, items: []Scanned_Item) -> Error,
 	consume_data: rawptr,
 ) {
 	_thread_proc :: proc(t: ^thread.Thread) {
-		w := cast(^Track_Scanner) t.data
-		worker_run(&w.worker)
+		w := cast(^Scanner) t.data
+		shared.worker_run(&w.worker)
 	}
 
 	_produce_proc :: proc(
 		data:             rawptr,
-		input:            []Track_Scanner_Input,
+		input:            []Scanner_Input,
 		output_allocator: mem.Allocator,
-	) -> (output: []Server_Scanned_Item, error: Error) {
+	) -> (output: []Scanned_Item, error: shared.Error) {
 		scratch: mem.Scratch
 		mem.scratch_init(&scratch, 512<<10, context.allocator)
 		defer mem.scratch_destroy(&scratch)
 
 		context.allocator = mem.scratch_allocator(&scratch)
 
-		progress := cast(^Track_Scanner_Progress) data
+		progress := cast(^Scanner_Progress) data
 		
 		buf := make_dynamic_array_len_cap(
-			[dynamic]Server_Scanned_Item, 0, 4096,
+			[dynamic]Scanned_Item, 0, 4096,
 			output_allocator
 		)
 		
@@ -96,12 +118,12 @@ track_scanner_init :: proc(
 		sync.atomic_store(&progress.scanned_files, 0)
 				
 		process_file :: proc(
-			progress:         ^Track_Scanner_Progress,
-			input:            Track_Scanner_Input,
-			output:           ^[dynamic]Server_Scanned_Item,
+			progress:         ^Scanner_Progress,
+			input:            Scanner_Input,
+			output:           ^[dynamic]Scanned_Item,
 			depth:            int,
 			output_allocator: mem.Allocator,
-		) -> Error {
+		) -> shared.Error {
 			image_formats := []string {
 				".jpeg", ".jpg", ".png", ".bmp",
 				".tga", ".webm"
@@ -117,7 +139,7 @@ track_scanner_init :: proc(
 				if depth != 0 do sync.atomic_add(&progress.total_items, 1)
 				
 				for file, _ in os.read_directory_iterator(&iter) {
-					process_file(progress, Track_Scanner_Input {
+					process_file(progress, Scanner_Input {
 						path = file.fullpath,
 						overwrite = input.overwrite,
 					}, output, depth+1, output_allocator)
@@ -127,15 +149,15 @@ track_scanner_init :: proc(
 			}
 			else {
 				ext := filepath.ext(input.path)
-				audio_format, is_audio := lib.audio_file_format_from_extension(ext)
+				audio_format, is_audio := audio_file_format_from_extension(ext)
 
 				if is_audio {
-					track_data := lib.read_tags(
+					track_data := read_tags(
 						input.path, output_allocator
 					) or_return
 
-					s := Server_Scanned_Item {
-						variant = Server_Scanned_Track {
+					s := Scanned_Item {
+						variant = Scanned_Track {
 							tags = track_data,
 							url  = strings.concatenate({"file://", input.path}, output_allocator),
 						},
@@ -149,14 +171,14 @@ track_scanner_init :: proc(
 				else if slice.contains(image_formats, ext) {
 					folder_name, _ := filepath.clean(filepath.dir(input.path), output_allocator)
 
-					s := Server_Scanned_Item {
-						variant = Server_Scanned_Cover_Art {
+					s := Scanned_Item {
+						variant = Scanned_Art {
 							folder = folder_name,
 							image  = strings.clone(input.path, output_allocator),
 						},
 					}
 
-					log.debug("Cover art", folder_name, s.variant.(Server_Scanned_Cover_Art).image)
+					log.debug("Cover art", folder_name, s.variant.(Scanned_Art).image)
 
 					s.overwrite = input.overwrite
 
@@ -179,17 +201,17 @@ track_scanner_init :: proc(
 	}
 
 	_clone_proc :: proc(
-		input: Track_Scanner_Input, allocator: mem.Allocator
-	) -> (out: Track_Scanner_Input, error: mem.Allocator_Error) {
+		input: Scanner_Input, allocator: mem.Allocator
+	) -> (out: Scanner_Input, error: mem.Allocator_Error) {
 		out = input
 		out.path = strings.clone(input.path,allocator)
 		return
 	}
 
-	worker_init(
+	shared.worker_init(
 		&ts.worker, _produce_proc, consume_proc, &ts.progress, consume_data,
-		output_scratch_size = TRACK_SCANNER_SCRATCH_SIZE,
-		input_scratch_size = 512<<10,
+		output_scratch_size = FILE_SCANNER_SCRATCH_SIZE,
+		input_scratch_size  = 512<<10,
 	)
 
 	ts.worker.clone_input = _clone_proc
@@ -201,22 +223,22 @@ track_scanner_init :: proc(
 	thread.start(ts.runner)
 }
 
-track_scanner_destroy :: proc(ts: ^Track_Scanner) {
-	worker_destroy(&ts.worker, ts.runner)
+scanner_destroy :: proc(ts: ^Scanner) {
+	shared.worker_destroy(&ts.worker, ts.runner)
 }
 
-track_scanner_queue :: proc(ts: ^Track_Scanner, input: []Track_Scanner_Input) {
-	worker_send_input(&ts.worker, input)
+scanner_queue :: proc(ts: ^Scanner, input: []Scanner_Input) {
+	shared.worker_send_input(&ts.worker, input)
 }
 
-track_scanner_is_running :: proc(ts: ^Track_Scanner) -> bool {
-	return worker_is_working(&ts.worker)
+scanner_is_running :: proc(ts: ^Scanner) -> bool {
+	return shared.worker_is_working(&ts.worker)
 }
 
-track_scanner_get_progress :: proc(
-	ts: ^Track_Scanner
+scanner_get_progress :: proc(
+	ts: ^Scanner
 ) -> (scanned_dirs, total_dirs, scanned_files: int, running: bool) {
-	if track_scanner_is_running(ts) {
+	if scanner_is_running(ts) {
 		scanned_dirs = sync.atomic_load(&ts.progress.scanned_items)
 		total_dirs = sync.atomic_load(&ts.progress.total_items)
 		scanned_files = sync.atomic_load(&ts.progress.scanned_files)
@@ -227,21 +249,13 @@ track_scanner_get_progress :: proc(
 	return
 }
 
-@test
-test_track_scanner :: proc(t: ^testing.T) {
-	ts: Track_Scanner
-	done_signal: sync.Auto_Reset_Event
+scanner_make_input :: proc(paths: []string, overwrite: bool, allocator: mem.Allocator) -> []Scanner_Input {
+	res := make([]Scanner_Input, len(paths), allocator)
+	for &input, i in res {
+		input.path = paths[i]
+		input.overwrite = overwrite
+	}
 
-	context.logger = log.create_console_logger()
-	defer log.destroy_console_logger(context.logger)
-
-	consume_proc :: proc(_: rawptr, tracks: []Server_Scanned_Item) -> Error {return nil}
-
-	track_scanner_init(&ts, consume_proc, nil)
-	defer track_scanner_destroy(&ts)
-
-	ts.worker.processing_done_signal = &done_signal
-
-	track_scanner_queue(&ts, {{path = "D:\\Media\\Music"}})
-	sync.auto_reset_event_wait(&done_signal)
+	return res
 }
+

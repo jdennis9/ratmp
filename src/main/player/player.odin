@@ -23,6 +23,8 @@ State :: struct {
 	paused:      bool,
 	shuffle_on:  bool,
 	repeat_mode: Repeat_Mode,
+	track:       Maybe(lib.Track_ID),
+	playlist:    shared.UID,
 }
 
 Player :: struct {
@@ -77,7 +79,7 @@ _audio_callback :: proc(
 	case .Paused:
 	case .Resumed:
 	case .TrackFinished:
-		play_next_track()
+		play_next_track(immediate = false)
 	}
 
 	return .Continue
@@ -119,8 +121,18 @@ get_state :: proc() -> State {
 		paused      = audio_is_paused(),
 		repeat_mode = p.repeat_mode,
 		shuffle_on  = p.enable_shuffle,
-		stopped     = playback_thread_has_track(p.playback_thread),
+		stopped     = !playback_thread_has_track(p.playback_thread),
+		track       = p.playing_track_id,
+		playlist    = p.playing_playlist_id,
 	}
+}
+
+get_current_track :: proc() -> Maybe(lib.Track_ID) {
+	return _player.playing_track_id
+}
+
+get_current_playlist :: proc() -> shared.UID {
+	return _player.playing_playlist_id
 }
 
 clear_queue :: proc() {

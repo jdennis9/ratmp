@@ -113,7 +113,26 @@ track_table_row_from_track :: proc(track_id: lib.Track_ID, allocator: mem.Alloca
 	return
 }
 
-_update :: proc(
+// track_table_update already checks this, but calling it manually
+// can be used to avoid having to grab track ids from somewhere
+@private
+track_table_is_up_to_date :: proc(
+	table:         ^Track_Table,
+	tracks_serial: uint,
+	playlist_uid:  shared.UID,
+) -> bool {
+	filter_hash := hash.fnv64a(transmute([]byte) string(cstring(&table.filter_buf[0])))
+
+	up_to_date := table.intialized && !table.force_update && tracks_serial == table.rows_serial && 
+		playlist_uid == table.playlist_uid &&
+		filter_hash == table.filter_hash &&
+		table.sort_serial == table.sort_spec_serial
+	
+	return up_to_date
+}
+
+@private
+track_table_update :: proc(
 	table:         ^Track_Table,
 	tracks_serial: uint,
 	track_ids_in:  []lib.Track_ID,
@@ -130,13 +149,8 @@ _update :: proc(
 	}
 	
 	filter_hash := hash.fnv64a(transmute([]byte) filter_spec.text)
-	
-	up_to_date := table.intialized && !table.force_update && tracks_serial == table.rows_serial && 
-		playlist_uid == table.playlist_uid &&
-		filter_hash == table.filter_hash &&
-		table.sort_serial == table.sort_spec_serial
-	
-	if up_to_date do return
+
+	if track_table_is_up_to_date(table, tracks_serial, playlist_uid) do return
 	
 	shared.TIME_SCOPE("Update track table of", len(track_ids_in))
 	
@@ -173,14 +187,11 @@ _update :: proc(
 track_table_show :: proc(
 	table:         ^Track_Table,
 	str_id:        cstring,
-	tracks_serial: uint,
-	track_ids:     []lib.Track_ID,
 	flags:         Track_Table_Flags,
-	playlist_uid:  shared.UID,
 ) -> bool {
 	frame_allocator_guard()
 
-	_update(table, tracks_serial, track_ids, playlist_uid)
+	playback_state := get_last_playback_state()
 
 	// --------------------------------------------------------------------------
 	// Filter
@@ -218,6 +229,11 @@ track_table_show :: proc(
 	// Begin table
 	// --------------------------------------------------------------------------
 	imgui.TextDisabled("%d tracks", i32(len(table.rows)))
+
+	if !playback_state.stopped && table.playlist_uid == player.get_current_playlist() {
+		imgui.SameLine()
+		imx.text_unformatted("- Now playing")
+	}
 
 	actions: struct {
 		play_track:             Maybe(lib.Track_ID),
@@ -321,9 +337,9 @@ track_table_show :: proc(
 				title_buf: [128]u8
 				copy(title_buf[:127], row.title)
 
-				/*if row.id == sv.current_track_id {
-					imgui.TableSetBgColor(.RowBg0, ui_theme.colors[.PlayingHighlight])
-				}*/
+				if playback_state.track != nil && row.id == playback_state.track.? {
+					imgui.TableSetBgColor(.RowBg0, 0xff0000ff)
+				}
 
 				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
 					select_table_rows(table, row_index, false)
@@ -452,7 +468,7 @@ track_table_show :: proc(
 		}
 		else {
 			tracks := track_table_get_tracks(table^, get_frame_allocator())
-			player.play_playlist(tracks, playlist_uid, actions.play_track.?)
+			player.play_playlist(tracks, table.playlist_uid, actions.play_track.?)
 		}
 	}
 

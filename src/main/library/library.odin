@@ -17,6 +17,7 @@
 */
 package library
 
+import "core:sync"
 import "src:bindings/taglib"
 import "core:hash"
 import "base:runtime"
@@ -39,11 +40,7 @@ Album_ID         :: Shared_String_ID
 Track_ID         :: hm.Handle32
 Playlist_ID      :: hm.Handle32
 
-Error :: union {
-	bool,
-	os.Error,
-	mem.Allocator_Error,
-}
+Error :: shared.Error
 
 Shared_String_Type :: enum u8 {
 	Artist,
@@ -102,6 +99,7 @@ Folder_Cover_Art :: struct {
 }
 
 Library :: struct {
+	lock:             sync.Mutex, // only used outside of this package
 	tracks_serial:    uint,
 	tracks:           Track_Map,
 	shared_strings:   [Shared_String_Type][dynamic]Shared_String,
@@ -538,6 +536,14 @@ get_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, ou
 url_to_filepath :: proc(url: string) -> (string, bool) {
 	if !strings.starts_with(url, "file://") do return "", false
 	return strings.trim_prefix(url, "file://"), true
+}
+
+lock :: proc() {
+	sync.lock(&_library.lock)
+}
+
+unlock :: proc() {
+	sync.unlock(&_library.lock)
 }
 
 @test

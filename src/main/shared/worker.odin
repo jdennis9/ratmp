@@ -15,7 +15,7 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package main
+package shared
 
 import "core:time"
 import "core:fmt"
@@ -33,7 +33,7 @@ import "core:mem"
 
 Worker_Progress :: struct {
 	processed_items: int,
-	total_items: int,
+	total_items:     int,
 }
 
 Worker :: struct($IN: typeid, $OUT: typeid) {
@@ -55,8 +55,8 @@ Worker :: struct($IN: typeid, $OUT: typeid) {
 	// This is passed to the optional clone_input proc
 	input_scratch:          mem.Scratch,
 
-	produce: proc(data: rawptr, input: []IN, output_allocator: mem.Allocator) -> ([]OUT, Error),
-	consume: proc(data: rawptr, output: []OUT) -> Error,
+	produce:     proc(data: rawptr, input: []IN, output_allocator: mem.Allocator) -> ([]OUT, Error),
+	consume:     proc(data: rawptr, output: []OUT) -> Error,
 	clone_input: proc(input: IN, allocator: mem.Allocator) -> (IN, mem.Allocator_Error),
 }
 
@@ -136,8 +136,6 @@ worker_run :: proc(w: ^Worker($IN, $OUT)) {
 		mem.dynamic_arena_free_all(&output_arena)
 	}
 
-	fmt.println("Closing")
-
 	return
 }
 
@@ -182,7 +180,6 @@ test_worker :: proc(t: ^testing.T) {
 	consume_proc :: proc(
 		_: rawptr, output: []int,
 	) -> Error {
-		fmt.println("Consoom", output)
 		return nil
 	}
 	
@@ -190,7 +187,6 @@ test_worker :: proc(t: ^testing.T) {
 	
 	worker_init(&w, produce_proc, consume_proc, nil, nil)
 	defer {
-		fmt.println("CLOSE")
 		worker_destroy(&w, thr)
 	}
 	
@@ -199,6 +195,5 @@ test_worker :: proc(t: ^testing.T) {
 	thread.start(thr)
 	
 	worker_send_input(&w, []int{1, 2, 3, 4, 5, 6, 7, 8})
-	fmt.println("GSDGSSGDSGSDGSGDGDGSSSSSSSSSSSSSSSSSSSSSSSSSSS")
 	time.sleep(time.Second * 4)
 }

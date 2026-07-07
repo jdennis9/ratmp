@@ -30,8 +30,19 @@ import "src:main/player"
 import imgui "src:thirdparty/odin-imgui"
 
 UI :: struct {
+	font_allocator:           mem.Allocator,
+	font_arena:               mem.Dynamic_Arena,
 	frame_allocator:          mem.Allocator,
 	frame_allocation_tracker: mem.Tracking_Allocator,
+	playback_state:           player.State,
+	system_fonts:             []sys.System_Font,
+	library_scanner:          lib.Scanner,
+
+	windows: struct {
+		library: struct {
+			track_table: Track_Table,
+		},
+	}
 }
 
 @(private="file")
@@ -49,32 +60,82 @@ ui_init :: proc() -> shared.Error {
 		ui.frame_allocator = context.temp_allocator
 	}
 
+	mem.dynamic_arena_init(&ui.font_arena)
+	ui.font_allocator = mem.dynamic_arena_allocator(&ui.font_arena)
+
+	lib.scanner_init(
+		&ui.library_scanner,
+		scanner_consume_proc,
+		nil
+	)
+
 	return nil
 }
 
 ui_shutdown :: proc() {
+	ui := &_ui
+
+	ui_free_fonts()
+	mem.dynamic_arena_destroy(&ui.font_arena)
+	lib.scanner_destroy(&ui.library_scanner)
 }
 
 ui_show :: proc() {
 	ui := &_ui
 
+	lib.lock()
+	defer lib.unlock()
+
+	ui.playback_state = player.get_state()
 	free_all(ui.frame_allocator)
+
+	imgui.PushStyleColor(.DockingEmptyBg, 0)
+	imgui.PushStyleColor(.WindowBg, 0)
+	imgui.DockSpaceOverViewport()
+	imgui.PopStyleColor(2)
 
 	_show_main_menu_bar()
 
-	@static tt: Track_Table
+	if imgui.Begin("Library") {
+		tracks_serial := lib.get_tracks_serial()
 
-	track_table_show(
-		&tt, "##library",
-		lib.get_tracks_serial(),
-		lib.get_all_track_ids(get_frame_allocator()),
-		{},
-		0
-	)
+		if !track_table_is_up_to_date(
+			&ui.windows.library.track_table, tracks_serial, 0
+		) {
+			track_table_update(
+				&ui.windows.library.track_table,
+				tracks_serial,
+				lib.get_all_track_ids(get_frame_allocator()),
+				0
+			)
+		}
+
+		track_table_show(&ui.windows.library.track_table, "##library", {})
+	}
+	imgui.End()
+}
+
+ui_free_fonts :: proc() {
+	ui := &_ui
+	for font in ui.system_fonts do sys.font_free(font)
+	free_all(ui.font_allocator)
+	ui.system_fonts = nil
+}
+
+ui_refresh_fonts :: proc() -> shared.Error {
+	ui := &_ui
+	ui_free_fonts()
+	ui.system_fonts = sys.font_list_system_fonts(ui.font_allocator) or_return
+
+	return nil
 }
 
 get_frame_allocator :: proc() -> mem.Allocator {
 	return _ui.frame_allocator
+}
+
+get_last_playback_state :: proc() -> player.State {
+	return _ui.playback_state
 }
 
 frame_allocator_guard :: runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD
@@ -94,21 +155,36 @@ _show_main_menu_bar :: proc() -> bool {
 		if imgui.MenuItem("Add files") {
 			frame_allocator_guard()
 
-			file_type := sys.File_Dialog_File_Type {
+			audio_file_type := sys.File_Dialog_File_Type {
 				extensions = lib.get_supported_extensions(temp_allocator),
 				name       = "Supported Audio File",
 			}
 
+			image_file_type := sys.File_Dialog_File_Type {
+				extensions = {".png", ".jpeg", ".jpg", ".webm", ".bmp", ".tga"},
+				name       = "Supported Image File",
+			}
+
 			files, have_files := sys.show_file_dialog({
 				select_multiple = true,
-				file_types      = {file_type},
+				file_types      = {audio_file_type, image_file_type},
 			}, temp_allocator)
 
 			if have_files {
-				for file in files {
-					tags := lib.read_tags(file, temp_allocator) or_continue
-					lib.add_track(tags, strings.concatenate({"file://", file}, temp_allocator))
-				}
+				queue_files_for_scan(files, false)
+			}
+		}
+
+		if imgui.MenuItem("Add folders") {
+			frame_allocator_guard()
+
+			folders, have_folders := sys.show_file_dialog({
+				select_multiple = true,
+				select_folders  = true,
+			}, temp_allocator)
+
+			if have_folders {
+				queue_files_for_scan(folders, false)
 			}
 		}
 	}
@@ -172,3 +248,26 @@ is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast (mods | key))
 }
 
+scanner_consume_proc :: proc(_: rawptr, input: []lib.Scanned_Item) -> shared.Error {
+	lib.lock()
+	defer lib.unlock()
+
+	for item in input {
+		switch v in item.variant {
+		case lib.Scanned_Track:
+			lib.add_track(v.tags, v.url)
+		case lib.Scanned_Art:
+			lib.add_cover_art(v.folder, v.image)
+		}
+	}
+
+	return nil
+}
+
+queue_files_for_scan :: proc(files: []string, overwrite: bool) {
+	frame_allocator_guard()
+
+	ui := &_ui
+	items := lib.scanner_make_input(files, overwrite, get_frame_allocator())
+	lib.scanner_queue(&ui.library_scanner, items)
+}
