@@ -113,6 +113,7 @@ Library :: struct {
 	folder_allocator: mem.Allocator,
 	folder_serial:    uint,
 	folder_cover_art: map[u64]Folder_Cover_Art, // folder hash -> cover art path
+	url_to_track_id:  map[u32]Track_ID, // url hash -> track id
 
 	tracking_allocators: struct {
 		tag:         mem.Tracking_Allocator,
@@ -145,23 +146,14 @@ init :: proc(config: Library_Config) -> shared.Error {
 		l.folder_allocator = shared.track_allocator(l.folder_allocator, &l.tracking_allocators.folder_tree)
 	}
 
-	// @TEMP: http audio stream test
-	{
-		tags := Track_Tags {
-			artist = "TEST",
-			album  = "INTERNET TEST",
-			format = .Mp3,
-			title  = "INTERNET TEST",
-		}
-
-		add_track(tags, "https://audio-edge-d34v9.syd.o.radiomast.io/ref-128k-mp3-stereo")
-	}
-
 	return nil
 }
 
 shutdown :: proc() {
 	l := &_library
+
+	delete(l.folder_cover_art)
+	delete(l.url_to_track_id)
 
 	if l.config.enable_memory_tracking {
 		mem.tracking_allocator_destroy(&l.tracking_allocators.tag)
@@ -174,6 +166,8 @@ shutdown :: proc() {
 	for ss in l.shared_strings {
 		delete(ss)
 	}
+
+	l^ = {}
 }
 
 update :: proc() {

@@ -30,13 +30,7 @@ import "src:main/player"
 import imgui "src:thirdparty/odin-imgui"
 
 UI :: struct {
-	font_allocator:           mem.Allocator,
-	font_arena:               mem.Dynamic_Arena,
-	frame_allocator:          mem.Allocator,
-	frame_allocation_tracker: mem.Tracking_Allocator,
-	playback_state:           player.State,
-	system_fonts:             []sys.System_Font,
-	library_scanner:          lib.Scanner,
+	library_scanner: lib.Scanner,
 
 	windows: struct {
 		library: struct {
@@ -51,18 +45,6 @@ _ui: UI
 ui_init :: proc() -> shared.Error {
 	ui := &_ui
 
-	if launch_config.memory_debug {
-		ui.frame_allocator = shared.track_allocator(
-			context.temp_allocator, &ui.frame_allocation_tracker
-		)
-	}
-	else {
-		ui.frame_allocator = context.temp_allocator
-	}
-
-	mem.dynamic_arena_init(&ui.font_arena)
-	ui.font_allocator = mem.dynamic_arena_allocator(&ui.font_arena)
-
 	lib.scanner_init(
 		&ui.library_scanner,
 		scanner_consume_proc,
@@ -74,9 +56,6 @@ ui_init :: proc() -> shared.Error {
 
 ui_shutdown :: proc() {
 	ui := &_ui
-
-	ui_free_fonts()
-	mem.dynamic_arena_destroy(&ui.font_arena)
 	lib.scanner_destroy(&ui.library_scanner)
 }
 
@@ -85,9 +64,6 @@ ui_show :: proc() {
 
 	lib.lock()
 	defer lib.unlock()
-
-	ui.playback_state = player.get_state()
-	free_all(ui.frame_allocator)
 
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.PushStyleColor(.WindowBg, 0)
@@ -113,29 +89,6 @@ ui_show :: proc() {
 		track_table_show(&ui.windows.library.track_table, "##library", {})
 	}
 	imgui.End()
-}
-
-ui_free_fonts :: proc() {
-	ui := &_ui
-	for font in ui.system_fonts do sys.font_free(font)
-	free_all(ui.font_allocator)
-	ui.system_fonts = nil
-}
-
-ui_refresh_fonts :: proc() -> shared.Error {
-	ui := &_ui
-	ui_free_fonts()
-	ui.system_fonts = sys.font_list_system_fonts(ui.font_allocator) or_return
-
-	return nil
-}
-
-get_frame_allocator :: proc() -> mem.Allocator {
-	return _ui.frame_allocator
-}
-
-get_last_playback_state :: proc() -> player.State {
-	return _ui.playback_state
 }
 
 frame_allocator_guard :: runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD

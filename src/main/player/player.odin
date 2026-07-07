@@ -28,6 +28,7 @@ State :: struct {
 }
 
 Player :: struct {
+	lock:                       sync.Mutex,
 	queue:                      [dynamic]lib.Track_ID,
 	queue_lock:                 sync.Mutex,
 	queue_serial:               uint,
@@ -54,6 +55,9 @@ _audio_callback :: proc(
 	spec:  Audio_Spec
 ) -> Audio_Callback_Status {
 	p := &_player
+
+	lock()
+	defer unlock()
 
 	switch event {
 	case .Stream:
@@ -113,6 +117,9 @@ shutdown :: proc() {
 
 	_player = {}
 }
+
+lock :: proc() {sync.lock(&_player.lock)}
+unlock :: proc() {sync.unlock(&_player.lock)}
 
 get_state :: proc() -> State {
 	p := &_player

@@ -17,6 +17,8 @@
 */
 package client
 
+import "src:main/sys"
+import "core:mem"
 import "core:log"
 import "src:main/media_controls"
 import "core:os"
@@ -33,9 +35,20 @@ launch_config: struct {
 	no_audio:          bool `usage:"[Debug] Disable audio output."`,
 }
 
+_client: struct {
+	media_controls_state:     player.State,
+	playback_state:           player.State, // updated every frame
+	font_allocator:           mem.Allocator,
+	font_arena:               mem.Dynamic_Arena,
+	frame_allocator:          mem.Allocator,
+	frame_allocation_tracker: mem.Tracking_Allocator,
+	system_fonts:             []sys.System_Font,
+}
 
 @(private="file")
 run :: proc() -> shared.Error {
+	client := &_client
+
 	context.logger = log.create_console_logger()
 	defer log.destroy_console_logger(context.logger)
 
@@ -62,6 +75,8 @@ run :: proc() -> shared.Error {
 		when ODIN_OS == .Windows do media_controls.init_smtc()
 	}
 
+	media_controls.set_handler(media_controls_handler, nil)
+
 	if !launch_config.headless {
 		when ODIN_OS == .Windows do platform_init_win32() or_return
 		else do platform_init_glfw() or_return
@@ -70,11 +85,51 @@ run :: proc() -> shared.Error {
 	platform_make_window() or_return
 	defer platform_destroy_window()
 
+	// --------------------------------------------------------------------------
+	// Initialize client stuff
+	// --------------------------------------------------------------------------
+	{
+		if launch_config.memory_debug {
+		client.frame_allocator = shared.track_allocator(
+			context.temp_allocator, &client.frame_allocation_tracker
+		)
+		}
+		else {
+			client.frame_allocator = context.temp_allocator
+		}
+
+		mem.dynamic_arena_init(&client.font_arena)
+		client.font_allocator = mem.dynamic_arena_allocator(&client.font_arena)
+	}
+	defer free_fonts()
+	defer mem.dynamic_arena_destroy(&client.font_arena)
+
 	ui_init() or_return
 	defer ui_shutdown()
 
 	for {
+		free_all(client.frame_allocator)
+
 		platform_poll_events()
+
+		client.playback_state = player.get_state()
+
+		if client.playback_state.track != client.media_controls_state.track {
+			log.debug("Update media controls track")
+			track_id := client.playback_state.track
+			if track_id != nil {
+				if track, ok := lib.get_track(track_id.?); ok {
+					media_controls.update_track(track)
+				}
+			}
+		}
+
+		if client.playback_state != client.media_controls_state {
+			log.debug("Update media controls state")
+			media_controls.update_state(client.playback_state)
+			client.media_controls_state = client.playback_state
+		}
+
 		
 		platform_imgui_new_frame()
 		video_imgui_new_frame()
@@ -94,4 +149,43 @@ main :: proc() {
 	run()
 }
 
+media_controls_handler :: proc(_: rawptr, cmd: media_controls.Command) {
+	player.lock()
+	defer player.unlock()
 
+	switch cmd {
+	case .Pause:
+	case .Play:
+	case .Stop: player.stop_playback()
+	case .ShuffleOn:
+	case .ShuffleOff:
+	case .Next: player.play_next_track()
+	case .Prev: player.play_prev_track()
+	case .RepeatTrack:
+	case .RepeatPlaylist:
+	case .RepeatOff:
+	}
+}
+
+free_fonts :: proc() {
+	client := &_client
+	for font in client.system_fonts do sys.font_free(font)
+	free_all(client.font_allocator)
+	client.system_fonts = nil
+}
+
+refresh_fonts :: proc() -> shared.Error {
+	client := &_client
+	free_fonts()
+	client.system_fonts = sys.font_list_system_fonts(client.font_allocator) or_return
+
+	return nil
+}
+
+get_frame_allocator :: proc() -> mem.Allocator {
+	return _client.frame_allocator
+}
+
+get_last_playback_state :: proc() -> player.State {
+	return _client.playback_state
+}

@@ -66,3 +66,15 @@ set_handler :: proc(h: Handler, data: rawptr) {
 	_handler = h
 	_handler_data = data
 }
+
+update_state :: proc(state: player.State) {
+	if _impl.update_state != nil do _impl.update_state(state)
+}
+
+update_track :: proc(track: library.Track) {
+	if _impl.update_track != nil do _impl.update_track(track)
+}
+
+shutdown :: proc() {
+	if _impl.shutdown != nil do _impl.shutdown()
+}
