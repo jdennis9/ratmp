@@ -469,6 +469,13 @@ show_theme_editor :: proc() -> bool {
 	return true
 }
 
+@private
+theme_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	if ev == .Show do show_theme_editor()
+
+	return true
+}
+
 _apply_accents :: proc() {
 	rgb_to_hsv :: proc(v: [3]f32) -> (hsv: [3]f32) {
 		imgui.ColorConvertRGBtoHSV(v.r, v.g, v.b, &hsv[0], &hsv[1], &hsv[2])

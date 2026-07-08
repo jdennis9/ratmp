@@ -235,6 +235,7 @@ track_table_show :: proc(
 		imx.text_unformatted("- Now playing")
 	}
 
+	// Deferred events processed at the end of this proc
 	actions: struct {
 		play_track:             Maybe(lib.Track_ID),
 		add_to_playlist:        Maybe(lib.Playlist_ID),
@@ -471,7 +472,6 @@ track_table_show :: proc(
 
 			}
 
-			// @FIXME
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Artist) {
 				imx.text_unformatted(
 					lib.join_shared_strings(.Artist, row.artists, get_frame_allocator())
@@ -482,7 +482,6 @@ track_table_show :: proc(
 				imx.text_unformatted(lib.get_shared_string(.Album, row.album.?))
 			}
 
-			// @FIXME
 			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Genre) {
 				imx.text_unformatted(
 					lib.join_shared_strings(.Genre, row.genres, get_frame_allocator())

@@ -146,6 +146,10 @@ get_queue :: proc() -> []lib.Track_ID {
 	return _player.queue[:]
 }
 
+get_queue_serial :: proc() -> uint {
+	return _player.queue_serial
+}
+
 set_paused :: proc(paused: bool) {
 	if paused {
 		if !audio_is_paused() do audio_pause()

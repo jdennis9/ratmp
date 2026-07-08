@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:fmt"
 import "src:imx"
 import "base:runtime"
 import "core:strings"
@@ -38,8 +39,53 @@ DEFAULT_FONT_CONFIG :: imgui.FontConfig {
 	ExtraSizeScale = 1,
 }
 
+UI_Window_Event :: enum {
+	Show,
+	Hidden,
+	Free,
+	SaveState,
+	LoadState,
+}
+
+UI_Window :: struct {
+	title:         string,
+	internal_name: string,
+	procedure:     proc(ev: UI_Window_Event) -> bool,
+}
+
+UI_Window_ID :: enum {
+	Library,
+	Queue,
+	ThemeEditor,
+}
+
+UI_WINDOWS := [UI_Window_ID]UI_Window {
+	.Library = {
+		title         = "Library",
+		internal_name = "_library",
+		procedure     = library_window_proc,
+	},
+	.Queue = {
+		title         = "Queue",
+		internal_name = "_queue",
+		procedure     = queue_window_proc,
+	},
+	.ThemeEditor = {
+		title         = "Theme",
+		internal_name = "_theme_editor",
+		procedure     = theme_editor_window_proc,
+	},
+}
+
+UI_Window_State :: struct {
+	shown:          bool,
+	bring_to_front: bool,
+}
+
 UI :: struct {
 	library_scanner: lib.Scanner,
+
+	window_state: [UI_Window_ID]UI_Window_State,
 
 	windows: struct {
 		library: struct {
@@ -63,6 +109,8 @@ ui_init :: proc() -> shared.Error {
 	)
 
 	ui_apply_fonts()
+
+	for &ws in ui.window_state do ws.shown = true
 	
 	return nil
 }
@@ -90,6 +138,8 @@ ui_apply_fonts :: proc() {
 ui_show :: proc() {
 	ui := &_ui
 
+	temp_allocator := get_frame_allocator()
+
 	lib.lock()
 	defer lib.unlock()
 
@@ -100,28 +150,21 @@ ui_show :: proc() {
 
 	_show_main_menu_bar()
 
-	if imgui.Begin("Library") {
-		tracks_serial := lib.get_tracks_serial()
+	{
+		frame_allocator_guard()
+		
+		for &state, id in ui.window_state {
+			if !state.shown do continue
+			win := UI_WINDOWS[id]
 
-		if !track_table_is_up_to_date(
-			&ui.windows.library.track_table, tracks_serial, 0
-		) {
-			track_table_update(
-				&ui.windows.library.track_table,
-				tracks_serial,
-				lib.get_all_track_ids(get_frame_allocator()),
-				0
-			)
+			name := fmt.caprint(win.title, win.internal_name, sep="###", allocator=temp_allocator)
+
+			if imgui.Begin(name, &state.shown) {
+				win.procedure(.Show)
+			}
+			imgui.End()
 		}
-
-		track_table_show(&ui.windows.library.track_table, "##library", {})
 	}
-	imgui.End()
-
-	if imgui.Begin("Theme") {
-		show_theme_editor()
-	}
-	imgui.End()
 }
 
 frame_allocator_guard :: runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD
