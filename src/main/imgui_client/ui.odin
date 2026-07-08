@@ -133,6 +133,7 @@ _show_main_menu_bar :: proc() -> bool {
 	imgui.BeginMainMenuBar() or_return
 	defer imgui.EndMainMenuBar()
 
+	track_info := player.get_track_info()
 	temp_allocator := get_frame_allocator()
 
 	if imgui.BeginMenu("File") {
@@ -182,7 +183,7 @@ _show_main_menu_bar :: proc() -> bool {
 	player_state := get_last_playback_state()
 	shuffle_on := player.is_shuffle_on()
 	if imgui.MenuItem(ICON_SHUFFLE, nil, shuffle_on) {
-		player.set_shuffle_on(shuffle_on)
+		player.set_shuffle_on(!shuffle_on)
 	}
 
 	if imgui.MenuItem(ICON_STOP) do player.stop_playback()
@@ -197,6 +198,12 @@ _show_main_menu_bar :: proc() -> bool {
 
 	if imgui.MenuItem(ICON_NEXT_TRACK) do player.play_next_track()
 
+	{
+		track_pos := player.get_playback_pos()
+		if imx.scrubber("##seek", &track_pos, 0, track_info.duration) {
+			player.seek(track_pos)
+		}
+	}
 
 	return true
 }

@@ -184,11 +184,11 @@ media_controls_handler :: proc(_: rawptr, cmd: media_controls.Command) {
 	defer player.unlock()
 
 	switch cmd {
-	case .Pause:
-	case .Play:
+	case .Pause: player.set_paused(true)
+	case .Play: player.set_paused(false)
 	case .Stop: player.stop_playback()
-	case .ShuffleOn:
-	case .ShuffleOff:
+	case .ShuffleOn: player.set_shuffle_on(true)
+	case .ShuffleOff: player.set_shuffle_on(false)
 	case .Next: player.play_next_track()
 	case .Prev: player.play_prev_track()
 	case .RepeatTrack:

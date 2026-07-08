@@ -165,6 +165,18 @@ set_shuffle_on :: proc(on: bool) {
 	}
 }
 
+get_playback_pos :: proc() -> int {
+	return playback_thread_get_track_position(&_player.playback_thread)
+}
+
+seek :: proc(pos: int) {
+	playback_thread_seek(&_player.playback_thread, pos)
+	audio_drop_buffer()
+}
+
+get_track_info :: proc() -> decoder.Info {
+	return _player.playing_track_info
+}
 clear_queue :: proc() {
 	p := &_player
 	sync.guard(&p.queue_lock)
