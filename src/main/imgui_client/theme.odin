@@ -92,13 +92,7 @@ _THEME_FILENAME_TEMPLATE :: "*.json"
 
 @private
 theme_init :: proc() -> shared.Error {
-	_theme.colors[.PlayingHighlight] = 0xff0568fc
-	_theme.colors[.LeftChannelWave]  = 0xffffffff
-	_theme.colors[.RightChannelWave] = 0xff00ffff
-	_theme.colors[.VolumeLow]        = 0xff00ff00
-	_theme.colors[.VolumeHigh]       = 0xff0000ff
-	_theme.colors[.WaveBarOuter]     = 0xffffce00
-	_theme.colors[.WaveBarInner]     = 0xffff0800
+	_set_colors_to_default()
 
 	_themes.dir = filepath.join({get_config_path(), "themes"}, context.allocator) or_return
 
@@ -169,7 +163,6 @@ set_theme_from_file :: proc(path: string) -> shared.Error {
 	model: _Theme_Model
 	unmarshal_error := json.unmarshal(data, &model, allocator=get_frame_allocator())
 	
-	
 	if unmarshal_error != nil {
 		log.error(unmarshal_error)
 		return false
@@ -209,6 +202,21 @@ refresh_theme :: proc() {
 @private
 is_theme_dirty :: proc() -> bool {
 	return _theme.dirty
+}
+
+@private
+get_theme_color :: proc(col: Theme_Color) -> u32 {
+	return _theme.colors[col]
+}
+
+_set_colors_to_default :: proc() {
+	_theme.colors[.PlayingHighlight] = 0xff0568fc
+	_theme.colors[.LeftChannelWave]  = 0xffffffff
+	_theme.colors[.RightChannelWave] = 0xff00ffff
+	_theme.colors[.VolumeLow]        = 0xff00ff00
+	_theme.colors[.VolumeHigh]       = 0xff0000ff
+	_theme.colors[.WaveBarOuter]     = 0xffffce00
+	_theme.colors[.WaveBarInner]     = 0xffff0800
 }
 
 _set_theme_name :: proc(name: string) {
@@ -328,7 +336,7 @@ show_theme_editor :: proc() -> bool {
 
 		imgui.SameLine()
 
-		if imgui.ColorEdit4(label, col) {
+		if imgui.ColorEdit4(label, col, {.NoInputs}) {
 			edited = true
 			_theme.color_locked[idx] = true
 		}
@@ -349,7 +357,7 @@ show_theme_editor :: proc() -> bool {
 
 		imgui.SameLine()
 
-		edited |= imgui.ColorEdit3(label, &_theme.accents[accent])
+		edited |= imgui.ColorEdit3(label, &_theme.accents[accent], {.NoInputs})
 
 		return
 	}
@@ -434,7 +442,7 @@ show_theme_editor :: proc() -> bool {
 
 		imgui.SameLine()
 
-		changed |= imx.color_edit_u32(THEME_COLOR_NAMES[col], &t.colors[col])
+		changed |= imx.color_edit_u32(THEME_COLOR_NAMES[col], &t.colors[col], {.NoInputs})
 	}
 
 	imgui.PopID()
