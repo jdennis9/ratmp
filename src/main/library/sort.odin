@@ -55,7 +55,9 @@ TRACK_METRIC_COMPARE_PROCS := [Track_Sort_Metric]Track_Metric_Compare_Proc {
 		return strings.compare(get_shared_string(.Artist, a.artists[0]), get_shared_string(.Artist, b.artists[0])) < 0
 	},
 	.Album = proc(a, b: Track) -> bool {
-		return strings.compare(get_shared_string(.Album, a.album), get_shared_string(.Album, b.album)) < 0
+		if a.album == nil do return true
+		if b.album == nil do return false
+		return strings.compare(get_shared_string(.Album, a.album.?), get_shared_string(.Album, b.album.?)) < 0
 	},
 	.Genre = proc(a, b: Track) -> bool {
 		if len(a.genres) == 0 do return true

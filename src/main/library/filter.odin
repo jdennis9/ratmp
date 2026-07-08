@@ -58,8 +58,8 @@ filter_tracks :: proc(input: []Track_ID, spec: Track_Filter_Spec) -> []Track_ID 
 			pass |= strings.contains(url, filter_lower)
 		}
 
-		if !pass && .Album in spec.metrics && track.album != 0 {
-			album_name := get_shared_string_lower(.Album, track.album)
+		if !pass && .Album in spec.metrics && track.album != nil {
+			album_name := get_shared_string_lower(.Album, track.album.?)
 			pass |= strings.contains(album_name, filter_lower)
 		}
 

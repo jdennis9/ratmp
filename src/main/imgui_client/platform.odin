@@ -85,10 +85,10 @@ platform_shutdown :: proc() {
 	_platform_impl_shutdown()
 }
 
-platform_set_window_title :: proc(args: ..any) {
-	buf: [1024]u8
-	str := fmt.bprint(buf[:1023], ..args)
-	_platform_impl_set_window_title(strings.unsafe_string_to_cstring(str))
+platform_set_window_title :: proc(args: ..any, sep := "") {
+	frame_allocator_guard()
+	str := fmt.caprint(..args, allocator=get_frame_allocator())
+	_platform_impl_set_window_title(str)
 }
 
 platform_set_window_size :: proc(w, h: int) {

@@ -37,7 +37,7 @@ Track_Table_Row :: struct {
 	id:         lib.Track_ID,
 	artists:    []lib.Artist_ID,
 	genres:     []lib.Genre_ID,
-	album:      lib.Album_ID,
+	album:      Maybe(lib.Album_ID),
 	format:     lib.Audio_File_Format,
 	samplerate: [8]u8,
 	duration:   [8]u8,
@@ -426,8 +426,8 @@ track_table_show :: proc(
 				)
 			}
 
-			if imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
-				imx.text_unformatted(lib.get_shared_string(.Album, row.album))
+			if row.album != nil && imgui.TableSetColumnIndex(auto_cast _Column_Index.Album) {
+				imx.text_unformatted(lib.get_shared_string(.Album, row.album.?))
 			}
 
 			// @FIXME

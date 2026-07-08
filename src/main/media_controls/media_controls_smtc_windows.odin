@@ -86,7 +86,7 @@ init_smtc :: proc() -> shared.Error {
 		defer delete(cover_art)
 		
 		ti := smtc.Track_Info {
-			album  = to_cstring(library.get_shared_string(.Album, track.album)),
+			album  = track.album != nil ? to_cstring(library.get_shared_string(.Album, track.album.?)) : nil,
 			artist = to_cstring(artists),
 			genre  = to_cstring(genres),
 			title  = to_cstring(track.title),

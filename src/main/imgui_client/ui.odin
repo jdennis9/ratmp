@@ -174,6 +174,8 @@ _show_main_menu_bar :: proc() -> bool {
 				queue_files_for_scan(folders, false)
 			}
 		}
+
+		if imgui.MenuItem("Exit") do request_exit()
 	}
 
 	// --------------------------------------------------------------------------

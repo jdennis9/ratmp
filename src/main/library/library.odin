@@ -67,7 +67,7 @@ Track :: struct {
 	samplerate: i32,
 	channels:   i32,
 	bitrate:    i32,
-	album:      Album_ID,
+	album:      Maybe(Album_ID),
 	format:     Audio_File_Format,
 }
 
@@ -219,6 +219,9 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 
 	split_shared_strings :: proc(s: string, type: Shared_String_Type) -> []Shared_String_ID {
 		l := &_library
+
+		if s == "" do return nil
+
 		parts := strings.split(s, ",", context.allocator)
 		
 		if len(parts) == 0 do return nil
@@ -232,7 +235,9 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 		return output
 	}
 
-	track.album      = auto_cast _add_shared_string(.Album, tags.album)
+	if tags.album != "" {
+		track.album = auto_cast _add_shared_string(.Album, tags.album)
+	}
 	track.title      = strings.clone(tags.title, l.tag_allocator)
 	track.url        = strings.clone(url, l.tag_allocator)
 	track.samplerate = tags.samplerate

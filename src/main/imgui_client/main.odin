@@ -17,6 +17,8 @@
 */
 package client
 
+import "core:fmt"
+import "core:strings"
 import "core:path/filepath"
 import "src:main/sys"
 import "core:mem"
@@ -44,6 +46,8 @@ _client: struct {
 	frame_allocator:          mem.Allocator,
 	frame_allocation_tracker: mem.Tracking_Allocator,
 	system_fonts:             []sys.System_Font,
+	window_title_track:       Maybe(lib.Track_ID),
+	want_exit:                bool,
 
 	paths: struct {
 		data:   string,
@@ -54,7 +58,21 @@ _client: struct {
 
 @(private="file")
 run :: proc() -> shared.Error {
+	tracking_allocator: mem.Tracking_Allocator
+
 	client := &_client
+
+	when ODIN_DEBUG {
+		mem.tracking_allocator_init(&tracking_allocator, context.allocator)
+		context.allocator = mem.tracking_allocator(&tracking_allocator)
+		defer {
+			for ptr, alloc in tracking_allocator.allocation_map {
+				fmt.println(alloc)
+			}
+
+			mem.tracking_allocator_destroy(&tracking_allocator)
+		}
+	}
 
 	context.logger = log.create_console_logger()
 	defer log.destroy_console_logger(context.logger)
@@ -132,7 +150,7 @@ run :: proc() -> shared.Error {
 	ui_init() or_return
 	defer ui_shutdown()
 
-	for {
+	for !_client.want_exit {
 		free_all(client.frame_allocator)
 
 		platform_poll_events()
@@ -156,6 +174,39 @@ run :: proc() -> shared.Error {
 			log.debug("Update media controls state")
 			media_controls.update_state(client.playback_state)
 			client.media_controls_state = client.playback_state
+		}
+
+		// -----------------------------------------------------------------------
+		// Update window title
+		// -----------------------------------------------------------------------
+		if client.playback_state.track != client.window_title_track {
+			client.window_title_track = client.playback_state.track
+			log.debug("Updating window title")
+
+			if client.playback_state.track == nil {
+				platform_set_window_title(shared.PROGRAM_NAME_AND_VERSION)
+			}
+			else if track, ok := lib.get_track(client.playback_state.track.?); ok {
+				sb: strings.Builder
+				defer strings.builder_destroy(&sb)
+
+				sep :: " |"
+
+				strings.write_string(&sb, shared.PROGRAM_NAME_AND_VERSION)
+				if track.artists != nil {
+					artists := lib.join_shared_strings(.Artist, track.artists, get_frame_allocator())
+					fmt.sbprint(&sb, sep, artists, "-", track.title)
+				}
+				else {
+					fmt.sbprint(&sb, sep, track.title)
+				}
+
+				if track.album != nil {
+					fmt.sbprint(&sb, sep, lib.get_shared_string(.Album, track.album.?))
+				}
+
+				platform_set_window_title(strings.to_string(sb))
+			}
 		}
 
 		// -----------------------------------------------------------------------
@@ -230,4 +281,8 @@ get_config_path :: proc() -> string {
 
 get_cache_path :: proc() -> string {
 	return _client.paths.cache
+}
+
+request_exit :: proc() {
+	_client.want_exit = true
 }
