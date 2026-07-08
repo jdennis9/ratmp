@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:path/filepath"
 import "src:main/sys"
 import "core:mem"
 import "core:log"
@@ -43,6 +44,12 @@ _client: struct {
 	frame_allocator:          mem.Allocator,
 	frame_allocation_tracker: mem.Tracking_Allocator,
 	system_fonts:             []sys.System_Font,
+
+	paths: struct {
+		data:   string,
+		config: string,
+		cache:  string,
+	}
 }
 
 @(private="file")
@@ -86,13 +93,29 @@ run :: proc() -> shared.Error {
 	defer platform_destroy_window()
 
 	// --------------------------------------------------------------------------
+	// Get paths
+	// --------------------------------------------------------------------------
+	when ODIN_DEBUG {
+		client.paths.config = "."
+		client.paths.data   = "."
+		client.paths.cache  = "." + filepath.SEPARATOR_STRING + "cache"
+
+		shared.ensure_dir(client.paths.cache)
+	}
+	else {
+		client.paths.config = os.user_config_dir(context.allocator) or_return
+		client.paths.data =   os.user_data_dir(context.allocator) or_return
+		client.paths.cache =  os.user_cache_dir(context.allocator) or_return
+	}
+
+	// --------------------------------------------------------------------------
 	// Initialize client stuff
 	// --------------------------------------------------------------------------
 	{
 		if launch_config.memory_debug {
-		client.frame_allocator = shared.track_allocator(
-			context.temp_allocator, &client.frame_allocation_tracker
-		)
+			client.frame_allocator = shared.track_allocator(
+				context.temp_allocator, &client.frame_allocation_tracker
+			)
 		}
 		else {
 			client.frame_allocator = context.temp_allocator
@@ -100,6 +123,8 @@ run :: proc() -> shared.Error {
 
 		mem.dynamic_arena_init(&client.font_arena)
 		client.font_allocator = mem.dynamic_arena_allocator(&client.font_arena)
+
+		refresh_fonts() or_return
 	}
 	defer free_fonts()
 	defer mem.dynamic_arena_destroy(&client.font_arena)
@@ -114,6 +139,9 @@ run :: proc() -> shared.Error {
 
 		client.playback_state = player.get_state()
 
+		// -----------------------------------------------------------------------
+		// Update media controls
+		// -----------------------------------------------------------------------
 		if client.playback_state.track != client.media_controls_state.track {
 			log.debug("Update media controls track")
 			track_id := client.playback_state.track
@@ -130,7 +158,9 @@ run :: proc() -> shared.Error {
 			client.media_controls_state = client.playback_state
 		}
 
-		
+		// -----------------------------------------------------------------------
+		// Show UI
+		// -----------------------------------------------------------------------
 		platform_imgui_new_frame()
 		video_imgui_new_frame()
 		imgui.NewFrame()
@@ -188,4 +218,16 @@ get_frame_allocator :: proc() -> mem.Allocator {
 
 get_last_playback_state :: proc() -> player.State {
 	return _client.playback_state
+}
+
+get_data_path :: proc() -> string {
+	return _client.paths.data
+}
+
+get_config_path :: proc() -> string {
+	return _client.paths.config
+}
+
+get_cache_path :: proc() -> string {
+	return _client.paths.cache
 }

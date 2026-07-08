@@ -29,6 +29,14 @@ import lib "src:main/library"
 import "src:main/player"
 import imgui "src:thirdparty/odin-imgui"
 
+DEFAULT_FONT_CONFIG :: imgui.FontConfig {
+	FontDataOwnedByAtlas = true,
+	GlyphMaxAdvanceX = max(f32),
+	RasterizerMultiply = 1,
+	RasterizerDensity = 1,
+	ExtraSizeScale = 1,
+}
+
 UI :: struct {
 	library_scanner: lib.Scanner,
 
@@ -45,18 +53,37 @@ _ui: UI
 ui_init :: proc() -> shared.Error {
 	ui := &_ui
 
+	theme_init()
+
 	lib.scanner_init(
 		&ui.library_scanner,
 		scanner_consume_proc,
 		nil
 	)
 
+	ui_apply_fonts()
+	
 	return nil
 }
 
 ui_shutdown :: proc() {
 	ui := &_ui
+	theme_shutdown()
 	lib.scanner_destroy(&ui.library_scanner)
+}
+
+ui_apply_fonts :: proc() {
+	io := imgui.GetIO()
+
+	@static icon_font := #load("../data/Font Awesome 7 Free-Solid-900.otf")
+
+	cfg := DEFAULT_FONT_CONFIG
+	cfg.FontDataOwnedByAtlas = false
+	
+	imgui.FontAtlas_AddFontDefault(io.Fonts)
+	cfg.ExtraSizeScale = 0.8
+	cfg.MergeMode = true
+	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(icon_font), auto_cast len(icon_font), font_cfg = &cfg)
 }
 
 ui_show :: proc() {
@@ -87,6 +114,11 @@ ui_show :: proc() {
 		}
 
 		track_table_show(&ui.windows.library.track_table, "##library", {})
+	}
+	imgui.End()
+
+	if imgui.Begin("Theme") {
+		show_theme_editor()
 	}
 	imgui.End()
 }
