@@ -142,6 +142,29 @@ get_current_playlist :: proc() -> shared.UID {
 	return _player.playing_playlist_id
 }
 
+get_queue :: proc() -> []lib.Track_ID {
+	return _player.queue[:]
+}
+
+set_paused :: proc(paused: bool) {
+	if paused {
+		if !audio_is_paused() do audio_pause()
+	}
+	else {
+		if audio_is_paused() do audio_resume()
+	}
+}
+
+is_shuffle_on :: proc() -> bool {return _player.enable_shuffle}
+set_shuffle_on :: proc(on: bool) {
+	p := &_player
+	p.enable_shuffle = on
+
+	if on && !p.queue_is_shuffled {
+		rand.shuffle(p.queue[:])
+	}
+}
+
 clear_queue :: proc() {
 	p := &_player
 	sync.guard(&p.queue_lock)
@@ -207,6 +230,7 @@ play_track :: proc(track_id: lib.Track_ID) -> bool {
 	track := lib.get_track(track_id) or_return
 	playback_thread_load_track(&p.playback_thread, track.url, &p.playing_track_info) or_return
 
+	set_paused(false)
 	p.playing_track_id = track_id
 
 	return true
@@ -244,5 +268,6 @@ stop_playback :: proc() {
 	p.playing_track_id = nil
 	p.playing_playlist_id = 0
 	clear(&p.queue)
+	set_paused(true)
 	playback_thread_close_track(&p.playback_thread)
 }

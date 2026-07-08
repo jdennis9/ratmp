@@ -17,6 +17,7 @@
 */
 package client
 
+import "src:imx"
 import "base:runtime"
 import "core:strings"
 import "src:main/sys"
@@ -173,6 +174,29 @@ _show_main_menu_bar :: proc() -> bool {
 			}
 		}
 	}
+
+	// --------------------------------------------------------------------------
+	// Controls
+	// --------------------------------------------------------------------------
+
+	player_state := get_last_playback_state()
+	shuffle_on := player.is_shuffle_on()
+	if imgui.MenuItem(ICON_SHUFFLE, nil, shuffle_on) {
+		player.set_shuffle_on(shuffle_on)
+	}
+
+	if imgui.MenuItem(ICON_STOP) do player.stop_playback()
+	if imgui.MenuItem(ICON_PREVIOUS_TRACK) do player.play_prev_track()
+
+	if player_state.paused {
+		if imgui.MenuItem(ICON_PLAY) do player.set_paused(false)
+	}
+	else {
+		if imgui.MenuItem(ICON_PAUSE) do player.set_paused(true)
+	}
+
+	if imgui.MenuItem(ICON_NEXT_TRACK) do player.play_next_track()
+
 
 	return true
 }
