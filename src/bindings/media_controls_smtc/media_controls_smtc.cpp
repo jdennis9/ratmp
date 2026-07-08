@@ -36,6 +36,7 @@ struct Media_Controls {
 		smtc.IsPauseEnabled(true);
 		smtc.IsNextEnabled(true);
 		smtc.IsPreviousEnabled(true);
+		smtc.IsStopEnabled(true);
 		smtc.ButtonPressed(&handle_button_pressed);
 	}
 
@@ -44,8 +45,10 @@ struct Media_Controls {
 
 static Media_Controls *mc;
 
-static void handle_button_pressed(SystemMediaTransportControls sender,
-	 SystemMediaTransportControlsButtonPressedEventArgs args) {
+static void handle_button_pressed(
+	SystemMediaTransportControls sender,
+	SystemMediaTransportControlsButtonPressedEventArgs args
+) {
 	if (!mc) return;
 
 	switch (args.Button()) {
@@ -60,6 +63,9 @@ static void handle_button_pressed(SystemMediaTransportControls sender,
 		break;
 	case SystemMediaTransportControlsButton::Previous:
 		mc->handler(mc->data, SIGNAL_PREV);
+		break;
+	case SystemMediaTransportControlsButton::Stop:
+		mc->handler(mc->data, SIGNAL_STOP);
 		break;
 	}
 }
