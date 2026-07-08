@@ -270,6 +270,8 @@ scanner_consume_proc :: proc(_: rawptr, input: []lib.Scanned_Item) -> shared.Err
 	lib.lock()
 	defer lib.unlock()
 
+	shared.TIME_SCOPE("Add scanned tracks to library")
+
 	for item in input {
 		switch v in item.variant {
 		case lib.Scanned_Track:

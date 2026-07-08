@@ -250,6 +250,34 @@ track_table_show :: proc(
 	list_clipper: imgui.ListClipper
 
 	check_table_size() or_return
+
+	// If true, scroll to the currently playing track if it's in this
+	// table
+	jump_to_playing := false
+
+	// --------------------------------------------------------------------------
+	// Control buttons
+	// --------------------------------------------------------------------------
+	if imgui.Button("Jump to current track") {
+		jump_to_playing = true
+	}
+
+	// --------------------------------------------------------------------------
+	// Hotkeys
+	// --------------------------------------------------------------------------
+	if is_key_chord_pressed_in_window(.ImGuiMod_Ctrl, .A) {
+		for &row in table.rows {
+			row.selected = true
+		}
+	}
+
+	if is_key_chord_pressed(.ImGuiMod_Ctrl, .Space) {
+		jump_to_playing = true
+	}
+
+	// --------------------------------------------------------------------------
+	// Set up table
+	// --------------------------------------------------------------------------
 	imgui.BeginTable(str_id, auto_cast len(_Column_Index),
 		imgui.TableFlags_BordersInner|imgui.TableFlags_RowBg|
 		imgui.TableFlags_Hideable|imgui.TableFlags_Reorderable|
@@ -317,11 +345,29 @@ track_table_show :: proc(
 		}
 	}
 
-	string_builder: strings.Builder
-	strings.builder_init(&string_builder, get_frame_allocator())
 
+	// --------------------------------------------------------------------------
+	// Show rows
+	// --------------------------------------------------------------------------
 	imgui.ListClipper_Begin(&list_clipper, auto_cast len(table.rows), imgui.GetTextLineHeightWithSpacing())
 	defer imgui.ListClipper_End(&list_clipper)
+
+	// --------------------------------------------------------------------------
+	// Jump to playing track
+	// --------------------------------------------------------------------------
+	if jump_to_playing && playback_state.track != nil {
+		index := -1
+		for row, i in table.rows {
+			if row.id == playback_state.track.? {
+				index = i
+				break
+			}
+		}
+
+		if index != -1 {
+			imgui.ListClipper_IncludeItemByIndex(&list_clipper, auto_cast index)
+		}
+	}
 
 	for imgui.ListClipper_Step(&list_clipper) {
 		for &row, local_row_index in table.rows[list_clipper.DisplayStart:list_clipper.DisplayEnd] {
@@ -329,6 +375,12 @@ track_table_show :: proc(
 			row_index := local_row_index + auto_cast list_clipper.DisplayStart
 			imgui.PushIDInt(auto_cast row_index)
 			defer imgui.PopID()
+
+			if jump_to_playing && playback_state.track != nil {
+				if row.id == playback_state.track.? {
+					imgui.SetScrollHereY()
+				}
+			}	
 
 			// --------------------------------------------------------------------
 			// Title
@@ -338,7 +390,7 @@ track_table_show :: proc(
 				copy(title_buf[:127], row.title)
 
 				if playback_state.track != nil && row.id == playback_state.track.? {
-					imgui.TableSetBgColor(.RowBg0, 0xff0000ff)
+					imgui.TableSetBgColor(.RowBg0, get_theme_color(.PlayingHighlight))
 				}
 
 				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
