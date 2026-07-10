@@ -48,7 +48,6 @@ library_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	return true
 }
 
-
 queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	@static w: struct {
 		track_table: Track_Table

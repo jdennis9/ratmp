@@ -57,6 +57,7 @@ UI_Window_ID :: enum {
 	Library,
 	Queue,
 	ThemeEditor,
+	Metadata,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -74,6 +75,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Theme",
 		internal_name = "_theme_editor",
 		procedure     = theme_editor_window_proc,
+	},
+	.Metadata = {
+		title         = "Metadata",
+		internal_name = "_metadata",
+		procedure     = metadata_window_proc,
 	},
 }
 
@@ -150,12 +156,17 @@ ui_show :: proc() {
 
 	_show_main_menu_bar()
 
+	// Show windows
 	{
 		frame_allocator_guard()
 		
 		for &state, id in ui.window_state {
-			if !state.shown do continue
 			win := UI_WINDOWS[id]
+
+			if !state.shown && !state.bring_to_front {
+				win.procedure(.Hidden)
+				continue
+			}
 
 			name := fmt.caprint(win.title, win.internal_name, sep="###", allocator=temp_allocator)
 

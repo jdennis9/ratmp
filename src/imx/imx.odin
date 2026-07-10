@@ -228,24 +228,22 @@ begin_kv_table :: proc(str_id: cstring, flags: imgui.TableFlags) -> bool {
 	return imgui.BeginTable(str_id, 2, flags)
 }
 
-kv_row :: proc(name: string, args: ..any, sep := "") -> (active: bool) {
-	buf: [1024]u8
-	fmt.bprint(buf[:1023], ..args, sep=sep)
+kv_row :: proc(name: string, args: ..any, sep := "", allocator := context.temp_allocator) -> (active: bool) {
+	str := fmt.caprint(..args, sep=sep, allocator=allocator)
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
 	if imgui.TableSetColumnIndex(1) {
-		active |= imgui.Selectable(cstring(&buf[0]), false, {.SpanAllColumns})
+		active |= imgui.Selectable(str, false, {.SpanAllColumns})
 	}
 	return
 }
 
-kv_rowf :: proc(name: string, format: string, args: ..any) -> (active: bool) {
-	buf: [1024]u8
-	fmt.bprintf(buf[:1023], format, ..args)
+kv_rowf :: proc(name: string, format: string, args: ..any, allocator := context.temp_allocator) -> (active: bool) {
+	str := fmt.caprintf(format, ..args, allocator=allocator)
 	imgui.TableNextRow()
 	if imgui.TableSetColumnIndex(0) do text_unformatted(name)
 	if imgui.TableSetColumnIndex(1) {
-		active |= imgui.Selectable(cstring(&buf[0]), false, {.SpanAllColumns})
+		active |= imgui.Selectable(str, false, {.SpanAllColumns})
 	}
 	return
 }
