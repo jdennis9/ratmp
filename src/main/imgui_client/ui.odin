@@ -108,14 +108,7 @@ UI_Window_State :: struct {
 
 UI :: struct {
 	library_scanner: lib.Scanner,
-
-	window_state: [UI_Window_ID]UI_Window_State,
-
-	windows: struct {
-		library: struct {
-			track_table: Track_Table,
-		},
-	}
+	window_state:    [UI_Window_ID]UI_Window_State,
 }
 
 @(private="file")
@@ -141,6 +134,11 @@ ui_init :: proc() -> shared.Error {
 
 ui_shutdown :: proc() {
 	ui := &_ui
+	
+	for win in UI_WINDOWS {
+		win.procedure(.Free)
+	}
+
 	theme_shutdown()
 	lib.scanner_destroy(&ui.library_scanner)
 }
@@ -190,6 +188,9 @@ ui_show :: proc() {
 
 			if imgui.Begin(name, &state.shown) {
 				win.procedure(.Show)
+			}
+			else {
+				win.procedure(.Hidden)
 			}
 			imgui.End()
 		}

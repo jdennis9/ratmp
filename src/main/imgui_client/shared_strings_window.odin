@@ -19,6 +19,7 @@
 #+private file
 package client
 
+import "core:log"
 import "src:main/player"
 import "core:slice"
 import "core:hash"
@@ -275,6 +276,17 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 }
 
 _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
+	if ev == .Free || ev == .Hidden {
+		track_table_free(&w.track_table)
+		delete(w.table_rows)
+		w.table_rows       = nil
+		w.rows_serial      = 0
+		w.sort_serial      = 0
+		w.sort_spec_serial = 0
+		w.sort_spec        = nil
+		return false
+	}
+
 	if ev != .Show do return false
 
 	tracks_serial := lib.get_tracks_serial()

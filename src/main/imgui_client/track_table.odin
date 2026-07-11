@@ -549,6 +549,7 @@ track_table_show :: proc(
 	return true
 }
 
+@private
 track_table_get_tracks :: proc(t: Track_Table, allocator: mem.Allocator) -> []lib.Track_ID {
 	out := make([]lib.Track_ID, len(t.rows), allocator)
 	for row, i in t.rows {
@@ -558,10 +559,22 @@ track_table_get_tracks :: proc(t: Track_Table, allocator: mem.Allocator) -> []li
 	return out
 }
 
+@private
 track_table_get_selection :: proc(t: Track_Table, allocator: mem.Allocator) -> []lib.Track_ID {
 	out := make_dynamic_array([dynamic]lib.Track_ID, allocator)
 	for row in t.rows {
 		if row.selected do append(&out, row.id)
 	}
 	return out[:]
+}
+
+@private
+track_table_free :: proc(t: ^Track_Table) {
+	if t.scratch.data != nil {
+		mem.scratch_destroy(&t.scratch)
+	}
+	t.scratch     = {}
+	t.rows        = nil
+	t.rows_serial = 0
+	t.intialized  = false
 }

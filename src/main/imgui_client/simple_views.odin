@@ -26,7 +26,9 @@ library_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		track_table: Track_Table
 	}
 
-	if ev == .Free {
+	if ev == .Free || ev == .Hidden {
+		track_table_free(&w.track_table)
+		return false
 	}
 	else if ev != .Show do return false
 
@@ -53,7 +55,9 @@ queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		track_table: Track_Table
 	}
 
-	if ev == .Free {
+	if ev == .Free || ev == .Hidden {
+		track_table_free(&w.track_table)
+		return false
 	}
 	else if ev != .Show do return false
 
