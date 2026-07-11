@@ -395,7 +395,7 @@ track_table_show :: proc(
 				}
 
 				if imgui.Selectable(cstring(&title_buf[0]), row.selected, {.SpanAllColumns}) {
-					select_table_rows(table, row_index, false)
+					select_table_rows(table.rows[:], row_index, false)
 				}
 
 				if imgui.BeginItemTooltip() {
@@ -417,7 +417,7 @@ track_table_show :: proc(
 
 					actions.context_menu_target = row.id
 
-					select_table_rows(table, row_index, true)
+					select_table_rows(table.rows[:], row_index, true)
 
 					/*if add_to_playlist, yes := _show_playlist_selector_menu(sv, "Add to playlist"); yes {
 						actions.add_to_playlist = add_to_playlist

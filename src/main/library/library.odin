@@ -51,6 +51,8 @@ Shared_String_Type :: enum u8 {
 Shared_String :: struct {
 	name:       string,
 	lower_name: string,
+	uid:        shared.UID,
+	serial:     uint,
 }
 
 Track :: struct {
@@ -501,13 +503,17 @@ find_track_cover_art :: proc(
 _add_shared_string :: proc(type: Shared_String_Type, name: string) -> i16 {
 	l := &_library
 
-	for s, i in l.shared_strings[type] {
-		if s.name == name do return auto_cast i
+	for &s, i in l.shared_strings[type] {
+		if s.name == name {
+			s.serial += 1
+			return auto_cast i
+		}
 	}
 
 	s := Shared_String {
 		name       = strings.clone(name, l.tag_allocator),
 		lower_name = strings.to_lower(name, l.tag_allocator),
+		uid        = shared.generate_uid(),
 	}
 
 	index := len(l.shared_strings[type])
@@ -524,12 +530,24 @@ get_shared_string_lower :: proc(type: Shared_String_Type, id: Shared_String_ID) 
 	return _library.shared_strings[type][id].lower_name
 }
 
+get_shared_string_uid :: proc(type: Shared_String_Type, id: Shared_String_ID) -> shared.UID {
+	return _library.shared_strings[type][id].uid
+}
+
+get_shared_string_serial :: proc(type: Shared_String_Type, id: Shared_String_ID) -> uint {
+	return _library.shared_strings[type][id].serial
+}
+
 get_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, out: []string) {
 	assert(len(ids) == len(out))
 
 	for id, i in ids {
 		out[i] = _library.shared_strings[type][id].name
 	}
+}
+
+get_all_shared_strings :: proc(type: Shared_String_Type) -> []Shared_String {
+	return _library.shared_strings[type][:]
 }
 
 url_to_filepath :: proc(url: string) -> (string, bool) {
@@ -543,6 +561,49 @@ lock :: proc() {
 
 unlock :: proc() {
 	sync.unlock(&_library.lock)
+}
+
+track_has_artist :: proc(t: Track, id: Shared_String_ID) -> bool {
+	for a in t.artists do if a == id do return true
+	return false
+}
+
+track_has_genre :: proc(t: Track, id: Shared_String_ID) -> bool {
+	for g in t.genres do if g == id do return true
+	return false
+}
+
+get_tracks_with_shared_string :: proc(type: Shared_String_Type, id: Shared_String_ID, out: ^[dynamic]Track_ID) -> int {
+	l := &_library
+	count := 0
+
+	iter := make_track_iterator()
+
+	switch type {
+	case .Artist:
+		for t in iterate_tracks(&iter) {
+			if track_has_artist(t^, id) && !slice.contains(out[:], t.handle) {
+				append(out, t.handle)
+				count += 1
+			}
+		}
+	case .Genre:
+		for t in iterate_tracks(&iter) {
+			if track_has_genre(t^, id) && !slice.contains(out[:], t.handle) {
+				append(out, t.handle)
+				count += 1
+			}
+		}
+	case .Album:
+		for t in iterate_tracks(&iter) {
+			if t.album != nil && t.album.? == id && !slice.contains(out[:], t.handle) {
+				append(out, t.handle)
+				count += 1
+			}
+		}
+	}
+
+	return count
 }
 
 @test

@@ -58,6 +58,9 @@ UI_Window_ID :: enum {
 	Queue,
 	ThemeEditor,
 	Metadata,
+	Artists,
+	Genres,
+	Albums,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -80,6 +83,21 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Metadata",
 		internal_name = "_metadata",
 		procedure     = metadata_window_proc,
+	},
+	.Artists = {
+		title         = "Artists",
+		internal_name = "_artists",
+		procedure     = artists_window_proc,
+	},
+	.Albums = {
+		title         = "Albums",
+		internal_name = "_albums",
+		procedure     = albums_window_proc,
+	},
+	.Genres = {
+		title         = "Genres",
+		internal_name = "_genres",
+		procedure     = genres_window_proc,
 	},
 }
 
@@ -264,10 +282,8 @@ _show_main_menu_bar :: proc() -> bool {
 	return true
 }
 
-select_table_rows :: proc(table: ^$T, row_index: int, keep_selection: bool) {
-	row := &table.rows[row_index]
-	rows := table.rows[:]
-
+select_table_rows :: proc(rows: []$T, row_index: int, keep_selection: bool) {
+	row := &rows[row_index]
 	ctrl := imgui.IsKeyDown(.ImGuiMod_Ctrl)
 	shift := imgui.IsKeyDown(.ImGuiMod_Shift)
 

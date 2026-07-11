@@ -17,6 +17,7 @@
 */
 package library
 
+import "core:slice"
 import "core:testing"
 import "core:mem"
 import "core:strings"
@@ -86,6 +87,29 @@ filter_tracks :: proc(input: []Track_ID, spec: Track_Filter_Spec) -> []Track_ID 
 			input[track_index] = input[len(input)-1]
 			input = input[:len(input)-1]
 			track_index -= 1
+		}
+	}
+
+	return input
+}
+
+@require_results
+filter_shared_strings :: proc(input: []Shared_String, text: string) -> []Shared_String {
+	count := 0
+	input := input
+
+	if len(input) == 0 do return input
+
+	filter_lower := strings.to_lower(text)
+	defer delete(filter_lower)
+
+	for index := 0; index < len(input); index += 1 {
+		ss := input[index]
+
+		if !strings.contains(ss.lower_name, filter_lower) {
+			input[index] = input[len(input)-1]
+			input = input[:len(input)-1]
+			index -= 1
 		}
 	}
 

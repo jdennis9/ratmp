@@ -17,7 +17,7 @@
 */
 package library
 
-import "vendor:stb/sprintf"
+import "base:intrinsics"
 import "core:strings"
 import "core:sort"
 
@@ -104,10 +104,10 @@ sort_tracks :: proc(tracks: []Track, spec: Track_Sort_Spec) {
 		return TRACK_METRIC_COMPARE_PROCS[col.metric](A, B)
 	}
 
-	if spec.order == .Descending {
+	if spec.order == .Ascending {
 		sort.sort(iface)
 	}
-	else if spec.order == .Ascending {
+	else if spec.order == .Descending {
 		sort.reverse_sort(iface)
 	}
 }
@@ -131,4 +131,54 @@ Playlist_Sort_Metric :: enum {
 Playlist_Sort_Spec :: struct {
 	metric: Playlist_Sort_Metric,
 	order:  Sort_Order,
+}
+
+sort_by_totals :: proc(
+	s: []$T, spec: Playlist_Sort_Spec
+) where intrinsics.type_has_field(T, "totals") && intrinsics.type_has_field(T, "name") {
+	_Ctx :: struct {
+		data:   []T,
+		metric: Playlist_Sort_Metric,
+	}
+
+	ctx := _Ctx {
+		data   = s,
+		metric = spec.metric,
+	}
+
+	iface: sort.Interface
+
+	iface.collection = &ctx
+
+	iface.len = proc(it: sort.Interface) -> int {
+		ctx := cast(^_Ctx) it.collection
+		return len(ctx.data)
+	}
+
+	iface.less = proc(it: sort.Interface, a, b: int) -> bool {
+		ctx := cast(^_Ctx) it.collection
+		A := ctx.data[a]
+		B := ctx.data[b]
+
+		switch ctx.metric {
+		case .Title:    return strings.compare(A.name, B.name) < 0
+		case .Duration: return A.totals.duration < B.totals.duration
+		case .Length:   return A.totals.length < B.totals.length
+		case .FileSize: return A.totals.file_size < B.totals.file_size
+		}
+
+		return false
+	}
+
+	iface.swap = proc(it: sort.Interface, a, b: int) {
+		ctx := cast(^_Ctx) it.collection
+		ctx.data[a], ctx.data[b] = ctx.data[b], ctx.data[a]
+	}
+
+	if spec.order == .Ascending {
+		sort.sort(iface)
+	}
+	else if spec.order == .Descending {
+		sort.reverse_sort(iface)
+	}
 }
