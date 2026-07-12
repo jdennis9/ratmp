@@ -18,6 +18,7 @@
 #+private file
 package player
 
+import "src:main/shared"
 import "core:fmt"
 import "core:thread"
 import "core:sync"
@@ -61,31 +62,30 @@ _stream: struct {
 }
 
 @private
-audio_init_pulse :: proc() {
+audio_init_pulse :: proc() -> shared.Error {
 
-	_audio_impl_init = proc(cb: Audio_Callback, cb_data: rawptr) -> bool {
-		s := &_stream
-		defer if s.error != .None {
-			_audio_impl_shutdown()
-		}
+	s := &_stream
+	defer if s.error != .None {
+		_audio_impl_shutdown()
+	}
 
-		s.ctx                 = context
-		s.callback            = cb
-		s.callback_data       = cb_data
-		s.mainloop            = pa.mainloop_new()
-		s.mainloop_api        = pa.mainloop_get_api(s.mainloop)
-		s.pa_context          = pa.context_new(s.mainloop_api, "RAT MP")
-		s.session_thread      = thread.create(_stream_session_thread)
-		s.session_thread.data = s
-		
-		_check(pa.context_connect(s.pa_context, nil, 0, nil)) or_return
-		pa.context_set_state_callback(s.pa_context, _context_state_proc, s)
+	s.ctx                 = context
+	s.mainloop            = pa.mainloop_new()
+	s.mainloop_api        = pa.mainloop_get_api(s.mainloop)
+	s.pa_context          = pa.context_new(s.mainloop_api, "RAT MP")
+	s.session_thread      = thread.create(_stream_session_thread)
+	s.session_thread.data = s
+	
+	_check(pa.context_connect(s.pa_context, nil, 0, nil)) or_return
+	pa.context_set_state_callback(s.pa_context, _context_state_proc, s)
 
-		thread.start(s.session_thread)
+	thread.start(s.session_thread)
 
-		sync.sema_wait(&s.ready_sem)
+	sync.sema_wait(&s.ready_sem)
 
-		return s.error == .None
+	_audio_impl_set_callback = proc(cb: Audio_Callback, data: rawptr) {
+		_stream.callback = cb
+		_stream.callback_data = data
 	}
 
 	_audio_impl_shutdown = proc() {
@@ -140,6 +140,8 @@ audio_init_pulse :: proc() {
 
 	_audio_impl_stop = proc() {
 	}
+
+	return nil
 }
 
 _check :: proc(error: i32, expr := #caller_expression) -> bool {
@@ -280,7 +282,7 @@ _begin_stream_session :: proc() -> (ok: bool) {
 		sync.sema_post(&s.ready_sem)
 	}
 
-	s.stream = pa.stream_new(s.pa_context, PROGRAM_NAME, &sample_spec, nil)
+	s.stream = pa.stream_new(s.pa_context, shared.PROGRAM_NAME, &sample_spec, nil)
 	if s.stream == nil do return
 	_check(pa.stream_connect_playback(s.stream, nil, nil, 0, nil, nil)) or_return
 	pa.stream_set_state_callback(s.stream, _stream_state_callback, s)

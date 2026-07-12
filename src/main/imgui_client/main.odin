@@ -221,6 +221,7 @@ run :: proc() -> shared.Error {
 		imgui.Render()
 
 		video_render_frame()
+		platform_swap_buffers()
 	}
 
 	return nil

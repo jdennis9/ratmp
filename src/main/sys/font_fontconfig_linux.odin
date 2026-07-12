@@ -17,17 +17,18 @@
 */
 package sys
 
+import "src:main/shared"
 import "core:strings"
 import "core:slice"
 import "core:mem"
 
 import fc "src:bindings/fontconfig"
 
-font_init_fontconfig :: proc() -> Error {
+font_init_fontconfig :: proc() -> shared.Error {
 
 	_font_impl_list_system_fonts = proc(
 		allocator: mem.Allocator
-	) -> (fonts: []System_Font, error: Error){
+	) -> (fonts: []System_Font, error: shared.Error){
 		buf: [dynamic]System_Font
 
 		cfg := fc.InitLoadConfigAndFonts()
@@ -56,15 +57,15 @@ font_init_fontconfig :: proc() -> Error {
 
 	_font_impl_get_font_path = proc(
 		f: System_Font, allocator: mem.Allocator
-	) -> (path: string, error: Error) {
+	) -> (path: string, error: shared.Error) {
 		str: cstring
 		pat := cast(^fc.Pattern) f.handle
-		if pat == nil do return "", Custom_Error.InvalidInput
+		if pat == nil do return "", shared.Error_Code.InvalidInput
 
 		if fc.PatternGetString(pat, fc.FILE, 0, &str) == .Match {
 			path = strings.clone(string(str), allocator)
 		}
-		else do error = Custom_Error.NotFound
+		else do error = shared.Error_Code.NotFound
 		
 		return
 	}

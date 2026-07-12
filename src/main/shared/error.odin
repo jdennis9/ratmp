@@ -22,6 +22,7 @@ import "core:os"
 
 Error_Code :: enum {
 	NotFound,
+	InvalidInput,
 }
 
 Error :: union {
