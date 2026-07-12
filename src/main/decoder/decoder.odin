@@ -15,7 +15,7 @@
 	You should have received a copy of the GNU General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-package decoder_is_open
+package decoder
 
 import "core:strings"
 
@@ -36,6 +36,16 @@ Info :: struct {
 	channels:    int,
 	duration:    int,
 	replay_gain: Maybe(ffmpeg.Replay_Gain),
+}
+
+Interface :: struct {
+	open:    proc(self: ^Interface, filename: string, info: ^Info) -> bool,
+	close:   proc(self: ^Interface),
+	destroy: proc(self: ^Interface),
+
+	read_packet: proc(
+		self: ^Interface, samplerate: int, output: [][dynamic]f32
+	) -> (read, written: int, eof: bool),
 }
 
 Decoder :: struct {
@@ -133,10 +143,6 @@ _decode_packet :: proc(dec: ^Decoder, output: [][dynamic]f32, samplerate: int) -
 	for ch in 0..<channels {
 		resize(&output[ch], pkt.frames_out)
 		copy(output[ch][:], pkt.data[ch][:pkt.frames_out])
-	}
-
-	if pkt.has_replay_gain {
-		dec.replay_gain = pkt.replay_gain
 	}
 
 	return

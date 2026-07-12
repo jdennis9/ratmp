@@ -69,7 +69,7 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 
 	ffmpeg_close_input(ff);
 
-	ff->demuxer = avformat_alloc_context();
+	ff->demuxer = NULL;
 	if (avformat_open_input(&ff->demuxer, filename, NULL, NULL)) {
 		return false;
 	}
@@ -139,13 +139,8 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 	// Replay gain
 	{
 		const AVPacketSideData *sd = av_packet_side_data_get(
-#ifdef _WIN32
-			stream->side_data,
-			stream->nb_side_data,
-#else
 			ff->decoder->coded_side_data,
 			ff->decoder->nb_coded_side_data,
-#endif
 			AV_PKT_DATA_REPLAYGAIN
 		);
 
@@ -162,9 +157,25 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 
 			info_out->has_replay_gain = true;
 			info_out->replay_gain.track_gain = rp->track_gain / 1e5;
-			info_out->replay_gain.album_gain = rp->album_gain / 1e5;
 			info_out->replay_gain.track_peak = rp->track_peak / 1e5;
+			info_out->replay_gain.album_gain = rp->album_gain / 1e5;
 			info_out->replay_gain.album_peak = rp->album_peak / 1e5;
+		}
+		else if (av_dict_get(stream->metadata, "REPLAYGAIN_TRACK_GAIN", NULL, 0) != NULL) {
+			// libav sometimes doesn't populate the replaygain side data. In that case, we parse
+			// the metadata manually. This is probably less reliable than what libav does but it's
+			// better than nothing.
+
+			AVDictionaryEntry *track_gain = av_dict_get(stream->metadata, "REPLAYGAIN_TRACK_GAIN", NULL, 0);
+			AVDictionaryEntry *track_peak = av_dict_get(stream->metadata, "REPLAYGAIN_TRACK_PEAK", NULL, 0);
+			AVDictionaryEntry *album_gain = av_dict_get(stream->metadata, "REPLAYGAIN_ALBUM_GAIN", NULL, 0);
+			AVDictionaryEntry *album_peak = av_dict_get(stream->metadata, "REPLAYGAIN_ALBUM_PEAK", NULL, 0);
+
+			info_out->has_replay_gain = true;
+			info_out->replay_gain.track_gain = atof(track_gain->value);
+			info_out->replay_gain.track_peak = atof(track_peak->value);
+			info_out->replay_gain.album_gain = atof(album_gain->value);
+			info_out->replay_gain.album_peak = atof(album_peak->value);
 		}
 		else {
 			ff->output_scale = 1.f;
