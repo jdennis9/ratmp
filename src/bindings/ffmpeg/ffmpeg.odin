@@ -36,12 +36,6 @@ else {
 
 MAX_AUDIO_CHANNELS :: 2
 
-Packet :: struct {
-	frames_in:  i32,
-	frames_out: i32,
-	data:       [MAX_AUDIO_CHANNELS][^]f32,
-}
-
 Audio_Spec :: struct {
 	channels:   i32,
 	samplerate: i32,
@@ -49,6 +43,12 @@ Audio_Spec :: struct {
 
 Replay_Gain :: struct {
 	track_gain, album_gain, track_peak, album_peak: f32,
+}
+
+Packet :: struct {
+	frames_in:       i32,
+	frames_out:      i32,
+	data:            [MAX_AUDIO_CHANNELS][^]f32,
 }
 
 File_Info :: struct {

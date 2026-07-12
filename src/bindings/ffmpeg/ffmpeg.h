@@ -26,18 +26,18 @@ struct Replay_Gain {
 };
 
 struct File_Info {
-	char codec_name[64];
-	char format_name[64];
-	Audio_Spec spec;
-	int64_t total_frames;
-	bool has_replay_gain;
+	char        codec_name[64];
+	char        format_name[64];
+	Audio_Spec  spec;
+	int64_t     total_frames;
+	bool        has_replay_gain;
 	Replay_Gain replay_gain;
 };
 
 struct Packet {
 	int32_t frames_in;
 	int32_t frames_out;
-	f32 *data[MAX_AUDIO_CHANNELS];
+	f32    *data[MAX_AUDIO_CHANNELS];
 };
 
 struct FFMPEG_Context;

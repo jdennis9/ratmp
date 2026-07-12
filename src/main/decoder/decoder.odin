@@ -135,6 +135,10 @@ _decode_packet :: proc(dec: ^Decoder, output: [][dynamic]f32, samplerate: int) -
 		copy(output[ch][:], pkt.data[ch][:pkt.frames_out])
 	}
 
+	if pkt.has_replay_gain {
+		dec.replay_gain = pkt.replay_gain
+	}
+
 	return
 }
 

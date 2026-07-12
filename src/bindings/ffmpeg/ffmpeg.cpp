@@ -88,10 +88,10 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 		return false;
 	}
 
-	stream = ff->demuxer->streams[ff->stream_index];
+	stream       = ff->demuxer->streams[ff->stream_index];
 	input_format = ff->demuxer->iformat;
-	codecpar = stream->codecpar;
-	codec = avcodec_find_decoder(codecpar->codec_id);
+	codecpar     = stream->codecpar;
+	codec        = avcodec_find_decoder(codecpar->codec_id);
 
 	if (!codec) {
 		ffmpeg_close_input(ff);
@@ -110,10 +110,10 @@ bool ffmpeg_open_input(FFMPEG_Context *ff, const char *filename, File_Info *info
 		return false;
 	}
 
-	ff->sample_format = (AVSampleFormat)codecpar->format;
-	ff->samplerate = codecpar->sample_rate;
+	ff->sample_format         = (AVSampleFormat)codecpar->format;
+	ff->samplerate            = codecpar->sample_rate;
 	ff->input_spec.samplerate = codecpar->sample_rate;
-	ff->input_spec.channels = codecpar->ch_layout.nb_channels;
+	ff->input_spec.channels   = codecpar->ch_layout.nb_channels;
 
 	if (ff->demuxer->duration > 0) {
 		duration = (ff->demuxer->duration / AV_TIME_BASE);
@@ -229,13 +229,16 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 		ff->resampler_spec = output_spec;
 	}
 
+	// --------------------------------------------------------------------------
+	// Decode and resample
+	// --------------------------------------------------------------------------
 	while (avcodec_receive_frame(ff->decoder, ff->frame) == 0) {
-		const float sample_ratio = (float)output_spec.samplerate / (float)ff->input_spec.samplerate;
-		int read_frames = ff->frame->nb_samples;
-		int write_frames = (int)floorf((float)read_frames * sample_ratio);
-		auto output_offset = packet_out->frames_out;
 		uint8_t *output_ptr[AV_NUM_DATA_POINTERS];
-		int packet_length = output_offset + write_frames;
+		const float sample_ratio = (float)output_spec.samplerate / (float)ff->input_spec.samplerate;
+		int read_frames          = ff->frame->nb_samples;
+		int write_frames         = (int)floorf((float)read_frames * sample_ratio);
+		auto output_offset       = packet_out->frames_out;
+		int packet_length        = output_offset + write_frames;
 
 		for (int i = 0; i < output_spec.channels; ++i) {
 			packet_out->data[i] = (f32*)realloc(packet_out->data[i], packet_length * sizeof(f32));
@@ -251,6 +254,7 @@ Decode_Status ffmpeg_decode_packet(FFMPEG_Context *ff, const Audio_Spec &output_
 
 		packet_out->frames_out += write_frames;
 		packet_out->frames_in += read_frames;
+
 	}
 
 	/*if (ff->output_scale != 1) {
