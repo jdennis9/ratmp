@@ -40,14 +40,16 @@ DEFAULT_FONT_CONFIG :: imgui.FontConfig {
 }
 
 UI_Config :: struct {
-	background_image: [512]u8,
-	default_theme:    [128]u8,
-	fonts:            [dynamic; 16]sys.System_Font,
-	font_size:        f32,
+	background_image:      [512]u8,
+	default_theme:         [128]u8,
+	fonts:                 [dynamic; 16]sys.System_Font,
+	font_size:             f32,
+	background_fit_policy: shared.Image_Fit_Policy,
 }
 
 UI_CONFIG_DEFAULTS :: UI_Config {
-	font_size = 16
+	font_size             = 16,
+	background_fit_policy = .Fill,
 }
 
 UI_Window_Event :: enum {
@@ -138,6 +140,12 @@ UI_Window_State :: struct {
 UI :: struct {
 	library_scanner: lib.Scanner,
 	window_state:    [UI_Window_ID]UI_Window_State,
+
+	background: struct {
+		path:    string,
+		texture: Maybe(Texture_Handle),
+		w, h:    int,
+	}
 }
 
 @(private="file")
@@ -197,17 +205,65 @@ ui_apply_config :: proc(cfg: ^UI_Config) {
 	style.FontSizeBase = cfg.font_size
 
 	set_theme_from_name(shared.string_from_array(cfg.default_theme[:]))
+	ui_set_background(shared.string_from_array(cfg.background_image[:]))
 
 	ui_apply_fonts()
 }
 
+ui_set_background :: proc(path: string) {
+	ui := &_ui
+	ui.background.path = path
+	_refresh_background()
+}
+
+@(private="file")
+_refresh_background :: proc() -> shared.Error {
+	ui := &_ui
+
+	if ui.background.texture != nil {
+		texture_release(ui.background.texture.?)
+		ui.background.texture = nil
+	}
+
+	tex, w, h := texture_create_from_file(ui.background.path) or_return
+
+	ui.background.texture = tex
+	ui.background.w = w
+	ui.background.h = h
+
+	return nil
+}
+
 ui_show :: proc() {
 	ui := &_ui
+	io := imgui.GetIO()
+	config := get_user_config()
 
 	temp_allocator := get_frame_allocator()
 
 	lib.lock()
 	defer lib.unlock()
+
+	// Draw background
+	blk_draw_background: if ui.background.texture != nil {
+		tex := ui.background.texture.?
+
+		if texture_is_outdated(tex) {
+			_refresh_background() or_break blk_draw_background
+			tex = ui.background.texture.?
+		}
+
+		w, h     := ui.background.w, ui.background.h
+		uv       := shared.image_fit_uv(config.ui.background_fit_policy, {{0, 0}, io.DisplaySize}, {f32(w), f32(h)})
+		drawlist := imgui.GetBackgroundDrawList()
+
+		imgui.DrawList_AddImage(
+			drawlist,
+			texture_get_imgui_ref(tex) or_break blk_draw_background,
+			{0, 0}, io.DisplaySize,
+			uv.min, uv.max
+		)
+	}
 
 	_show_main_menu_bar()
 	_show_status_bar()
