@@ -62,6 +62,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 	if ev == .Hidden {
 		release_cover_art()
+		w.shown_track = nil
 		return false
 	}
 

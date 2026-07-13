@@ -17,6 +17,8 @@
 */
 package client
 
+import "src:dsp"
+import "core:time"
 import "core:fmt"
 import "core:strings"
 import "core:path/filepath"
@@ -30,6 +32,15 @@ import "src:main/shared"
 import lib "src:main/library"
 import "src:main/player"
 import imgui "src:thirdparty/odin-imgui"
+
+ANALYSIS_BUFFER_SIZE :: 16384
+
+Analysis_Data :: struct {
+	raw_output: [player.MAX_CHANNELS][ANALYSIS_BUFFER_SIZE]f32,
+	avg_output: [ANALYSIS_BUFFER_SIZE]f32, // Average of all channels for each frame
+	samplerate: f32,
+	channels:   int,
+}
 
 launch_config: struct {
 	no_media_controls: bool `usage:"Disable system media controls."`,
@@ -48,6 +59,8 @@ _client: struct {
 	system_fonts:             []sys.System_Font,
 	window_title_track:       Maybe(lib.Track_ID),
 	want_exit:                bool,
+	analysis:                 Analysis_Data,
+	last_frame_time:          f32,
 
 	paths: struct {
 		data:   string,
@@ -150,12 +163,38 @@ run :: proc() -> shared.Error {
 	ui_init() or_return
 	defer ui_shutdown()
 
+	last_frame_start: time.Tick
+
 	for !_client.want_exit {
+		frame_start := time.tick_now()
+		defer last_frame_start = frame_start
+
+		client.last_frame_time = auto_cast time.duration_seconds(time.tick_diff(last_frame_start, frame_start))
+		client.last_frame_time = clamp(client.last_frame_time, 0, 1)
+
 		free_all(client.frame_allocator)
 
 		platform_poll_events()
 
 		client.playback_state = player.get_state()
+
+		// -----------------------------------------------------------------------
+		// Update analysis
+		// -----------------------------------------------------------------------
+		{
+			a := &client.analysis
+
+			bufs := [player.MAX_CHANNELS][]f32 {}
+			for ch in 0..<player.MAX_CHANNELS do bufs[ch] = a.raw_output[ch][:]
+
+			if !client.playback_state.paused {
+				spec := player.consume_output(bufs[:], client.last_frame_time)
+				dsp.to_mono(bufs[:], a.avg_output[:])
+
+				a.samplerate = f32(spec.samplerate)
+				a.channels = spec.channels
+			}
+		}
 
 		// -----------------------------------------------------------------------
 		// Update media controls
@@ -287,3 +326,12 @@ get_cache_path :: proc() -> string {
 request_exit :: proc() {
 	_client.want_exit = true
 }
+
+get_frame_time :: proc() -> f32 {
+	return _client.last_frame_time
+}
+
+get_analysis_data :: proc() -> Analysis_Data {
+	return _client.analysis
+}
+

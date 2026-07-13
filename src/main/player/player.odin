@@ -1,5 +1,7 @@
 package player
 
+import "src:bindings/ffmpeg"
+import "core:math/linalg"
 import "core:reflect"
 import "core:strconv"
 import "src:main/decoder"
@@ -9,6 +11,9 @@ import "core:slice"
 import "src:main/shared"
 import "src:dsp"
 import lib "src:main/library"
+
+ANALYSIS_SAMPLERATE :: 48000
+MAX_CHANNELS :: AUDIO_MAX_CHANNELS
 
 Repeat_Mode :: enum {
 	Playlist,
@@ -55,10 +60,10 @@ Player :: struct {
 	queue_is_shuffled:          bool,
 	enable_shuffle:             bool,
 	playback_thread:            Playback_Thread,
-	output_rings:               [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
 	output_intermediate_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 	repeat_mode:                Repeat_Mode,
 	config:                     Config,
+	analysis:                   Analysis_Buffer,
 }
 
 @(private="file")
@@ -73,8 +78,15 @@ _audio_callback :: proc(
 ) -> Audio_Callback_Status {
 	p := &_player
 
+	@static buffer_was_dropped: bool
+
 	lock()
 	defer unlock()
+
+	if buffer_was_dropped {
+		buffer_was_dropped = false
+		analysis_reset(&p.analysis)
+	}
 
 	switch event {
 	case .Stream:
@@ -95,11 +107,10 @@ _audio_callback :: proc(
 
 		dsp.interlace(output_buf[:spec.channels], data)
 
-		for ch in 0..<spec.channels {
-			shared.rb_produce(&p.output_rings[ch], output_buf[ch])
-		}
+		analysis_feed(&p.analysis, output_buf[:spec.channels], spec.samplerate)
 
 	case .BufferDropped:
+		buffer_was_dropped = true
 	case .Paused:
 	case .Resumed:
 	case .TrackFinished:
@@ -119,6 +130,8 @@ init :: proc(cfg: Init_Config) -> shared.Error {
 	else {
 		audio_init_null()
 	}
+
+	analysis_init(&p.analysis, context.allocator)
 
 	audio_set_callback(_audio_callback, nil)
 	audio_start() or_return
@@ -178,6 +191,9 @@ get_queue_serial :: proc() -> uint {
 	return _player.queue_serial
 }
 
+get_volume :: proc() -> f32 {return audio_get_volume()}
+set_volume :: proc(v: f32) {audio_set_volume(v)}
+
 set_paused :: proc(paused: bool) {
 	if paused {
 		if !audio_is_paused() do audio_pause()
@@ -209,6 +225,7 @@ seek :: proc(pos: int) {
 get_track_info :: proc() -> decoder.Info {
 	return _player.playing_track_info
 }
+
 clear_queue :: proc() {
 	p := &_player
 	sync.guard(&p.queue_lock)
@@ -315,3 +332,9 @@ stop_playback :: proc() {
 	set_paused(true)
 	playback_thread_close_track(&p.playback_thread)
 }
+
+consume_output :: proc(buf: [][]f32, timespan: f32) -> Audio_Spec {
+	p := &_player
+	return analysis_consume(&p.analysis, timespan, buf)
+}
+

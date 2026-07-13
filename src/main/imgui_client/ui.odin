@@ -69,6 +69,7 @@ UI_Window_ID :: enum {
 	Genres,
 	Albums,
 	Config,
+	Spectrum,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -111,7 +112,12 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Settings",
 		internal_name = "_settings",
 		procedure     = config_editor_window_proc,
-	}
+	},
+	.Spectrum = {
+		title         = "Spectrum",
+		internal_name = "_spectrum",
+		procedure     = spectrum_window_proc,
+	},
 }
 
 UI_Window_State :: struct {
@@ -188,12 +194,13 @@ ui_show :: proc() {
 	lib.lock()
 	defer lib.unlock()
 
+	_show_main_menu_bar()
+	_show_status_bar()
+
 	imgui.PushStyleColor(.DockingEmptyBg, 0)
 	imgui.PushStyleColor(.WindowBg, 0)
 	imgui.DockSpaceOverViewport()
 	imgui.PopStyleColor(2)
-
-	_show_main_menu_bar()
 
 	// Show windows
 	{
@@ -278,8 +285,19 @@ _show_main_menu_bar :: proc() -> bool {
 	// Controls
 	// --------------------------------------------------------------------------
 
+	imgui.Separator()
+
+	volume := player.get_volume() * 100
+	imgui.SetNextItemWidth(80)
+	if imgui.SliderFloat("##volume", &volume, 0, 100, "%.0f%%") {
+		player.set_volume(volume / 100)
+	}
+
+	imgui.Separator()
+
 	player_state := get_last_playback_state()
 	shuffle_on := player.is_shuffle_on()
+
 	if imgui.MenuItem(ICON_SHUFFLE, nil, shuffle_on) {
 		player.set_shuffle_on(!shuffle_on)
 	}
@@ -296,10 +314,61 @@ _show_main_menu_bar :: proc() -> bool {
 
 	if imgui.MenuItem(ICON_NEXT_TRACK) do player.play_next_track()
 
+	imgui.Separator()
+
 	{
 		track_pos := player.get_playback_pos()
 		if imx.scrubber("##seek", &track_pos, 0, track_info.duration) {
 			player.seek(track_pos)
+		}
+	}
+
+	return true
+}
+
+@(private="file")
+_show_status_bar :: proc() -> bool {
+	defer imgui.End()
+	imgui.BeginViewportSideBar("##status", imgui.GetMainViewport(), .Down, imgui.GetFrameHeight(), {
+		.MenuBar, .NoSavedSettings, .NoScrollbar
+	}) or_return
+	imgui.BeginMenuBar() or_return
+	defer imgui.EndMenuBar()
+
+	frame_allocator_guard()
+
+	playback_state := get_last_playback_state()
+	temp_allocator := get_frame_allocator()
+
+	track_info_block: if playback_state.track != nil {
+		track   := lib.get_track(playback_state.track.?) or_break track_info_block
+		info    := player.get_track_info()
+		artists := lib.join_shared_strings(.Artist, track.artists, temp_allocator)
+
+		imx.text_unformatted(artists)
+		imx.text_unformatted("-")
+		imx.text_unformatted(track.title)
+
+		imgui.Separator()
+
+		if track.album != nil do imx.text_unformatted(lib.get_shared_string(.Album, track.album.?))
+		else do imgui.TextDisabled("No album")
+
+		imgui.Separator()
+		imx.text(32, info.samplerate, "Hz", sep="")
+
+		imgui.Separator()
+		imx.text(32, info.channels, "channels")
+
+		imgui.Separator()
+		imx.text_unformatted(lib.AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].short)
+
+		if info.replay_gain != nil {
+			imgui.Separator()
+			rp := info.replay_gain.?
+			imx.textf(128, "Track gain/peak: %.2f dB / %.2f dB", rp.track_gain, rp.track_peak)
+			imgui.Separator()
+			imx.textf(128, "Album gain/peak: %.2f dB / %.2f dB", rp.album_gain, rp.album_peak)
 		}
 	}
 
