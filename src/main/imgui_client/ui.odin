@@ -46,6 +46,10 @@ UI_Config :: struct {
 	font_size:        f32,
 }
 
+UI_CONFIG_DEFAULTS :: UI_Config {
+	font_size = 16
+}
+
 UI_Window_Event :: enum {
 	Show,
 	Hidden,
@@ -152,7 +156,10 @@ ui_init :: proc() -> shared.Error {
 
 	for &ws in ui.window_state do ws.shown = true
 
-	load_user_config()
+	if load_user_config() != nil {
+		cfg := UI_CONFIG_DEFAULTS
+		ui_apply_config(&cfg)
+	}
 
 	return nil
 }
@@ -173,6 +180,8 @@ ui_apply_fonts :: proc() {
 
 	@static default_font := #load("../data/NotoSans-SemiBold.ttf")
 	@static icon_font := #load("../data/Font Awesome 7 Free-Solid-900.otf")
+
+	imgui.FontAtlas_Clear(io.Fonts)
 
 	cfg := DEFAULT_FONT_CONFIG
 	cfg.FontDataOwnedByAtlas = false
