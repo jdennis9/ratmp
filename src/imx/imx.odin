@@ -35,6 +35,10 @@ title_text :: proc(args: ..any, sep := " ") {
 	imgui.PopFont()
 }
 
+input_text :: proc(label: cstring, buf: []u8, flags: imgui.InputTextFlags = {}) -> bool {
+	return imgui.InputText(label, cstring(raw_data(buf)), auto_cast len(buf), flags)
+}
+
 typeid_to_data_type :: proc(t: typeid) -> (s: imgui.DataType, ok: bool) {
 	ok = true
 	switch t {

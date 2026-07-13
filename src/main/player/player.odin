@@ -1,5 +1,7 @@
 package player
 
+import "core:reflect"
+import "core:strconv"
 import "src:main/decoder"
 import "core:sync"
 import "core:math/rand"
@@ -14,8 +16,22 @@ Repeat_Mode :: enum {
 	None,
 }
 
-Config :: struct {
+Init_Config :: struct {
 	no_audio: bool,
+}
+
+ReplayGain_Mode :: enum {Track, Album,}
+
+Config :: struct {
+	enable_replaygain:     bool,
+	replaygain_pregain:    f32,
+	replaygain_preference: ReplayGain_Mode,
+}
+
+CONFIG_DEFAULTS :: Config {
+	enable_replaygain     = true,
+	replaygain_pregain    = 3,
+	replaygain_preference = .Track,
 }
 
 State :: struct {
@@ -42,6 +58,7 @@ Player :: struct {
 	output_rings:               [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
 	output_intermediate_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
 	repeat_mode:                Repeat_Mode,
+	config:                     Config,
 }
 
 @(private="file")
@@ -69,7 +86,10 @@ _audio_callback :: proc(
 			output_buf[ch] = p.output_intermediate_buffer[ch][:]
 		}
 		
-		status := playback_thread_request_frames(&p.playback_thread, output_buf[:spec.channels], spec.samplerate)
+		status := playback_thread_request_frames(
+			&p.playback_thread, output_buf[:spec.channels], spec.samplerate,
+			p.config
+		)
 
 		if status == .Eof do return .Finish
 
@@ -89,7 +109,7 @@ _audio_callback :: proc(
 	return .Continue
 }
 
-init :: proc(cfg: Config) -> shared.Error {
+init :: proc(cfg: Init_Config) -> shared.Error {
 	p := &_player
 
 	if !cfg.no_audio {
@@ -104,6 +124,8 @@ init :: proc(cfg: Config) -> shared.Error {
 	audio_start() or_return
 
 	playback_thread_init(&p.playback_thread, context.allocator)
+
+	p.config = CONFIG_DEFAULTS
 
 	return nil
 }
@@ -120,6 +142,12 @@ shutdown :: proc() {
 
 lock :: proc() {sync.lock(&_player.lock)}
 unlock :: proc() {sync.unlock(&_player.lock)}
+
+apply_config :: proc(config: Config) {
+	lock()
+	_player.config = config
+	unlock()
+}
 
 get_state :: proc() -> State {
 	p := &_player

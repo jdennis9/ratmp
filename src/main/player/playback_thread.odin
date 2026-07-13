@@ -41,33 +41,6 @@ Playback_Thread_Status :: enum {
 	Eof,
 }
 
-Playback_Replay_Gain_Mode :: enum {
-	TrackGain,
-	Ignore,
-}
-
-Playback_Post_Process_Params :: struct {
-	preamp_gain: f32,
-	replay_gain_mode: Playback_Replay_Gain_Mode,
-	hard_limiter: struct {
-		enable: bool,
-		release_ms: f32,
-		state: struct {
-			current_gain: f32,
-		}
-	},
-	state: dsp.Process_State,
-}
-
-PLAYBACK_POST_PROCESS_DEFAULTS :: Playback_Post_Process_Params {
-	preamp_gain = 6,
-	replay_gain_mode = .TrackGain,
-	hard_limiter = {
-		enable = false,
-		release_ms = 30,
-	},
-}
-
 Playback_Thread :: struct {
 	runner:                 ^thread.Thread,
 	allocator:              mem.Allocator,
@@ -86,14 +59,14 @@ Playback_Thread :: struct {
 	consumed_frame_index: int,
 
 	// Set by playback_thread_request_frames
-	frames_requested: int,
-	samplerate, channels: int,
+	input: struct {
+		frames_requested: int,
+		samplerate:       int,
+		channels:         int,
+		config:           Config,
+	},
 
 	audio_buffer: [AUDIO_MAX_CHANNELS][dynamic]f32,
-
-	post_processing:             Playback_Post_Process_Params,
-	post_processing_lock:        sync.Mutex,
-	post_processing_config_path: string,
 }
 
 @(private="file")
@@ -110,52 +83,19 @@ _reset_ring_buffers :: proc(at: ^Playback_Thread) {
 
 @(private="file")
 _post_process :: proc(at: ^Playback_Thread, audio: [][]f32, samplerate: f32) {
-	shared.TIME_SCOPE("Post process")
-	sync.lock(&at.post_processing_lock)
-	pp := at.post_processing
-	sync.unlock(&at.post_processing_lock)
+	config := at.input.config
 
 	// ReplayGain
-	if at.dec.replay_gain != nil {
+	if at.dec.replay_gain != nil && config.enable_replaygain {
 		rp := at.dec.replay_gain.?
-		{
-			v := dsp.gain_to_amp(rp.track_gain)
-			for ch in audio {
-				for &f in ch {
-					f *= v
-				}
-			}
-		}
+		gain := config.replaygain_preference == .Track ? rp.track_gain : rp.album_gain
+		gain += config.replaygain_pregain
+		v := dsp.gain_to_amp(gain)
 
-		// Apply preamp
-		if pp.preamp_gain != 0 {
-			v := dsp.gain_to_amp(pp.preamp_gain)
-			for ch in audio {
-				for &f in ch {
-					f *= v
-				}
+		for ch in audio {
+			for &f in ch {
+				f *= v
 			}
-		}
-
-		// Hard limit
-		if pp.hard_limiter.enable {
-			//release_samples := pp.hard_limiter.release_ms * (samplerate * 0.001)
-			x := dsp.Process_Params {
-				limiter = dsp.Limiter_Params {
-					release_ms = 30,
-					limit = 1,
-				},
-			}
-
-			dsp.post_process(&at.post_processing.state, x, audio, samplerate, at.processing_allocator)
-
-			// @Remove
-			for samples in audio {
-				for &sample in samples do sample = clamp(sample, -1, 1)
-			}
-		}
-		else {
-			
 		}
 	}
 
@@ -166,7 +106,6 @@ _post_process :: proc(at: ^Playback_Thread, audio: [][]f32, samplerate: f32) {
 			if abs(f) > 10 do f = 0
 		}
 	}
-
 }
 
 @(private="file")
@@ -184,14 +123,14 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 		sync.lock(&at.lock)
 		defer sync.unlock(&at.lock)
 
-		if at.channels == 0 || at.samplerate == 0 do continue
+		if at.input.channels == 0 || at.input.samplerate == 0 do continue
 		if !decoder.is_open(at.dec) do continue
 		
-		if at.frames_requested > len(at.ring_buffers[0].data) {
-			ring_buffer_size := _pad_ring_buffer_size(at.frames_requested*2)
+		if at.input.frames_requested > len(at.ring_buffers[0].data) {
+			ring_buffer_size := _pad_ring_buffer_size(at.input.frames_requested*2)
 			log.debug("Resizing ring buffer to", ring_buffer_size)
 
-			for &rb in at.ring_buffers[:at.channels] {
+			for &rb in at.ring_buffers[:at.input.channels] {
 				if rb.data == nil {
 					shared.rb_init(&rb, ring_buffer_size, at.allocator)
 				}
@@ -202,9 +141,9 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 			}
 		}	
 
-		if at.ring_buffer_channels != at.channels || at.ring_buffer_samplerate != at.samplerate {
-			at.ring_buffer_channels = at.channels
-			at.ring_buffer_samplerate = at.samplerate
+		if at.ring_buffer_channels != at.input.channels || at.ring_buffer_samplerate != at.input.samplerate {
+			at.ring_buffer_channels = at.input.channels
+			at.ring_buffer_samplerate = at.input.samplerate
 			_reset_ring_buffers(at)
 		}
 
@@ -212,31 +151,26 @@ _thread_proc :: proc(thr: ^thread.Thread) {
 
 		if frames_required <= 0 do continue
 		
-		for ch in 0..<at.channels {
+		for ch in 0..<at.input.channels {
 			resize(&at.audio_buffer[ch], frames_required)
 			deinterlaced[ch] = at.audio_buffer[ch][:]
 		}
 
-		at.decode_status = decoder.decode(&at.dec, deinterlaced[:at.channels], at.samplerate)
+		at.decode_status = decoder.decode(&at.dec, deinterlaced[:at.input.channels], at.input.samplerate)
 
 		// Post-processing
 		/*if at.post_process_hook.process != nil do at.post_process_hook.process(
 			at.post_process_hook.data, deinterlaced[:at.channels], at.samplerate
 		)*/
-		_post_process(at, deinterlaced[:at.channels], f32(at.samplerate))
+		_post_process(at, deinterlaced[:at.input.channels], f32(at.input.samplerate))
 
-		for d, ch in deinterlaced[:at.channels] {
+		for d, ch in deinterlaced[:at.input.channels] {
 			frames_copied = shared.rb_produce(&at.ring_buffers[ch], d)
 		}
 	}
 }
 
 playback_thread_init :: proc(at: ^Playback_Thread, allocator: mem.Allocator) {
-	//at.post_process_hook = params.post_process_hook
-
-	// Post-processing defaults
-	at.post_processing = PLAYBACK_POST_PROCESS_DEFAULTS
-
 	mem.dynamic_arena_init(&at.processing_arena)
 
 	at.allocator            = allocator
@@ -251,22 +185,23 @@ playback_thread_destroy :: proc(at: ^Playback_Thread) {
 }
 
 playback_thread_request_frames :: proc(
-	at: ^Playback_Thread, output: [][]f32, samplerate: int
+	at: ^Playback_Thread, output: [][]f32, samplerate: int, config: Config,
 ) -> Playback_Thread_Status {
 	channels := len(output)
 	frames_read := 0
 	frames_wanted := len(output[0])
 	iter_count := 0
+	
+	at.input.config = config
 
 	for frames_read < frames_wanted {
 		{
-			sync.lock(&at.lock)
-			defer sync.unlock(&at.lock)
+			sync.guard(&at.lock)
 			
 			if !decoder.is_open(at.dec) do return .NoInput
 			
 			// Help the thread proc to know what to size the ring buffers
-			at.frames_requested = frames_wanted
+			at.input.frames_requested = frames_wanted
 			
 			if at.ring_buffer_channels == len(output) && at.ring_buffer_samplerate == samplerate {
 				frames_copied: int
@@ -280,8 +215,8 @@ playback_thread_request_frames :: proc(
 				iter_count += 1
 			}
 			else {
-				at.channels = len(output)
-				at.samplerate = samplerate
+				at.input.channels = len(output)
+				at.input.samplerate = samplerate
 			}
 		}
 		
@@ -341,14 +276,4 @@ playback_thread_get_track_position :: proc(at: ^Playback_Thread) -> int {
 
 playback_thread_has_track :: proc(at: Playback_Thread) -> bool {
 	return decoder.is_open(at.dec)
-}
-
-playback_thread_set_post_process_params :: proc(at: ^Playback_Thread, params: Playback_Post_Process_Params) {
-	sync.guard(&at.post_processing_lock)
-	at.post_processing = params
-}
-
-playback_thread_get_post_process_params :: proc(at: ^Playback_Thread) -> Playback_Post_Process_Params {
-	sync.guard(&at.post_processing_lock)
-	return at.post_processing
 }

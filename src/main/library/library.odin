@@ -100,6 +100,13 @@ Folder_Cover_Art :: struct {
 	image:  string,
 }
 
+Config :: struct {
+	prefer_folder_cover_art: bool,
+}
+
+CONFIG_DEFAULTS :: Config {
+}
+
 Library :: struct {
 	lock:             sync.Mutex, // only used outside of this package
 	tracks_serial:    uint,
@@ -109,7 +116,8 @@ Library :: struct {
 	tag_allocator:    mem.Allocator,
 	playlists:        Playlist_Map,
 	playlists_serial: uint,
-	config:           Library_Config,
+	config:           Config,
+	init_config:      Init_Config,
 	folder_root:      Folder,
 	folder_arena:     mem.Dynamic_Arena,
 	folder_allocator: mem.Allocator,
@@ -123,7 +131,7 @@ Library :: struct {
 	},
 }
 
-Library_Config :: struct {
+Init_Config :: struct {
 	enable_memory_tracking:  bool,
 	prefer_folder_cover_art: bool,
 }
@@ -131,9 +139,9 @@ Library_Config :: struct {
 @(private="file")
 _library: Library
 
-init :: proc(config: Library_Config) -> shared.Error {
+init :: proc(config: Init_Config) -> shared.Error {
 	l := &_library
-	l.config = config
+	l.config = CONFIG_DEFAULTS
 
 	for &ss in l.shared_strings do reserve(&ss, 128)
 
@@ -157,10 +165,8 @@ shutdown :: proc() {
 	delete(l.folder_cover_art)
 	delete(l.url_to_track_id)
 
-	if l.config.enable_memory_tracking {
-		mem.tracking_allocator_destroy(&l.tracking_allocators.tag)
-		mem.tracking_allocator_destroy(&l.tracking_allocators.folder_tree)
-	}
+	mem.tracking_allocator_destroy(&l.tracking_allocators.tag)
+	mem.tracking_allocator_destroy(&l.tracking_allocators.folder_tree)
 
 	mem.dynamic_arena_destroy(&l.tag_arena)
 	mem.dynamic_arena_destroy(&l.folder_arena)
@@ -170,6 +176,10 @@ shutdown :: proc() {
 	}
 
 	l^ = {}
+}
+
+apply_config :: proc(c: Config) {
+	_library.config = c
 }
 
 update :: proc() {

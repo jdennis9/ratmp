@@ -24,7 +24,7 @@ import "core:mem"
 
 System_Font :: struct {
 	handle: rawptr,
-	name:  cstring,
+	name:   cstring,
 }
 
 @private _font_impl_list_system_fonts: proc(allocator: mem.Allocator) -> ([]System_Font, shared.Error)

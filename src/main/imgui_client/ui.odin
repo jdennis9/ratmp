@@ -39,6 +39,13 @@ DEFAULT_FONT_CONFIG :: imgui.FontConfig {
 	ExtraSizeScale = 1,
 }
 
+UI_Config :: struct {
+	background_image: [512]u8,
+	default_theme:    [128]u8,
+	fonts:            [dynamic; 16]sys.System_Font,
+	font_size:        f32,
+}
+
 UI_Window_Event :: enum {
 	Show,
 	Hidden,
@@ -61,6 +68,7 @@ UI_Window_ID :: enum {
 	Artists,
 	Genres,
 	Albums,
+	Config,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -99,6 +107,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		internal_name = "_genres",
 		procedure     = genres_window_proc,
 	},
+	.Config = {
+		title         = "Settings",
+		internal_name = "_settings",
+		procedure     = config_editor_window_proc,
+	}
 }
 
 UI_Window_State :: struct {
@@ -125,10 +138,10 @@ ui_init :: proc() -> shared.Error {
 		nil
 	)
 
-	ui_apply_fonts()
-
 	for &ws in ui.window_state do ws.shown = true
-	
+
+	load_user_config()
+
 	return nil
 }
 
@@ -146,15 +159,25 @@ ui_shutdown :: proc() {
 ui_apply_fonts :: proc() {
 	io := imgui.GetIO()
 
+	@static default_font := #load("../data/NotoSans-SemiBold.ttf")
 	@static icon_font := #load("../data/Font Awesome 7 Free-Solid-900.otf")
 
 	cfg := DEFAULT_FONT_CONFIG
 	cfg.FontDataOwnedByAtlas = false
 	
-	imgui.FontAtlas_AddFontDefault(io.Fonts)
+	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(default_font), auto_cast len(default_font), font_cfg = &cfg)
 	cfg.ExtraSizeScale = 0.8
 	cfg.MergeMode = true
 	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(icon_font), auto_cast len(icon_font), font_cfg = &cfg)
+}
+
+ui_apply_config :: proc(cfg: ^UI_Config) {
+	style := imgui.GetStyle()
+	style.FontSizeBase = cfg.font_size
+
+	set_theme_from_name(shared.string_from_array(cfg.default_theme[:]))
+
+	ui_apply_fonts()
 }
 
 ui_show :: proc() {
