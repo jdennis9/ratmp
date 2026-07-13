@@ -210,6 +210,7 @@ ui_apply_config :: proc(cfg: ^UI_Config) {
 	ui_apply_fonts()
 }
 
+// @NOTE: Does not save to config
 ui_set_background :: proc(path: string) {
 	ui := &_ui
 	ui.background.path = path
@@ -358,10 +359,21 @@ _show_main_menu_bar :: proc() -> bool {
 
 	imgui.Separator()
 
-	volume := player.get_volume() * 100
-	imgui.SetNextItemWidth(80)
-	if imgui.SliderFloat("##volume", &volume, 0, 100, "%.0f%%") {
-		player.set_volume(volume / 100)
+	// Volume slider
+	{
+		str_id: cstring
+		volume := player.get_volume() * 100
+
+		w := imgui.CalcTextSize(ICON_VOLUME_HIGH)
+
+		if volume <= 0 do      str_id = ICON_VOLUME_OFF + "###volume"
+		else if volume < 50 do str_id = ICON_VOLUME_LOW + "###volume"
+		else do                str_id = ICON_VOLUME_HIGH + "###volume"
+
+		imgui.SetNextItemWidth(80)
+		if imgui.SliderFloat(str_id, &volume, 0, 100, "%.0f%%") {
+			player.set_volume(volume / 100)
+		}
 	}
 
 	imgui.Separator()

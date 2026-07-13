@@ -18,6 +18,7 @@
 #+private file
 package client
 
+import imgui "src:thirdparty/odin-imgui"
 import "src:main/shared"
 import "core:unicode/utf16"
 import win "core:sys/windows"
@@ -135,6 +136,16 @@ platform_init_win32 :: proc() -> bool {
 	_win.hinstance = cast(win.HINSTANCE) win.GetModuleHandleW(nil)
 	_win.icon = win.LoadIconW(_win.hinstance, "WindowIconLight")
 
+	// ImGui DPI scaling
+	imgui_win32.EnableDpiAwareness()
+	scale := imgui_win32.GetDpiScaleForMonitor(
+		win.MonitorFromPoint({0, 0}, .MONITOR_DEFAULTTOPRIMARY)
+	)
+
+	style := imgui.GetStyle()
+	imgui.Style_ScaleAllSizes(style, scale)
+	style.FontScaleDpi = scale
+
 	wndclass := win.WNDCLASSEXW {
 		hInstance = _win.hinstance,
 		lpszClassName = WINDOW_CLASS_NAME,
@@ -164,6 +175,10 @@ _wnd_proc :: proc "system" (
 			auto_cast win.LOWORD(lparam),
 			auto_cast win.HIWORD(lparam),
 		}
+	case win.WM_SYSCOMMAND:
+		// Prevent pressing alt from freezing the window until another
+		// input is pressed
+		if (wparam & 0xfff0) == win.SC_KEYMENU do return 0
 	}
 
 	return win.DefWindowProcW(hwnd, msg, wparam, lparam)

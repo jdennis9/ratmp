@@ -107,6 +107,7 @@ run :: proc() -> shared.Error {
 
 	if io := imgui.GetIO(); io != nil {
 		io.ConfigFlags |= {.DockingEnable}
+		io.ConfigDpiScaleFonts = true
 	}
 
 	if !launch_config.no_media_controls {
@@ -126,7 +127,7 @@ run :: proc() -> shared.Error {
 	// --------------------------------------------------------------------------
 	// Get paths
 	// --------------------------------------------------------------------------
-	when ODIN_DEBUG {
+	when ODIN_DEBUG || ODIN_OS == .Windows {
 		client.paths.config = "."
 		client.paths.data   = "."
 		client.paths.cache  = "." + filepath.SEPARATOR_STRING + "cache"

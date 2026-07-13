@@ -76,76 +76,37 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 
 
 	_video_impl_create_texture = proc(td: Texture_Desc) -> (texture_id: rawptr, ok: bool) {
-		staging: ^dx.ITexture2D
-		texture: ^dx.ITexture2D
+		tex: ^dx.ITexture2D
 		view: ^dx.IShaderResourceView
 
-		//if data == nil do return _create_dynamic_texture(width, height)
-
 		desc := dx.TEXTURE2D_DESC {
-			Width = auto_cast td.width,
-			Height = auto_cast td.height,
-			MipLevels = 1,
-			ArraySize = 1,
-			Format = .R8G8B8A8_UNORM,
-			SampleDesc = {
-				Count = 1,
-			},
-			Usage = .DYNAMIC,
-			BindFlags = {.SHADER_RESOURCE},
-			CPUAccessFlags = {.WRITE},
-		}
-		
-		win32_check(_dx.device->CreateTexture2D(&desc, nil, &staging)) or_return
-		defer staging->Release()
-		
-		desc.Usage = .DEFAULT
-		desc.CPUAccessFlags = {}
-		win32_check(_dx.device->CreateTexture2D(&desc, nil, &texture)) or_return
-		defer texture->Release()
-
-		mapped: dx.MAPPED_SUBRESOURCE
-		win32_check(_dx.ctx->Map(staging, 0, .WRITE_DISCARD, {}, &mapped)) or_return
-
-		// If the target pitch is not the same we need to manually
-		// copy each row
-		pitch := 4 * td.width
-		if mapped.RowPitch != u32(pitch) {
-			out := cast([^]u8) mapped.pData
-			pixels := cast([^]u8) td.data
-			offset := 0
-
-			for row in 0..<td.height {
-				row_start := row * int(mapped.RowPitch)
-				copy(out[row_start:][:mapped.RowPitch], pixels[offset:][:pitch])
-
-				offset += pitch
-			}
-		}
-		else {
-			out := cast([^]u8) mapped.pData
-			pixels := cast([^]u8) td.data
-			size := td.width * td.height * 4
-
-			copy(out[:size], pixels[:size])
+			ArraySize  = 1,
+			MipLevels  = 1,
+			Width      = auto_cast td.width,
+			Height     = auto_cast td.height,
+			Format     = .R8G8B8A8_UNORM,
+			SampleDesc = {Count = 1},
+			Usage      = .DEFAULT,
+			BindFlags  = {.SHADER_RESOURCE},
 		}
 
-		_dx.ctx->Unmap(staging, 0)
-		_dx.ctx->CopyResource(texture, staging)
+		init_data := dx.SUBRESOURCE_DATA {
+			pSysMem =     auto_cast td.data,
+			SysMemPitch = auto_cast(td.width * 4),
+		}
 
+		win32_check(_dx.device->CreateTexture2D(&desc, &init_data, &tex)) or_return
+		defer tex->Release()
+			
 		sr := dx.SHADER_RESOURCE_VIEW_DESC {
-			Format = desc.Format,
+			Format        = desc.Format,
 			ViewDimension = .TEXTURE2D,
-			Texture2D = {
-				MipLevels = 1,
-			},
+			Texture2D     = {MipLevels = 1},
 		}
 
-		win32_check(_dx.device->CreateShaderResourceView(texture, &sr, &view)) or_return
+		win32_check(_dx.device->CreateShaderResourceView(tex, &sr, &view))
 
-		texture_id = view
-		ok = true
-		return
+		return view, true
 	}
 	
 	_video_impl_destroy_texture = proc(tex: rawptr) {
@@ -231,18 +192,8 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 		)
 	) or_return
 
-	/*if !from_device_reset do */imgui_dx11.Init(_dx.device, _dx.ctx) or_return
+	imgui_dx11.Init(_dx.device, _dx.ctx) or_return
 	_create_render_target()
-
-	/*sampler_desc := dx11.SAMPLER_DESC {
-		Filter = .COMPARISON_MIN_MAG_MIP_LINEAR,
-		AddressW = .WRAP,
-		AddressV = .WRAP,
-		AddressU = .WRAP,
-		ComparisonFunc = .ALWAYS,
-	}
-
-	win32_check(_dx.device->CreateSamplerState(&sampler_desc, &_dx.repeat_sampler)) or_return*/
 
 	return true
 }
