@@ -18,6 +18,13 @@
 #+private file
 package client
 
+import "core:slice"
+import "src:main/player"
+import "core:strings"
+import "core:sync"
+import lib "src:main/library"
+import "core:thread"
+import "src:main/decoder"
 import "core:mem"
 import "core:math/linalg"
 import "core:fmt"
@@ -26,22 +33,22 @@ import imgui "src:thirdparty/odin-imgui"
 import "src:dsp"
 import "src:imx"
 
-_MAX_BANDS :: 160
-
-_Frequency_Guide :: struct {
-	str: [8]u8,
-	offset: f32,
-}
-
-_Display_Mode :: enum {
-	Histogram,
-	Heat,
-	Line,
-	LineFilled,
-}
-
 @private
 spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	_MAX_BANDS :: 160
+
+	_Frequency_Guide :: struct {
+		str: [8]u8,
+		offset: f32,
+	}
+
+	_Display_Mode :: enum {
+		Histogram,
+		Heat,
+		Line,
+		LineFilled,
+	}
+
 	@static w: struct {
 		bands:            [dynamic; _MAX_BANDS]f32,
 		band_freqs:       [dynamic; _MAX_BANDS]f32,
@@ -317,6 +324,197 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 			imgui.EndTooltip()
 		}
 	}
+
+	return true
+}
+
+@private
+wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	if ev != .Show do return false
+
+	_RESOLUTION :: 1440
+
+	@static w: struct {
+		decoder_thread:   ^thread.Thread,
+		cancel_decode:    bool,
+		displayed_track:  Maybe(lib.Track_ID),
+		peaks:            [_RESOLUTION]f32,
+		peaks_calculated: int,
+		track_url:        string,
+		track_is_remote:  bool,
+		color_mode:       imx.Bar_Color_Mode,
+		track_replaygain: f32,
+		peak_mul:         f32,
+		apply_replaygain: bool,
+	} = {
+		peak_mul         = 1,
+		track_replaygain = 1,
+	}
+
+	playback_state := get_last_playback_state()
+
+	calc_peaks :: proc() -> bool {
+		dec:  decoder.Decoder
+		info: decoder.Info
+
+		decoder.open(&dec, w.track_url, &info) or_return
+		defer decoder.close(&dec)
+
+		if info.replay_gain != nil {
+			rp := info.replay_gain.?
+			sync.atomic_store(&w.track_replaygain, rp.track_gain)
+		}
+
+		buffer_size := dec.frame_count / _RESOLUTION
+
+		buf := make([]f32, buffer_size)
+		defer delete(buf)
+
+		for i in 0..<_RESOLUTION {
+			peak: f32
+			status := decoder.decode(&dec, {buf}, dec.samplerate)
+
+			if sync.atomic_load(&w.cancel_decode) do break
+
+			for v in buf do peak = max(abs(v), peak)
+
+			w.peaks[i] = peak
+			sync.atomic_add(&w.peaks_calculated, 1)
+
+			if status != .Complete do break
+		}
+
+		return true
+	}
+
+	calc_peaks_thread_proc :: proc(t: ^thread.Thread) {
+		calc_peaks()
+	}
+
+	close_thread :: proc() {
+		if w.decoder_thread != nil {
+			sync.atomic_store(&w.cancel_decode, true)
+			thread.join(w.decoder_thread)
+			thread.destroy(w.decoder_thread)
+			w.decoder_thread = nil
+			w.cancel_decode = false
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Settings
+	// --------------------------------------------------------------------------
+	if imgui.BeginPopupContextWindow() {
+		defer imgui.EndPopup()
+		imx.select_enum("Color mode", &w.color_mode)
+		imgui.SliderFloat("Height multiplier", &w.peak_mul, 0.05, 8, "%.2f")
+		imgui.Checkbox("Apply ReplayGain", &w.apply_replaygain)
+	}
+	
+	// --------------------------------------------------------------------------
+	// Update waveform
+	// --------------------------------------------------------------------------
+	blk_update_track: if w.displayed_track != playback_state.track {
+		w.displayed_track = playback_state.track
+		if w.displayed_track == nil do break blk_update_track
+		
+		close_thread()
+		
+		track            := lib.get_track(w.displayed_track.?) or_break blk_update_track
+		w.track_url       = track.url
+		w.track_is_remote = !strings.starts_with(track.url, "file://")
+
+		if !w.track_is_remote {
+			slice.zero(w.peaks[:])
+			w.decoder_thread = thread.create(calc_peaks_thread_proc, .Low)
+			w.decoder_thread.init_context = context
+			thread.start(w.decoder_thread)
+		}
+	}
+
+	// --------------------------------------------------------------------------
+	// Early check if track is streaming from internet
+	// --------------------------------------------------------------------------
+	if w.track_is_remote {
+		imgui.TextDisabled("Streaming from internet")
+		return true
+	}
+
+	track_info := player.get_track_info()
+
+	// --------------------------------------------------------------------------
+	// Input
+	// --------------------------------------------------------------------------
+	if imgui.IsWindowHovered() && imgui.IsMouseClicked(.Left) {
+		p_min := imgui.GetCursorScreenPos()
+		p_max := p_min + imgui.GetContentRegionAvail()
+
+		pos := linalg.unlerp(p_min.x, p_max.x, imgui.GetMousePos().x)
+		pos = clamp(pos, 0, 1)
+		player.seek(int(pos * f32(track_info.duration)))
+	}
+
+	// --------------------------------------------------------------------------
+	// Display
+	// --------------------------------------------------------------------------
+	peaks          := w.peaks[:]
+	track_pos      := player.get_playback_pos()
+	track_duration := track_info.duration
+	if track_duration <= 0 do return false
+	track_progress := f32(track_pos) / f32(track_duration)
+
+	drawlist          := imgui.GetWindowDrawList()
+	pos               := imgui.GetCursorScreenPos()
+	size              := imgui.GetContentRegionAvail()
+	left_data_points  := int(track_progress * _RESOLUTION)
+	right_data_points := _RESOLUTION - left_data_points
+	bar_size          := size.x / f32(_RESOLUTION)
+	left_size         := f32(left_data_points) * bar_size
+	right_size        := f32(right_data_points) * bar_size
+
+	draw_wave :: proc(drawlist: ^imgui.DrawList, pos, size: [2]f32, points: []f32, brightness: f32, color_mode: imx.Bar_Color_Mode, height_mul: f32) {
+		height := size.y * 0.5
+		inner_color_v := imgui.ColorConvertU32ToFloat4(get_theme_color(.WaveBarInner))
+		outer_color_v := imgui.ColorConvertU32ToFloat4(get_theme_color(.WaveBarOuter))
+
+		inner_color_v.rgb *= brightness
+		outer_color_v.rgb *= brightness
+		inner_color := imgui.GetColorU32ImVec4(inner_color_v)
+		outer_color := imgui.GetColorU32ImVec4(outer_color_v)
+
+		imx.draw_bars(
+			imgui.GetWindowDrawList(), 
+			{pos.x, pos.y + height}, {pos.x + size.x, pos.y}, points, inner_color, outer_color,
+			spacing = 0, min_height = 1, color_mode = color_mode, height_multiplier = height_mul
+		)
+		imx.draw_bars(
+			imgui.GetWindowDrawList(), 
+			{pos.x, pos.y + height}, {pos.x + size.x, pos.y + size.y}, points, inner_color, outer_color,
+			spacing = 0, min_height = 1, color_mode = color_mode, height_multiplier = height_mul
+		)
+		/*imx.draw_bars(
+			imgui.GetWindowDrawList(),
+			pos + {0, size.y}, pos + {size.x, 0}, points, inner_color, outer_color,
+			spacing = 0, min_height = 1, color_mode = color_mode, height_multiplier = height_mul
+		)*/
+	}
+
+	height_mul := w.peak_mul
+	if w.apply_replaygain do height_mul *= player.calc_effective_replaygain_multiplier()
+
+	draw_wave(
+		drawlist, pos,
+		{left_size, size.y}, peaks[:left_data_points],
+		1, w.color_mode,
+		height_mul
+	)
+	draw_wave(
+		drawlist,
+		{pos.x + left_size, pos.y}, {right_size, size.y},
+		peaks[left_data_points:],
+		0.4, w.color_mode,
+		height_mul,
+	)
 
 	return true
 }

@@ -338,3 +338,18 @@ consume_output :: proc(buf: [][]f32, timespan: f32) -> Audio_Spec {
 	return analysis_consume(&p.analysis, timespan, buf)
 }
 
+// Calculate the current ReplayGain output multiplier being applied
+calc_effective_replaygain_multiplier :: proc() -> f32 {
+	p := &_player
+	c := p.config
+	info := p.playing_track_info
+
+	if !c.enable_replaygain || p.playing_track_id == nil || info.replay_gain == nil do return 1
+
+	rp := info.replay_gain.?
+	gain := c.replaygain_preference == .Track ? rp.track_gain : rp.album_gain
+	gain += c.replaygain_pregain
+
+	return dsp.gain_to_amp(gain)
+}
+

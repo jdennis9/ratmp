@@ -70,6 +70,7 @@ UI_Window_ID :: enum {
 	Albums,
 	Config,
 	Spectrum,
+	Wavebar,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -117,6 +118,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Spectrum",
 		internal_name = "_spectrum",
 		procedure     = spectrum_window_proc,
+	},
+	.Wavebar = {
+		title         = "Wavebar",
+		internal_name = "_wavebar",
+		procedure     = wavebar_window_proc,
 	},
 }
 

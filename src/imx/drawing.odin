@@ -16,6 +16,7 @@ draw_bars :: proc(
 	spacing: f32 = 1,
 	min_height: f32 = 0,
 	color_mode: Bar_Color_Mode = .Gradient,
+	height_multiplier: f32 = 1,
 ) {
 	x_offset: f32 = 0
 	width := bb_max.x - bb_min.x
@@ -29,7 +30,7 @@ draw_bars :: proc(
 	case .Gradient:
 		for v in values {
 			top_color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
-			h: f32 = max(abs(v * height), min_height)
+			h: f32 = max(abs(v * height * height_multiplier), min_height)
 			if height < 0 do h = -h
 
 			imgui.DrawList_AddRectFilledMultiColor(
@@ -45,7 +46,7 @@ draw_bars :: proc(
 	case .Flat:
 		for v in values {
 			color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
-			h: f32 = max(abs(v * height), min_height)
+			h: f32 = max(abs(v * height * height_multiplier), min_height)
 			if height < 0 do h = -h
 
 			imgui.DrawList_AddRectFilled(
