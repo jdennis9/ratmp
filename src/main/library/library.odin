@@ -124,6 +124,7 @@ Library :: struct {
 	folder_serial:    uint,
 	folder_cover_art: map[u64]Folder_Cover_Art, // folder hash -> cover art path
 	url_to_track_id:  map[u32]Track_ID, // url hash -> track id
+	save_serial:      uint,
 
 	tracking_allocators: struct {
 		tag:         mem.Tracking_Allocator,
@@ -134,6 +135,7 @@ Library :: struct {
 Init_Config :: struct {
 	enable_memory_tracking:  bool,
 	prefer_folder_cover_art: bool,
+	metadata_db_path:        string,
 }
 
 @(private="file")
@@ -141,6 +143,7 @@ _library: Library
 
 init :: proc(config: Init_Config) -> shared.Error {
 	l := &_library
+	l.init_config = config
 	l.config = CONFIG_DEFAULTS
 
 	for &ss in l.shared_strings do reserve(&ss, 128)
@@ -155,6 +158,8 @@ init :: proc(config: Init_Config) -> shared.Error {
 		l.tag_allocator    = shared.track_allocator(l.tag_allocator, &l.tracking_allocators.tag)
 		l.folder_allocator = shared.track_allocator(l.folder_allocator, &l.tracking_allocators.folder_tree)
 	}
+
+	if config.metadata_db_path != "" do load_db_from_disk(config.metadata_db_path)
 
 	return nil
 }
@@ -190,6 +195,11 @@ update :: proc() {
 		shared.TIME_SCOPE("Build folder tree")
 		free_all(l.folder_allocator)
 		build_folder_tree(&l.folder_root, l.folder_allocator)
+	}
+
+	if l.init_config.metadata_db_path != "" && l.save_serial != l.tracks_serial {
+		l.save_serial = l.tracks_serial
+		save_db_to_disk(l.init_config.metadata_db_path)
 	}
 }
 
@@ -335,6 +345,10 @@ get_all_track_ids :: proc(allocator: mem.Allocator) -> []Track_ID {
 	}
 
 	return ids[:count]
+}
+
+get_track_count :: proc() -> int {
+	return int(hm.dynamic_len(_library.tracks))
 }
 
 find_track_by_url :: proc(url: string) -> (id: Track_ID, found: bool) {

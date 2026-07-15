@@ -147,11 +147,11 @@ platform_init_win32 :: proc() -> bool {
 	style.FontScaleDpi = scale
 
 	wndclass := win.WNDCLASSEXW {
-		hInstance = _win.hinstance,
+		hInstance     = _win.hinstance,
 		lpszClassName = WINDOW_CLASS_NAME,
-		cbSize = size_of(win.WNDCLASSEXW),
-		lpfnWndProc = _wnd_proc,
-		hIcon = _win.icon,
+		cbSize        = size_of(win.WNDCLASSEXW),
+		lpfnWndProc   = _wnd_proc,
+		hIcon         = _win.icon,
 	}
 
 	assert(win.RegisterClassExW(&wndclass) != 0)

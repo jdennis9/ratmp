@@ -492,11 +492,6 @@ wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
 			{pos.x, pos.y + height}, {pos.x + size.x, pos.y + size.y}, points, inner_color, outer_color,
 			spacing = 0, min_height = 1, color_mode = color_mode, height_multiplier = height_mul
 		)
-		/*imx.draw_bars(
-			imgui.GetWindowDrawList(),
-			pos + {0, size.y}, pos + {size.x, 0}, points, inner_color, outer_color,
-			spacing = 0, min_height = 1, color_mode = color_mode, height_multiplier = height_mul
-		)*/
 	}
 
 	height_mul := w.peak_mul

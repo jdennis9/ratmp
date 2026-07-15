@@ -92,8 +92,28 @@ run :: proc() -> shared.Error {
 
 	flags.parse_or_exit(&launch_config, os.args)
 
+	// --------------------------------------------------------------------------
+	// Get paths
+	// --------------------------------------------------------------------------
+	when ODIN_DEBUG || ODIN_OS == .Windows {
+		client.paths.config = "."
+		client.paths.data   = "."
+		client.paths.cache  = "." + filepath.SEPARATOR_STRING + "cache"
+
+		shared.ensure_dir(client.paths.cache)
+	}
+	else {
+		client.paths.config = os.user_config_dir(context.allocator) or_return
+		client.paths.data   = os.user_data_dir(context.allocator) or_return
+		client.paths.cache  = os.user_cache_dir(context.allocator) or_return
+		client.paths.config = filepath.join({client.paths.config, "ratmp"}) or_return
+		client.paths.data   = filepath.join({client.paths.data, "ratmp"}) or_return
+		client.paths.cache  = filepath.join({client.paths.cache, "ratmp"}) or_return
+	}
+
 	lib.init({
 		enable_memory_tracking = launch_config.memory_debug,
+		metadata_db_path       = filepath.join({client.paths.data, "metadata.dat"}) or_return,
 	}) or_return
 	defer lib.shutdown()
 
@@ -124,21 +144,6 @@ run :: proc() -> shared.Error {
 	platform_make_window() or_return
 	defer platform_destroy_window()
 
-	// --------------------------------------------------------------------------
-	// Get paths
-	// --------------------------------------------------------------------------
-	when ODIN_DEBUG || ODIN_OS == .Windows {
-		client.paths.config = "."
-		client.paths.data   = "."
-		client.paths.cache  = "." + filepath.SEPARATOR_STRING + "cache"
-
-		shared.ensure_dir(client.paths.cache)
-	}
-	else {
-		client.paths.config = os.user_config_dir(context.allocator) or_return
-		client.paths.data =   os.user_data_dir(context.allocator) or_return
-		client.paths.cache =  os.user_cache_dir(context.allocator) or_return
-	}
 
 	// --------------------------------------------------------------------------
 	// Initialize client stuff
@@ -170,12 +175,17 @@ run :: proc() -> shared.Error {
 		frame_start := time.tick_now()
 		defer last_frame_start = frame_start
 
+
 		client.last_frame_time = auto_cast time.duration_seconds(time.tick_diff(last_frame_start, frame_start))
 		client.last_frame_time = clamp(client.last_frame_time, 0, 1)
 
 		free_all(client.frame_allocator)
 
 		platform_poll_events()
+
+		lib.lock()
+		lib.update()
+		lib.unlock()
 
 		client.playback_state = player.get_state()
 

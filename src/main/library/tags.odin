@@ -107,3 +107,20 @@ read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Ta
 	ok = true
 	return
 }
+
+convert_track_to_tags :: proc(track: Track, allocator: mem.Allocator) -> (tags: Track_Tags) {
+	tags.album      = track.album != nil ? get_shared_string(.Album, track.album.?) : ""
+	tags.artist     = join_shared_strings(.Artist, track.artists, allocator)
+	tags.genre      = join_shared_strings(.Genre, track.genres, allocator)
+	tags.title      = track.title
+	tags.bitrate    = track.bitrate
+	tags.channels   = track.channels
+	tags.samplerate = track.samplerate
+	tags.format     = track.format
+	tags.file_date  = track.file_date
+	tags.file_size  = track.file_size
+	tags.duration   = track.duration
+	tags.track      = track.track
+	tags.year       = track.year
+	return
+}
