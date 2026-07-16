@@ -143,7 +143,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 
 	_video_impl_resize_swapchain = proc(width, height: int) {
 		_destroy_render_target()
-		_dx.swapchain->ResizeBuffers(1, auto_cast width, auto_cast height, .UNKNOWN, {})
+		_dx.swapchain->ResizeBuffers(2, auto_cast width, auto_cast height, .UNKNOWN, {})
 		_create_render_target()
 	}
 
@@ -201,13 +201,15 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 @(private="file")
 _create_render_target :: proc() -> bool {
 	texture: ^dx.ITexture2D
-	_dx.swapchain->GetBuffer(0, dx.ITexture2D_UUID, cast(^rawptr) &texture)
+	win32_check(_dx.swapchain->GetBuffer(0, dx.ITexture2D_UUID, cast(^rawptr) &texture)) or_return
+
 	if texture == nil {
 		_dx.rtv = nil
 		return false
 	}
-	_dx.device->CreateRenderTargetView(texture, nil, &_dx.rtv)
-	texture->Release()
+	defer texture->Release()
+
+	win32_check(_dx.device->CreateRenderTargetView(texture, nil, &_dx.rtv)) or_return
 
 	return true
 }
