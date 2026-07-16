@@ -173,7 +173,7 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 			Count = 1,
 		},
 		Windowed = true,
-		SwapEffect = .DISCARD,
+		SwapEffect = .FLIP_SEQUENTIAL,
 	}
 
 	feature_levels := []dx.FEATURE_LEVEL {
