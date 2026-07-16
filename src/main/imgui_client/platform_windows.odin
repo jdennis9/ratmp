@@ -103,6 +103,7 @@ platform_init_win32 :: proc() -> bool {
 		if _win.resize != nil {
 			rs := _win.resize.?
 			video_resize_swapchain(rs.x, rs.y)
+			_win.resize = nil
 		}
 
 		return _win.events

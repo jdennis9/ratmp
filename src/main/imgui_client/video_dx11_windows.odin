@@ -18,6 +18,7 @@
 #+private file
 package client
 
+import "core:log"
 import "src:main/shared"
 import "vendor:directx/dxgi"
 import dx "vendor:directx/d3d11"
@@ -26,11 +27,12 @@ import imgui "src:thirdparty/odin-imgui"
 import imgui_dx11 "src:thirdparty/odin-imgui/imgui_impl_dx11"
 
 _dx: struct {
-	hwnd:      win.HWND,
-	device:    ^dx.IDevice,
-	ctx:       ^dx.IDeviceContext,
-	rtv:       ^dx.IRenderTargetView,
-	swapchain: ^dxgi.ISwapChain,
+	hwnd:                 win.HWND,
+	device:               ^dx.IDevice,
+	ctx:                  ^dx.IDeviceContext,
+	rtv:                  ^dx.IRenderTargetView,
+	swapchain:            ^dxgi.ISwapChain,
+	swapchain1:           ^dxgi.ISwapChain1,
 }
 
 win32_check :: shared.win32_check
@@ -49,7 +51,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	_init(hwnd) or_return
 
 	_video_impl_render_frame = proc() {
-		clear_color: [4]f32 = {0, 0, 0, 1}
+		clear_color: [4]f32 = {0, 0, 0, 0}
 		_dx.ctx->OMSetRenderTargets(1, &_dx.rtv, nil)
 		_dx.ctx->ClearRenderTargetView(_dx.rtv, &clear_color)
 
@@ -57,7 +59,14 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 			imgui_dx11.RenderDrawData(draw_data)
 		}
 
-		result := _dx.swapchain->Present(1, {})
+		result: win.HRESULT
+		
+		if _dx.swapchain1 != nil {
+			_dx.swapchain1->Present(1, {})
+		}
+		else {
+			result = _dx.swapchain->Present(1, {})
+		}
 
 		if result == dxgi.STATUS_OCCLUDED {
 			return
@@ -153,7 +162,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 @private
 video_dx11_resize_window :: proc(w, h: int) {
 	_destroy_render_target()
-	_dx.swapchain->ResizeBuffers(1, auto_cast w, auto_cast h, .UNKNOWN, {})
+	_dx.swapchain->ResizeBuffers(2, auto_cast w, auto_cast h, .UNKNOWN, {})
 	_create_render_target()
 }
 
@@ -161,19 +170,17 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 	_dx.hwnd = hwnd
 
 	swapchain := dxgi.SWAP_CHAIN_DESC {
-		BufferCount = 2,
-		BufferDesc = {
-			Format = .R8G8B8A8_UNORM,
+		BufferCount  = 2,
+		Flags        = {.ALLOW_MODE_SWITCH},
+		BufferUsage  = {.RENDER_TARGET_OUTPUT},
+		OutputWindow = hwnd,
+		SampleDesc   = {Count = 1},
+		Windowed     = true,
+		SwapEffect   = .FLIP_SEQUENTIAL,
+		BufferDesc   = {
+			Format      = .R8G8B8A8_UNORM,
 			RefreshRate = {Numerator = 60, Denominator = 1},
 		},
-		Flags = {.ALLOW_MODE_SWITCH},
-		BufferUsage = {.RENDER_TARGET_OUTPUT},
-		OutputWindow = hwnd,
-		SampleDesc = {
-			Count = 1,
-		},
-		Windowed = true,
-		SwapEffect = .FLIP_SEQUENTIAL,
 	}
 
 	feature_levels := []dx.FEATURE_LEVEL {
@@ -191,6 +198,29 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 			&selected_feature_level, &_dx.ctx
 		)
 	) or_return
+
+	if selected_feature_level == ._11_1 {
+		fac: ^dxgi.IFactory2
+
+		log.debug("Using DX11.1 ISwapchain1")
+
+		swapchain1 := dxgi.SWAP_CHAIN_DESC1 {
+			BufferCount = 2,
+			BufferUsage = {.RENDER_TARGET_OUTPUT},
+			Flags       = {.ALLOW_MODE_SWITCH},
+			Format      = .R8G8B8A8_UNORM,
+			SampleDesc  = {Count = 1},
+			SwapEffect  = .FLIP_SEQUENTIAL,
+		}
+
+		_dx.swapchain->Release()
+
+		win32_check(dxgi.CreateDXGIFactory2({}, dxgi.IFactory2_UUID, auto_cast &fac)) or_return
+
+		fac->CreateSwapChainForHwnd(_dx.device, hwnd, &swapchain1, nil, nil, &_dx.swapchain1)
+
+		_dx.swapchain = _dx.swapchain1
+	}
 
 	imgui_dx11.Init(_dx.device, _dx.ctx) or_return
 	_create_render_target()
