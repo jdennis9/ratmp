@@ -53,7 +53,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	_video_impl_render_frame = proc() {
 		clear_color: [4]f32 = {0, 0, 0, 0}
 		_dx.ctx->OMSetRenderTargets(1, &_dx.rtv, nil)
-		_dx.ctx->ClearRenderTargetView(_dx.rtv, &clear_color)
+		//_dx.ctx->ClearRenderTargetView(_dx.rtv, &clear_color)
 
 		if draw_data := imgui.GetDrawData(); draw_data != nil {
 			imgui_dx11.RenderDrawData(draw_data)
@@ -62,7 +62,8 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 		result: win.HRESULT
 		
 		if _dx.swapchain1 != nil {
-			_dx.swapchain1->Present(1, {})
+			// We don't do anything special here for now
+			result = _dx.swapchain1->Present(1, {})
 		}
 		else {
 			result = _dx.swapchain->Present(1, {})
@@ -192,7 +193,7 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 
 	win32_check(
 		dx.CreateDeviceAndSwapChain(
-			nil, .HARDWARE, nil, {},
+			nil, .HARDWARE, nil, {.DEBUG},
 			raw_data(feature_levels), auto_cast len(feature_levels), dx.SDK_VERSION,
 			&swapchain, &_dx.swapchain, &_dx.device,
 			&selected_feature_level, &_dx.ctx
