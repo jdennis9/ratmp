@@ -1,0 +1,3 @@
+{
+  "dependencies": ["taglib", "zlib", "qtbase", "qtsvg", "ffmpeg", "libsamplerate", "lz4", "fftw3", "qt-advanced-docking-system"]
+}

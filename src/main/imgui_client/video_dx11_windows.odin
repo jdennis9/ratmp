@@ -62,8 +62,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 		result: win.HRESULT
 		
 		if _dx.swapchain1 != nil {
-			// We don't do anything special here for now
-			result = _dx.swapchain1->Present(1, {})
+			result = _dx.swapchain->Present(1, {})
 		}
 		else {
 			result = _dx.swapchain->Present(1, {})
@@ -177,7 +176,7 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 		OutputWindow = hwnd,
 		SampleDesc   = {Count = 1},
 		Windowed     = true,
-		SwapEffect   = .FLIP_SEQUENTIAL,
+		SwapEffect   = .FLIP_DISCARD,
 		BufferDesc   = {
 			Format      = .R8G8B8A8_UNORM,
 			RefreshRate = {Numerator = 60, Denominator = 1},
@@ -193,7 +192,7 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 
 	win32_check(
 		dx.CreateDeviceAndSwapChain(
-			nil, .HARDWARE, nil, {.DEBUG},
+			nil, .HARDWARE, nil, {},
 			raw_data(feature_levels), auto_cast len(feature_levels), dx.SDK_VERSION,
 			&swapchain, &_dx.swapchain, &_dx.device,
 			&selected_feature_level, &_dx.ctx

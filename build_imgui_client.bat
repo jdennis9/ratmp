@@ -1,0 +1,13 @@
+@echo off
+
+set collections=-collection:src=src
+
+IF "%~1" == "" (
+	set args=-debug
+) ELSE (
+	set args=%*
+)
+
+set cmdline=odin build src/main/imgui_client -vet-shadowing %collections% -out:out/ratmp.exe %args% -show-timings -resource:src/resources.rc
+echo %cmdline%
+%cmdline%

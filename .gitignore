@@ -10,6 +10,8 @@ out
 *.exe
 *.dll
 *.so
+*.o
+*.obj
 src/bindings/taglib/taglib
 src/bindings/ffmpeg/libavcodec
 src/bindings/ffmpeg/libavformat

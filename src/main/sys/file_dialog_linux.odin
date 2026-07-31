@@ -19,8 +19,6 @@ package sys
 
 import "core:log"
 import "core:os"
-import "core:c/libc"
-import "src:main/shared"
 import "core:strings"
 import "core:mem"
 
