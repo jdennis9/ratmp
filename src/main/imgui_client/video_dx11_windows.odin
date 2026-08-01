@@ -72,7 +72,6 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 			return
 		}
 		else if result == dxgi.ERROR_DEVICE_RESET || result == dxgi.ERROR_DEVICE_REMOVED {
-			//_handle_device_lost()
 			handle_graphics_device_lost()
 		}
 
@@ -82,7 +81,6 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	_video_impl_imgui_new_frame = proc() {
 		imgui_dx11.NewFrame()
 	}
-
 
 	_video_impl_create_texture = proc(td: Texture_Desc) -> (texture_id: rawptr, ok: bool) {
 		tex: ^dx.ITexture2D
@@ -159,13 +157,6 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	return true
 }
 
-@private
-video_dx11_resize_window :: proc(w, h: int) {
-	_destroy_render_target()
-	_dx.swapchain->ResizeBuffers(2, auto_cast w, auto_cast h, .UNKNOWN, {})
-	_create_render_target()
-}
-
 _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 	_dx.hwnd = hwnd
 
@@ -176,17 +167,14 @@ _init :: proc(hwnd: win.HWND, from_device_reset := false) -> bool {
 		OutputWindow = hwnd,
 		SampleDesc   = {Count = 1},
 		Windowed     = true,
-		SwapEffect   = .FLIP_DISCARD,
+		SwapEffect   = .FLIP_SEQUENTIAL,
 		BufferDesc   = {
 			Format      = .R8G8B8A8_UNORM,
 			RefreshRate = {Numerator = 60, Denominator = 1},
 		},
 	}
 
-	feature_levels := []dx.FEATURE_LEVEL {
-		._11_1,
-		._11_0,
-	}
+	feature_levels := []dx.FEATURE_LEVEL {._11_1, ._11_0}
 
 	selected_feature_level: dx.FEATURE_LEVEL
 

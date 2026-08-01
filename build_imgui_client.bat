@@ -8,6 +8,6 @@ IF "%~1" == "" (
 	set args=%*
 )
 
-set cmdline=odin build src/main/imgui_client -vet-shadowing %collections% -out:out/ratmp.exe %args% -show-timings -resource:src/resources.rc
+set cmdline=odin build src/main/imgui_client -vet-shadowing %collections% -out:out/RATMP.exe %args% -show-timings -resource:src/resources.rc
 echo %cmdline%
 %cmdline%

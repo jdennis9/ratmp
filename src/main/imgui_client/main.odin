@@ -181,7 +181,7 @@ run :: proc() -> shared.Error {
 
 		free_all(client.frame_allocator)
 
-		platform_poll_events()
+		platform_events := platform_poll_events()
 
 		lib.lock()
 		lib.update()
@@ -272,6 +272,10 @@ run :: proc() -> shared.Error {
 
 		video_render_frame()
 		platform_swap_buffers()
+
+		if platform_events.window_closed {
+			platform_set_window_visible(false)
+		}
 	}
 
 	return nil

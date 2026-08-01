@@ -123,7 +123,7 @@ Library :: struct {
 	folder_allocator: mem.Allocator,
 	folder_serial:    uint,
 	folder_cover_art: map[u64]Folder_Cover_Art, // folder hash -> cover art path
-	url_to_track_id:  map[u32]Track_ID, // url hash -> track id
+	url_to_track_id:  map[u64]Track_ID, // url hash -> track id
 	save_serial:      uint,
 
 	tracking_allocators: struct {
@@ -207,6 +207,7 @@ get_playlists_serial :: proc() -> uint {return _library.playlists_serial}
 get_tracks_serial :: proc() -> uint {return _library.tracks_serial}
 get_root_folder :: proc() -> ^Folder {return &_library.folder_root}
 get_folder_tree_serial :: proc() -> uint {return _library.folder_serial}
+get_folder_cover_art_map :: proc() -> map[u64]Folder_Cover_Art {return _library.folder_cover_art}
 
 join_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, allocator: mem.Allocator) -> string {
 	if len(ids) == 0 do return ""
@@ -238,6 +239,13 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	track: Track
 
 	l := &_library
+	url_hash := hash.fnv64a(transmute([]u8) url)
+
+	if existing, exists := l.url_to_track_id[url_hash]; exists {
+		id = existing
+		ok = true
+		return
+	}
 
 	split_shared_strings :: proc(s: string, type: Shared_String_Type) -> []Shared_String_ID {
 		l := &_library
@@ -281,6 +289,7 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	ok = true
 
 	l.tracks_serial += 1
+	l.url_to_track_id[url_hash] = id
 
 	return
 }

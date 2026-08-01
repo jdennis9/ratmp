@@ -40,7 +40,8 @@ _Track_Model :: struct {
 }
 
 _Model :: struct {
-	tracks: []_Track_Model,
+	tracks:    []_Track_Model,
+	cover_art: map[string]string,
 }
 
 MAGIC :: u32(0xbede4721)
@@ -63,15 +64,21 @@ save_db_to_disk :: proc(path: string) -> shared.Error {
 
 	model.tracks = make([]_Track_Model, get_track_count())
 	defer delete(model.tracks)
-
+	
 	iter := make_track_iterator()
 	index := 0
-
+	
 	for track in iterate_tracks(&iter) {
 		model.tracks[index].tags = convert_track_to_tags(track^, allocator)
 		model.tracks[index].url  = track.url
 		index += 1
 	}
+	
+	folder_cover_art := get_folder_cover_art_map()
+	for _, m in folder_cover_art {
+		model.cover_art[m.folder] = m.image
+	}
+	defer delete(model.cover_art)
 
 	raw, marshal_error := cbor.marshal_into_bytes(model)
 	if marshal_error != nil {
@@ -158,6 +165,10 @@ load_db_from_disk :: proc(path: string) -> shared.Error {
 
 	for t in model.tracks {
 		add_track(t.tags, t.url)
+	}
+
+	for folder, art in model.cover_art {
+		add_cover_art(folder, art)
 	}
 
 	return nil

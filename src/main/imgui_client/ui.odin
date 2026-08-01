@@ -282,8 +282,6 @@ ui_show :: proc() {
 		for &state, id in ui.window_state {
 			win := UI_WINDOWS[id]
 
-			if id != .Spectrum && id != .Library do continue
-
 			if !state.shown && !state.bring_to_front {
 				win.procedure(.Hidden)
 				continue
@@ -293,9 +291,6 @@ ui_show :: proc() {
 
 			if imgui.Begin(name, &state.shown) {
 				win.procedure(.Show)
-				if id == .Spectrum {
-					log.debug(imgui.GetWindowSize(), imgui.GetWindowPos())
-				}
 			}
 			else {
 				win.procedure(.Hidden)
