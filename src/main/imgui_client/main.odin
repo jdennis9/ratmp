@@ -17,6 +17,7 @@
 */
 package client
 
+import "src:main/systray"
 import "src:dsp"
 import "core:time"
 import "core:fmt"
@@ -144,6 +145,11 @@ run :: proc() -> shared.Error {
 	platform_make_window() or_return
 	defer platform_destroy_window()
 
+	when ODIN_OS == .Windows do systray.use_win32()
+	else when ODIN_OS == .Linux do systray.use_appindicator()
+
+	systray.init(tray_callback, nil)
+	defer systray.destroy()
 
 	// --------------------------------------------------------------------------
 	// Initialize client stuff
@@ -300,6 +306,18 @@ media_controls_handler :: proc(_: rawptr, cmd: media_controls.Command) {
 	case .RepeatTrack:
 	case .RepeatPlaylist:
 	case .RepeatOff:
+	}
+}
+
+tray_callback :: proc(_: rawptr, cmd: systray.Button) {
+	switch cmd {
+	case .None:
+	case .Show:   platform_set_window_visible(true)
+	case .Pause:  player.set_paused(true)
+	case .Resume: player.set_paused(false)
+	case .Prev:   player.play_prev_track()
+	case .Next:   player.play_next_track()
+	case .Exit:   _client.want_exit = true
 	}
 }
 
