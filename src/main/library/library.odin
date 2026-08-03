@@ -304,6 +304,24 @@ remove_track :: proc(id: Track_ID) {
 	_library.tracks_serial += 1
 }
 
+remove_all_missing_tracks :: proc() -> int {
+	iter := make_track_iterator()
+	removed_count: int
+
+	for track in iterate_tracks(&iter) {
+		strings.starts_with(track.url, "file://") or_continue
+		path := strings.trim_prefix(track.url, "file://")
+		if !os.exists(path) {
+			remove_track(track.handle)
+			removed_count += 1
+		}
+	}
+
+	if removed_count > 0 do _library.tracks_serial += 1
+
+	return removed_count
+}
+
 get_track :: proc(id: Track_ID) -> (track: Track, found: bool) {
 	l := &_library
 	ptr := hm.dynamic_get(&l.tracks, id) or_return

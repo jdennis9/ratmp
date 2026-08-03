@@ -59,13 +59,15 @@ Scanner_Input :: struct {
 }
 
 Scanner_Progress :: struct {
-	scanned_items, total_items, scanned_files: int,
+	scanned_dirs, total_dirs, scanned_files: int,
 }
 
 Scanner :: struct {
-	worker:   shared.Worker(Scanner_Input, Scanned_Item),
-	runner:   ^thread.Thread,
-	progress: Scanner_Progress,
+	current_file: [512]u8,
+	file_lock:    sync.RW_Mutex,
+	worker:       shared.Worker(Scanner_Input, Scanned_Item),
+	runner:       ^thread.Thread,
+	progress:     Scanner_Progress,
 }
 
 @(private="file")
@@ -106,19 +108,20 @@ scanner_init :: proc(
 
 		context.allocator = mem.scratch_allocator(&scratch)
 
-		progress := cast(^Scanner_Progress) data
+		scanner := cast(^Scanner) data
+		progress := &scanner.progress
 		
 		buf := make_dynamic_array_len_cap(
 			[dynamic]Scanned_Item, 0, 4096,
 			output_allocator
 		)
 		
-		sync.atomic_store(&progress.scanned_items, 0)
-		sync.atomic_store(&progress.total_items, len(input))
+		sync.atomic_store(&progress.scanned_dirs,  0)
+		sync.atomic_store(&progress.total_dirs,    len(input))
 		sync.atomic_store(&progress.scanned_files, 0)
-				
+		
 		process_file :: proc(
-			progress:         ^Scanner_Progress,
+			scanner:          ^Scanner,
 			input:            Scanner_Input,
 			output:           ^[dynamic]Scanned_Item,
 			depth:            int,
@@ -129,6 +132,8 @@ scanner_init :: proc(
 				".tga", ".webm"
 			}
 
+			progress := &scanner.progress
+
 			file := os.open(input.path) or_return
 			defer os.close(file)
 			
@@ -136,20 +141,24 @@ scanner_init :: proc(
 				iter := os.read_directory_iterator_create(file)
 				defer os.read_directory_iterator_destroy(&iter)
 				
-				if depth != 0 do sync.atomic_add(&progress.total_items, 1)
+				if depth != 0 do sync.atomic_add(&progress.total_dirs, 1)
 				
 				for file, _ in os.read_directory_iterator(&iter) {
-					process_file(progress, Scanner_Input {
+					process_file(scanner, Scanner_Input {
 						path = file.fullpath,
 						overwrite = input.overwrite,
 					}, output, depth+1, output_allocator)
 				}	
 
-				sync.atomic_add(&progress.scanned_items, 1)
+				sync.atomic_add(&progress.scanned_dirs, 1)
 			}
 			else {
 				ext := filepath.ext(input.path)
 				audio_format, is_audio := audio_file_format_from_extension(ext)
+
+				sync.rw_mutex_lock(&scanner.file_lock)
+				copy(scanner.current_file[:len(&scanner.current_file)-1], input.path)
+				sync.rw_mutex_unlock(&scanner.file_lock)
 
 				if is_audio {
 					track_data := read_tags(
@@ -193,7 +202,7 @@ scanner_init :: proc(
 		}
 
 		for item in input {
-			process_file(progress, item, &buf, 0, output_allocator)
+			process_file(scanner, item, &buf, 0, output_allocator)
 		}
 
 		output = buf[:]
@@ -209,7 +218,7 @@ scanner_init :: proc(
 	}
 
 	shared.worker_init(
-		&ts.worker, _produce_proc, consume_proc, &ts.progress, consume_data,
+		&ts.worker, _produce_proc, consume_proc, ts, consume_data,
 		output_scratch_size = FILE_SCANNER_SCRATCH_SIZE,
 		input_scratch_size  = 512<<10,
 	)
@@ -237,16 +246,21 @@ scanner_is_running :: proc(ts: ^Scanner) -> bool {
 
 scanner_get_progress :: proc(
 	ts: ^Scanner
-) -> (scanned_dirs, total_dirs, scanned_files: int, running: bool) {
+) -> (progress: Scanner_Progress, running: bool) {
 	if scanner_is_running(ts) {
-		scanned_dirs = sync.atomic_load(&ts.progress.scanned_items)
-		total_dirs = sync.atomic_load(&ts.progress.total_items)
-		scanned_files = sync.atomic_load(&ts.progress.scanned_files)
+		progress.scanned_dirs  = sync.atomic_load(&ts.progress.scanned_dirs)
+		progress.total_dirs    = sync.atomic_load(&ts.progress.total_dirs)
+		progress.scanned_files = sync.atomic_load(&ts.progress.scanned_files)
 		running = true
 		return
 	}
 	
 	return
+}
+
+scanner_get_current_file :: proc(ts: ^Scanner, allocator: mem.Allocator) -> string {
+	sync.rw_mutex_shared_guard(&ts.file_lock)
+	return strings.clone(shared.string_from_array(ts.current_file[:]), allocator)
 }
 
 scanner_make_input :: proc(paths: []string, overwrite: bool, allocator: mem.Allocator) -> []Scanner_Input {

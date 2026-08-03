@@ -414,6 +414,14 @@ _show_main_menu_bar :: proc() -> bool {
 		}
 	}
 
+	if imgui.BeginMenu("Library") {
+		defer imgui.EndMenu()
+
+		if imgui.MenuItem("Remove missing tracks") {
+			lib.remove_all_missing_tracks()
+		}
+	}
+
 	// --------------------------------------------------------------------------
 	// Controls
 	// --------------------------------------------------------------------------
@@ -501,8 +509,8 @@ _show_status_bar :: proc() -> bool {
 		imgui.Separator()
 		imx.text(32, info.samplerate, "Hz", sep="")
 
-		imgui.Separator()
-		imx.text(32, info.channels, "channels")
+		//imgui.Separator()
+		//imx.text(32, info.channels, "channels")
 
 		imgui.Separator()
 		imx.text_unformatted(lib.AUDIO_FILE_FORMAT_DISPLAY_NAMES[track.format].short)
@@ -514,6 +522,11 @@ _show_status_bar :: proc() -> bool {
 			imgui.Separator()
 			imx.textf(128, "Album gain/peak: %.2f dB / %.2f dB", rp.album_gain, rp.album_peak)
 		}
+	}
+
+	scan_progress_block: if sp, ok := get_background_metadata_scan_progress(); ok {
+		current_file := lib.scanner_get_current_file(&_ui.library_scanner, temp_allocator)
+		imx.textf(256, "Scanning metadata (%d): %s", sp.scanned_files, current_file)
 	}
 
 	return true
@@ -601,4 +614,8 @@ queue_files_for_scan :: proc(files: []string, overwrite: bool) {
 
 bring_window_to_front :: proc(w: UI_Window_ID) {
 	_ui.window_state[w].bring_to_front = true
+}
+
+get_background_metadata_scan_progress :: proc() -> (progress: lib.Scanner_Progress, running: bool) {
+	return lib.scanner_get_progress(&_ui.library_scanner)
 }
