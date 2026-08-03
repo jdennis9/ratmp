@@ -295,6 +295,12 @@ ui_show :: proc() {
 
 			name := fmt.caprint(win.title, win.internal_name, sep="###", allocator=temp_allocator)
 
+			if state.bring_to_front {
+				state.shown = true
+				state.bring_to_front = false
+				imgui.SetNextWindowFocus()
+			}
+
 			if imgui.Begin(name, &state.shown) {
 				win.procedure(.Show)
 			}
@@ -358,6 +364,54 @@ _show_main_menu_bar :: proc() -> bool {
 		}
 
 		if imgui.MenuItem("Exit") do request_exit()
+	}
+
+	if imgui.BeginMenu("View") {
+		defer imgui.EndMenu()
+		_Section :: struct {name: cstring, items: []UI_Window_ID}
+		sections := []_Section {
+			{
+				name = "Library",
+				items = {
+					.Albums,
+					.Artists,
+					.FolderTree,
+					.Genres,
+					.Library,
+					.Queue,
+				}
+			},
+			{
+				name = "Metadata",
+				items = {
+					.Metadata,
+				},
+			},
+			{
+				name = "Visualizers",
+				items = {
+					.Spectrum,
+					.Wavebar,
+				},
+			},
+			{
+				name = "Settings",
+				items = {
+					.Config,
+					.ThemeEditor,
+				}
+			}
+		}
+
+		for s in sections {
+			imgui.SeparatorText(s.name)
+			for i in s.items {
+				win := UI_WINDOWS[i]
+				if imgui.MenuItem(strings.clone_to_cstring(win.title, get_frame_allocator())) {
+					bring_window_to_front(i)
+				}
+			}
+		}
 	}
 
 	// --------------------------------------------------------------------------
@@ -543,4 +597,8 @@ queue_files_for_scan :: proc(files: []string, overwrite: bool) {
 	ui := &_ui
 	items := lib.scanner_make_input(files, overwrite, get_frame_allocator())
 	lib.scanner_queue(&ui.library_scanner, items)
+}
+
+bring_window_to_front :: proc(w: UI_Window_ID) {
+	_ui.window_state[w].bring_to_front = true
 }
