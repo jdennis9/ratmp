@@ -149,7 +149,7 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 
 	COLUMNS := [_Column_Index]_Column {
 		.Title = _Column {
-			title       = "Title",
+			title       = "Name",
 			sort_metric = .Title,
 			flags       = {.NoHide},
 		},
@@ -158,11 +158,11 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 			sort_metric = .Length,
 		},
 		.Duration = _Column {
-			title = "Total Duration",
+			title       = "Total Duration",
 			sort_metric = .Duration,
 		},
 		.FileSize = _Column {
-			title = "Total File Size",
+			title       = "Total File Size",
 			sort_metric = .FileSize,
 		},
 	}

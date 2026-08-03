@@ -157,6 +157,7 @@ scanner_init :: proc(
 				audio_format, is_audio := audio_file_format_from_extension(ext)
 
 				sync.rw_mutex_lock(&scanner.file_lock)
+				scanner.current_file = {}
 				copy(scanner.current_file[:len(&scanner.current_file)-1], input.path)
 				sync.rw_mutex_unlock(&scanner.file_lock)
 

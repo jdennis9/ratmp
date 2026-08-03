@@ -398,13 +398,6 @@ track_table_show :: proc(
 					select_table_rows(table.rows[:], row_index, false)
 				}
 
-				if imgui.BeginItemTooltip() {
-					if track, got_track := lib.get_track(row.id); got_track {
-						//_show_track_metadata_table(ui, "##metadata", sv^, track)
-					}
-					imgui.EndTooltip()
-				}
-
 				if imgui.IsItemClicked(.Middle) || imx.is_item_double_clicked() {
 					actions.play_track = row.id
 				}
