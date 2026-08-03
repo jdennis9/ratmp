@@ -114,7 +114,7 @@ find_folder_tracks :: proc(folder: ^Folder, output: ^[dynamic]Track_ID) {
 		track_folder := strings.trim_prefix(track.url, "file://")
 		track_folder = filepath.clean(filepath.dir(track_folder), temp_allocator) or_continue
 
-		if path == track_folder {
+		if strings.starts_with(track_folder, path) {
 			append(output, track.handle)
 		}
 	}
