@@ -17,6 +17,7 @@
 */
 package shared
 
+import "core:log"
 import "core:mem"
 import "core:slice"
 import "core:sync"
@@ -94,7 +95,7 @@ rb_consume :: proc(buf: ^Ring_Buffer($T), output: []T, consume_count: Maybe(int)
 	if buf_size == 0 do return
 	producer := sync.atomic_load(&buf.producer_index)
 	consumer := sync.atomic_load(&buf.consumer_index)
-	read_end := producer
+	read_end := _wrap(consumer - 1, buf_size)
 	
 	if read_end < consumer {
 		copied += copy(output[:], buf.data[consumer:])

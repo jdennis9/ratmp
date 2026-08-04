@@ -67,11 +67,11 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 
 		for samples, ch in input {
 			data := resampler.Data {
-				data_in = raw_data(samples),
-				data_out = raw_data(buf.resample_buf),
-				input_frames = auto_cast len(samples),
+				data_in       = raw_data(samples),
+				data_out      = raw_data(buf.resample_buf),
+				input_frames  = auto_cast len(samples),
 				output_frames = auto_cast len(buf.resample_buf),
-				src_ratio = f64(ratio),
+				src_ratio     = f64(ratio),
 			}
 
 			resampler.process(buf.rs[ch], &data)
