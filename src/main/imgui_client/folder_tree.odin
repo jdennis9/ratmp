@@ -105,6 +105,7 @@ folder_tree_window_proc :: proc(ev: UI_Window_Event) -> bool {
 						_show_folder_node(child, events)
 					}
 				}
+				else do _show_folder_node_common(events, folder)
 			}
 			else {
 				if imgui.Selectable(folder_name) {
