@@ -299,12 +299,34 @@ play_track :: proc(track_id: lib.Track_ID) -> bool {
 
 play_next_track :: proc(immediate: bool = true) -> bool {
 	p := &_player
-	return set_queue_pos(p.queue_pos + 1, immediate)
+	tries_left := len(p.queue)
+
+	for !set_queue_pos(p.queue_pos + 1, immediate) {
+		if tries_left <= 0 {
+			stop_playback()
+			return false
+		}
+
+		tries_left -= 1
+	}
+
+	return false
 }
 
 play_prev_track :: proc(immediate: bool = true) -> bool {
 	p := &_player
-	return set_queue_pos(p.queue_pos - 1, immediate)
+	tries_left := len(p.queue)
+
+	for !set_queue_pos(p.queue_pos - 1, immediate) {
+		if tries_left <= 0 {
+			stop_playback()
+			return false
+		}
+
+		tries_left -= 1
+	}
+
+	return false
 }
 
 play_playlist :: proc(tracks: []lib.Track_ID, uid: shared.UID, initial_track: Maybe(lib.Track_ID) = nil) {
