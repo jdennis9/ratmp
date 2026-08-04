@@ -70,6 +70,7 @@ playlist_save :: proc(pl: Playlist, path: string, format := Playlist_Format.M3u)
 	}
 	defer os.close(f)
 
+
 	return iface.save(pl, os.to_stream(f))
 }
 

@@ -115,6 +115,7 @@ run :: proc() -> shared.Error {
 	lib.init({
 		enable_memory_tracking = launch_config.memory_debug,
 		metadata_db_path       = filepath.join({client.paths.data, "metadata.dat"}) or_return,
+		playlists_dir          = filepath.join({client.paths.data, "playlists"}) or_return,
 	}) or_return
 	defer lib.shutdown()
 

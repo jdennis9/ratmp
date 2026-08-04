@@ -85,6 +85,7 @@ UI_Window_ID :: enum {
 	Spectrum,
 	Wavebar,
 	FolderTree,
+	Playlists,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -142,7 +143,12 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Folders",
 		internal_name = "_folders",
 		procedure     = folder_tree_window_proc,
-	}
+	},
+	.Playlists = {
+		title         = "Playlists",
+		internal_name = "_playlists",
+		procedure     = playlists_window_proc,
+	},
 }
 
 UI_Window_State :: struct {

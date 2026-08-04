@@ -136,6 +136,7 @@ Init_Config :: struct {
 	enable_memory_tracking:  bool,
 	prefer_folder_cover_art: bool,
 	metadata_db_path:        string,
+	playlists_dir:           string,
 }
 
 @(private="file")
@@ -160,6 +161,21 @@ init :: proc(config: Init_Config) -> shared.Error {
 	}
 
 	if config.metadata_db_path != "" do load_db_from_disk(config.metadata_db_path)
+
+	if config.playlists_dir != "" {
+		shared.ensure_dir(config.playlists_dir)
+
+		files, _ := os.read_all_directory_by_path(config.playlists_dir, context.allocator)
+		defer os.file_info_slice_delete(files, context.allocator)
+
+		for file in files {
+			pl := playlist_load(file.fullpath) or_continue
+			pl.file = strings.clone(file.fullpath, l.tag_allocator)
+			_ = hm.dynamic_add(&l.playlists, pl)
+		}
+
+		l.playlists_serial += 1
+	}
 
 	return nil
 }
@@ -200,6 +216,17 @@ update :: proc() {
 	if l.init_config.metadata_db_path != "" && l.save_serial != l.tracks_serial {
 		l.save_serial = l.tracks_serial
 		save_db_to_disk(l.init_config.metadata_db_path)
+	}
+
+	if l.init_config.playlists_dir != "" {
+		iter := make_playlist_iterator()
+
+		for playlist in iterate_playlists(&iter) {
+			if playlist.save_serial != playlist.serial {
+				playlist_save_to_dir(playlist, l.init_config.playlists_dir)
+				playlist.save_serial = playlist.serial
+			}
+		}
 	}
 }
 
@@ -429,6 +456,8 @@ remove_playlist :: proc(id: Playlist_ID) -> bool {
 		os.remove(playlist.file)
 	}
 
+	hm.dynamic_remove(&l.playlists, id)
+
 	l.playlists_serial += 1
 
 	return true
@@ -448,14 +477,18 @@ rename_playlist :: proc(id: Playlist_ID, new_name: string) -> bool {
 
 add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	l := &_library
+	any_added: bool
 
 	playlist := hm.dynamic_get(&l.playlists, id) or_return
 
 	for track in tracks {
 		if !slice.contains(playlist.tracks[:], track) {
 			append(&playlist.tracks, track)
+			any_added = true
 		}
 	}
+
+	if any_added do playlist.serial += 1
 
 	return true
 }

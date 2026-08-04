@@ -95,6 +95,7 @@ theme_init :: proc() -> shared.Error {
 	_set_colors_to_default()
 
 	_themes.dir = filepath.join({get_config_path(), "themes"}, context.allocator) or_return
+	shared.ensure_dir(_themes.dir)
 
 	mem.dynamic_arena_init(&_themes.avail_themes_arena, block_size=4<<10)
 

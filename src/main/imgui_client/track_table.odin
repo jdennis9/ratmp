@@ -412,9 +412,13 @@ track_table_show :: proc(
 
 					select_table_rows(table.rows[:], row_index, true)
 
-					/*if add_to_playlist, yes := _show_playlist_selector_menu(sv, "Add to playlist"); yes {
-						actions.add_to_playlist = add_to_playlist
-					}*/
+					if imgui.BeginMenu("Add to playlist") {
+						defer imgui.EndMenu()
+
+						if playlist, chosen := show_playlist_menu_items(); chosen {
+							actions.add_to_playlist = playlist
+						}
+					}
 
 					if imgui.MenuItem("Play selection") {
 						actions.play_selection = true
@@ -570,4 +574,19 @@ track_table_free :: proc(t: ^Track_Table) {
 	t.rows        = nil
 	t.rows_serial = 0
 	t.intialized  = false
+}
+
+@private
+show_playlist_menu_items :: proc() -> (id: lib.Playlist_ID, ok: bool) {
+	iter           := lib.make_playlist_iterator()
+	temp_allocator := get_frame_allocator()
+
+	for pl in lib.iterate_playlists(&iter) {
+		if imgui.MenuItem(strings.clone_to_cstring(pl.name, temp_allocator)) {
+			id = pl.handle
+			ok = true
+		}
+	}
+
+	return
 }
