@@ -60,13 +60,13 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		return true
 	}
 
-	if ev == .Hidden {
+	if ev.type == .Hidden {
 		release_cover_art()
 		w.shown_track = nil
 		return false
 	}
 
-	if ev != .Show do return false
+	if ev.type != .Show do return false
 
 	if playback_state.track != w.shown_track {
 		if playback_state.track == nil {

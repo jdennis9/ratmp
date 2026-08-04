@@ -26,11 +26,11 @@ library_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		track_table: Track_Table
 	}
 
-	if ev == .Free || ev == .Hidden {
+	if ev.type == .Free || ev.type == .Hidden {
 		track_table_free(&w.track_table)
 		return false
 	}
-	else if ev != .Show do return false
+	else if ev.type != .Show do return false
 
 	tracks_serial := lib.get_tracks_serial()
 
@@ -55,11 +55,11 @@ queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		track_table: Track_Table
 	}
 
-	if ev == .Free || ev == .Hidden {
+	if ev.type == .Free || ev.type == .Hidden {
 		track_table_free(&w.track_table)
 		return false
 	}
-	else if ev != .Show do return false
+	else if ev.type != .Show do return false
 
 	track_table_update(&w.track_table, player.get_queue_serial(), player.get_queue(), 1)
 	track_table_show(&w.track_table, "##queue", {.IsQueue})

@@ -18,6 +18,9 @@
 #+private file
 package client
 
+
+import "core:reflect"
+import "core:strconv"
 import "core:slice"
 import "src:main/player"
 import "core:strings"
@@ -62,7 +65,34 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		freq_guide_bands: int,
 	}
 
-	if ev != .Show do return false
+	if ev.type == .LoadState {
+		key, value := ev.load_state.key, ev.load_state.value
+
+		switch key {
+		case "BandCount":
+			bc := strconv.parse_int(value) or_break
+			bc = clamp(bc, 10, _MAX_BANDS)
+			resize(&w.bands, bc)
+		case "Mode":
+			w.display_mode = reflect.enum_from_name(_Display_Mode, value) or_break
+		case "WindowFunc":
+			w.window_func = reflect.enum_from_name(dsp.Window_Function, value) or_break
+		}
+
+		return true
+	}
+	else if ev.type == .SaveState {
+		m := ev.save_state.m
+		a := ev.save_state.allocator
+
+		m["BandCount"]  = fmt.aprint(len(w.bands), allocator=a)
+		m["Mode"]       = fmt.aprint(w.display_mode, allocator=a)
+		m["WindowFunc"] = fmt.aprint(w.window_func, allocator=a)
+
+		return true
+	}
+
+	if ev.type != .Show do return false
 	
 	enable_band_hover_info := true
 	window_func_changed    := false
@@ -330,10 +360,9 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 @private
 wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
-	if ev != .Show do return false
-
+	
 	_RESOLUTION :: 1440
-
+	
 	@static w: struct {
 		decoder_thread:   ^thread.Thread,
 		cancel_decode:    bool,
@@ -350,6 +379,29 @@ wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		peak_mul         = 1,
 		track_replaygain = 1,
 	}
+
+	if ev.type == .SaveState {
+		m := ev.save_state.m
+		a := ev.save_state.allocator
+
+		m["ApplyReplayGain"] = fmt.aprint(w.apply_replaygain, allocator=a)
+		m["PeakMul"]         = fmt.aprint(w.peak_mul, allocator=a)
+		m["ColorMode"]       = fmt.aprint(w.color_mode, allocator=a)
+	}
+	else if ev.type == .LoadState {
+		value := ev.load_state.value
+
+		switch ev.load_state.key {
+		case "ApplyReplayGain":
+			w.apply_replaygain = strconv.parse_bool(value) or_break
+		case "ColorMode":
+			w.color_mode = reflect.enum_from_name(imx.Bar_Color_Mode, value) or_break
+		case "PeakMul":
+			w.peak_mul = strconv.parse_f32(value) or_break
+		}
+	}
+
+	if ev.type != .Show do return false
 
 	playback_state := get_last_playback_state()
 

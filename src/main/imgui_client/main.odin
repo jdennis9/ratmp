@@ -268,16 +268,18 @@ run :: proc() -> shared.Error {
 		// -----------------------------------------------------------------------
 		// Show UI
 		// -----------------------------------------------------------------------
-		platform_imgui_new_frame()
-		video_imgui_new_frame()
-		imgui.NewFrame()
-		
-		ui_show()
+		if platform_is_window_visible() {
+			platform_imgui_new_frame()
+			video_imgui_new_frame()
+			imgui.NewFrame()
+			
+			ui_show()
 
-		imgui.Render()
+			imgui.Render()
 
-		video_render_frame()
-		platform_swap_buffers()
+			video_render_frame()
+			platform_swap_buffers()
+		}
 
 		if platform_events.window_closed {
 			platform_set_window_visible(false)

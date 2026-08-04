@@ -53,12 +53,18 @@ UI_CONFIG_DEFAULTS :: UI_Config {
 	background_fit_policy = .Fill,
 }
 
-UI_Window_Event :: enum {
+UI_Window_Event_Type :: enum {
 	Show,
 	Hidden,
 	Free,
 	SaveState,
 	LoadState,
+}
+
+UI_Window_Event :: struct {
+	type:       UI_Window_Event_Type,
+	load_state: struct {key, value: string},
+	save_state: struct {m: ^map[string]string, allocator: mem.Allocator},
 }
 
 UI_Window :: struct {
@@ -160,6 +166,7 @@ _ui: UI
 
 ui_init :: proc() -> shared.Error {
 	ui := &_ui
+	io := imgui.GetIO()
 
 	theme_init()
 
@@ -176,6 +183,9 @@ ui_init :: proc() -> shared.Error {
 		ui_apply_config(&cfg)
 	}
 
+	register_imgui_settings_handler()
+	imgui.LoadIniSettingsFromDisk(io.IniFilename)
+
 	return nil
 }
 
@@ -183,7 +193,7 @@ ui_shutdown :: proc() {
 	ui := &_ui
 	
 	for win in UI_WINDOWS {
-		win.procedure(.Free)
+		win.procedure({type = .Free})
 	}
 
 	theme_shutdown()
@@ -289,7 +299,7 @@ ui_show :: proc() {
 			win := UI_WINDOWS[id]
 
 			if !state.shown && !state.bring_to_front {
-				win.procedure(.Hidden)
+				win.procedure({type = .Hidden})
 				continue
 			}
 
@@ -302,10 +312,10 @@ ui_show :: proc() {
 			}
 
 			if imgui.Begin(name, &state.shown) {
-				win.procedure(.Show)
+				win.procedure({type = .Show})
 			}
 			else {
-				win.procedure(.Hidden)
+				win.procedure({type = .Hidden})
 			}
 			imgui.End()
 		}
@@ -616,6 +626,15 @@ bring_window_to_front :: proc(w: UI_Window_ID) {
 	_ui.window_state[w].bring_to_front = true
 }
 
+set_window_open :: proc(w: UI_Window_ID, open: bool) {
+	_ui.window_state[w].shown = true
+}
+
+is_window_open :: proc(w: UI_Window_ID) -> bool {
+	return _ui.window_state[w].shown
+}
+
 get_background_metadata_scan_progress :: proc() -> (progress: lib.Scanner_Progress, running: bool) {
 	return lib.scanner_get_progress(&_ui.library_scanner)
 }
+

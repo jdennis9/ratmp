@@ -33,7 +33,7 @@ folder_tree_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		tracks:                 [dynamic]lib.Track_ID,
 	}
 
-	if ev != .Show do return false
+	if ev.type != .Show do return false
 
 	_Events :: struct {
 		select:       ^lib.Folder,

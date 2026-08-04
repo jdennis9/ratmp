@@ -160,7 +160,7 @@ apply_user_config :: proc() {
 
 @private
 config_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
-	if ev != .Show do return false
+	if ev.type != .Show do return false
 	frame_allocator_guard()
 
 	changed := false

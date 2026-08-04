@@ -158,11 +158,11 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 			sort_metric = .Length,
 		},
 		.Duration = _Column {
-			title       = "Total Duration",
+			title = "Total Duration",
 			sort_metric = .Duration,
 		},
 		.FileSize = _Column {
-			title       = "Total File Size",
+			title = "Total File Size",
 			sort_metric = .FileSize,
 		},
 	}
@@ -276,7 +276,7 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 }
 
 _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
-	if ev == .Free || ev == .Hidden {
+	if ev.type == .Free || ev.type == .Hidden {
 		track_table_free(&w.track_table)
 		delete(w.table_rows)
 		w.table_rows       = nil
@@ -287,7 +287,7 @@ _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
 		return false
 	}
 
-	if ev != .Show do return false
+	if ev.type != .Show do return false
 
 	tracks_serial := lib.get_tracks_serial()
 	filter_hash := hash.fnv64a(transmute([]byte) shared.string_from_array(w.filter_buf[:]))

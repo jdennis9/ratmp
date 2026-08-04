@@ -471,7 +471,7 @@ show_theme_editor :: proc() -> bool {
 
 @private
 theme_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
-	if ev == .Show do show_theme_editor()
+	if ev.type == .Show do show_theme_editor()
 
 	return true
 }
