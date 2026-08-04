@@ -6,8 +6,6 @@ int main(int argc, char *argv[]) {
 	
 	if (!ratmp_init()) return 1;
 
-	ratmp_play_file(from_cstring("D:\\Music\\Electronic\\InsideInfo\\Ancestral\\Ancestral [TjqBxpGXv6c].opus"));
-
 	QApplication app(argc, argv);
 	app.setStyle("Windows11");
 	
