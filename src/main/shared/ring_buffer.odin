@@ -65,7 +65,7 @@ rb_produce :: proc(buf: ^Ring_Buffer($T), data: []T, loc := #caller_location) ->
 	if buf_size == 0 do return
 	producer := sync.atomic_load(&buf.producer_index)
 
-	write_end := _wrap(producer-1, buf_size)
+	write_end := producer
 
 	if producer >= write_end {
 		copied += copy(buf.data[producer:], data[:])

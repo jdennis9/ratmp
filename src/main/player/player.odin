@@ -105,9 +105,14 @@ _audio_callback :: proc(
 		buffer_was_dropped = false
 		analysis_reset(&p.analysis)
 	}
-		
+
 	switch event {
 	case .Stream:
+		if audio_is_paused() {
+			slice.zero(data)
+			break
+		}
+
 		output_buf: [AUDIO_MAX_CHANNELS][]f32
 		frame_count := len(data) / spec.channels
 		
