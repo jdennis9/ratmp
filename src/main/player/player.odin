@@ -17,6 +17,7 @@
 */
 package player
 
+import "core:log"
 import "src:bindings/ffmpeg"
 import "core:math/linalg"
 import "core:reflect"
@@ -104,7 +105,7 @@ _audio_callback :: proc(
 		buffer_was_dropped = false
 		analysis_reset(&p.analysis)
 	}
-
+		
 	switch event {
 	case .Stream:
 		output_buf: [AUDIO_MAX_CHANNELS][]f32

@@ -17,7 +17,6 @@
 */
 package shared
 
-import "core:log"
 import "core:mem"
 import "core:slice"
 import "core:sync"
@@ -25,13 +24,7 @@ import "core:sync"
 
 @(private="file")
 _wrap :: proc(i, N: int) -> int {
-	/*if i < 0 do return N+i
-	else if i == 0 do return 0
-	else do return i - ((i/N)*N)*/
-	/*if i >= 0 && i < N do return i
-	else if i < 0 do return N+i
-	else if i >= N do return i - ((i/N)*N)*/
-	return i %% N
+	return i % N
 }
 
 Ring_Buffer :: struct($T: typeid) {
@@ -74,7 +67,7 @@ rb_produce :: proc(buf: ^Ring_Buffer($T), data: []T, loc := #caller_location) ->
 
 	write_end := _wrap(producer-1, buf_size)
 
-	if producer > write_end {
+	if producer >= write_end {
 		copied += copy(buf.data[producer:], data[:])
 		if copied < len(data) {
 			copied += copy(buf.data[:write_end], data[copied:])
