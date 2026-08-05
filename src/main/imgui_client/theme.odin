@@ -171,10 +171,11 @@ set_theme_from_file :: proc(path: string) -> shared.Error {
 	
 	delete(_theme.path)
 	
-	_theme.accents = model.accents
-	_theme.colors  = model.colors
-	_theme.dirty   = false
-	_theme.path    = strings.clone(path)
+	_theme.accents              = model.accents
+	_theme.colors               = model.colors
+	_theme.dirty                = false
+	_theme.path                 = strings.clone(path)
+	_theme.enable_frame_borders = model.frame_borders
 	_set_theme_name(model.name)
 
 	_theme.color_locked = {}
@@ -188,6 +189,8 @@ set_theme_from_file :: proc(path: string) -> shared.Error {
 		if idx == .COUNT do break
 		style.Colors[idx] = imgui.ColorConvertU32ToFloat4(col)
 	}
+
+	style.FrameBorderSize = _theme.enable_frame_borders ? 1 : 0
 
 	_themes.serial += 1
 	
@@ -255,9 +258,10 @@ _save_theme :: proc() -> shared.Error {
 	
 	defer os.close(file)
 	
-	model.name    = t.name
-	model.accents = t.accents
-	model.colors  = t.colors
+	model.name          = t.name
+	model.accents       = t.accents
+	model.colors        = t.colors
+	model.frame_borders = t.enable_frame_borders
 	
 	for col in imgui.Col {
 		if col == .COUNT do break
