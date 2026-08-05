@@ -206,7 +206,7 @@ ui_shutdown :: proc() {
 	lib.scanner_destroy(&ui.library_scanner)
 }
 
-ui_apply_fonts :: proc() {
+ui_apply_fonts :: proc(cfg: ^UI_Config) {
 	io := imgui.GetIO()
 
 	@static default_font := #load("../data/NotoSans-SemiBold.ttf")
@@ -214,13 +214,28 @@ ui_apply_fonts :: proc() {
 
 	imgui.FontAtlas_Clear(io.Fonts)
 
-	cfg := DEFAULT_FONT_CONFIG
-	cfg.FontDataOwnedByAtlas = false
+	temp_allocator := get_frame_allocator()
+	have_a_font := false
+	font_cfg := DEFAULT_FONT_CONFIG
 	
-	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(default_font), auto_cast len(default_font), font_cfg = &cfg)
-	cfg.ExtraSizeScale = 0.8
-	cfg.MergeMode = true
-	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(icon_font), auto_cast len(icon_font), font_cfg = &cfg)
+	for font in cfg.fonts {
+		path := sys.font_get_path(font, temp_allocator) or_continue
+		imgui.FontAtlas_AddFontFromFileTTF(
+			io.Fonts, strings.clone_to_cstring(path, temp_allocator), font_cfg = &font_cfg
+		)
+		font_cfg.MergeMode = true
+		have_a_font = true
+	}
+	
+	font_cfg.FontDataOwnedByAtlas = false
+
+	if !have_a_font {
+		imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(default_font), auto_cast len(default_font), font_cfg = &font_cfg)
+	}
+
+	font_cfg.ExtraSizeScale = 0.8
+	font_cfg.MergeMode = true
+	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(icon_font), auto_cast len(icon_font), font_cfg = &font_cfg)
 }
 
 ui_apply_config :: proc(cfg: ^UI_Config) {
@@ -230,7 +245,7 @@ ui_apply_config :: proc(cfg: ^UI_Config) {
 	set_theme_from_name(shared.string_from_array(cfg.default_theme[:]))
 	ui_set_background(shared.string_from_array(cfg.background_image[:]))
 
-	ui_apply_fonts()
+	ui_apply_fonts(cfg)
 }
 
 // @NOTE: Does not save to config
@@ -259,11 +274,17 @@ _refresh_background :: proc() -> shared.Error {
 }
 
 ui_show :: proc() {
-	ui := &_ui
-	io := imgui.GetIO()
-	config := get_user_config()
-
+	ui             := &_ui
+	io             := imgui.GetIO()
+	config         := get_user_config()
+	need_pop_font  := false
 	temp_allocator := get_frame_allocator()
+
+	if config.ui.font_size > 8 {
+		imgui.PushFontFloat(nil, config.ui.font_size)
+		need_pop_font = true
+	}
+	defer if need_pop_font do imgui.PopFont()
 
 	lib.lock()
 	defer lib.unlock()

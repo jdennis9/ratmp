@@ -28,8 +28,8 @@ import misc "src:bindings/windows_misc"
 import "core:mem"
 
 font_init_windows :: proc() -> shared.Error {
-	_font_impl_free = proc(f: System_Font) {
-		if f.handle != nil do free(f.handle)
+	_font_impl_destroy = proc(f: System_Font, free_impl_memory: bool) {
+		if free_impl_memory && f.handle != nil do free(f.handle)
 	}
 
 	_font_impl_get_font_path = proc(

@@ -18,6 +18,7 @@
 #+private file
 package client
 
+import "core:strings"
 import "core:path/filepath"
 import lib "src:main/library"
 import "core:strconv"
@@ -37,6 +38,7 @@ User_Config :: struct {
 	ui:       UI_Config,
 	playback: player.Config,
 	library:  lib.Config,
+	fonts:    [dynamic; 32]sys.System_Font,
 }
 
 @private
@@ -90,7 +92,11 @@ load_user_config :: proc() -> (error: shared.Error) {
 			case "FontSize":
 				c.ui.font_size = strconv.parse_f32(v) or_break
 			case "Fonts":
-				// @TODO
+				fonts := strings.split(v, ";", temp_allocator)
+				for f in fonts[:min(cap(c.ui.fonts), len(fonts))] {
+					sf := sys.font_from_name(get_system_fonts(), strings.trim_space(f)) or_continue
+					append(&c.ui.fonts, sf)
+				}
 			}
 		}
 	}
@@ -128,6 +134,19 @@ save_user_config :: proc() -> shared.Error {
 	ui["BackgroundImage"] = shared.string_from_array(c.ui.background_image[:])
 	ui["DefaultTheme"]    = shared.string_from_array(c.ui.default_theme[:])
 	ui["FontSize"]        = fmt.aprint(c.ui.font_size, allocator=temp_allocator)
+	// Fonts
+	{
+		sb: strings.Builder
+		strings.builder_init(&sb, temp_allocator)
+		defer strings.builder_destroy(&sb)
+
+		for font in c.ui.fonts {
+			strings.write_string(&sb, string(font.name))
+			strings.write_rune(&sb, ';')
+		}
+
+		ui["Fonts"] = strings.to_string(sb)
+	}
 
 	playback: map[string]string
 	defer delete(playback)
@@ -177,6 +196,40 @@ config_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	changed |= imx.input_text("Background image", c.ui.background_image[:])
 	changed |= imx.input_text("Default theme",    c.ui.default_theme[:])
 	changed |= imgui.DragFloat("Font size", &c.ui.font_size, 0.1, 9, 48, "%.0f", {.ClampOnInput})
+
+	// Fonts list
+	if imgui.BeginListBox("##fonts") {
+		defer imgui.EndListBox()
+
+		font_items_loop: for f, i in c.ui.fonts {
+			imgui.PushIDInt(auto_cast i)
+			defer imgui.PopID()
+			
+			imgui.MenuItem(f.name)
+			if imgui.BeginPopupContextItem() {
+				defer imgui.EndPopup()
+
+				if imgui.MenuItem("Remove") {
+					ordered_remove(&c.ui.fonts, i)
+					break font_items_loop
+				}
+			}
+		}
+	}
+
+	// Add font
+	if len(c.ui.fonts) == cap(c.ui.fonts) {
+		imgui.TextDisabled("Maximum fonts used")
+	}
+	else if imgui.BeginCombo("##add_font", "Add font") {
+		defer imgui.EndCombo()
+
+		for f in get_system_fonts() {
+			if imgui.MenuItem(f.name) {
+				append(&c.ui.fonts, f)
+			}
+		}
+	}
 
 	imx.title_text("Playback")
 	changed |= imgui.Checkbox("Enable ReplayGain", &c.playback.enable_replaygain)

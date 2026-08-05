@@ -29,9 +29,15 @@ System_Font :: struct {
 
 @private _font_impl_list_system_fonts: proc(allocator: mem.Allocator) -> ([]System_Font, shared.Error)
 @private _font_impl_get_font_path:     proc(f: System_Font, allocator: mem.Allocator) -> (string, shared.Error)
-@private _font_impl_free:              proc(f: System_Font)
+@private _font_impl_destroy:           proc(f: System_Font, free_impl_memory: bool)
 
-font_list_system_fonts :: proc(allocator: mem.Allocator) -> (fonts: []System_Font, error: shared.Error) {
+init_system_fonts :: proc() {
+	when ODIN_OS == .Windows do font_init_windows()
+	else when ODIN_OS == .Linux do font_init_fontconfig()
+	else do unimplemented()
+}
+
+query_system_fonts :: proc(allocator: mem.Allocator) -> (fonts: []System_Font, error: shared.Error) {
 	if _font_impl_list_system_fonts != nil {
 		fonts = _font_impl_list_system_fonts(allocator) or_return
 
@@ -62,9 +68,9 @@ font_get_path :: proc(f: System_Font, allocator: mem.Allocator) -> (path: string
 	return
 }
 
-font_free :: proc(f: System_Font) {
-	if _font_impl_free != nil {
-		_font_impl_free(f)
+destroy_font :: proc(f: System_Font, free_impl_memory := true) {
+	if _font_impl_destroy != nil {
+		_font_impl_destroy(f, free_impl_memory)
 	}
 }
 

@@ -168,6 +168,7 @@ run :: proc() -> shared.Error {
 		mem.dynamic_arena_init(&client.font_arena)
 		client.font_allocator = mem.dynamic_arena_allocator(&client.font_arena)
 
+		sys.init_system_fonts()
 		refresh_fonts() or_return
 	}
 	defer free_fonts()
@@ -327,7 +328,7 @@ tray_callback :: proc(_: rawptr, cmd: systray.Button) {
 
 free_fonts :: proc() {
 	client := &_client
-	for font in client.system_fonts do sys.font_free(font)
+	for font in client.system_fonts do sys.destroy_font(font, free_impl_memory=false)
 	free_all(client.font_allocator)
 	client.system_fonts = nil
 }
@@ -335,10 +336,12 @@ free_fonts :: proc() {
 refresh_fonts :: proc() -> shared.Error {
 	client := &_client
 	free_fonts()
-	client.system_fonts = sys.font_list_system_fonts(client.font_allocator) or_return
+	client.system_fonts = sys.query_system_fonts(client.font_allocator) or_return
 
 	return nil
 }
+
+get_system_fonts :: proc() -> []sys.System_Font {return _client.system_fonts}
 
 get_frame_allocator :: proc() -> mem.Allocator {
 	return _client.frame_allocator

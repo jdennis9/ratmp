@@ -70,8 +70,8 @@ font_init_fontconfig :: proc() -> shared.Error {
 		return
 	}
 
-	_font_impl_free = proc(f: System_Font) {
-		if f.handle != nil {
+	_font_impl_destroy = proc(f: System_Font, free_impl_memory: bool) {
+		if handle != nil {
 			fc.PatternDestroy(cast(^fc.Pattern) f.handle)
 		}
 	}
