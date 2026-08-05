@@ -183,8 +183,9 @@ run :: proc() -> shared.Error {
 		defer last_frame_start = frame_start
 
 
-		client.last_frame_time = auto_cast time.duration_seconds(time.tick_diff(last_frame_start, frame_start))
-		client.last_frame_time = clamp(client.last_frame_time, 0, 1)
+		client.last_frame_time = auto_cast time.duration_seconds(
+			time.tick_diff(last_frame_start, frame_start)
+		)
 
 		free_all(client.frame_allocator)
 

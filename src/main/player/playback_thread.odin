@@ -27,7 +27,6 @@ import "core:log"
 import "core:sync"
 import "core:thread"
 
-Ring_Buffer :: shared.Ring_Buffer
 
 // =============================================================================
 // Procedures to create and interact with an asynchronous playback stream.
@@ -46,7 +45,7 @@ Playback_Thread :: struct {
 	allocator:              mem.Allocator,
 	processing_allocator:   mem.Allocator,
 	processing_arena:       mem.Dynamic_Arena,
-	ring_buffers:           [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
+	ring_buffers:           [AUDIO_MAX_CHANNELS]shared.Ring_Buffer(f32),
 	ring_buffer_channels:   int,
 	ring_buffer_samplerate: int,
 	dec:                    decoder.Decoder,

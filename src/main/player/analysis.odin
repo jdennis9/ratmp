@@ -30,7 +30,7 @@ ANALYSIS_RING_BUFFER_SIZE :: 64<<10
 ANALYSIS_SAMPLE_RATE :: 48000
 
 Analysis_Buffer :: struct {
-	rings:        [AUDIO_MAX_CHANNELS]Ring_Buffer(f32),
+	rings:        [AUDIO_MAX_CHANNELS]shared.Ring_Buffer(f32),
 	channels:     int,
 	rs:           [AUDIO_MAX_CHANNELS]resampler.State,
 	allocator:    mem.Allocator,
