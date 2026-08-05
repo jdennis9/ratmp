@@ -213,6 +213,14 @@ config_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
 					ordered_remove(&c.ui.fonts, i)
 					break font_items_loop
 				}
+
+				if imgui.MenuItem("Move up", enabled = i >= 0) {
+					c.ui.fonts[i], c.ui.fonts[i-1] = c.ui.fonts[i-1], c.ui.fonts[i]
+				}
+
+				if imgui.MenuItem("Move down", enabled = i < len(c.ui.fonts)-1) {
+					c.ui.fonts[i], c.ui.fonts[i+1] = c.ui.fonts[i+1], c.ui.fonts[i]
+				}
 			}
 		}
 	}
