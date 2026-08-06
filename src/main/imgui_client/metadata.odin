@@ -57,7 +57,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		w.cover_art_w     = width
 		w.cover_art_h     = height
 		w.cover_art_ratio = f32(width) / f32(height)
-		if w.comment != "" do delete(w.comment)
+		delete(w.comment)
 		w.comment = lib.get_track_comment(track_id, context.allocator) or_else ""
 
 		return true
@@ -68,6 +68,10 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		w.shown_track = nil
 		return false
 	}
+	else if ev.type == .Free {
+		release_cover_art()
+		delete(w.comment)
+	}
 
 	if ev.type != .Show do return false
 
@@ -75,6 +79,8 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		if playback_state.track == nil {
 			release_cover_art()
 			w.shown_track = nil
+			delete(w.comment)
+			w.comment = ""
 		}
 		else {
 			update_track(playback_state.track.?)
@@ -117,7 +123,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		imx.kv_rowf("File creation time", "%d-%d-%d",       file_year, file_month, file_day)
 	}
 
-	if w.shown_track != nil {
+	if w.shown_track != nil && w.comment != "" {
 		imgui.Separator()
 		imx.text_unformatted(w.comment)
 	}
