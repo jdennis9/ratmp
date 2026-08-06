@@ -19,3 +19,4 @@ src/bindings/ffmpeg/libavutil
 src/bindings/ffmpeg/libswresample
 src/bindings/ffmpeg/libswscale
 src/thirdparty/odin-imgui/*
+vcpkg_installed
