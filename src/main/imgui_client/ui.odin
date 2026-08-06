@@ -93,6 +93,8 @@ UI_Window_ID :: enum {
 	Wavebar,
 	FolderTree,
 	Playlists,
+	License,
+	About,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -155,6 +157,16 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Playlists",
 		internal_name = "_playlists",
 		procedure     = playlists_window_proc,
+	},
+	.License = {
+		title         = "License",
+		internal_name = "_license",
+		procedure     = license_window_proc,
+	},
+	.About = {
+		title         = "About",
+		internal_name = "_about",
+		procedure     = about_window_proc,
 	},
 }
 
@@ -468,6 +480,13 @@ _show_main_menu_bar :: proc() -> bool {
 		if imgui.MenuItem("Remove missing tracks") {
 			lib.remove_all_missing_tracks()
 		}
+	}
+
+	if imgui.BeginMenu("Help") {
+		defer imgui.EndMenu()
+
+		if imgui.MenuItem("About") do bring_window_to_front(.About)
+		if imgui.MenuItem("License") do bring_window_to_front(.License)
 	}
 
 	// --------------------------------------------------------------------------

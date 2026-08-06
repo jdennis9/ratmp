@@ -17,6 +17,9 @@
 */
 package client
 
+import "core:time"
+import "src:main/shared"
+import "src:imx"
 import "src:main/player"
 import lib "src:main/library"
 import imgui "src:thirdparty/odin-imgui"
@@ -77,6 +80,86 @@ queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 			player.add_to_queue(payload, 0)
 		}
 	}
+
+	return true
+}
+
+OPUS_OWNAGE :: `
+2001-2023 Xiph.Org, Skype Limited, Octasic,
+Jean-Marc Valin, Timothy B. Terriberry,
+CSIRO, Gregory Maxwell, Mark Borgerding,
+Erik de Castro Lopo, Mozilla, Amazon
+`
+
+license_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	if ev.type != .Show do return false
+
+	_License :: struct {
+		name:  cstring,
+		owner: cstring,
+		url:   cstring,
+	}
+
+
+
+	imx.text(128, "RAT MP", shared.PROGRAM_VERSION_STRING)
+	imx.text_unformatted(shared.PROGRAM_LICENSE)
+
+	@static licenses := [?]_License {
+		{
+			name  = "FFmpeg",
+			owner = "2001 Fabrice Bellard",
+			url   = "https://ffmpeg.org/",
+		},
+		{
+			name  = "FreeType",
+			owner = "1996-2002, 2006 by\nDavid Turner, Robert Wilhelm, and Werner Lemberg",
+			url   = "https://freetype.org/",
+		},
+		{
+			name  = "ImGui",
+			owner = "2014-2026 Omar Cornut",
+			url   = "https://github.com/ocornut/imgui",
+		},
+		{
+			name  = "TagLib",
+			owner = "2002-2008 by Scott Wheeler",
+			url   = "https://taglib.org/",
+		},
+		{
+			name  = "Opus",
+			owner = OPUS_OWNAGE,
+			url   = "https://opus-codec.org/",
+		},
+	}
+
+	for l in licenses {
+		imgui.Separator()
+		imx.text_unformatted(string(l.name))
+		imx.text_unformatted(string(l.owner))
+		imgui.TextLinkOpenURL(l.url)
+	}
+
+	return true
+}
+
+about_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	if ev.type != .Show do return false
+	
+	imx.title_text(shared.PROGRAM_NAME)
+	imx.text_unformatted("Version: " + shared.PROGRAM_VERSION_STRING)
+	imx.text_unformatted("Odin compiler version: " + ODIN_VERSION)
+	imx.text_unformatted("Odin compiler vendor: " + ODIN_VENDOR)
+	
+	{
+		ts := time.unix(0, i64(ODIN_COMPILE_TIMESTAMP))
+		y, m, d := time.date(ts)
+		imx.textf(128, "Compile date: %d/%d/%d", y, m, d)
+	}
+
+	imx.text(64, "Optimization:", ODIN_OPTIMIZATION_MODE)
+	imx.text(64, "Target architecture:", ODIN_ARCH)
+	imx.text(64, "Target OS:", ODIN_OS_STRING)
 
 	return true
 }
