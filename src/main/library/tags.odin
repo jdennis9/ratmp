@@ -108,6 +108,22 @@ read_tags :: proc(filename: string, allocator: mem.Allocator) -> (tags: Track_Ta
 	return
 }
 
+read_comment :: proc(path: string, allocator: mem.Allocator) -> (comment: string, ok: bool) {
+	file := open_file_for_taglib(path)
+	if file == nil do return
+	defer taglib.file_free(file)
+
+	tag := taglib.file_tag(file)
+	if tag == nil do return
+
+	cstr := taglib.tag_comment(tag)
+	if cstr == nil || cstr == "" do return
+
+	comment = strings.clone(string(cstr), allocator)
+	ok = true
+	return
+}
+
 convert_track_to_tags :: proc(track: Track, allocator: mem.Allocator) -> (tags: Track_Tags) {
 	tags.album      = track.album != nil ? get_shared_string(.Album, track.album.?) : ""
 	tags.artist     = join_shared_strings(.Artist, track.artists, allocator)

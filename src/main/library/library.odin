@@ -22,7 +22,6 @@ import "src:bindings/taglib"
 import "core:hash"
 import "base:runtime"
 import "src:main/shared"
-import "core:net"
 import "core:slice"
 import "core:path/filepath"
 import "core:os"
@@ -606,6 +605,13 @@ find_track_cover_art :: proc(
 		data, found = get_folder_art(track, allocator)
 		return
 	}
+}
+
+// Maybe store comments permanently in the library?
+get_track_comment :: proc(track_id: Track_ID, allocator: mem.Allocator) -> (comment: string, ok: bool) {
+	track := get_track(track_id) or_return
+	if !strings.starts_with(track.url, "file://") do return
+	return read_comment(strings.trim_prefix(track.url, "file://"), allocator)
 }
 
 @private

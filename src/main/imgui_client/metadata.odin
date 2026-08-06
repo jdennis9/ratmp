@@ -31,6 +31,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		cover_art_w:     int,
 		cover_art_h:     int,
 		cover_art_ratio: f32,
+		comment:         string,
 		shown_track:     Maybe(lib.Track_ID),
 	}
 
@@ -56,6 +57,8 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		w.cover_art_w     = width
 		w.cover_art_h     = height
 		w.cover_art_ratio = f32(width) / f32(height)
+		if w.comment != "" do delete(w.comment)
+		w.comment = lib.get_track_comment(track_id, context.allocator) or_else ""
 
 		return true
 	}
@@ -93,7 +96,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	}
 	imgui.Separator()
 
-	if w.shown_track != nil && imx.begin_kv_table("##metadata", imgui.TableFlags_RowBg) {
+	if w.shown_track != nil && imx.begin_kv_table("##metadata", imgui.TableFlags_RowBg, 0.3) {
 		defer imx.end_kv_table()
 
 		track := lib.get_track(w.shown_track.?) or_return
@@ -112,6 +115,11 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		imx.kv_rowf("Duration",           "%02d:%02d:%02d", h, m, s)
 		imx.kv_rowf("File size",          "%M",             track.file_size)
 		imx.kv_rowf("File creation time", "%d-%d-%d",       file_year, file_month, file_day)
+	}
+
+	if w.shown_track != nil {
+		imgui.Separator()
+		imx.text_unformatted(w.comment)
 	}
 
 	return true

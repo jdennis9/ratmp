@@ -228,8 +228,12 @@ is_item_double_clicked :: proc(button := imgui.MouseButton.Left) -> bool {
 	return imgui.IsItemClicked(button) && imgui.IsMouseDoubleClicked(button)
 }
 
-begin_kv_table :: proc(str_id: cstring, flags: imgui.TableFlags) -> bool {
-	return imgui.BeginTable(str_id, 2, flags)
+begin_kv_table :: proc(str_id: cstring, flags: imgui.TableFlags, left_weight: f32 = 0.5) -> bool {
+	imgui.BeginTable(str_id, 2, flags) or_return
+	imgui.TableSetupColumn("##left", {.WidthStretch}, left_weight)
+	imgui.TableSetupColumn("##right", {.WidthStretch}, 1 - left_weight)
+
+	return true
 }
 
 kv_row :: proc(name: string, args: ..any, sep := "", allocator := context.temp_allocator) -> (active: bool) {
