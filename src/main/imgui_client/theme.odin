@@ -416,6 +416,8 @@ show_theme_editor :: proc() -> bool {
 	changed |= imgui.Checkbox("Frame borders", &t.enable_frame_borders)
 
 	accent_changed |= edit_accent("Accent", .Fg1)
+	imgui.SameLine()
+	if imgui.Button("Apply") do _apply_accents()
 	changed |= edit_imgui_col("Text",                    style, .Text)
 	changed |= edit_imgui_col("Table borders",           style, .TableBorderLight)
 	changed |= edit_imgui_col("Table headers",           style, .TableHeaderBg)
