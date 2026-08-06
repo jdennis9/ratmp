@@ -201,6 +201,8 @@ config_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	if imgui.BeginListBox("##fonts") {
 		defer imgui.EndListBox()
 
+		imgui.SetItemTooltip("Fonts are prioritized from top to bottom.")
+
 		font_items_loop: for f, i in c.ui.fonts {
 			imgui.PushIDInt(auto_cast i)
 			defer imgui.PopID()

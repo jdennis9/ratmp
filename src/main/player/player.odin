@@ -17,6 +17,7 @@
 */
 package player
 
+import "core:time"
 import "core:log"
 import "src:bindings/ffmpeg"
 import "core:math/linalg"
@@ -93,7 +94,7 @@ _audio_callback :: proc(
 	event: Audio_Callback_Event,
 	data:  []f32,
 	spec:  Audio_Spec
-) -> Audio_Callback_Status {
+) -> (result: Audio_Callback_Status = .Continue) {
 	p := &_player
 
 	@static buffer_was_dropped: bool
@@ -103,12 +104,12 @@ _audio_callback :: proc(
 
 	if buffer_was_dropped {
 		buffer_was_dropped = false
-		analysis_reset(&p.analysis)
+		//analysis_reset(&p.analysis)
 	}
 
 	switch event {
 	case .Stream:
-		if audio_is_paused() {
+		if audio_is_paused() || !playback_thread_has_track(p.playback_thread) {
 			slice.zero(data)
 			break
 		}
@@ -126,7 +127,7 @@ _audio_callback :: proc(
 			p.config
 		)
 
-		if status == .Eof do return .Finish
+		if status == .Eof do result = .Finish
 
 		dsp.interlace(output_buf[:spec.channels], data)
 
@@ -134,13 +135,14 @@ _audio_callback :: proc(
 
 	case .BufferDropped:
 		buffer_was_dropped = true
+		analysis_reset(&p.analysis)
 	case .Paused:
 	case .Resumed:
 	case .TrackFinished:
 		play_next_track(immediate = false)
 	}
 
-	return .Continue
+	return
 }
 
 init :: proc(cfg: Init_Config) -> shared.Error {
@@ -241,6 +243,7 @@ get_playback_pos :: proc() -> int {
 }
 
 seek :: proc(pos: int) {
+	log.debugf("Seeking to %02d:%02:%02d", time.clock_from_seconds(auto_cast pos))
 	playback_thread_seek(&_player.playback_thread, pos)
 	audio_drop_buffer()
 }
@@ -313,6 +316,8 @@ play_track :: proc(track_id: lib.Track_ID) -> bool {
 	p := &_player
 	track := lib.get_track(track_id) or_return
 	playback_thread_load_track(&p.playback_thread, track.url, &p.playing_track_info) or_return
+
+	log.info("Now playing:", track.url)
 
 	set_paused(false)
 	p.playing_track_id = track_id

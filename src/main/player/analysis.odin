@@ -18,6 +18,7 @@
 #+private
 package player
 
+import "core:sync"
 import "core:math/linalg"
 import "core:mem"
 import resampler "src:bindings/samplerate"
@@ -35,6 +36,7 @@ Analysis_Buffer :: struct {
 	rs:           [AUDIO_MAX_CHANNELS]resampler.State,
 	allocator:    mem.Allocator,
 	resample_buf: [dynamic]f32,
+	lock:         sync.Mutex,
 }
 
 analysis_init :: proc(buf: ^Analysis_Buffer, allocator: mem.Allocator) {
@@ -45,6 +47,8 @@ analysis_init :: proc(buf: ^Analysis_Buffer, allocator: mem.Allocator) {
 analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 	channels := len(input)
 	buf.channels = channels
+
+	sync.guard(&buf.lock)
 
 	for ch in 0..<channels {
 		if buf.rings[ch].data == nil {
@@ -82,6 +86,8 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 
 analysis_consume :: proc(buf: ^Analysis_Buffer, time: f32, output: [][]f32) -> Audio_Spec {
 	consume_count := int(linalg.ceil(time * ANALYSIS_SAMPLE_RATE))
+
+	sync.guard(&buf.lock)
 
 	for ch in 0..<buf.channels {
 		shared.rb_consume(&buf.rings[ch], output[ch], consume_count)

@@ -180,6 +180,8 @@ run :: proc() -> shared.Error {
 	last_frame_start: time.Tick
 
 	for !_client.want_exit {
+		platform_events: Platform_Events
+
 		frame_start := time.tick_now()
 		defer last_frame_start = frame_start
 
@@ -190,7 +192,12 @@ run :: proc() -> shared.Error {
 
 		free_all(client.frame_allocator)
 
-		platform_events := platform_poll_events()
+		if platform_is_window_visible() {
+			platform_events = platform_poll_events()
+		}
+		else {
+			platform_events = platform_wait_events()
+		}
 
 		lib.lock()
 		lib.update()
@@ -312,6 +319,8 @@ media_controls_handler :: proc(_: rawptr, cmd: media_controls.Command) {
 	case .RepeatPlaylist:
 	case .RepeatOff:
 	}
+
+	platform_flush_events()
 }
 
 tray_callback :: proc(_: rawptr, cmd: systray.Button) {
@@ -324,6 +333,8 @@ tray_callback :: proc(_: rawptr, cmd: systray.Button) {
 	case .Next:   player.play_next_track()
 	case .Exit:   _client.want_exit = true
 	}
+
+	platform_flush_events()
 }
 
 free_fonts :: proc() {
