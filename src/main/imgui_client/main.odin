@@ -222,7 +222,7 @@ run :: proc() -> shared.Error {
 			for ch in 0..<player.MAX_CHANNELS do bufs[ch] = a.raw_output[ch][:]
 
 			if !client.playback_state.paused {
-				spec := player.consume_output(bufs[:], client.last_frame_time)
+				spec := player.consume_output(bufs[:])
 				dsp.to_mono(bufs[:], a.avg_output[:])
 
 				a.samplerate = f32(spec.samplerate)

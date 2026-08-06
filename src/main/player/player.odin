@@ -109,7 +109,7 @@ _audio_callback :: proc(
 
 	switch event {
 	case .Stream:
-		if audio_is_paused() || !playback_thread_has_track(p.playback_thread) {
+		if !playback_thread_has_track(p.playback_thread) {
 			slice.zero(data)
 			break
 		}
@@ -383,9 +383,9 @@ stop_playback :: proc() {
 	playback_thread_close_track(&p.playback_thread)
 }
 
-consume_output :: proc(buf: [][]f32, timespan: f32) -> Audio_Spec {
+consume_output :: proc(buf: [][]f32) -> Audio_Spec {
 	p := &_player
-	return analysis_consume(&p.analysis, timespan, buf)
+	return analysis_consume(&p.analysis, buf)
 }
 
 // Calculate the current ReplayGain output multiplier being applied

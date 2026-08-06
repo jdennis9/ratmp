@@ -269,9 +269,9 @@ _run_session :: proc() -> (ok: bool) {
 		if w.in_events[.DropBuffer] > 0 {
 			audio_client->Stop()
 			audio_client->Reset()
-			w.callback(w.callback_data, .BufferDropped, nil, {})
 			audio_client->Start()
 			w.in_events[.DropBuffer] -= 1
+			w.callback(w.callback_data, .BufferDropped, nil, {})
 		}
 
 		if w.in_events[.Pause] > 0 {

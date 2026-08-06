@@ -18,25 +18,30 @@
 #+private
 package player
 
+import "core:log"
+import "core:time"
 import "core:sync"
 import "core:math/linalg"
 import "core:mem"
 import resampler "src:bindings/samplerate"
 import "src:main/shared"
 
-ANALYSIS_RING_BUFFER_SIZE :: 64<<10
+ANALYSIS_BUFFER_SIZE :: 64<<10
 
 // Use a constant sample rate for analysis for
 // consistent behaviour of visualizers
 ANALYSIS_SAMPLE_RATE :: 48000
 
 Analysis_Buffer :: struct {
-	rings:        [AUDIO_MAX_CHANNELS]shared.Ring_Buffer(f32),
-	channels:     int,
-	rs:           [AUDIO_MAX_CHANNELS]resampler.State,
-	allocator:    mem.Allocator,
-	resample_buf: [dynamic]f32,
-	lock:         sync.Mutex,
+	channels:             int,
+	rs:                   [AUDIO_MAX_CHANNELS]resampler.State,
+	rings:                [AUDIO_MAX_CHANNELS]shared.Ring_Buffer(f32),
+	allocator:            mem.Allocator,
+	resample_buf:         [dynamic]f32,
+	lock:                 sync.Mutex,
+	last_consume:         time.Tick,
+	last_chunk_consumed:  bool,
+	empty:                bool,
 }
 
 analysis_init :: proc(buf: ^Analysis_Buffer, allocator: mem.Allocator) {
@@ -49,16 +54,27 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 	buf.channels = channels
 
 	sync.guard(&buf.lock)
+	
+	defer buf.empty = false
 
 	for ch in 0..<channels {
 		if buf.rings[ch].data == nil {
-			shared.rb_init(&buf.rings[ch], ANALYSIS_RING_BUFFER_SIZE, buf.allocator)
+			shared.rb_init(&buf.rings[ch], ANALYSIS_BUFFER_SIZE, buf.allocator)
 		}
-		
+
 		if buf.rs[ch] == nil {
 			buf.rs[ch] = resampler.new(.SINC_FASTEST, 1, nil)
 		}
 	}
+
+	if !buf.last_chunk_consumed {
+		log.warn("Last chunk not consumed, skipping samples")
+		sync.unlock(&buf.lock)
+		analysis_consume(buf, nil)
+		sync.lock(&buf.lock)
+	}
+
+	buf.last_chunk_consumed = false
 
 	if samplerate == ANALYSIS_SAMPLE_RATE {
 		for samples, ch in input {
@@ -84,19 +100,36 @@ analysis_feed :: proc(buf: ^Analysis_Buffer, input: [][]f32, samplerate: int) {
 	}
 }
 
-analysis_consume :: proc(buf: ^Analysis_Buffer, time: f32, output: [][]f32) -> Audio_Spec {
-	consume_count := int(linalg.ceil(time * ANALYSIS_SAMPLE_RATE))
-
+analysis_consume :: proc(buf: ^Analysis_Buffer, output: [][]f32) -> Audio_Spec {
 	sync.guard(&buf.lock)
 
-	for ch in 0..<buf.channels {
-		shared.rb_consume(&buf.rings[ch], output[ch], consume_count)
+	if buf.empty do return {}
+
+	buf.last_chunk_consumed = true
+
+	now := time.tick_now()
+	span := cast(f32) time.duration_seconds(time.tick_diff(buf.last_consume, now))
+	consume_count := int(linalg.floor(span * ANALYSIS_SAMPLE_RATE))
+
+	if output != nil {
+		for ch in 0..<buf.channels {
+			shared.rb_consume(&buf.rings[ch], output[ch], consume_count)
+		}
 	}
+	else {
+		for ch in 0..<buf.channels {
+			shared.rb_consume(&buf.rings[ch], nil, consume_count)
+		}
+	}
+
+	buf.last_consume = now
 
 	return {channels = buf.channels, samplerate = ANALYSIS_SAMPLE_RATE}
 }
 
 analysis_reset :: proc(buf: ^Analysis_Buffer) {
+	buf.empty = true
+
 	for &ring in buf.rings {
 		shared.rb_reset(&ring)
 	}
