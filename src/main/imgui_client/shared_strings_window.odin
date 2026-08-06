@@ -286,6 +286,13 @@ _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
 		w.sort_spec        = nil
 		return false
 	}
+	else if ev.type == .Command {
+		if ev.command.name == "set_id" {
+			#partial switch v in ev.command.arg {
+			case lib.Shared_String_ID: w.viewing = v
+			}
+		}
+	}
 
 	if ev.type != .Show do return false
 
@@ -357,4 +364,43 @@ albums_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	@static w: _Shared_Strings_Window
 	w.type = .Album
 	return _show_proc(&w, ev)
+}
+
+@private
+go_to_artist :: proc(id: lib.Shared_String_ID) {
+	p := UI_WINDOWS[.Artists].procedure
+	p({
+		type = .Command,
+		command = {
+			name = "set_id",
+			arg = id,
+		},
+	})
+	bring_window_to_front(.Artists)
+}
+
+@private
+go_to_album :: proc(id: lib.Shared_String_ID) {
+	p := UI_WINDOWS[.Albums].procedure
+	p({
+		type = .Command,
+		command = {
+			name = "set_id",
+			arg = id,
+		},
+	})
+	bring_window_to_front(.Albums)
+}
+
+@private
+go_to_genre :: proc(id: lib.Shared_String_ID) {
+	p := UI_WINDOWS[.Genres].procedure
+	p({
+		type = .Command,
+		command = {
+			name = "set_id",
+			arg = id,
+		},
+	})
+	bring_window_to_front(.Genres)
 }

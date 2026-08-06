@@ -59,12 +59,18 @@ UI_Window_Event_Type :: enum {
 	Free,
 	SaveState,
 	LoadState,
+	Command,
 }
 
 UI_Window_Event :: struct {
 	type:       UI_Window_Event_Type,
 	load_state: struct {key, value: string},
 	save_state: struct {m: ^map[string]string, allocator: mem.Allocator},
+	command: struct {
+		name: string,
+		// Add more types here as needed
+		arg: union {string, lib.Shared_String_ID},
+	}
 }
 
 UI_Window :: struct {

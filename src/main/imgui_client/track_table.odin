@@ -541,9 +541,9 @@ track_table_show :: proc(
 		player.add_to_queue(sel, table.playlist_uid)
 	}
 
-	/*if actions.go_to_genre != nil do _go_to_genre(ui, actions.go_to_genre.?)
-	if actions.go_to_album != nil do _go_to_album(ui, actions.go_to_album.?)
-	if actions.go_to_artist != nil do _go_to_artist(ui, actions.go_to_artist.?)*/
+	if actions.go_to_genre != nil do go_to_genre(actions.go_to_genre.?)
+	if actions.go_to_album != nil do go_to_album( actions.go_to_album.?)
+	if actions.go_to_artist != nil do go_to_artist(actions.go_to_artist.?)
 
 	return true
 }
