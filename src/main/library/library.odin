@@ -499,6 +499,25 @@ add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	return true
 }
 
+remove_from_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
+	l := &_library
+	playlist := hm.dynamic_get(&l.playlists, id) or_return
+	any_removed := false
+
+	for remove_id in tracks {
+		i := slice.linear_search(playlist.tracks[:], remove_id) or_continue
+		any_removed = true
+		ordered_remove(&playlist.tracks, i)
+	}
+
+	if any_removed {
+		l.playlists_serial += 1
+		playlist.serial += 1
+	}
+
+	return true
+}
+
 add_to_track_totals :: proc(t: ^Track_Totals, track: Track) {
 	t.duration += i64(track.duration)
 	t.file_size += i64(track.file_size)

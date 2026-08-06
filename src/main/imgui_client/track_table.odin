@@ -185,12 +185,17 @@ track_table_update :: proc(
 	}
 }
 
+// Events that can't be handled within track_table_show()
+Track_Table_Events :: struct {
+	remove_selection: bool,
+}
+
 @private
 track_table_show :: proc(
 	table:         ^Track_Table,
 	str_id:        cstring,
 	flags:         Track_Table_Flags,
-) -> bool {
+) -> (ext_events: Track_Table_Events, shown: bool) #optional_ok {
 	frame_allocator_guard()
 
 	playback_state := get_last_playback_state()
@@ -248,6 +253,7 @@ track_table_show :: proc(
 		go_to_album:            Maybe(lib.Album_ID),
 		go_to_genre:            Maybe(lib.Genre_ID),
 		add_selection_to_queue: bool,
+		remove_selection:       bool,
 	}
 
 	list_clipper: imgui.ListClipper
@@ -475,7 +481,7 @@ track_table_show :: proc(
 
 					if .NoRemove not_in flags {
 						imgui.Separator()
-						imgui.MenuItem("Remove")
+						actions.remove_selection |= imgui.MenuItem("Remove")
 					}
 				}
 
@@ -524,7 +530,7 @@ track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	if actions.play_track != nil {
 		if .IsQueue in flags {
-			player.play_track(actions.play_track.?)
+			player.set_queue_track(actions.play_track.?)
 		}
 		else {
 			tracks := track_table_get_tracks(table^, get_frame_allocator())
@@ -551,11 +557,16 @@ track_table_show :: proc(
 		player.add_to_queue(sel, table.playlist_uid)
 	}
 
+	if actions.remove_selection {
+		ext_events.remove_selection = true
+	}
+
 	if actions.go_to_genre != nil do go_to_genre(actions.go_to_genre.?)
 	if actions.go_to_album != nil do go_to_album( actions.go_to_album.?)
 	if actions.go_to_artist != nil do go_to_artist(actions.go_to_artist.?)
 
-	return true
+	shown = true
+	return
 }
 
 @private

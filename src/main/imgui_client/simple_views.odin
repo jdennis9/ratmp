@@ -62,7 +62,12 @@ queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	else if ev.type != .Show do return false
 
 	track_table_update(&w.track_table, player.get_queue_serial(), player.get_queue(), 1)
-	track_table_show(&w.track_table, "##queue", {.IsQueue})
+	events := track_table_show(&w.track_table, "##queue", {.IsQueue})
+
+	if events.remove_selection {
+		selection := track_table_get_selection(w.track_table, get_frame_allocator())
+		player.remove_from_queue(selection)
+	}
 
 	if begin_window_drag_drop_target("##queue_drag_drop") {
 		defer imgui.EndDragDropTarget()

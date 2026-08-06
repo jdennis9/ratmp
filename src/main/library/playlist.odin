@@ -135,9 +135,6 @@ _m3u_load :: proc(data: []byte) -> (pl: Playlist, error: Error) {
 		else {
 			track_path := strings.trim_space(line)
 
-			track_path = slashpath.clean(track_path)
-			defer delete(track_path)
-
 			track := find_track_by_url(track_path) or_continue
 
 			append(&pl.tracks, track)

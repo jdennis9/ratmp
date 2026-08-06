@@ -283,6 +283,16 @@ add_to_queue :: proc(tracks: []lib.Track_ID, playlist_uid: shared.UID, assume_un
 	p.queue_serial += 1
 }
 
+remove_from_queue :: proc(tracks: []lib.Track_ID) {
+	p := &_player
+	for remove_id in tracks {
+		i := slice.linear_search(p.queue[:], remove_id) or_continue
+		ordered_remove(&p.queue, i)
+	}
+
+	p.queue_serial += 1
+}
+
 set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
 	p := &_player
 
@@ -302,6 +312,12 @@ set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
 	if immediate do audio_drop_buffer()
 
 	return true
+}
+
+set_queue_track :: proc(track: lib.Track_ID) -> bool {
+	p := &_player
+	index := slice.linear_search(p.queue[:], track) or_return
+	return set_queue_pos(index)
 }
 
 play_url :: proc(url: string) -> bool {

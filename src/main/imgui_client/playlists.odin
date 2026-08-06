@@ -152,7 +152,12 @@ playlists_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 		if playlist, ok := lib.get_playlist(w.viewing_playlist.?); ok {
 			track_table_update(&w.track_table, playlist.serial, playlist.tracks[:], playlist.uid)
-			track_table_show(&w.track_table, "##tracks", {})
+			events := track_table_show(&w.track_table, "##tracks", {})
+
+			if events.remove_selection {
+				selection := track_table_get_selection(w.track_table, temp_allocator)
+				lib.remove_from_playlist(playlist.handle, selection)
+			}
 
 			if begin_window_drag_drop_target("##playlist_drag_drop") {
 				defer imgui.EndDragDropTarget()
