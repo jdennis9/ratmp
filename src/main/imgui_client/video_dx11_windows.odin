@@ -53,7 +53,7 @@ video_dx11_init :: proc(hwnd: win.HWND) -> bool {
 	_video_impl_render_frame = proc() {
 		clear_color: [4]f32 = {0, 0, 0, 0}
 		_dx.ctx->OMSetRenderTargets(1, &_dx.rtv, nil)
-		//_dx.ctx->ClearRenderTargetView(_dx.rtv, &clear_color)
+		if !ui_has_background() do _dx.ctx->ClearRenderTargetView(_dx.rtv, &clear_color)
 
 		if draw_data := imgui.GetDrawData(); draw_data != nil {
 			imgui_dx11.RenderDrawData(draw_data)

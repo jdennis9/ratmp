@@ -46,15 +46,16 @@ video_init_opengl :: proc(set_gl_proc_address: gl.Set_Proc_Address_Type) -> bool
 	}
 
 	_video_impl_render_frame = proc() {
-		gl.impl_ClearColor(0, 0, 0, 1)
+		if !ui_has_background() {
+			gl.impl_ClearColor(0, 0, 0, 1)
+			gl.Clear(gl.COLOR_BUFFER_BIT)
+		}
 
 		if gl.GetError() != gl.NO_ERROR {
 			gl.Finish()
 			handle_graphics_device_lost()
 			return
 		}
-
-		gl.Clear(gl.COLOR_BUFFER_BIT)
 
 		if draw_data := imgui.GetDrawData(); draw_data != nil {
 			imgui_gl.RenderDrawData(draw_data)

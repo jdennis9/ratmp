@@ -255,6 +255,10 @@ ui_set_background :: proc(path: string) {
 	_refresh_background()
 }
 
+ui_has_background :: proc() -> bool {
+	return _ui.background.texture != nil
+}
+
 @(private="file")
 _refresh_background :: proc() -> shared.Error {
 	ui := &_ui
