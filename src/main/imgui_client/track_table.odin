@@ -153,6 +153,8 @@ track_table_update :: proc(
 	if track_table_is_up_to_date(table, tracks_serial, playlist_uid) do return
 	
 	shared.TIME_SCOPE("Update track table of", len(track_ids_in))
+
+	require_frames(1)
 	
 	table.force_update = false
 	table.intialized   = true

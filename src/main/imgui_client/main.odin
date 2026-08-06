@@ -62,6 +62,7 @@ _client: struct {
 	want_exit:                bool,
 	analysis:                 Analysis_Data,
 	last_frame_time:          f32,
+	required_frames:          int,
 
 	paths: struct {
 		data:   string,
@@ -193,7 +194,13 @@ run :: proc() -> shared.Error {
 		free_all(client.frame_allocator)
 
 		if platform_is_window_visible() {
-			platform_events = platform_poll_events()
+			if client.required_frames > 0 {
+				platform_events = platform_poll_events()
+				client.required_frames -= 1
+			}
+			else {
+				platform_events = platform_wait_events()
+			}
 		}
 		else {
 			platform_events = platform_wait_events()
@@ -386,3 +393,6 @@ get_analysis_data :: proc() -> Analysis_Data {
 	return _client.analysis
 }
 
+require_frames :: proc(f: int) {
+	_client.required_frames = max(_client.required_frames, f)
+}

@@ -137,6 +137,7 @@ folder_tree_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	if w.displayed_folder == nil {
 		if w.tree_serial != lib.get_folder_tree_serial() {
 			w.root_node = lib.get_root_folder()
+			require_frames(1)
 		}
 
 		if w.root_node == nil {

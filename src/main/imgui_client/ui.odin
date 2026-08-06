@@ -506,10 +506,16 @@ _show_main_menu_bar :: proc() -> bool {
 	imgui.Separator()
 
 	{
+		@static old_track_pos: int
 		track_pos := player.get_playback_pos()
+
+		if track_pos != old_track_pos do require_frames(1)
+
 		if imx.scrubber("##seek", &track_pos, 0, track_info.duration) {
 			player.seek(track_pos)
 		}
+
+		old_track_pos = track_pos
 	}
 
 	return true

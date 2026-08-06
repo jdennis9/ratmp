@@ -76,6 +76,8 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		else {
 			update_track(playback_state.track.?)
 		}
+
+		require_frames(1)
 	}
 
 	if w.cover_art != nil {

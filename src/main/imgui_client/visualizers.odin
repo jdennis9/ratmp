@@ -93,6 +93,8 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	}
 
 	if ev.type != .Show do return false
+
+	require_frames(1)
 	
 	enable_band_hover_info := true
 	window_func_changed    := false
