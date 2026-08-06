@@ -690,7 +690,7 @@ bring_window_to_front :: proc(w: UI_Window_ID) {
 }
 
 set_window_open :: proc(w: UI_Window_ID, open: bool) {
-	_ui.window_state[w].shown = true
+	_ui.window_state[w].shown = open
 }
 
 is_window_open :: proc(w: UI_Window_ID) -> bool {
