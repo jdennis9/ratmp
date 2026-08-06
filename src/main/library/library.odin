@@ -308,6 +308,8 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	track.format     = tags.format
 	track.artists    = split_shared_strings(tags.artist, .Artist)
 	track.genres     = split_shared_strings(tags.genre, .Genre)
+	track.artists    = slice.unique(track.artists)
+	track.genres     = slice.unique(track.genres)
 
 	assert(track.title != "")
 	assert(track.url != "")
