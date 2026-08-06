@@ -124,6 +124,12 @@ playlists_window_proc :: proc(ev: UI_Window_Event) -> bool {
 					w.viewing_playlist = row.id
 				}
 
+				if imgui.BeginDragDropTarget() {
+					payload := get_track_drag_drop_payload(temp_allocator)
+					if payload != nil do lib.add_to_playlist(row.id, payload)
+					imgui.EndDragDropTarget()
+				}
+
 				if imgui.IsItemClicked(.Middle) {
 					player.play_playlist(playlist.tracks[:], playlist.uid)
 				}
@@ -147,6 +153,14 @@ playlists_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		if playlist, ok := lib.get_playlist(w.viewing_playlist.?); ok {
 			track_table_update(&w.track_table, playlist.serial, playlist.tracks[:], playlist.uid)
 			track_table_show(&w.track_table, "##tracks", {})
+
+			if begin_window_drag_drop_target("##playlist_drag_drop") {
+				defer imgui.EndDragDropTarget()
+
+				payload := get_track_drag_drop_payload(temp_allocator)
+
+				if payload != nil do lib.add_to_playlist(playlist.handle, payload)
+			}
 		}
 		else {
 			w.viewing_playlist = nil

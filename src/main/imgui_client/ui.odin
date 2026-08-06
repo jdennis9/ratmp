@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:slice"
 import "core:log"
 import "core:fmt"
 import "src:imx"
@@ -681,3 +682,31 @@ get_background_metadata_scan_progress :: proc() -> (progress: lib.Scanner_Progre
 	return lib.scanner_get_progress(&_ui.library_scanner)
 }
 
+begin_window_drag_drop_target :: proc(str_id: cstring) -> bool {
+	bb: imgui.Rect
+	bb.Min = imgui.GetWindowPos()
+	bb.Max = bb.Min + imgui.GetWindowSize()
+
+	return imgui.BeginDragDropTargetCustom(bb, imgui.GetID(str_id))
+}
+
+set_track_drag_drop_payload :: proc(tracks: []lib.Track_ID) {
+	imgui.SetDragDropPayload(
+		"TRACKS",
+		raw_data(tracks),
+		auto_cast(size_of(lib.Track_ID) * len(tracks)),
+		.Once
+	)
+}
+
+get_track_drag_drop_payload :: proc(allocator: mem.Allocator) -> []lib.Track_ID {
+	pl := imgui.AcceptDragDropPayload("TRACKS")
+	if pl == nil do return nil
+
+	tracks_ptr := cast([^]lib.Track_ID) pl.Data
+	track_count := pl.DataSize / size_of(lib.Track_ID)
+
+	if track_count == 0 do return nil
+
+	return slice.clone(tracks_ptr[:track_count], allocator)
+}

@@ -64,5 +64,14 @@ queue_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	track_table_update(&w.track_table, player.get_queue_serial(), player.get_queue(), 1)
 	track_table_show(&w.track_table, "##queue", {.IsQueue})
 
+	if begin_window_drag_drop_target("##queue_drag_drop") {
+		defer imgui.EndDragDropTarget()
+
+		payload := get_track_drag_drop_payload(get_frame_allocator())
+		if payload != nil {
+			player.add_to_queue(payload, 0)
+		}
+	}
+
 	return true
 }

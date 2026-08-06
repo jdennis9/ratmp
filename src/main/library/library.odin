@@ -171,6 +171,7 @@ init :: proc(config: Init_Config) -> shared.Error {
 		for file in files {
 			pl := playlist_load(file.fullpath) or_continue
 			pl.file = strings.clone(file.fullpath, l.tag_allocator)
+			pl.uid = shared.generate_uid()
 			_ = hm.dynamic_add(&l.playlists, pl)
 		}
 
@@ -490,7 +491,10 @@ add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 		}
 	}
 
-	if any_added do playlist.serial += 1
+	if any_added {
+		playlist.serial += 1
+		l.playlists_serial += 1
+	}
 
 	return true
 }

@@ -405,6 +405,16 @@ track_table_show :: proc(
 				}
 
 				// -----------------------------------------------------------------
+				// Drag drop
+				// -----------------------------------------------------------------
+				if imgui.BeginDragDropSource() {
+					tracks := track_table_get_selection(table^, get_frame_allocator())
+					set_track_drag_drop_payload(tracks)
+					imgui.SetTooltip("%d tracks", i32(len(tracks)))
+					imgui.EndDragDropSource()
+				}
+
+				// -----------------------------------------------------------------
 				// Context menu
 				// -----------------------------------------------------------------
 				if imgui.BeginPopupContextItem() {
