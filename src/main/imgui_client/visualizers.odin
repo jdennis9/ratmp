@@ -55,7 +55,7 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	@static w: struct {
 		bands:            [dynamic; _MAX_BANDS]f32,
 		band_freqs:       [dynamic; _MAX_BANDS]f32,
-		freq_guides:      [dynamic; 32]_Frequency_Guide,
+		freq_guides:      [dynamic; 64]_Frequency_Guide,
 		window_values:    [dynamic]f32,
 		fft:              dsp.FFT_State,
 		display_mode:     _Display_Mode,
@@ -159,7 +159,7 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	avail_size  := imgui.GetContentRegionAvail()
 	graph_pos   := imgui.GetCursorScreenPos()
 	graph_size: [2]f32 = {avail_size.x, avail_size.y - imgui.GetTextLineHeight() * guide_font_scale}
-	bar_width   := graph_size.x / f32(len(w.bands)) - 1
+	bar_width   := (graph_size.x / f32(len(w.bands))) - 1
 	bar_spacing := bar_width + 1
 	drawlist    := imgui.GetWindowDrawList()
 
@@ -321,8 +321,6 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 	switch w.display_mode {
 	case .Histogram:
-		//draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
-		//draw_band_bars(drawlist, graph_pos, graph_size, bands[:])
 		imx.draw_bars(
 			drawlist, graph_pos + {0, graph_size.y}, graph_pos + {graph_size.x, 0}, w.bands[:],
 			get_theme_color(.VolumeLow), get_theme_color(.VolumeHigh)
@@ -342,6 +340,8 @@ spectrum_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		p_max := p_min + {band.width, graph_size.y}
 
 		if imgui.IsMouseHoveringRect(p_min, p_max) && imgui.BeginTooltip() {
+			imx.text(64, "Band", band_index+1)
+
 			if band_index + 1 < len(w.band_freqs) {
 				imx.textf(64, "Frequency: %.1f-%.1fHz", 
 					w.band_freqs[band_index], w.band_freqs[band_index+1]

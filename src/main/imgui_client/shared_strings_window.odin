@@ -36,8 +36,8 @@ _Shared_Strings_Table_Row :: struct {
 	id:            lib.Shared_String_ID,
 	uid:           shared.UID,
 	duration_str:  [12]u8,
-	file_size_str: [8]u8,
-	length_str:    [8]u8,
+	file_size_str: [16]u8,
+	length_str:    [6]u8,
 	totals:        lib.Track_Totals,
 	selected:      bool,
 }
