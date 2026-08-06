@@ -18,18 +18,18 @@ draw_bars :: proc(
 	color_mode: Bar_Color_Mode = .Gradient,
 	height_multiplier: f32 = 1,
 ) {
-	x_offset: f32 = 0
-	width := bb_max.x - bb_min.x
-	height := bb_max.y - bb_min.y
-	gap: f32 = width / f32(len(values))
-	bar_width := gap - spacing
+	x_offset:   f32 = 0
+	width      := bb_max.x - bb_min.x
+	height     := bb_max.y - bb_min.y
+	gap        := width / f32(len(values))
+	bar_width  := gap - spacing
 	low_color  := imgui.ColorConvertU32ToFloat4(low_color_u)
 	high_color := imgui.ColorConvertU32ToFloat4(high_color_u)
 
 	switch color_mode {
 	case .Gradient:
 		for v in values {
-			top_color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
+			top_color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v*height_multiplier))
 			h: f32 = max(abs(v * height * height_multiplier), min_height)
 			if height < 0 do h = -h
 
@@ -45,7 +45,7 @@ draw_bars :: proc(
 		}
 	case .Flat:
 		for v in values {
-			color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v))
+			color := imgui.GetColorU32ImVec4(linalg.lerp(low_color, high_color, v*height_multiplier))
 			h: f32 = max(abs(v * height * height_multiplier), min_height)
 			if height < 0 do h = -h
 
