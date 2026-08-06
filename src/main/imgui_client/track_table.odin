@@ -267,6 +267,7 @@ track_table_show :: proc(
 	// --------------------------------------------------------------------------
 	// Control buttons
 	// --------------------------------------------------------------------------
+	imgui.SameLine()
 	if imgui.Button("Jump to current track") {
 		jump_to_playing = true
 	}

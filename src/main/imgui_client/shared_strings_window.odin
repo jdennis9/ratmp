@@ -300,11 +300,11 @@ _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
 	filter_hash := hash.fnv64a(transmute([]byte) shared.string_from_array(w.filter_buf[:]))
 
 	if w.viewing != nil {
-		
 		serial     := lib.get_shared_string_serial(w.type, w.viewing.?)
 		uid        := lib.get_shared_string_uid(w.type, w.viewing.?)
 		up_to_date := track_table_is_up_to_date(&w.track_table, serial, uid)
-		
+		title      := lib.get_shared_string(w.type, w.viewing.?)
+
 		if !up_to_date || w.track_table_id != w.viewing.? {
 			shared.TIME_SCOPE("Update shared string track table")
 
@@ -318,14 +318,19 @@ _show_proc :: proc(w: ^_Shared_Strings_Window, ev: UI_Window_Event) -> bool {
 			track_table_update(&w.track_table, serial, tracks[:], uid)
 		}
 
+		switch w.type {
+		case .Artist: imx.title_text("Artist:", title)
+		case .Album:  imx.title_text("Album:",  title)
+		case .Genre:  imx.title_text("Genre:",  title)
+		}
+
 		if imgui.Button("Back") || imgui.IsKeyPressed(.Escape) {
 			w.viewing = nil
 		}
 
 		track_table_show(&w.track_table, "##tracks", {.NoRemove})
 	}
-
-	if w.viewing == nil {
+	else {
 		if w.rows_serial != tracks_serial || w.filter_hash != filter_hash || w.sort_serial != w.sort_spec_serial {
 			w.rows_serial = tracks_serial
 			w.filter_hash = filter_hash
