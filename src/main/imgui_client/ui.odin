@@ -246,11 +246,13 @@ ui_apply_fonts :: proc(cfg: ^UI_Config) {
 	
 	for font in cfg.fonts {
 		path := sys.font_get_path(font, temp_allocator) or_continue
-		imgui.FontAtlas_AddFontFromFileTTF(
+		
+		if imgui.FontAtlas_AddFontFromFileTTF(
 			io.Fonts, strings.clone_to_cstring(path, temp_allocator), font_cfg = &font_cfg
-		)
-		font_cfg.MergeMode = true
-		have_a_font = true
+		) != nil {
+			font_cfg.MergeMode = true
+			have_a_font = true
+		}
 	}
 	
 	font_cfg.FontDataOwnedByAtlas = false
