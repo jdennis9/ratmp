@@ -85,6 +85,7 @@ UI_Window_ID :: enum {
 	Queue,
 	ThemeEditor,
 	Metadata,
+	CoverArt,
 	Artists,
 	Genres,
 	Albums,
@@ -117,6 +118,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Metadata",
 		internal_name = "_metadata",
 		procedure     = metadata_window_proc,
+	},
+	.CoverArt = {
+		title         = "Cover Art",
+		internal_name = "_cover_art",
+		procedure     = cover_art_window_proc,
 	},
 	.Artists = {
 		title         = "Artists",
@@ -444,6 +450,7 @@ _show_main_menu_bar :: proc() -> bool {
 			{
 				name = "Metadata",
 				items = {
+					.CoverArt,
 					.Metadata,
 				},
 			},

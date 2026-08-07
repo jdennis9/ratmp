@@ -27,10 +27,6 @@ import imgui "src:thirdparty/odin-imgui"
 
 metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	@static w: struct {
-		cover_art:       Maybe(Texture_Handle),
-		cover_art_w:     int,
-		cover_art_h:     int,
-		cover_art_ratio: f32,
 		comment:         string,
 		shown_track:     Maybe(lib.Track_ID),
 	}
@@ -38,25 +34,10 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	playback_state := get_last_playback_state()
 	temp_allocator := get_frame_allocator()
 
-	release_cover_art :: proc() {
-		if w.cover_art != nil {
-			texture_release(w.cover_art.?)
-			w.cover_art = nil
-		}
-	}
 
 	update_track :: proc(track_id: lib.Track_ID) -> bool {
 		w.shown_track = track_id
 
-		cover_data := lib.find_track_cover_art(track_id, context.allocator) or_return
-		defer delete(cover_data)
-
-		tex, width, height := texture_create_from_memory(cover_data) or_return
-
-		w.cover_art       = tex
-		w.cover_art_w     = width
-		w.cover_art_h     = height
-		w.cover_art_ratio = f32(width) / f32(height)
 		delete(w.comment)
 		w.comment = lib.get_track_comment(track_id, context.allocator) or_else ""
 
@@ -64,12 +45,10 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	}
 
 	if ev.type == .Hidden {
-		release_cover_art()
 		w.shown_track = nil
 		return false
 	}
 	else if ev.type == .Free {
-		release_cover_art()
 		delete(w.comment)
 	}
 
@@ -77,7 +56,6 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 	if playback_state.track != w.shown_track {
 		if playback_state.track == nil {
-			release_cover_art()
 			w.shown_track = nil
 			delete(w.comment)
 			w.comment = ""
@@ -88,18 +66,7 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 		require_frames(1)
 	}
-
-	if w.cover_art != nil {
-		size := [2]f32{f32(w.cover_art_w), f32(w.cover_art_h)}
-		scale := imgui.GetContentRegionAvail().x / f32(w.cover_art_w)
-
-		imgui.PushStyleVarImVec2(.FramePadding, {})
-		imgui.ImageButton("##art", texture_get_imgui_ref(w.cover_art.?) or_else {}, size * scale)
-		imgui.PopStyleVar()
-	}
-	else {
-		imgui.InvisibleButton("##art", imgui.GetContentRegionAvail().xx)
-	}
+	
 	imgui.Separator()
 
 	if w.shown_track != nil && imx.begin_kv_table("##metadata", imgui.TableFlags_RowBg, 0.3) {
@@ -126,6 +93,79 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	if w.shown_track != nil && w.comment != "" {
 		imgui.Separator()
 		imx.text_unformatted(w.comment)
+	}
+
+	return true
+}
+
+cover_art_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	@static w: struct {
+		shown_track:     Maybe(lib.Track_ID),
+		cover_art:       Maybe(Texture_Handle),
+		cover_art_w:     int,
+		cover_art_h:     int,
+		cover_art_ratio: f32,
+	}
+
+
+	release_cover_art :: proc() {
+		if w.cover_art != nil {
+			texture_release(w.cover_art.?)
+			w.cover_art = nil
+		}
+	}
+
+	update_track :: proc(track_id: lib.Track_ID) -> bool {
+		w.shown_track = track_id
+
+		cover_data := lib.find_track_cover_art(track_id, context.allocator) or_return
+		defer delete(cover_data)
+
+		tex, width, height := texture_create_from_memory(cover_data) or_return
+
+		w.cover_art       = tex
+		w.cover_art_w     = width
+		w.cover_art_h     = height
+		w.cover_art_ratio = f32(width) / f32(height)
+
+		return true
+	}
+
+	
+	if ev.type == .Hidden {
+		w.shown_track = nil
+		return false
+	}
+	else if ev.type == .Free {
+		release_cover_art()
+	}
+
+	if ev.type != .Show do return false
+
+	playback_state := get_last_playback_state()
+
+	if playback_state.track != w.shown_track {
+		if playback_state.track == nil {
+			release_cover_art()
+			w.shown_track = nil
+		}
+		else {
+			update_track(playback_state.track.?)
+		}
+
+		require_frames(1)
+	}
+
+	if w.cover_art != nil {
+		size := [2]f32{f32(w.cover_art_w), f32(w.cover_art_h)}
+		scale := imgui.GetContentRegionAvail().x / f32(w.cover_art_w)
+
+		imgui.PushStyleVarImVec2(.FramePadding, {})
+		imgui.ImageButton("##art", texture_get_imgui_ref(w.cover_art.?) or_else {}, size * scale)
+		imgui.PopStyleVar()
+	}
+	else {
+		imgui.InvisibleButton("##art", imgui.GetContentRegionAvail().xx)
 	}
 
 	return true
