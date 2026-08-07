@@ -171,10 +171,17 @@ save_user_config :: proc() -> shared.Error {
 
 @private
 apply_user_config :: proc() {
-	c := _config
+	c := &_config
 	ui_apply_config(&c.ui)
 	player.apply_config(c.playback)
 	lib.apply_config(c.library)
+}
+
+@private
+set_default_theme :: proc(name: string) {
+	c := &_config
+	c.ui.default_theme = {}
+	copy(c.ui.default_theme[:len(c.ui.default_theme)-1], name)
 }
 
 @private
@@ -192,59 +199,144 @@ config_editor_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	}
 
 	imx.title_text("UI")
-	// @TODO: File selects for these
-	changed |= imx.input_text("Background image", c.ui.background_image[:])
-	changed |= imx.input_text("Default theme",    c.ui.default_theme[:])
-	changed |= imgui.DragFloat("Font size", &c.ui.font_size, 0.1, 9, 48, "%.0f", {.ClampOnInput})
 
-	// Fonts list
-	if imgui.BeginListBox("##fonts") {
-		defer imgui.EndListBox()
+	if imgui.BeginTable("##ui_settings", 2) {
+		defer imgui.EndTable()
 
-		imgui.SetItemTooltip("Fonts are prioritized from top to bottom.")
+		imgui.TableSetupColumn("##name", {.WidthStretch}, 0.3)
+		imgui.TableSetupColumn("##value", {.WidthStretch}, 0.7)
 
-		font_items_loop: for f, i in c.ui.fonts {
-			imgui.PushIDInt(auto_cast i)
-			defer imgui.PopID()
-			
-			imgui.MenuItem(f.name)
-			if imgui.BeginPopupContextItem() {
-				defer imgui.EndPopup()
-
-				if imgui.MenuItem("Remove") {
-					ordered_remove(&c.ui.fonts, i)
-					break font_items_loop
+		// -----------------------------------------------------------------------
+		// Background
+		// -----------------------------------------------------------------------
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("Background")
+		if imgui.TableSetColumnIndex(1) {
+			changed |= imx.input_text("##background_input", c.ui.background_image[:])
+			imgui.SameLine()
+			if imgui.Button("Browse") {
+				dp := sys.File_Dialog_Params {file_types = FILE_TYPES_IMAGE,}
+				if res, ok := sys.show_file_dialog(dp, temp_allocator); ok && len(res) >= 1 {
+					c.ui.background_image = {}
+					copy(c.ui.background_image[:len(c.ui.background_image)-1], res[0])
+					changed = true
 				}
+			}
+		}
 
-				if imgui.MenuItem("Move up", enabled = i >= 0) {
-					c.ui.fonts[i], c.ui.fonts[i-1] = c.ui.fonts[i-1], c.ui.fonts[i]
+		// -----------------------------------------------------------------------
+		// Theme
+		// -----------------------------------------------------------------------
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("Default theme")
+		if imgui.TableSetColumnIndex(1) {
+			changed |= imx.input_text("##theme_input", c.ui.default_theme[:])
+			imgui.SameLine()
+
+			if imgui.BeginCombo("##theme_picker", nil, {.NoPreview}) {
+				defer imgui.EndCombo()
+
+				if option, picked := show_theme_menu_items(); picked {
+					c.ui.default_theme = {}
+					copy(c.ui.default_theme[:len(c.ui.default_theme)-1], option)
+					changed = true
 				}
+			}
+		}
 
-				if imgui.MenuItem("Move down", enabled = i < len(c.ui.fonts)-1) {
-					c.ui.fonts[i], c.ui.fonts[i+1] = c.ui.fonts[i+1], c.ui.fonts[i]
+		// -----------------------------------------------------------------------
+		// Font size
+		// -----------------------------------------------------------------------
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("Font size")
+		if imgui.TableSetColumnIndex(1) {
+			changed |= imgui.DragFloat(
+				"##font_size_input", &c.ui.font_size, 0.1, 9, 48, "%.0f", {.ClampOnInput}
+			)
+		}
+
+		// -----------------------------------------------------------------------
+		// Font list
+		// -----------------------------------------------------------------------
+		imgui.TableNextRow()
+
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("Fonts")
+
+		// Fonts list
+		if imgui.TableSetColumnIndex(1) {
+			if imgui.BeginListBox("##fonts") {
+				defer imgui.EndListBox()
+
+				imgui.SetItemTooltip("Fonts are prioritized from top to bottom.")
+
+				font_items_loop: for f, i in c.ui.fonts {
+					imgui.PushIDInt(auto_cast i)
+					defer imgui.PopID()
+					
+					imgui.MenuItem(f.name)
+					if imgui.BeginPopupContextItem() {
+						defer imgui.EndPopup()
+
+						if imgui.MenuItem("Remove") {
+							ordered_remove(&c.ui.fonts, i)
+							break font_items_loop
+						}
+
+						if imgui.MenuItem("Move up", enabled = i >= 0) {
+							c.ui.fonts[i], c.ui.fonts[i-1] = c.ui.fonts[i-1], c.ui.fonts[i]
+						}
+
+						if imgui.MenuItem("Move down", enabled = i < len(c.ui.fonts)-1) {
+							c.ui.fonts[i], c.ui.fonts[i+1] = c.ui.fonts[i+1], c.ui.fonts[i]
+						}
+					}
+				}
+			}
+
+			// Add font
+			if len(c.ui.fonts) == cap(c.ui.fonts) {
+				imgui.TextDisabled("Maximum fonts used")
+			}
+			else if imgui.BeginCombo("##add_font", "Add font") {
+				defer imgui.EndCombo()
+
+				for f in get_system_fonts() {
+					if imgui.MenuItem(f.name) {
+						append(&c.ui.fonts, f)
+					}
 				}
 			}
 		}
 	}
 
-	// Add font
-	if len(c.ui.fonts) == cap(c.ui.fonts) {
-		imgui.TextDisabled("Maximum fonts used")
-	}
-	else if imgui.BeginCombo("##add_font", "Add font") {
-		defer imgui.EndCombo()
 
-		for f in get_system_fonts() {
-			if imgui.MenuItem(f.name) {
-				append(&c.ui.fonts, f)
-			}
-		}
-	}
 
 	imx.title_text("Playback")
-	changed |= imgui.Checkbox("Enable ReplayGain", &c.playback.enable_replaygain)
-	changed |= imx.select_enum("ReplayGain preference", &c.playback.replaygain_preference)
-	changed |= imgui.DragFloat("Preamp gain for ReplayGain", &c.playback.replaygain_pregain, 0.1, -12, 12, "%.0f dB")
+	if imgui.BeginTable("##playback_settings", 2) {
+		defer imgui.EndTable()
+
+		imgui.TableSetupColumn("##name", {.WidthStretch}, 0.3)
+		imgui.TableSetupColumn("##value", {.WidthStretch}, 0.7)
+
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("Enable ReplayGain")
+		if imgui.TableSetColumnIndex(1) do changed |= imgui.Checkbox("##replaygain", &c.playback.enable_replaygain)
+		
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("ReplayGain preference")
+		if imgui.TableSetColumnIndex(1) {
+			changed |= imx.select_enum("##replaygain_pref", &c.playback.replaygain_preference)
+		}
+
+		imgui.TableNextRow()
+		if imgui.TableSetColumnIndex(0) do imx.text_unformatted("ReplayGain preamp")
+		if imgui.TableSetColumnIndex(1) {
+			changed |= imgui.DragFloat(
+				"##replaygain_preamp", &c.playback.replaygain_pregain, 0.1, -12, 12, "%.0f dB"
+			)
+		}
+
+	}
 
 	imx.title_text("Library")
 	changed |= imgui.Checkbox("Prefer folder cover art", &c.library.prefer_folder_cover_art)

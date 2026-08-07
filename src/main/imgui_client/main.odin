@@ -114,7 +114,15 @@ run :: proc() -> shared.Error {
 		client.paths.config = filepath.join({client.paths.config, "ratmp"}) or_return
 		client.paths.data   = filepath.join({client.paths.data, "ratmp"}) or_return
 		client.paths.cache  = filepath.join({client.paths.cache, "ratmp"}) or_return
+
+		shared.ensure_dir(client.paths.config)
+		shared.ensure_dir(client.paths.data)
+		shared.ensure_dir(client.paths.cache)
 	}
+
+	log.info("Config path:", client.paths.config)
+	log.info("Data path:  ", client.paths.data)
+	log.info("Cache path: ", client.paths.cache)
 
 	lib.init({
 		enable_memory_tracking = launch_config.memory_debug,

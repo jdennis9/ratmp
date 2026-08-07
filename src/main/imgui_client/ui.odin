@@ -246,7 +246,7 @@ ui_apply_fonts :: proc(cfg: ^UI_Config) {
 	
 	for font in cfg.fonts {
 		path := sys.font_get_path(font, temp_allocator) or_continue
-		
+
 		if imgui.FontAtlas_AddFontFromFileTTF(
 			io.Fonts, strings.clone_to_cstring(path, temp_allocator), font_cfg = &font_cfg
 		) != nil {
@@ -316,8 +316,7 @@ ui_show :: proc() {
 		imgui.PushFontFloat(nil, config.ui.font_size)
 		need_pop_font = true
 	}
-	defer if need_pop_font do imgui.PopFont()
-
+	
 	lib.lock()
 	defer lib.unlock()
 
@@ -378,6 +377,10 @@ ui_show :: proc() {
 			}
 			imgui.End()
 		}
+	}
+
+	if need_pop_font {
+		imgui.PopFont()
 	}
 }
 

@@ -213,6 +213,23 @@ get_theme_color :: proc(col: Theme_Color) -> u32 {
 	return _theme.colors[col]
 }
 
+@private
+show_theme_menu_items :: proc() -> (option: string, picked: bool) {
+	temp_allocator := get_frame_allocator()
+
+	for at, i in _themes.avail_themes {
+		imgui.PushIDInt(auto_cast i)
+		defer imgui.PopID()
+
+		if imgui.MenuItem(strings.clone_to_cstring(at.name)) {
+			option = at.name
+			picked = true
+		}
+	}
+
+	return
+}
+
 _set_colors_to_default :: proc() {
 	_theme.colors[.PlayingHighlight] = 0xff0568fc
 	_theme.colors[.LeftChannelWave]  = 0xffffffff
@@ -388,11 +405,14 @@ show_theme_editor :: proc() -> bool {
 	if imgui.BeginCombo("##select_theme", nil, {.NoPreview}) {
 		defer imgui.EndCombo()
 
-		show_theme_selector_menu_items()
+		if show_theme_selector_menu_items() {
+			set_default_theme(t.name)
+		}
 	}
 
 	if imgui.Button("Save") {
 		_save_theme()
+		set_default_theme(t.name)
 	}
 	
 	imgui.SameLine()
