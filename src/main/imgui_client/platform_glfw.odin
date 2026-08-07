@@ -96,7 +96,7 @@ platform_init_glfw :: proc() -> bool {
 
 	_platform_impl_wait_events = proc() -> Platform_Events {
 		_glfw.events = {}
-		glfw.WaitEventsTimeout(0.1)
+		glfw.WaitEventsTimeout(0.3)
 		return _glfw.events
 	}
 	

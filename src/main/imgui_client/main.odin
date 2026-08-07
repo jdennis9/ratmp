@@ -75,6 +75,9 @@ _client: struct {
 run :: proc() -> shared.Error {
 	tracking_allocator: mem.Tracking_Allocator
 
+	sys_init()
+	defer sys_shutdown()
+
 	client := &_client
 
 	when ODIN_DEBUG {
@@ -205,6 +208,8 @@ run :: proc() -> shared.Error {
 		else {
 			platform_events = platform_wait_events()
 		}
+
+		sys_update()
 
 		lib.lock()
 		lib.update()

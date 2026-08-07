@@ -148,7 +148,7 @@ init :: proc(config: Init_Config) -> shared.Error {
 
 	for &ss in l.shared_strings do reserve(&ss, 128)
 
-	mem.dynamic_arena_init(&l.tag_arena, alignment = 4)
+	mem.dynamic_arena_init(&l.tag_arena)
 	l.tag_allocator = mem.dynamic_arena_allocator(&l.tag_arena)
 
 	mem.dynamic_arena_init(&l.folder_arena)

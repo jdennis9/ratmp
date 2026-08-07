@@ -71,7 +71,7 @@ font_init_fontconfig :: proc() -> shared.Error {
 	}
 
 	_font_impl_destroy = proc(f: System_Font, free_impl_memory: bool) {
-		if handle != nil {
+		if f.handle != nil {
 			fc.PatternDestroy(cast(^fc.Pattern) f.handle)
 		}
 	}
