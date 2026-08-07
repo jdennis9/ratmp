@@ -18,6 +18,7 @@
 #+private file
 package client
 
+import "core:time"
 
 import "core:reflect"
 import "core:strconv"
@@ -499,13 +500,21 @@ wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	// --------------------------------------------------------------------------
 	// Input
 	// --------------------------------------------------------------------------
-	if imgui.IsWindowHovered() && imgui.IsMouseClicked(.Left) {
+	if imgui.IsWindowHovered()  {
 		p_min := imgui.GetCursorScreenPos()
 		p_max := p_min + imgui.GetContentRegionAvail()
 
 		pos := linalg.unlerp(p_min.x, p_max.x, imgui.GetMousePos().x)
 		pos = clamp(pos, 0, 1)
-		player.seek(int(pos * f32(track_info.duration)))
+		target_second := int(pos * f32(track_info.duration))
+
+		if imgui.IsMouseClicked(.Left) {
+			player.seek(target_second)
+		}
+		else {
+			h, m, s := time.clock_from_seconds(auto_cast target_second)
+			imgui.SetTooltip("%02d:%02d:%02d", i32(h), i32(m), i32(s))
+		}
 	}
 
 	// --------------------------------------------------------------------------
