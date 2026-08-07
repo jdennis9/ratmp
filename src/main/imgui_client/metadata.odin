@@ -115,8 +115,10 @@ cover_art_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		}
 	}
 
-	update_track :: proc(track_id: lib.Track_ID) -> bool {
+	update_art :: proc(track_id: lib.Track_ID) -> bool {
 		w.shown_track = track_id
+
+		if w.cover_art != nil do release_cover_art()
 
 		cover_data := lib.find_track_cover_art(track_id, context.allocator) or_return
 		defer delete(cover_data)
@@ -142,6 +144,10 @@ cover_art_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 	if ev.type != .Show do return false
 
+	if w.cover_art != nil && texture_is_outdated(w.cover_art.?) && w.shown_track != nil {
+		update_art(w.shown_track.?)
+	}
+
 	playback_state := get_last_playback_state()
 
 	if playback_state.track != w.shown_track {
@@ -150,7 +156,7 @@ cover_art_window_proc :: proc(ev: UI_Window_Event) -> bool {
 			w.shown_track = nil
 		}
 		else {
-			update_track(playback_state.track.?)
+			update_art(playback_state.track.?)
 		}
 
 		require_frames(1)
