@@ -1,5 +1,6 @@
 package imx
 
+import "core:time"
 import "core:strconv"
 import "core:reflect"
 import "core:math/linalg"
@@ -70,14 +71,14 @@ menu_item :: proc($BUF_SIZE: uint, label: string) -> bool {
 }
 
 scrubber :: proc(
-	str_id: cstring, p_value: ^int, min, max: int,
+	str_id: cstring, p_value: ^int, pmin, pmax: int,
 	size_arg: imgui.Vec2 = {}, marker_interval: int = 10
 ) -> bool {
 	size: [2]f32
 	style := imgui.GetStyle()
 	drawlist := imgui.GetWindowDrawList()
-	span := max - min
-	frac := (f32(p_value^) + f32(min)) / f32(span)
+	span := pmax - pmin
+	frac := (f32(p_value^) + f32(pmin)) / f32(span)
 	avail_size := imgui.GetContentRegionAvail()
 	cursor := imgui.GetCursorScreenPos() + style.FramePadding*1.5
 	mouse := imgui.GetMousePos()
@@ -97,6 +98,13 @@ scrubber :: proc(
 	}
 	hovered := imgui.IsItemHovered()
 
+	if hovered {
+		f := clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
+		target_pos := int(linalg.lerp(f32(pmin), f32(pmax), f))
+		h, m, s := time.clock_from_seconds(auto_cast target_pos)
+		imgui.SetItemTooltip("%02d:%02d:%02d", i32(h), i32(m), i32(s))
+	}
+
 	// Bg
 	imgui.DrawList_AddRectFilled(drawlist, cursor, cursor + size, imgui.GetColorU32(.Header), 2)
 	// Fg
@@ -112,7 +120,7 @@ scrubber :: proc(
 
 	if imgui.IsItemDeactivated() {
 		frac = clamp((mouse.x - cursor.x) / size.x, 0.0, 1.0)
-		p_value^ = int(linalg.lerp(f32(min), f32(max), frac))
+		p_value^ = int(linalg.lerp(f32(pmin), f32(pmax), frac))
 		return true
 	}
 	

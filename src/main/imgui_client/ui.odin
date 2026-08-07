@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:time"
 import "core:slice"
 import "core:log"
 import "core:fmt"
@@ -547,6 +548,11 @@ _show_main_menu_bar :: proc() -> bool {
 		track_pos := player.get_playback_pos()
 
 		if track_pos != old_track_pos do require_frames(1)
+
+		ph, pm, ps := time.clock_from_seconds(auto_cast track_pos)
+		dh, dm, ds := time.clock_from_seconds(auto_cast track_info.duration)
+
+		imx.textf(128, "%02d:%02d:%02d/%02d:%02d:%02d", ph, pm, ps, dh, dm, ds)
 
 		if imx.scrubber("##seek", &track_pos, 0, track_info.duration) {
 			player.seek(track_pos)
