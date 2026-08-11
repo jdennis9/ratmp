@@ -67,7 +67,7 @@ _build_table :: proc(w: ^_Shared_Strings_Window) {
 	w.table_rows = nil
 	temp_allocator := get_frame_allocator()
 
-	all_strings  := slice.clone(lib.get_all_shared_strings(type), temp_allocator)	
+	all_strings  := lib.get_all_shared_strings(type, temp_allocator)
 	filter_str   := string(cstring(&w.filter_buf[0]))
 	filter_lower := strings.to_lower(filter_str, temp_allocator)
 	totals       := make([]lib.Track_Totals, len(all_strings), temp_allocator)

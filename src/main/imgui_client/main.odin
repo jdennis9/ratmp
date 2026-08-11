@@ -219,9 +219,7 @@ run :: proc() -> shared.Error {
 
 		sys_update()
 
-		lib.lock()
 		lib.update()
-		lib.unlock()
 
 		client.playback_state = player.get_state()
 

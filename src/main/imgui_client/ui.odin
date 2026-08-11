@@ -316,9 +316,6 @@ ui_show :: proc() {
 		imgui.PushFontFloat(nil, config.ui.font_size)
 		need_pop_font = true
 	}
-	
-	lib.lock()
-	defer lib.unlock()
 
 	// Draw background
 	blk_draw_background: if ui.background.texture != nil {
@@ -678,9 +675,6 @@ is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 }
 
 scanner_consume_proc :: proc(_: rawptr, input: []lib.Scanned_Item) -> shared.Error {
-	lib.lock()
-	defer lib.unlock()
-
 	shared.TIME_SCOPE("Add scanned tracks to library")
 
 	for item in input {

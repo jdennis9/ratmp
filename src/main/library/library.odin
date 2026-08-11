@@ -17,6 +17,7 @@
 */
 package library
 
+import "core:thread"
 import "core:sync"
 import "src:bindings/taglib"
 import "core:hash"
@@ -99,6 +100,15 @@ Folder_Cover_Art :: struct {
 	image:  string,
 }
 
+Missing_Track_Scan_Input :: struct {
+	track_id: Track_ID,
+	path:     string,
+}
+
+Missing_Track :: struct {
+	track_id: Track_ID,
+}
+
 Config :: struct {
 	prefer_folder_cover_art: bool,
 }
@@ -107,23 +117,26 @@ CONFIG_DEFAULTS :: Config {
 }
 
 Library :: struct {
-	lock:             sync.Mutex, // only used outside of this package
-	tracks_serial:    uint,
-	tracks:           Track_Map,
-	shared_strings:   [Shared_String_Type][dynamic]Shared_String,
-	tag_arena:        mem.Dynamic_Arena,
-	tag_allocator:    mem.Allocator,
-	playlists:        Playlist_Map,
-	playlists_serial: uint,
-	config:           Config,
-	init_config:      Init_Config,
-	folder_root:      Folder,
-	folder_arena:     mem.Dynamic_Arena,
-	folder_allocator: mem.Allocator,
-	folder_serial:    uint,
-	folder_cover_art: map[u64]Folder_Cover_Art, // folder hash -> cover art path
-	url_to_track_id:  map[u64]Track_ID, // url hash -> track id
-	save_serial:      uint,
+	lock:                  sync.RW_Mutex, // only used outside of this package
+	tracks_serial:         uint,
+	tracks:                Track_Map,
+	shared_strings:        [Shared_String_Type][dynamic]Shared_String,
+	tag_arena:             mem.Dynamic_Arena,
+	tag_allocator:         mem.Allocator,
+	playlists:             Playlist_Map,
+	playlists_serial:      uint,
+	config:                Config,
+	init_config:           Init_Config,
+	folder_root:           Folder,
+	folder_arena:          mem.Dynamic_Arena,
+	folder_allocator:      mem.Allocator,
+	folder_serial:         uint,
+	folder_cover_art:      map[u64]Folder_Cover_Art, // folder hash -> cover art path
+	url_to_track_id:       map[u64]Track_ID, // url hash -> track id
+	save_serial:           uint,
+	missing_tracks:        [dynamic]Missing_Track,
+	missing_track_scanner: shared.Worker(Missing_Track_Scan_Input, Missing_Track),
+	missing_track_thread:  ^thread.Thread,
 
 	tracking_allocators: struct {
 		tag:         mem.Tracking_Allocator,
@@ -177,11 +190,61 @@ init :: proc(config: Init_Config) -> shared.Error {
 		l.playlists_serial += 1
 	}
 
+	// Expects that the url scheme is already trimmed from the path
+	missing_track_scanner_produce :: proc(
+		_: rawptr, input: []Missing_Track_Scan_Input, output_allocator: mem.Allocator
+	) -> (missing_tracks: []Missing_Track, error: shared.Error) {
+		output := make_dynamic_array_len_cap([dynamic]Missing_Track, 0, len(input), output_allocator)
+
+		for item in input {
+			guard_read()
+			if !os.exists(item.path) {
+				append(&output, Missing_Track {
+					track_id = item.track_id,
+				})
+			}
+		}
+
+		return
+	}
+
+	missing_track_scanner_consume :: proc(
+		_: rawptr, input: []Missing_Track
+	) -> shared.Error {
+		guard_write()
+
+		log.debug("Found", len(input), "missing tracks")
+
+		l := &_library
+
+		for mt in input {
+			append(&l.missing_tracks, mt)
+		}
+
+		return nil
+	}
+
+	missing_track_scanner_thread_proc :: proc(t: ^thread.Thread) {
+		shared.worker_run(&_library.missing_track_scanner)
+	}
+
+	shared.worker_init(
+		&l.missing_track_scanner,
+		missing_track_scanner_produce,
+		missing_track_scanner_consume,
+		nil, nil
+	)
+
+	l.missing_track_thread = thread.create(missing_track_scanner_thread_proc)
+	thread.start(l.missing_track_thread)
+
 	return nil
 }
 
 shutdown :: proc() {
 	l := &_library
+
+	shared.worker_destroy(&l.missing_track_scanner, l.missing_track_thread)
 
 	delete(l.folder_cover_art)
 	delete(l.url_to_track_id)
@@ -207,6 +270,7 @@ update :: proc() {
 	l := &_library
 
 	if l.folder_serial != l.tracks_serial {
+		guard_write()
 		l.folder_serial = l.tracks_serial
 		shared.TIME_SCOPE("Build folder tree")
 		free_all(l.folder_allocator)
@@ -215,11 +279,14 @@ update :: proc() {
 
 	if l.init_config.metadata_db_path != "" && l.save_serial != l.tracks_serial {
 		l.save_serial = l.tracks_serial
+		guard_read()
 		save_db_to_disk(l.init_config.metadata_db_path)
 	}
 
 	if l.init_config.playlists_dir != "" {
 		iter := make_playlist_iterator()
+
+		guard_read()
 
 		for playlist in iterate_playlists(&iter) {
 			if playlist.save_serial != playlist.serial {
@@ -246,6 +313,8 @@ join_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, a
 dump_tracks :: proc() {
 	l := &_library
 
+	guard_read()
+
 	iter := hm.dynamic_iterator_make(&l.tracks)
 
 	for track, _ in hm.dynamic_iterate(&iter) {
@@ -268,10 +337,14 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	l := &_library
 	url_hash := hash.fnv64a(transmute([]u8) url)
 
-	if existing, exists := l.url_to_track_id[url_hash]; exists {
-		id = existing
-		ok = true
-		return
+
+	{
+		guard_read()
+		if existing, exists := l.url_to_track_id[url_hash]; exists {
+			id = existing
+			ok = true
+			return
+		}
 	}
 
 	split_shared_strings :: proc(s: string, type: Shared_String_Type) -> []Shared_String_ID {
@@ -295,8 +368,15 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	if tags.album != "" {
 		track.album = auto_cast _add_shared_string(.Album, tags.album)
 	}
-	track.title      = strings.clone(tags.title, l.tag_allocator)
-	track.url        = strings.clone(url, l.tag_allocator)
+	track.artists    = split_shared_strings(tags.artist, .Artist)
+	track.genres     = split_shared_strings(tags.genre, .Genre)
+
+	{
+		guard_write()
+		track.title = strings.clone(tags.title, l.tag_allocator)
+		track.url   = strings.clone(url, l.tag_allocator)
+	}
+
 	track.samplerate = tags.samplerate
 	track.bitrate    = tags.bitrate
 	track.channels   = tags.channels
@@ -306,19 +386,21 @@ add_track :: proc(tags: Track_Tags, url: string) -> (id: Track_ID, ok: bool) {
 	track.track      = tags.track
 	track.year       = tags.year
 	track.format     = tags.format
-	track.artists    = split_shared_strings(tags.artist, .Artist)
-	track.genres     = split_shared_strings(tags.genre, .Genre)
 	track.artists    = slice.unique(track.artists)
 	track.genres     = slice.unique(track.genres)
 
 	assert(track.title != "")
 	assert(track.url != "")
-	
-	id = hm.dynamic_add(&l.tracks, track)
-	ok = true
 
-	l.tracks_serial += 1
-	l.url_to_track_id[url_hash] = id
+	{
+		guard_write()
+
+		id = hm.dynamic_add(&l.tracks, track)
+		ok = true
+		
+		l.tracks_serial += 1
+		l.url_to_track_id[url_hash] = id
+	}
 
 	return
 }
@@ -328,14 +410,21 @@ remove_track :: proc(id: Track_ID) {
 	// 99% of the time tracks are only being added, not removed.
 	// We are only leaking a few bytes here anyway.
 
-	hm.dynamic_remove(&_library.tracks, id)
+	l := &_library
 
-	_library.tracks_serial += 1
+	guard_write()
+
+	hm.dynamic_remove(&l.tracks, id)
+
+	l.tracks_serial += 1
 }
 
 remove_all_missing_tracks :: proc() -> int {
+	l := &_library
 	iter := make_track_iterator()
 	removed_count: int
+
+	guard_write()
 
 	for track in iterate_tracks(&iter) {
 		strings.starts_with(track.url, "file://") or_continue
@@ -351,8 +440,50 @@ remove_all_missing_tracks :: proc() -> int {
 	return removed_count
 }
 
+scan_for_missing_tracks :: proc() {
+	l := &_library
+	iter := make_track_iterator()
+	input := make_dynamic_array_len_cap([dynamic]Missing_Track_Scan_Input, 0, get_track_count())
+	defer delete(input)
+
+	for track in iterate_tracks(&iter) {
+		if !strings.starts_with(track.url, "file://") do continue
+
+		append(&input, Missing_Track_Scan_Input {
+			track_id = track.handle,
+			path     = strings.trim_prefix(track.url, "file://"),
+		})
+	}
+
+	{
+		guard_write()
+		clear(&l.missing_tracks)
+	}
+
+	shared.worker_send_input(&l.missing_track_scanner, input[:])
+}
+
+is_scanning_for_missing_tracks :: proc() -> bool {
+	return shared.worker_is_working(&_library.missing_track_scanner)
+}
+
+get_missing_tracks :: proc(allocator: mem.Allocator) -> []Track_ID {
+	l := &_library
+	guard_read()
+	ids := make([]Track_ID, len(l.missing_tracks), allocator)
+
+	for mt, i in l.missing_tracks {
+		ids[i] = mt.track_id
+	}
+
+	return ids
+}
+
 get_track :: proc(id: Track_ID) -> (track: Track, found: bool) {
 	l := &_library
+
+	guard_read()
+
 	ptr := hm.dynamic_get(&l.tracks, id) or_return
 	track = ptr^
 	found = true
@@ -360,9 +491,12 @@ get_track :: proc(id: Track_ID) -> (track: Track, found: bool) {
 }
 
 get_tracks :: proc(ids: []Track_ID, allocator: mem.Allocator) -> []Track {
-	count: int
 	l := &_library
+
+	count: int
 	tracks := make([]Track, len(ids), allocator)
+
+	guard_read()
 
 	for id in ids {
 		t := get_track(id) or_continue
@@ -380,6 +514,8 @@ get_all_tracks :: proc(allocator: mem.Allocator) -> []Track {
 	iter   := make_track_iterator()
 	count  := 0
 
+	guard_read()
+
 	for track in iterate_tracks(&iter) {
 		tracks[count] = track^
 		count += 1
@@ -395,6 +531,8 @@ get_all_track_ids :: proc(allocator: mem.Allocator) -> []Track_ID {
 	iter  := make_track_iterator()
 	count := 0
 
+	guard_read()
+
 	for track in iterate_tracks(&iter) {
 		ids[count] = track.handle
 		count += 1
@@ -404,11 +542,14 @@ get_all_track_ids :: proc(allocator: mem.Allocator) -> []Track_ID {
 }
 
 get_track_count :: proc() -> int {
+	guard_read()
 	return int(hm.dynamic_len(_library.tracks))
 }
 
 find_track_by_url :: proc(url: string) -> (id: Track_ID, found: bool) {
 	iter := make_track_iterator()
+
+	guard_read()
 
 	for track in iterate_tracks(&iter) {
 		if track.url == url {
@@ -419,15 +560,19 @@ find_track_by_url :: proc(url: string) -> (id: Track_ID, found: bool) {
 	return
 }
 
-get_playlist :: proc(id: Playlist_ID) -> (^Playlist, bool) {
-	return hm.dynamic_get(&_library.playlists, id)
+get_playlist :: proc(id: Playlist_ID) -> (pl: Playlist, ok: bool) {
+	guard_read()
+	ptr := hm.dynamic_get(&_library.playlists, id) or_return
+	return ptr^, true
 }
 
 make_playlist_iterator :: proc() -> Playlist_Iterator {
+	guard_read()
 	return hm.dynamic_iterator_make(&_library.playlists)
 }
 
 iterate_playlists :: proc(iter: ^Playlist_Iterator) -> (pl: ^Playlist, ok: bool) {
+	guard_read()
 	ptr, _ := hm.dynamic_iterate(iter) or_return
 	return ptr, true
 }
@@ -440,6 +585,8 @@ create_playlist :: proc(name: string) -> (Playlist_ID, bool) {
 		uid  = shared.generate_uid(),
 	}
 
+	guard_write()
+
 	id, error := hm.dynamic_add(&l.playlists, playlist)
 
 	if error != nil do return {}, false
@@ -451,6 +598,8 @@ create_playlist :: proc(name: string) -> (Playlist_ID, bool) {
 
 remove_playlist :: proc(id: Playlist_ID) -> bool {
 	l := &_library
+
+	guard_write()
 
 	playlist := hm.dynamic_get(&l.playlists, id) or_return
 
@@ -468,6 +617,8 @@ remove_playlist :: proc(id: Playlist_ID) -> bool {
 rename_playlist :: proc(id: Playlist_ID, new_name: string) -> bool {
 	l := &_library
 
+	guard_write()
+
 	playlist := hm.dynamic_get(&l.playlists, id) or_return
 	playlist.name = strings.clone(new_name, l.tag_allocator)
 	playlist.serial += 1
@@ -480,6 +631,8 @@ rename_playlist :: proc(id: Playlist_ID, new_name: string) -> bool {
 add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	l := &_library
 	any_added: bool
+
+	guard_write()
 
 	playlist := hm.dynamic_get(&l.playlists, id) or_return
 
@@ -500,6 +653,9 @@ add_to_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 
 remove_from_playlist :: proc(id: Playlist_ID, tracks: []Track_ID) -> bool {
 	l := &_library
+
+	guard_write()
+
 	playlist := hm.dynamic_get(&l.playlists, id) or_return
 	any_removed := false
 
@@ -534,11 +690,13 @@ sum_track_totals :: proc(tracks: []Track_ID) -> (t: Track_Totals) {
 
 add_cover_art :: proc(folder: string, art_path: string) {
 	l := &_library
-
+	
 	cleaned, _ := filepath.clean(folder)
 	defer delete(cleaned)
 
 	folder_hash := hash.fnv64a(transmute([]byte) folder)
+
+	guard_write()
 
 	l.folder_cover_art[folder_hash] = {
 		folder = strings.clone(folder, l.tag_allocator),
@@ -551,7 +709,10 @@ find_track_cover_art :: proc(
 	allocator: mem.Allocator
 ) -> (data: []byte, found: bool) {
 	l := &_library
+	
 	track := get_track(track_id) or_return
+
+	guard_read()
 
 	get_folder_art :: proc(track: Track, allocator: mem.Allocator) -> (data: []byte, found: bool) {
 		l := &_library
@@ -618,6 +779,8 @@ get_track_comment :: proc(track_id: Track_ID, allocator: mem.Allocator) -> (comm
 _add_shared_string :: proc(type: Shared_String_Type, name: string) -> i16 {
 	l := &_library
 
+	guard_write()
+
 	for &s, i in l.shared_strings[type] {
 		if s.name == name {
 			s.serial += 1
@@ -638,31 +801,38 @@ _add_shared_string :: proc(type: Shared_String_Type, name: string) -> i16 {
 }
 
 get_shared_string :: proc(type: Shared_String_Type, id: Shared_String_ID) -> string {
+	guard_read()
 	return _library.shared_strings[type][id].name
 }
 
 get_shared_string_lower :: proc(type: Shared_String_Type, id: Shared_String_ID) -> string {
+	guard_read()
 	return _library.shared_strings[type][id].lower_name
 }
 
 get_shared_string_uid :: proc(type: Shared_String_Type, id: Shared_String_ID) -> shared.UID {
+	guard_read()
 	return _library.shared_strings[type][id].uid
 }
 
 get_shared_string_serial :: proc(type: Shared_String_Type, id: Shared_String_ID) -> uint {
+	guard_read()
 	return _library.shared_strings[type][id].serial
 }
 
 get_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, out: []string) {
 	assert(len(ids) == len(out))
 
+	guard_read()
+
 	for id, i in ids {
 		out[i] = _library.shared_strings[type][id].name
 	}
 }
 
-get_all_shared_strings :: proc(type: Shared_String_Type) -> []Shared_String {
-	return _library.shared_strings[type][:]
+get_all_shared_strings :: proc(type: Shared_String_Type, allocator: mem.Allocator) -> []Shared_String {
+	guard_read()
+	return slice.clone(_library.shared_strings[type][:], allocator)
 }
 
 url_to_filepath :: proc(url: string) -> (string, bool) {
@@ -670,20 +840,40 @@ url_to_filepath :: proc(url: string) -> (string, bool) {
 	return strings.trim_prefix(url, "file://"), true
 }
 
-lock :: proc() {
-	sync.lock(&_library.lock)
+lock_read :: proc() {
+	sync.rw_mutex_shared_lock(&_library.lock)
 }
 
-unlock :: proc() {
-	sync.unlock(&_library.lock)
+lock_write :: proc() {
+	sync.rw_mutex_lock(&_library.lock)
+}
+
+@(deferred_in_out=unlock_read)
+guard_read :: proc() {
+	sync.rw_mutex_shared_lock(&_library.lock)
+}
+
+@(deferred_in_out=unlock_write)
+guard_write :: proc() {
+	sync.rw_mutex_lock(&_library.lock)
+}
+
+unlock_write :: proc() {
+	sync.rw_mutex_unlock(&_library.lock)
+}
+
+unlock_read :: proc() {
+	sync.rw_mutex_shared_unlock(&_library.lock)
 }
 
 track_has_artist :: proc(t: Track, id: Shared_String_ID) -> bool {
+	guard_read()
 	for a in t.artists do if a == id do return true
 	return false
 }
 
 track_has_genre :: proc(t: Track, id: Shared_String_ID) -> bool {
+	guard_read()
 	for g in t.genres do if g == id do return true
 	return false
 }
@@ -693,6 +883,8 @@ get_tracks_with_shared_string :: proc(type: Shared_String_Type, id: Shared_Strin
 	count := 0
 
 	iter := make_track_iterator()
+
+	guard_read()
 
 	switch type {
 	case .Artist:

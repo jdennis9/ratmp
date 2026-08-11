@@ -105,10 +105,10 @@ playlists_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		imgui.TableSetupScrollFreeze(1, 1)
 		imgui.TableHeadersRow()
 
-		for &row in w.playlist_rows {
+		for &row, row_index in w.playlist_rows {
 			playlist := lib.get_playlist(row.id) or_continue
 
-			imgui.PushIDPtr(playlist)
+			imgui.PushIDInt(auto_cast row_index)
 			defer imgui.PopID()
 
 			imgui.TableNextRow()
