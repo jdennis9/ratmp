@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:sync"
 import "core:time"
 import "core:slice"
 import "core:log"
@@ -183,8 +184,8 @@ UI_Window_State :: struct {
 }
 
 UI :: struct {
-	library_scanner: lib.Scanner,
-	window_state:    [UI_Window_ID]UI_Window_State,
+	window_state:           [UI_Window_ID]UI_Window_State,
+	metadata_scan_progress: lib.Metadata_Scan,
 
 	background: struct {
 		path:    string,
@@ -201,12 +202,6 @@ ui_init :: proc() -> shared.Error {
 	io := imgui.GetIO()
 
 	theme_init()
-
-	lib.scanner_init(
-		&ui.library_scanner,
-		scanner_consume_proc,
-		nil
-	)
 
 	for &ws in ui.window_state do ws.shown = true
 
@@ -229,7 +224,6 @@ ui_shutdown :: proc() {
 	}
 
 	theme_shutdown()
-	lib.scanner_destroy(&ui.library_scanner)
 }
 
 ui_apply_fonts :: proc(cfg: ^UI_Config) {
@@ -376,6 +370,20 @@ ui_show :: proc() {
 		}
 	}
 
+	// Show metadata scan progress
+	if sync.atomic_load(&ui.metadata_scan_progress.is_running) {
+		p := ui.metadata_scan_progress
+
+		imgui.SetNextWindowSize({300, 100})
+		if imgui.Begin("Metadata Scan") {
+			imx.text_unformatted("Scanning metadata...")
+			imx.textf(64, "%d folders scanned",    sync.atomic_load(&p.dirs_scanned))
+			imx.textf(64, "%d tracks found",       sync.atomic_load(&p.tracks_scanned))
+			imx.textf(64, "%d cover images found", sync.atomic_load(&p.cover_art_scanned))
+		}
+		imgui.End()
+	}
+
 	if need_pop_font {
 		imgui.PopFont()
 	}
@@ -484,13 +492,14 @@ _show_main_menu_bar :: proc() -> bool {
 		}
 	}
 
-	if imgui.BeginMenu("Library") {
+	/*if imgui.BeginMenu("Library") {
 		defer imgui.EndMenu()
 
-		if imgui.MenuItem("Remove missing tracks") {
+		// @FIXME
+		/*if imgui.MenuItem("Remove missing tracks") {
 			lib.remove_all_missing_tracks()
-		}
-	}
+		}*/
+	}*/
 
 	if imgui.BeginMenu("Help") {
 		defer imgui.EndMenu()
@@ -612,11 +621,6 @@ _show_status_bar :: proc() -> bool {
 		}
 	}
 
-	scan_progress_block: if sp, ok := get_background_metadata_scan_progress(); ok {
-		current_file := lib.scanner_get_current_file(&_ui.library_scanner, temp_allocator)
-		imx.textf(256, "Scanning metadata (%d): %s", sp.scanned_files, current_file)
-	}
-
 	return true
 }
 
@@ -674,27 +678,15 @@ is_key_chord_pressed :: proc(mods: imgui.Key, key: imgui.Key) -> bool {
 	return imgui.IsKeyChordPressed(auto_cast (mods | key))
 }
 
-scanner_consume_proc :: proc(_: rawptr, input: []lib.Scanned_Item) -> shared.Error {
-	shared.TIME_SCOPE("Add scanned tracks to library")
+queue_files_for_scan :: proc(files: []string, overwrite: bool) {
+	ui := &_ui
 
-	for item in input {
-		switch v in item.variant {
-		case lib.Scanned_Track:
-			lib.add_track(v.tags, v.url)
-		case lib.Scanned_Art:
-			lib.add_cover_art(v.folder, v.image)
-		}
+	if sync.atomic_load(&ui.metadata_scan_progress.is_running) {
+		log.warn("Already scanning files!")
+		return
 	}
 
-	return nil
-}
-
-queue_files_for_scan :: proc(files: []string, overwrite: bool) {
-	frame_allocator_guard()
-
-	ui := &_ui
-	items := lib.scanner_make_input(files, overwrite, get_frame_allocator())
-	lib.scanner_queue(&ui.library_scanner, items)
+	lib.start_background_metadata_scan(files, &ui.metadata_scan_progress)
 }
 
 bring_window_to_front :: proc(w: UI_Window_ID) {
@@ -707,10 +699,6 @@ set_window_open :: proc(w: UI_Window_ID, open: bool) {
 
 is_window_open :: proc(w: UI_Window_ID) -> bool {
 	return _ui.window_state[w].shown
-}
-
-get_background_metadata_scan_progress :: proc() -> (progress: lib.Scanner_Progress, running: bool) {
-	return lib.scanner_get_progress(&_ui.library_scanner)
 }
 
 begin_window_drag_drop_target :: proc(str_id: cstring) -> bool {

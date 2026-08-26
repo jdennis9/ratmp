@@ -128,6 +128,7 @@ run :: proc() -> shared.Error {
 		enable_memory_tracking = launch_config.memory_debug,
 		metadata_db_path       = filepath.join({client.paths.data, "metadata.dat"}) or_return,
 		playlists_dir          = filepath.join({client.paths.data, "playlists"}) or_return,
+		wake_proc              = platform_flush_events,
 	}) or_return
 	defer lib.shutdown()
 
@@ -197,7 +198,6 @@ run :: proc() -> shared.Error {
 		frame_start := time.tick_now()
 		defer last_frame_start = frame_start
 
-
 		client.last_frame_time = auto_cast time.duration_seconds(
 			time.tick_diff(last_frame_start, frame_start)
 		)
@@ -219,7 +219,7 @@ run :: proc() -> shared.Error {
 
 		sys_update()
 
-		lib.update()
+		lib.poll_events()
 
 		client.playback_state = player.get_state()
 

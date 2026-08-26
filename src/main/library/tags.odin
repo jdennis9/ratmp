@@ -41,6 +41,16 @@ Track_Tags :: struct {
 	format:     Audio_File_Format,
 }
 
+
+clone_track_tags :: proc(input: Track_Tags, allocator: mem.Allocator) -> Track_Tags {
+	o := input
+	o.title  = strings.clone(o.title, allocator)
+	o.artist = strings.clone(o.artist, allocator)
+	o.album  = strings.clone(o.album, allocator)
+	o.genre  = strings.clone(o.genre, allocator)
+	return o
+}
+
 open_file_for_taglib :: proc(filename: string) -> taglib.File {
 	when ODIN_OS == .Windows {
 		filename_u16 := make([]u16, len(filename) + 1, context.temp_allocator)

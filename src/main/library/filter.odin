@@ -134,7 +134,7 @@ test_filter_tracks :: proc(t: ^testing.T) {
 			file_size  = 1000000,
 		}
 
-		add_track(track, "file://C:/Music/Computer_Music.mp3")
+		_add_track(track, "file://C:/Music/Computer_Music.mp3")
 	}
 
 	{
@@ -150,7 +150,7 @@ test_filter_tracks :: proc(t: ^testing.T) {
 			file_size  = 1000000,
 		}
 
-		add_track(track, "file://C:/Music/Computer_Music.mp3")
+		_add_track(track, "file://C:/Music/Computer_Music.mp3")
 	}
 
 	{
@@ -166,7 +166,7 @@ test_filter_tracks :: proc(t: ^testing.T) {
 			file_size  = 1000000,
 		}
 
-		add_track(track, "file://C:/Music/Computer_Music.mp3")
+		_add_track(track, "file://C:/Music/Computer_Music.mp3")
 	}
 
 	tracks := get_all_track_ids(context.allocator)

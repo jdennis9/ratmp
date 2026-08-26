@@ -164,11 +164,11 @@ load_db_from_disk :: proc(path: string) -> shared.Error {
 	cbor.unmarshal_from_bytes(uncompressed, &model, {}, allocator)
 
 	for t in model.tracks {
-		add_track(t.tags, t.url)
+		_add_track(t.tags, t.url)
 	}
 
 	for folder, art in model.cover_art {
-		add_cover_art(folder, art)
+		_add_cover_art(folder, art)
 	}
 
 	return nil

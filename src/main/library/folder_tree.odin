@@ -134,7 +134,7 @@ test_folder_tree :: proc(t: ^testing.T) {
 	defer shutdown()
 
 	for f in files {
-		add_track({title = "dont_care"}, f)
+		_add_track({title = "dont_care"}, f)
 	}
 
 	tree: Folder
