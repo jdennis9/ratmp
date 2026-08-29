@@ -192,7 +192,7 @@ run :: proc() -> shared.Error {
 
 	last_frame_start: time.Tick
 
-	for !_client.want_exit {
+	for !client.want_exit {
 		platform_events: Platform_Events
 
 		frame_start := time.tick_now()
@@ -220,6 +220,7 @@ run :: proc() -> shared.Error {
 		sys_update()
 
 		lib.poll_events()
+		player.poll_events()
 
 		client.playback_state = player.get_state()
 
