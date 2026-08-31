@@ -98,6 +98,7 @@ UI_Window_ID :: enum {
 	Playlists,
 	License,
 	About,
+	MissingTracks,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -175,6 +176,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "About",
 		internal_name = "_about",
 		procedure     = about_window_proc,
+	},
+	.MissingTracks = {
+		title         = "Missing Tracks",
+		internal_name = "_missing_tracks",
+		procedure     = missing_tracks_window_proc,
 	},
 }
 
@@ -492,14 +498,13 @@ _show_main_menu_bar :: proc() -> bool {
 		}
 	}
 
-	/*if imgui.BeginMenu("Library") {
+	if imgui.BeginMenu("Library") {
 		defer imgui.EndMenu()
 
-		// @FIXME
-		/*if imgui.MenuItem("Remove missing tracks") {
-			lib.remove_all_missing_tracks()
-		}*/
-	}*/
+		if imgui.MenuItem("Scan for missing tracks") {
+			lib.start_missing_tracks_scan()
+		}
+	}
 
 	if imgui.BeginMenu("Help") {
 		defer imgui.EndMenu()

@@ -72,7 +72,8 @@ font_init_fontconfig :: proc() -> shared.Error {
 
 	_font_impl_destroy = proc(f: System_Font, free_impl_memory: bool) {
 		if f.handle != nil {
-			fc.PatternDestroy(cast(^fc.Pattern) f.handle)
+			// @FIXME: Crashing due to corrupted heap here
+			//fc.PatternDestroy(cast(^fc.Pattern) f.handle)
 		}
 	}
 

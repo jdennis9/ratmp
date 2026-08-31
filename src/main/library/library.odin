@@ -100,15 +100,6 @@ Folder_Cover_Art :: struct {
 	image:  string,
 }
 
-Missing_Track_Scan_Input :: struct {
-	track_id: Track_ID,
-	path:     string,
-}
-
-Missing_Track :: struct {
-	track_id: Track_ID,
-}
-
 Config :: struct {
 	prefer_folder_cover_art: bool,
 }
@@ -165,6 +156,19 @@ Add_Cover_Art_Event :: struct {
 	cover_arts: []Cover_Art_Add_Info,
 }
 
+Mark_Missing_Tracks_Event :: struct {
+	tracks: []Track_ID,
+}
+
+String_Replace_Op :: struct {
+	replace: string,
+	with:    string,
+}
+
+Replace_Missing_Tracks_Path_Event :: struct {
+	replace_ops: []String_Replace_Op,	
+}
+
 Event :: union {
 	Create_Playlist_Event,
 	Remove_Playlist_Event,
@@ -174,6 +178,12 @@ Event :: union {
 	Remove_Tracks_Event,
 	Add_Cover_Art_Event,
 	Remove_Tracks_From_Playlist_Event,
+	Mark_Missing_Tracks_Event,
+}
+
+Missing_Track :: struct {
+	id:       Track_ID,
+	new_path: string,
 }
 
 // -----------------------------------------------------------------------------
@@ -181,7 +191,7 @@ Event :: union {
 // -----------------------------------------------------------------------------
 
 Library :: struct {
-	lock:                  sync.RW_Mutex, // only used outside of this package
+	lock:                  sync.RW_Mutex,
 	event_queue:           shared.Event_Queue(Event),
 	tracks_serial:         uint,
 	tracks:                Track_Map,
@@ -199,6 +209,8 @@ Library :: struct {
 	folder_cover_art:      map[u64]Folder_Cover_Art, // folder hash -> cover art path
 	url_to_track_id:       map[u64]Track_ID, // url hash -> track id
 	save_serial:           uint,
+	missing_tracks:        [dynamic]Track_ID,
+	missing_tracks_serial: uint,
 
 	tracking_allocators: struct {
 		tag:         mem.Tracking_Allocator,
@@ -278,6 +290,15 @@ shutdown :: proc() {
 	l^ = {}
 }
 
+lock_for_read :: proc() {sync.rw_mutex_shared_lock(&_library.lock)}
+unlock_for_read :: proc() {sync.rw_mutex_shared_unlock(&_library.lock)}
+lock_for_write :: proc() {sync.rw_mutex_lock(&_library.lock)}
+unlock_for_write :: proc() {sync.rw_mutex_unlock(&_library.lock)}
+@(deferred_out=unlock_for_read)
+guard_for_read :: proc() {lock_for_read()}
+@(deferred_out=unlock_for_write)
+guard_for_write :: proc() {lock_for_write()}
+
 apply_config :: proc(c: Config) {
 	_library.config = c
 }
@@ -330,6 +351,11 @@ send_event :: proc(event: Event) {
 		shared.event_queue_send(&l.event_queue, Remove_Tracks_From_Playlist_Event {
 			tracks = slice.clone(v.tracks, allocator),
 			target = v.target,
+		})
+
+	case Mark_Missing_Tracks_Event:
+		shared.event_queue_send(&l.event_queue, Mark_Missing_Tracks_Event {
+			tracks = slice.clone(v.tracks, allocator),
 		})
 
 	case: shared.event_queue_send(&l.event_queue, event)
@@ -419,6 +445,15 @@ poll_events :: proc() {
 			for cv in event.cover_arts {
 				_add_cover_art(cv.folder, cv.img_path)
 			}
+
+		case Mark_Missing_Tracks_Event:
+			for track in event.tracks {
+				if !slice.contains(l.missing_tracks[:], track) {
+					append(&l.missing_tracks, track)
+				}
+			}
+
+			l.missing_tracks_serial += 1
 		}
 	}
 
@@ -451,6 +486,8 @@ get_tracks_serial :: proc() -> uint {return _library.tracks_serial}
 get_root_folder :: proc() -> ^Folder {return &_library.folder_root}
 get_folder_tree_serial :: proc() -> uint {return _library.folder_serial}
 get_folder_cover_art_map :: proc() -> map[u64]Folder_Cover_Art {return _library.folder_cover_art}
+get_missing_tracks :: proc() -> []Track_ID {return _library.missing_tracks[:]}
+get_missing_tracks_serial :: proc() -> uint {return _library.missing_tracks_serial}
 
 join_shared_strings :: proc(type: Shared_String_Type, ids: []Shared_String_ID, allocator: mem.Allocator) -> string {
 	if len(ids) == 0 do return ""
