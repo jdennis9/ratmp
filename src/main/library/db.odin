@@ -118,10 +118,10 @@ load_db_from_disk :: proc(path: string) -> shared.Error {
 	raw := os.read_entire_file_from_path(path, context.allocator) or_return
 	defer delete(raw)
 	
-	scratch: mem.Scratch
-	mem.scratch_init(&scratch, 512<<10)
-	defer mem.scratch_destroy(&scratch)
-	allocator := mem.scratch_allocator(&scratch)
+	arena: mem.Dynamic_Arena
+	mem.dynamic_arena_init(&arena)
+	defer mem.dynamic_arena_destroy(&arena)
+	allocator := mem.dynamic_arena_allocator(&arena)
 
 	if len(raw) <= size_of(_Header) do return false
 
@@ -153,6 +153,7 @@ load_db_from_disk :: proc(path: string) -> shared.Error {
 
 	if bytes_decompressed < 0 {
 		log.error("Decompression failed")
+		return false
 	}
 
 	if bytes_decompressed != auto_cast header.uncompressed_size {
@@ -161,7 +162,10 @@ load_db_from_disk :: proc(path: string) -> shared.Error {
 	}
 
 	model: _Model
-	cbor.unmarshal_from_bytes(uncompressed, &model, {}, allocator)
+	unmarshal_error := cbor.unmarshal_from_bytes(uncompressed, &model, {}, allocator)
+	if unmarshal_error != nil {
+		log.error(unmarshal_error)
+	}
 
 	for t in model.tracks {
 		_add_track(t.tags, t.url)

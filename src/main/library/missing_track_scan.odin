@@ -47,7 +47,7 @@ _scan_proc :: proc() {
 
 	_do_scan(&result)
 
-	send_event(Mark_Missing_Tracks_Event {
+	send_event(Update_Missing_Tracks_Event {
 		tracks = result[:]
 	})
 }

@@ -156,17 +156,15 @@ Add_Cover_Art_Event :: struct {
 	cover_arts: []Cover_Art_Add_Info,
 }
 
-Mark_Missing_Tracks_Event :: struct {
+Update_Missing_Tracks_Event :: struct {
 	tracks: []Track_ID,
 }
 
-String_Replace_Op :: struct {
+Replace_Metadata_Event :: struct {
 	replace: string,
 	with:    string,
-}
-
-Replace_Missing_Tracks_Path_Event :: struct {
-	replace_ops: []String_Replace_Op,	
+	tracks:  []Track_ID,
+	targets: bit_set[Track_Metadata_Replace_Target],
 }
 
 Event :: union {
@@ -178,12 +176,8 @@ Event :: union {
 	Remove_Tracks_Event,
 	Add_Cover_Art_Event,
 	Remove_Tracks_From_Playlist_Event,
-	Mark_Missing_Tracks_Event,
-}
-
-Missing_Track :: struct {
-	id:       Track_ID,
-	new_path: string,
+	Update_Missing_Tracks_Event,
+	Replace_Metadata_Event,
 }
 
 // -----------------------------------------------------------------------------
@@ -353,9 +347,17 @@ send_event :: proc(event: Event) {
 			target = v.target,
 		})
 
-	case Mark_Missing_Tracks_Event:
-		shared.event_queue_send(&l.event_queue, Mark_Missing_Tracks_Event {
+	case Update_Missing_Tracks_Event:
+		shared.event_queue_send(&l.event_queue, Update_Missing_Tracks_Event {
 			tracks = slice.clone(v.tracks, allocator),
+		})
+
+	case Replace_Metadata_Event:
+		shared.event_queue_send(&l.event_queue, Replace_Metadata_Event {
+			replace = strings.clone(v.replace, allocator),
+			with    = strings.clone(v.with, allocator),
+			targets = v.targets,
+			tracks  = slice.clone(v.tracks, allocator),
 		})
 
 	case: shared.event_queue_send(&l.event_queue, event)
@@ -446,7 +448,9 @@ poll_events :: proc() {
 				_add_cover_art(cv.folder, cv.img_path)
 			}
 
-		case Mark_Missing_Tracks_Event:
+		case Update_Missing_Tracks_Event:
+			clear(&l.missing_tracks)
+
 			for track in event.tracks {
 				if !slice.contains(l.missing_tracks[:], track) {
 					append(&l.missing_tracks, track)
@@ -454,6 +458,12 @@ poll_events :: proc() {
 			}
 
 			l.missing_tracks_serial += 1
+
+		case Replace_Metadata_Event:
+			replace_track_metadata(
+				event.tracks[:], event.targets, event.replace, event.with, l.tag_allocator
+			)
+			l.tracks_serial += 1
 		}
 	}
 
@@ -662,6 +672,11 @@ get_track :: proc(id: Track_ID) -> (track: Track, found: bool) {
 	track = ptr^
 	found = true
 	return
+}
+
+@private
+get_track_ptr :: proc(id: Track_ID) -> (track: ^Track, ok: bool) {
+	return hm.dynamic_get(&_library.tracks, id)
 }
 
 get_tracks :: proc(ids: []Track_ID, allocator: mem.Allocator) -> []Track {
