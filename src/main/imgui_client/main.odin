@@ -133,7 +133,8 @@ run :: proc() -> shared.Error {
 	defer lib.shutdown()
 
 	player.init({
-		no_audio = launch_config.no_audio,
+		no_audio  = launch_config.no_audio,
+		wake_proc = platform_flush_events,
 	}) or_return
 	defer player.shutdown()
 

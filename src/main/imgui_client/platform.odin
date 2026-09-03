@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:log"
 import "core:strings"
 import "core:fmt"
 

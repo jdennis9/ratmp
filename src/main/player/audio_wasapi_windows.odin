@@ -277,11 +277,13 @@ _run_session :: proc() -> (ok: bool) {
 		if w.in_events[.Pause] > 0 {
 			w.is_paused = true
 			audio_client->Stop()
+			w.callback(w.callback_data, .Paused, nil, {})
 			sync.sema_wait(&w.event_semaphore)
 			w.is_paused = false
 			audio_client->Start()
 			w.in_events[.Pause] = 0
 			w.in_events[.Resume] = 0
+			w.callback(w.callback_data, .Resumed, nil, {})
 		}
 		
 		// -----------------------------------------------------------------------

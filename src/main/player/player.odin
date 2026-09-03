@@ -106,7 +106,16 @@ Set_Queue_Pos_Event :: struct {
 	immediate: bool,
 }
 
+Set_Paused_Event :: struct {
+	paused: bool,
+}
+
+// Needs to exist because pausing is done asynchronously. When the audio system actually
+// gets paused a signal is sent to the audio callback which then sends this event.
+Pause_State_Changed_Event :: struct {}
+
 Event :: union {
+	Set_Paused_Event,
 	Play_Pause_Event,
 	Stop_Event,
 	Skip_Track_Event,
@@ -116,6 +125,7 @@ Event :: union {
 	Play_Playlist_Event,
 	Play_Track_Event,
 	Set_Queue_Pos_Event,
+	Pause_State_Changed_Event,
 }
 
 Player :: struct {
@@ -189,8 +199,8 @@ _audio_callback :: proc(
 		buffer_was_dropped = true
 		log.debug("RESET")
 		analysis_reset(&p.analysis)
-	case .Paused:
-	case .Resumed:
+	case .Paused: send_event(Pause_State_Changed_Event{})
+	case .Resumed: send_event(Pause_State_Changed_Event{})
 	case .TrackFinished:
 		play_next_track(immediate = false)
 	}
@@ -242,12 +252,48 @@ wait_for_events :: proc() {
 poll_events :: proc() {
 	p := &_player
 
+	_set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
+		p := &_player
+
+		defer if !ok do stop_playback()
+
+		if len(p.queue) == 0 do return
+		p.queue_pos = pos
+
+		p.queue_pos = max(p.queue_pos, 0)
+		if p.queue_pos >= len(p.queue) {
+			if p.repeat_mode == .None do return
+			p.queue_pos = len(p.queue) - p.queue_pos
+		}
+
+		_play_track(p.queue[p.queue_pos]) or_return
+
+		if immediate do audio_drop_buffer()
+
+		return true
+	}
+
+	_play_track :: proc(id: lib.Track_ID) -> bool {
+		p := &_player
+		track := lib.get_track(id) or_return
+		playback_thread_load_track(
+			&p.playback_thread, track.url, &p.playing_track_info
+		) or_return
+
+		log.info("Now playing:", track.url)
+
+		_set_paused(false)
+		p.playing_track_id = id
+
+		return true
+	}
+
 	_skip_tracks :: proc(jump: int, immediate: bool) -> bool {
 		p := &_player
 
 		tries_left := len(p.queue)
 
-		for !_set_queue_pos(p.queue_pos - 1, immediate) {
+		for !_set_queue_pos(p.queue_pos + jump, immediate) {
 			if tries_left <= 0 {
 				stop_playback()
 				break
@@ -259,13 +305,27 @@ poll_events :: proc() {
 		return true
 	}
 
+	_set_paused :: proc(paused: bool) {
+		if paused {
+			if !audio_is_paused() do audio_pause()
+		}
+		else {
+			if audio_is_paused() do audio_resume()
+		}
+	}
+
 	for event_union in shared.event_queue_get(&p.event_queue) {
 		switch event in event_union {
+		case Pause_State_Changed_Event:
+
+		case Set_Paused_Event:
+			_set_paused(event.paused)
+
 		case Stop_Event:
 			p.playing_track_id = nil
 			p.playing_playlist_id = 0
 			clear(&p.queue)
-			set_paused(true)
+			_set_paused(true)
 			playback_thread_close_track(&p.playback_thread)
 
 		case Play_Pause_Event:
@@ -314,6 +374,7 @@ send_event :: proc(event: Event) {
 	p := &_player
 	q := &p.event_queue
 	allocator := q.event_allocator
+
 	#partial switch v in event {
 	case Add_To_Queue_Event:
 		shared.event_queue_send(q, Add_To_Queue_Event {
@@ -377,12 +438,7 @@ get_volume :: proc() -> f32 {return audio_get_volume()}
 set_volume :: proc(v: f32) {audio_set_volume(v)}
 
 set_paused :: proc(paused: bool) {
-	if paused {
-		if !audio_is_paused() do audio_pause()
-	}
-	else {
-		if audio_is_paused() do audio_resume()
-	}
+	send_event(Set_Paused_Event{paused = paused})
 }
 
 is_shuffle_on :: proc() -> bool {return _player.enable_shuffle}
@@ -465,28 +521,6 @@ _remove_from_queue :: proc(tracks: []lib.Track_ID) {
 	p.queue_serial += 1
 }
 
-@private
-_set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
-	p := &_player
-
-	defer if !ok do stop_playback()
-
-	if len(p.queue) == 0 do return
-	p.queue_pos = pos
-
-	p.queue_pos = max(p.queue_pos, 0)
-	if p.queue_pos >= len(p.queue) {
-		if p.repeat_mode == .None do return
-		p.queue_pos = len(p.queue) - p.queue_pos
-	}
-
-	_play_track(p.queue[p.queue_pos]) or_return
-
-	if immediate do audio_drop_buffer()
-
-	return true
-}
-
 set_queue_pos :: proc(pos: int, immediate: bool = true) -> bool {
 	send_event(Set_Queue_Pos_Event{pos = pos, immediate = immediate})
 	return true
@@ -505,21 +539,6 @@ _play_url :: proc(url: string) -> bool {
 	p.playing_playlist_id = 0
 
 	return playback_thread_load_track(&p.playback_thread, url, &p.playing_track_info)
-}
-
-_play_track :: proc(id: lib.Track_ID) -> bool {
-	p := &_player
-	track := lib.get_track(id) or_return
-	playback_thread_load_track(
-		&p.playback_thread, track.url, &p.playing_track_info
-	) or_return
-
-	log.info("Now playing:", track.url)
-
-	set_paused(false)
-	p.playing_track_id = id
-
-	return true
 }
 
 play_track :: proc(track_id: lib.Track_ID) -> bool {
