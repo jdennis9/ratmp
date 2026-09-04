@@ -76,10 +76,14 @@ UI_Window_Event :: struct {
 	}
 }
 
+UI_Window_Flag :: enum {DefaultHide}
+UI_Window_Flags :: bit_set[UI_Window_Flag]
+
 UI_Window :: struct {
 	title:         string,
 	internal_name: string,
 	procedure:     proc(ev: UI_Window_Event) -> bool,
+	flags:         UI_Window_Flags,
 }
 
 UI_Window_ID :: enum {
@@ -117,6 +121,7 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Theme",
 		internal_name = "_theme_editor",
 		procedure     = theme_editor_window_proc,
+		flags         = {.DefaultHide},
 	},
 	.Metadata = {
 		title         = "Metadata",
@@ -147,6 +152,7 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Settings",
 		internal_name = "_settings",
 		procedure     = config_editor_window_proc,
+		flags         = {.DefaultHide},
 	},
 	.Spectrum = {
 		title         = "Spectrum",
@@ -157,6 +163,7 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Oscilloscope",
 		internal_name = "_oscilloscope",
 		procedure     = oscilloscope_window_proc,
+		flags         = {.DefaultHide},
 	},
 	.Wavebar = {
 		title         = "Wavebar",
@@ -177,16 +184,19 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "License",
 		internal_name = "_license",
 		procedure     = license_window_proc,
+		flags         = {.DefaultHide},
 	},
 	.About = {
 		title         = "About",
 		internal_name = "_about",
 		procedure     = about_window_proc,
+		flags         = {.DefaultHide},
 	},
 	.MissingTracks = {
 		title         = "Missing Tracks",
 		internal_name = "_missing_tracks",
 		procedure     = missing_tracks_window_proc,
+		flags         = {.DefaultHide},
 	},
 }
 
@@ -214,8 +224,13 @@ ui_init :: proc() -> shared.Error {
 	io := imgui.GetIO()
 
 	theme_init()
+	init_layouts()
 
-	for &ws in ui.window_state do ws.shown = true
+	for &ws, id in ui.window_state {
+		if .DefaultHide not_in UI_WINDOWS[id].flags {
+			ws.shown = true
+		}
+	}
 
 	if load_user_config() != nil {
 		cfg := UI_CONFIG_DEFAULTS
@@ -468,6 +483,7 @@ _show_main_menu_bar :: proc() -> bool {
 					.Genres,
 					.Library,
 					.MissingTracks,
+					.Playlists,
 					.Queue,
 				}
 			},
@@ -503,6 +519,27 @@ _show_main_menu_bar :: proc() -> bool {
 					bring_window_to_front(i)
 				}
 			}
+		}
+	}
+
+	if imgui.BeginMenu("Layout") {
+		defer imgui.EndMenu()
+
+		@static name_buf: [512]u8
+
+		layouts := get_layouts()
+
+		for l in layouts {
+			if imgui.MenuItem(strings.clone_to_cstring(l, temp_allocator)) {
+				load_layout(l)
+			}
+		}
+
+		imgui.Separator()
+
+		imgui.InputTextWithHint("##layout_name", "Layout name", cstring(&name_buf[0]), auto_cast len(name_buf))
+		if imgui.Button("Save layout") {
+			save_layout(shared.string_from_array(name_buf[:]))
 		}
 	}
 

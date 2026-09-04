@@ -299,6 +299,7 @@ run :: proc() -> shared.Error {
 		// Show UI
 		// -----------------------------------------------------------------------
 		if platform_is_window_visible() {
+			update_layout()
 			platform_imgui_new_frame()
 			video_imgui_new_frame()
 			imgui.NewFrame()
