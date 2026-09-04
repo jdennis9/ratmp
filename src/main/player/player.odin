@@ -110,6 +110,8 @@ Set_Paused_Event :: struct {
 	paused: bool,
 }
 
+Buffer_Filled_Event :: struct {}
+
 // Needs to exist because pausing is done asynchronously. When the audio system actually
 // gets paused a signal is sent to the audio callback which then sends this event.
 Pause_State_Changed_Event :: struct {}
@@ -126,6 +128,7 @@ Event :: union {
 	Play_Track_Event,
 	Set_Queue_Pos_Event,
 	Pause_State_Changed_Event,
+	Buffer_Filled_Event,
 }
 
 Player :: struct {
@@ -188,6 +191,8 @@ _audio_callback :: proc(
 
 		analysis_feed(&p.analysis, output_buf[:spec.channels], spec.samplerate)
 
+		send_event(Buffer_Filled_Event{})
+
 	case .BufferDropped:
 		analysis_reset(&p.analysis)
 	case .Paused: send_event(Pause_State_Changed_Event{})
@@ -244,6 +249,9 @@ wait_for_events :: proc() {
 
 poll_events :: proc() {
 	p := &_player
+
+	shared.event_queue_loop_begin(&p.event_queue)
+	defer shared.event_queue_loop_end(&p.event_queue)
 
 	_set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
 		p := &_player
@@ -309,7 +317,7 @@ poll_events :: proc() {
 
 	for event_union in shared.event_queue_get(&p.event_queue) {
 		switch event in event_union {
-		case Pause_State_Changed_Event:
+		case Pause_State_Changed_Event, Buffer_Filled_Event:
 
 		case Set_Paused_Event:
 			_set_paused(event.paused)

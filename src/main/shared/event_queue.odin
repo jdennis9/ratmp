@@ -28,6 +28,7 @@ Event_Queue :: struct($T: typeid) {
 	lock:            sync.Mutex,
 	wake_proc:       proc(),
 	signal:          sync.Auto_Reset_Event,
+	in_loop:         bool,
 }
 
 event_queue_init :: proc(eq: ^Event_Queue($T)) {	
@@ -55,6 +56,17 @@ event_queue_send :: proc(eq: ^Event_Queue($T), evt: T) {
 }
 
 event_queue_get :: proc(eq: ^Event_Queue($T)) -> (evt: T, have_evt: bool) {
-	sync.guard(&eq.lock)
+	assert(eq.in_loop)
 	return queue.pop_back_safe(&eq.events)
+}
+
+event_queue_loop_begin :: proc(eq: ^Event_Queue($T)) {
+	sync.lock(&eq.lock)
+	eq.in_loop = true
+}
+
+event_queue_loop_end :: proc(eq: ^Event_Queue($T)) {
+	eq.in_loop = false
+	sync.unlock(&eq.lock)
+	free_all(eq.event_allocator)
 }

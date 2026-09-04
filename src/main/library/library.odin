@@ -371,7 +371,8 @@ wait_for_events :: proc() {
 poll_events :: proc() {
 	l := &_library
 
-	defer free_all(l.event_queue.event_allocator)
+	shared.event_queue_loop_begin(&l.event_queue)
+	defer shared.event_queue_loop_end(&l.event_queue)
 
 	for event_union in shared.event_queue_get(&l.event_queue) {
 		switch event in event_union {
