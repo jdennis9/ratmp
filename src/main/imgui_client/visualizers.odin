@@ -577,3 +577,148 @@ wavebar_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	return true
 }
 
+@private
+oscilloscope_window_proc :: proc(ev: UI_Window_Event) -> bool {
+	if ev.type != .Show do return false
+
+	MIN_SAMPLES :: 128
+	MAX_SAMPLES :: (12<<10)
+
+	_Display_Mode :: enum {
+		Average,
+		Layered,
+		Stacked,
+	}
+
+	@static w: struct {
+		window_size:  int,
+		pinch:        bool,
+		display_mode: _Display_Mode,
+	}
+
+	if w.window_size == 0 {
+		w.window_size = 8192
+	}
+
+	analysis := get_analysis_data()
+
+	// --------------------------------------------------------------------------
+	// Settings
+	// --------------------------------------------------------------------------
+	if imgui.BeginPopupContextWindow() {
+		defer imgui.EndPopup()
+
+		current_window_ms := (f32(w.window_size) / analysis.samplerate) * 1000
+		min_window_ms := (MIN_SAMPLES / analysis.samplerate) * 1000
+		max_window_ms := (MAX_SAMPLES / analysis.samplerate) * 1000
+
+		if imgui.SliderFloat("Length", &current_window_ms, min_window_ms, max_window_ms, "%.0fms") {
+			w.window_size = int((current_window_ms / 1000) * analysis.samplerate)
+		}
+
+		imgui.MenuItemBoolPtr("Pinch", nil, &w.pinch)
+
+		if imgui.BeginMenu("Mode") {
+			defer imgui.EndMenu()
+
+			if imgui.MenuItem("Average of channels", nil, w.display_mode == .Average) {
+				w.display_mode = .Average
+			}
+			imx.set_item_tooltip("One wave which is the average volume of all channels.")
+
+			if imgui.MenuItem("Layered channels", nil, w.display_mode == .Layered) {
+				w.display_mode = .Layered
+			}
+			imx.set_item_tooltip("All channel waves layered on top of each other.")
+
+			if imgui.MenuItem("Stacked channels", nil, w.display_mode == .Stacked) {
+				w.display_mode = .Stacked
+			}
+			imx.set_item_tooltip("Separate wave for each channel.")
+
+		}
+	}
+
+	w.window_size = clamp(w.window_size, MIN_SAMPLES, MAX_SAMPLES)
+
+	raw_output := analysis.raw_output[:analysis.channels]
+	drawlist := imgui.GetWindowDrawList()
+
+	draw_wave :: proc(
+		drawlist: ^imgui.DrawList,
+		samples: []f32,
+		pos: [2]f32,
+		size: [2]f32,
+		pinch: bool,
+		color: u32,
+	) {
+		window_size := len(samples)
+		positions := make([][2]f32, len(samples), get_frame_allocator())
+		center := pos + {0, size.y*0.5}
+		gap := size.x / f32(window_size)
+		fade_size := window_size / 8
+
+		for i in 0..<window_size {
+			m: f32 = 1
+			p := samples[i] * 0.8
+
+			if pinch {
+				if i < fade_size {
+					m = f32(i) / f32(fade_size)
+				}
+				else if i > (window_size - fade_size - 1) {
+					m = f32(window_size - i - 1) / f32(fade_size)
+				}
+			}
+
+			positions[i] = center + {gap * f32(i), size.y * 0.5 * p * m}
+		}
+
+		imgui.DrawList_AddPolyline(drawlist, raw_data(positions), auto_cast len(positions), color, {}, 2)
+	}
+
+	window_size := min(len(raw_output[0]), w.window_size)
+	channels := len(raw_output)
+	channel_colors := [player.MAX_CHANNELS]u32 {
+		get_theme_color(.LeftChannelWave),
+		get_theme_color(.RightChannelWave),
+	}
+
+	switch w.display_mode {
+	case .Average:
+		draw_wave(
+			drawlist, analysis.avg_output[:window_size],
+			imgui.GetCursorScreenPos(),
+			imgui.GetContentRegionAvail(),
+			w.pinch,
+			get_theme_color(.LeftChannelWave),
+		)
+	case .Layered:
+		for &ch, i in raw_output {
+			draw_wave(
+				drawlist, ch[:window_size],
+				imgui.GetCursorScreenPos(),
+				imgui.GetContentRegionAvail(),
+				w.pinch,
+				channel_colors[i]
+			)
+		}
+	case .Stacked:
+		size := imgui.GetContentRegionAvail()
+		pos := imgui.GetCursorScreenPos()
+		spacing: f32 = 4
+		wave_height := size.y / f32(channels)
+
+		for &ch in raw_output {
+			draw_wave(
+				drawlist, ch[:window_size],
+				{pos.x, pos.y + spacing}, {size.x, wave_height - spacing},
+				w.pinch,
+				get_theme_color(.LeftChannelWave),
+			)
+			pos.y += wave_height
+		}
+	}
+
+	return true
+}

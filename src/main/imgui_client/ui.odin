@@ -99,6 +99,7 @@ UI_Window_ID :: enum {
 	License,
 	About,
 	MissingTracks,
+	Oscilloscope,
 }
 
 UI_WINDOWS := [UI_Window_ID]UI_Window {
@@ -151,6 +152,11 @@ UI_WINDOWS := [UI_Window_ID]UI_Window {
 		title         = "Spectrum",
 		internal_name = "_spectrum",
 		procedure     = spectrum_window_proc,
+	},
+	.Oscilloscope = {
+		title         = "Oscilloscope",
+		internal_name = "_oscilloscope",
+		procedure     = oscilloscope_window_proc,
 	},
 	.Wavebar = {
 		title         = "Wavebar",
@@ -461,6 +467,7 @@ _show_main_menu_bar :: proc() -> bool {
 					.FolderTree,
 					.Genres,
 					.Library,
+					.MissingTracks,
 					.Queue,
 				}
 			},
@@ -474,6 +481,7 @@ _show_main_menu_bar :: proc() -> bool {
 			{
 				name = "Visualizers",
 				items = {
+					.Oscilloscope,
 					.Spectrum,
 					.Wavebar,
 				},
