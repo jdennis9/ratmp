@@ -159,15 +159,8 @@ _audio_callback :: proc(
 ) -> (result: Audio_Callback_Status = .Continue) {
 	p := &_player
 
-	@static buffer_was_dropped: bool
-
 	lock()
 	defer unlock()
-
-	if buffer_was_dropped {
-		buffer_was_dropped = false
-		//analysis_reset(&p.analysis)
-	}
 
 	switch event {
 	case .Stream:
@@ -196,12 +189,12 @@ _audio_callback :: proc(
 		analysis_feed(&p.analysis, output_buf[:spec.channels], spec.samplerate)
 
 	case .BufferDropped:
-		buffer_was_dropped = true
-		log.debug("RESET")
 		analysis_reset(&p.analysis)
 	case .Paused: send_event(Pause_State_Changed_Event{})
 	case .Resumed: send_event(Pause_State_Changed_Event{})
 	case .TrackFinished:
+		log.debug("Track finished, loading next track...")
+		playback_thread_close_track(&p.playback_thread)
 		play_next_track(immediate = false)
 	}
 
@@ -333,6 +326,7 @@ poll_events :: proc() {
 			else do audio_resume()
 
 		case Skip_Track_Event:
+			log.debug(event)
 			if event.backwards do _skip_tracks(-1, event.immediate)
 			else do _skip_tracks(+1, event.immediate)
 
