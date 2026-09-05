@@ -533,6 +533,14 @@ _show_main_menu_bar :: proc() -> bool {
 			if imgui.MenuItem(strings.clone_to_cstring(l, temp_allocator)) {
 				load_layout(l)
 			}
+
+			if imgui.BeginPopupContextItem() {
+				defer imgui.EndPopup()
+
+				if imgui.MenuItem("Delete") {
+					delete_layout(l)
+				}
+			}
 		}
 
 		imgui.Separator()

@@ -390,7 +390,7 @@ send_event :: proc(event: Event) {
 		})
 	case Play_Playlist_Event:
 		shared.event_queue_send(q, Play_Playlist_Event {
-			tracks        = slice.clone(v.tracks),
+			tracks        = slice.clone(v.tracks, allocator),
 			uid           = v.uid,
 			initial_track = v.initial_track,
 		})

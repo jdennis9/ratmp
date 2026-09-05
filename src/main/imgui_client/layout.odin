@@ -144,10 +144,40 @@ load_layout :: proc(name: string) -> shared.Error {
 }
 
 @private
+delete_layout :: proc(name: string) {
+	temp_allocator := get_frame_allocator()
+	path := get_layout_filename(name, temp_allocator, temp_allocator)
+
+	os.remove(path)
+
+	for l, i in _layouts {
+		if l == name {
+			ordered_remove(&_layouts, i)
+			break
+		}
+	}
+}
+
+@private
+rename_layout :: proc(current_name: string, new_name: string) {
+	temp_allocator := get_frame_allocator()
+	old_path := get_layout_filename(current_name, temp_allocator, temp_allocator)
+	new_path := get_layout_filename(new_name, temp_allocator, temp_allocator)
+
+	os.rename(old_path, new_path)
+
+	for &l in _layouts {
+		if l == current_name {
+			delete(l)
+			l = strings.clone(new_name)
+		}
+	}
+}
+
+@private
 get_layouts :: proc() -> []string {
 	return _layouts[:]
 }
-
 
 _DEFAULT_LAYOUT_INI :: `
 [Window][WindowOverViewport_11111111]
