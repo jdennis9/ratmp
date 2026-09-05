@@ -135,6 +135,7 @@ missing_tracks_window_proc :: proc(ev: UI_Window_Event) -> bool {
 	if imgui.Button("Refresh") {
 		lib.start_missing_tracks_scan()
 	}
+	imgui.SetItemTooltip("Scan for missing tracks in the background (may take a minute).")
 
 	imgui.SameLine()
 	{
@@ -143,8 +144,7 @@ missing_tracks_window_proc :: proc(ev: UI_Window_Event) -> bool {
 			w.dont_check_paths = !check_exists
 		}
 	}
-
-	imgui.SetItemTooltip("Scan for missing tracks in the background (may take a minute)")
+	imgui.SetItemTooltip("Automatically check if files exist after you've changed the path. Existing files are highlighted in green.")
 
 	table_flags := imgui.TableFlags_ScrollY|imgui.TableFlags_RowBg|imgui.TableFlags_BordersInner|
 		imgui.TableFlags_Resizable|imgui.TableFlags_SizingStretchProp
