@@ -108,7 +108,7 @@ folder_tree_window_proc :: proc(ev: UI_Window_Event) -> bool {
 				else do _show_folder_node_common(events, folder)
 			}
 			else {
-				if imgui.Selectable(folder_name) {
+				if imgui.Selectable(folder_name, false, {.SpanAllColumns}) {
 					events.select = folder
 				}
 

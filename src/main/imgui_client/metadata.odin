@@ -17,6 +17,7 @@
 */
 package client
 
+import "core:strings"
 import "core:time"
 import "core:fmt"
 import "src:imx"
@@ -83,8 +84,39 @@ metadata_window_proc :: proc(ev: UI_Window_Event) -> bool {
 
 		imx.kv_row("Title",  track.title)
 		imx.kv_row("Artist", artists)
+		
+		// Go to artist
+		if imgui.BeginPopupContextItem() {
+			defer imgui.EndPopup()
+
+			for artist_id in track.artists {
+				artist_name := lib.get_shared_string(.Artist, artist_id)
+				if imgui.MenuItem(strings.clone_to_cstring(artist_name, temp_allocator)) {
+					go_to_artist(artist_id)
+				}
+			}
+		}
+
 		imx.kv_row("Genres", genres)
-		if album != "" do imx.kv_row("Album", album)
+
+		// Go to genre
+		if imgui.BeginPopupContextItem() {
+			defer imgui.EndPopup()
+
+			for genre_id in track.genres {
+				genre_name := lib.get_shared_string(.Genre, genre_id)
+				if imgui.MenuItem(strings.clone_to_cstring(genre_name, temp_allocator)) {
+					go_to_genre(genre_id)
+				}
+			}
+		}
+
+		if album != "" {
+			if imx.kv_row("Album", album) {
+				go_to_album(track.album.?)
+			}
+			imgui.SetItemTooltip("Click to view album")
+		}
 		imx.kv_rowf("Duration",           "%02d:%02d:%02d", h, m, s)
 		imx.kv_rowf("File size",          "%M",             track.file_size)
 		imx.kv_rowf("File creation time", "%d-%d-%d",       file_year, file_month, file_day)
