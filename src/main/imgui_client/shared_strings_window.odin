@@ -240,6 +240,17 @@ _show_top_table :: proc(w: ^_Shared_Strings_Window) -> bool {
 					}
 				}
 
+				if imgui.BeginDragDropSource() {
+					defer imgui.EndDragDropSource()
+
+					tracks: [dynamic]lib.Track_ID
+					defer delete(tracks)
+					lib.get_tracks_with_shared_string(w.type, row.id, &tracks)
+
+					set_track_drag_drop_payload(tracks[:])
+					imgui.SetTooltip("%d tracks", i32(len(tracks)))
+				}
+
 				if imgui.IsItemClicked(.Middle) || imx.is_item_double_clicked() {
 					actions.play_row = int(row_index)
 				}

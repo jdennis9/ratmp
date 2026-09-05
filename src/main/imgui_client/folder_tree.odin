@@ -112,6 +112,17 @@ folder_tree_window_proc :: proc(ev: UI_Window_Event) -> bool {
 					events.select = folder
 				}
 
+				if imgui.BeginDragDropSource() {
+					defer imgui.EndDragDropSource()
+
+					tracks: [dynamic]lib.Track_ID
+					defer delete(tracks)
+
+					lib.find_folder_tracks(folder, &tracks)
+					imgui.SetTooltip("%d tracks", i32(len(tracks)))
+					set_track_drag_drop_payload(tracks[:])
+				}
+
 				_show_folder_node_common(events, folder)
 			}
 		}
