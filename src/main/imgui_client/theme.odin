@@ -38,6 +38,10 @@ Theme_Color :: enum {
 	VolumeHigh,
 	WaveBarInner,
 	WaveBarOuter,
+	WindowGradientTL,
+	WindowGradientTR,
+	WindowGradientBL,
+	WindowGradientBR,
 }
 
 THEME_COLOR_NAMES := [Theme_Color]cstring {
@@ -48,6 +52,10 @@ THEME_COLOR_NAMES := [Theme_Color]cstring {
 	.VolumeHigh       = "Peak high volume",
 	.WaveBarInner     = "Wave bar quiet",
 	.WaveBarOuter     = "Wave bar loud",
+	.WindowGradientTL = "Window gradient top left",
+	.WindowGradientTR = "Window gradient top right",
+	.WindowGradientBL = "Window gradient bottom left",
+	.WindowGradientBR = "Window gradient bottom right",
 }
 
 @private
@@ -238,6 +246,10 @@ _set_colors_to_default :: proc() {
 	_theme.colors[.VolumeHigh]       = 0xff0000ff
 	_theme.colors[.WaveBarOuter]     = 0xffffce00
 	_theme.colors[.WaveBarInner]     = 0xffff0800
+	_theme.colors[.WindowGradientTL] = 0
+	_theme.colors[.WindowGradientTR] = 0
+	_theme.colors[.WindowGradientBL] = 0
+	_theme.colors[.WindowGradientBR] = 0
 }
 
 _set_theme_name :: proc(name: string) {

@@ -388,6 +388,13 @@ ui_show :: proc() {
 			}
 
 			if imgui.Begin(name, &state.shown) {
+				dl := imgui.GetWindowDrawList()
+				pmin := imgui.GetWindowPos()
+				pmax := pmin + imgui.GetWindowSize()
+				imgui.DrawList_AddRectFilledMultiColor(dl, pmin, pmax, 
+					get_theme_color(.WindowGradientTL), get_theme_color(.WindowGradientTR),
+					get_theme_color(.WindowGradientBR), get_theme_color(.WindowGradientBL)
+				)
 				win.procedure({type = .Show})
 			}
 			else {

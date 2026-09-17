@@ -151,6 +151,8 @@ playlists_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		}
 
 		if playlist, ok := lib.get_playlist(w.viewing_playlist.?); ok {
+			imx.title_text("Playlist:", playlist.name)
+
 			track_table_update(&w.track_table, playlist.serial, playlist.tracks[:], playlist.uid)
 			events := track_table_show(&w.track_table, "##tracks", {})
 
