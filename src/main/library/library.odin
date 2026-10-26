@@ -329,6 +329,8 @@ send_event :: proc(event: Event) {
 			ev.cover_arts[i].folder = strings.clone(cv.folder, allocator)
 			ev.cover_arts[i].img_path = strings.clone(cv.img_path, allocator)
 		}
+
+		shared.event_queue_send(&l.event_queue, ev)
 	
 	case Remove_Tracks_Event:
 		shared.event_queue_send(&l.event_queue, Remove_Tracks_Event {
@@ -606,10 +608,12 @@ _add_cover_art :: proc(folder: string, img: string) {
 	cleaned, _ := filepath.clean(folder)
 	defer delete(cleaned)
 
-	folder_hash := hash.fnv64a(transmute([]byte) folder)
+	folder_hash := hash.fnv64a(transmute([]byte) cleaned)
+
+	log.debug("Add cover art", cleaned, img)
 
 	l.folder_cover_art[folder_hash] = {
-		folder = strings.clone(folder, l.tag_allocator),
+		folder = strings.clone(cleaned, l.tag_allocator),
 		image  = strings.clone(img, l.tag_allocator),
 	}
 }

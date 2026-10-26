@@ -17,6 +17,7 @@
 */
 package client
 
+import "src:main/sdk_impl"
 import "src:main/systray"
 import "src:dsp"
 import "core:time"
@@ -33,6 +34,7 @@ import "src:main/shared"
 import lib "src:main/library"
 import "src:main/player"
 import imgui "src:thirdparty/odin-imgui"
+import "src:main/plugins"
 
 ANALYSIS_BUFFER_SIZE :: 16384
 
@@ -191,6 +193,9 @@ run :: proc() -> shared.Error {
 	ui_init() or_return
 	defer ui_shutdown()
 
+	plugins.init(sdk_impl.get_sdk())
+	plugins.add_plugins_from_folder("plugins")
+
 	last_frame_start: time.Tick
 
 	for !client.want_exit {
@@ -305,6 +310,7 @@ run :: proc() -> shared.Error {
 			imgui.NewFrame()
 			
 			ui_show()
+			plugins.on_show_ui()
 
 			imgui.Render()
 

@@ -107,13 +107,14 @@ _scan_thread_proc :: proc() {
 			}
 			else {
 				switch ext {
-				case ".jpg", ".jpeg", ".png", ".webm", ".bmp", ".tga":
+				case ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tga":
+					pc := strings.clone(path, allocator)
 					append(&output.cover_art, Cover_Art_Add_Info {
-						folder   = filepath.dir(path),
+						folder   = filepath.dir(pc),
 						img_path = strings.clone(path, allocator),
 					})
+					sync.atomic_add(&output.progress.cover_art_scanned, 1)
 				}
-				sync.atomic_add(&output.progress.cover_art_scanned, 1)
 			}
 		}
 
