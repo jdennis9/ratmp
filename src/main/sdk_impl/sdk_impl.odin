@@ -1,5 +1,6 @@
 package sdk_impl
 
+import "core:slice"
 import "core:mem"
 import imgui "src:thirdparty/odin-imgui"
 import lib "src:main/library"
@@ -30,7 +31,19 @@ get_sdk :: proc() -> ^sdk.SDK {
 				}
 
 				return out
-			}
+			},
+
+			get_artist_name = proc(id: sdk.Artist_ID) -> string {
+				return lib.get_shared_string(.Artist, auto_cast id)
+			},
+
+			get_album_name = proc(id: sdk.Album_ID) -> string {
+				return lib.get_shared_string(.Album, auto_cast id)
+			},
+
+			get_genre_name = proc(id: sdk.Genre_ID) -> string {
+				return lib.get_shared_string(.Genre, auto_cast id)
+			},
 		}
 	}
 

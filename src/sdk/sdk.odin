@@ -68,6 +68,10 @@ SDK :: struct {
 	interface_version: u32,
 	imgui_context:     rawptr,
 	
-	find_track:        proc(id: Track_ID) -> (Track, bool),
-	get_all_track_ids: proc(allocator: mem.Allocator) -> []Track_ID,
+	find_track:           proc(id: Track_ID) -> (Track, bool),
+	get_all_track_ids:    proc(allocator: mem.Allocator) -> []Track_ID,
+	get_clipboard_tracks: proc(allocator: mem.Allocator) -> []Track_ID,
+	get_artist_name:      proc(id: Artist_ID) -> string,
+	get_genre_name:       proc(id: Genre_ID) -> string,
+	get_album_name:       proc(id: Album_ID) -> string,
 }

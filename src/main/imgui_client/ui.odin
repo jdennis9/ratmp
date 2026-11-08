@@ -208,6 +208,7 @@ UI_Window_State :: struct {
 UI :: struct {
 	window_state:           [UI_Window_ID]UI_Window_State,
 	metadata_scan_progress: lib.Metadata_Scan,
+	track_clipboard:        [dynamic]lib.Track_ID,
 
 	background: struct {
 		path:    string,
@@ -285,6 +286,17 @@ ui_apply_fonts :: proc(cfg: ^UI_Config) {
 	font_cfg.ExtraSizeScale = 0.8
 	font_cfg.MergeMode = true
 	imgui.FontAtlas_AddFontFromMemoryTTF(io.Fonts, raw_data(icon_font), auto_cast len(icon_font), font_cfg = &font_cfg)
+}
+
+ui_copy_tracks_to_clipboard :: proc(tracks: []lib.Track_ID) {
+	ui := &_ui
+	resize(&ui.track_clipboard, len(tracks))
+	copy(ui.track_clipboard[:], tracks)
+}
+
+ui_get_copied_tracks :: proc() -> []lib.Track_ID {
+	ui := &_ui
+	return ui.track_clipboard[:]
 }
 
 ui_apply_config :: proc(cfg: ^UI_Config) {

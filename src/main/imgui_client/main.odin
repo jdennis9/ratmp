@@ -193,7 +193,10 @@ run :: proc() -> shared.Error {
 	ui_init() or_return
 	defer ui_shutdown()
 
-	plugins.init(sdk_impl.get_sdk())
+	sdk_ptr := sdk_impl.get_sdk()
+	add_sdk_impl_procs(sdk_ptr)
+	
+	plugins.init(sdk_ptr)
 	plugins.add_plugins_from_folder("plugins")
 
 	last_frame_start: time.Tick

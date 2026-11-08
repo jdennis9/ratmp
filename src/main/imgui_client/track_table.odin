@@ -244,6 +244,7 @@ track_table_show :: proc(
 
 	// Deferred events processed at the end of this proc
 	actions: struct {
+		copy_selected:          bool,
 		play_track:             Maybe(lib.Track_ID),
 		add_to_playlist:        Maybe(lib.Playlist_ID),
 		play_selection:         bool,
@@ -439,6 +440,10 @@ track_table_show :: proc(
 						}
 					}
 
+					if imgui.MenuItem("Copy") {
+						actions.copy_selected = true
+					}
+
 					if imgui.MenuItem("Play selection") {
 						actions.play_selection = true
 					}
@@ -537,6 +542,11 @@ track_table_show :: proc(
 			tracks := track_table_get_tracks(table^, get_frame_allocator())
 			player.play_playlist(tracks, table.playlist_uid, actions.play_track.?)
 		}
+	}
+
+	if actions.copy_selected {
+		sel := track_table_get_selection(table^, get_frame_allocator())
+		ui_copy_tracks_to_clipboard(sel)
 	}
 
 	if actions.play_selection {
