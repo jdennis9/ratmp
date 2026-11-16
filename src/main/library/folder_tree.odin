@@ -102,8 +102,8 @@ find_folder_tracks :: proc(folder: ^Folder, output: ^[dynamic]Track_ID) {
 
 	slice.reverse(parts[:])
 
-	path, _ := filepath.join(parts[:])
-	defer delete(path)
+	path, _ := filepath.join(parts[:], temp_allocator)
+	when ODIN_OS == .Linux do path = strings.trim_prefix(path, "/")
 
 	iter := make_track_iterator()
 
