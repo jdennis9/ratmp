@@ -256,7 +256,7 @@ poll_events :: proc() {
 	_set_queue_pos :: proc(pos: int, immediate: bool = true) -> (ok: bool) {
 		p := &_player
 
-		defer if !ok do stop_playback()
+		defer if !ok do _stop_playback()
 
 		if len(p.queue) == 0 do return
 		p.queue_pos = pos
@@ -306,15 +306,6 @@ poll_events :: proc() {
 		return true
 	}
 
-	_set_paused :: proc(paused: bool) {
-		if paused {
-			if !audio_is_paused() do audio_pause()
-		}
-		else {
-			if audio_is_paused() do audio_resume()
-		}
-	}
-
 	for event_union in shared.event_queue_get(&p.event_queue) {
 		switch event in event_union {
 		case Pause_State_Changed_Event, Buffer_Filled_Event:
@@ -323,11 +314,7 @@ poll_events :: proc() {
 			_set_paused(event.paused)
 
 		case Stop_Event:
-			p.playing_track_id = nil
-			p.playing_playlist_id = 0
-			clear(&p.queue)
-			_set_paused(true)
-			playback_thread_close_track(&p.playback_thread)
+			_stop_playback()
 
 		case Play_Pause_Event:
 			if event.pause do audio_pause()
@@ -441,6 +428,16 @@ set_volume :: proc(v: f32) {audio_set_volume(v)}
 
 set_paused :: proc(paused: bool) {
 	send_event(Set_Paused_Event{paused = paused})
+}
+
+@private
+_set_paused :: proc(paused: bool) {
+	if paused {
+		if !audio_is_paused() do audio_pause()
+	}
+	else {
+		if audio_is_paused() do audio_resume()
+	}
 }
 
 is_shuffle_on :: proc() -> bool {return _player.enable_shuffle}
@@ -568,6 +565,16 @@ play_playlist :: proc(tracks: []lib.Track_ID, uid: shared.UID, initial_track: Ma
 
 stop_playback :: proc() {
 	send_event(Stop_Event{})
+}
+
+@private
+_stop_playback :: proc() {
+	p := &_player
+	p.playing_track_id = nil
+	p.playing_playlist_id = 0
+	clear(&p.queue)
+	_set_paused(true)
+	playback_thread_close_track(&p.playback_thread)
 }
 
 consume_output :: proc(buf: [][]f32) -> Audio_Spec {
