@@ -92,14 +92,11 @@ audio_init_pulse :: proc() -> shared.Error {
 		s := &_stream
 
 		_send_message(.Quit)
-		thread.join(s.session_thread)
 
+		thread.destroy(s.session_thread)
 		pa.stream_unref(s.stream)
 		pa.context_unref(s.pa_context)
 		pa.mainloop_free(s.mainloop)
-		thread.destroy(s.session_thread)
-
-		free(s)
 	}
 
 	_audio_impl_drop_buffer = proc() {

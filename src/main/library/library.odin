@@ -602,6 +602,14 @@ _remove_track :: proc(id: Track_ID) {
 	l.tracks_serial += 1
 }
 
+remove_track :: proc(id: Track_ID) {
+	l := &_library
+	ev := Remove_Tracks_Event {
+		tracks = {id}
+	}
+	send_event(ev)
+}
+
 @private
 _add_cover_art :: proc(folder: string, img: string) {
 	l := &_library

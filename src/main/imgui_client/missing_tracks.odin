@@ -130,6 +130,15 @@ missing_tracks_window_proc :: proc(ev: UI_Window_Event) -> bool {
 		w.need_update = true
 	}
 
+	imgui.SameLine()
+	if imgui.Button("Remove selected tracks from library") {
+		ev := lib.Remove_Tracks_Event {
+			tracks = _get_all_tracks(temp_allocator),
+		}
+		lib.send_event(ev)
+		w.need_update = true
+	}
+
 	imgui.Separator()
 
 	if imgui.Button("Refresh") {
