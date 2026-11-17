@@ -102,7 +102,8 @@ find_folder_tracks :: proc(folder: ^Folder, output: ^[dynamic]Track_ID) {
 
 	slice.reverse(parts[:])
 
-	path, _ := filepath.join(parts[:], temp_allocator)
+	path, _ := filepath.join(parts[:])
+	defer delete(path)
 	when ODIN_OS == .Linux do path = strings.trim_prefix(path, "/")
 
 	iter := make_track_iterator()
@@ -113,6 +114,7 @@ find_folder_tracks :: proc(folder: ^Folder, output: ^[dynamic]Track_ID) {
 		strings.starts_with(track.url, "file://") or_continue
 		track_folder := strings.trim_prefix(track.url, "file://")
 		track_folder = filepath.clean(filepath.dir(track_folder), temp_allocator) or_continue
+		track_folder = strings.trim_prefix(track_folder, "/")
 
 		if strings.starts_with(track_folder, path) {
 			append(output, track.handle)
