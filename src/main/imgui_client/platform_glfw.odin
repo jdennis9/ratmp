@@ -17,9 +17,11 @@
 */
 package client
 
+import "core:strings"
 import "base:runtime"
 import "core:log"
 import "vendor:glfw"
+import stbi "vendor:stb/image"
 import imgui_glfw "src:thirdparty/odin-imgui/imgui_impl_glfw"
 
 @(private="file")
@@ -61,6 +63,23 @@ platform_init_glfw :: proc() -> bool {
 		glfw.SetWindowCloseCallback(_glfw.window, close_proc)
 		glfw.SetWindowSizeCallback(_glfw.window, size_proc)
 		
+		// Try set window icon. Only works on X11
+		try_set_icon: {
+			w, h: i32
+			buffer := #load("../../resources/ratmp.png", []byte)
+
+			image_data := stbi.load_from_memory(raw_data(buffer), auto_cast len(buffer), &w, &h, nil, 4)
+			if image_data == nil do break try_set_icon
+			defer stbi.image_free(image_data)
+
+			img := glfw.Image {
+				pixels = image_data,
+				width  = auto_cast w,
+				height = auto_cast h,
+			}
+			glfw.SetWindowIcon(_glfw.window, {img})
+		}
+
 		imgui_glfw.InitForOpenGL(_glfw.window, true) or_return
 		
 		video_init_opengl(glfw.gl_set_proc_address) or_return
